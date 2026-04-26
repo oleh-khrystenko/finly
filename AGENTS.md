@@ -35,9 +35,7 @@ apps/
 packages/
 └── types/src/           # contracts, entities, enums, constants, agency
 docs/
-├── architecture/        # auth-flow, payments-flow
-├── conventions/         # source-of-truth rules
-└── testing/             # auth, payments test plans
+└── conventions/         # source-of-truth rules
 ```
 
 ## Domain Model
@@ -100,13 +98,13 @@ Controller + guard + DTO wrapper + service; відповідь іде через
 Zod schemas живуть у `packages/types/src/contracts/*` та `packages/types/src/agency/*`, після чого Nest DTO обгортають їх через `createZodDto()`. Приклади: `apps/api/src/modules/**/dto/*.ts`.
 
 ### Auth/session lifecycle
-Access JWT зберігається лише in-memory у web (`apps/web/src/shared/api/client.ts`), refresh JWT живе в `bid_refresh` httpOnly cookie, rotation/rate limits/magic links трекаються Redis-ключами в `apps/api/src/modules/auth/auth.service.ts`. Bootstrap сесії робить `apps/web/src/features/auth/AuthInitializer.tsx`, а session-loss між слоями передається через `apps/web/src/shared/lib/authEvents.ts`. Повний опис: `docs/architecture/auth-flow/README.md`.
+Access JWT зберігається лише in-memory у web (`apps/web/src/shared/api/client.ts`), refresh JWT живе в `bid_refresh` httpOnly cookie, rotation/rate limits/magic links трекаються Redis-ключами в `apps/api/src/modules/auth/auth.service.ts`. Bootstrap сесії робить `apps/web/src/features/auth/AuthInitializer.tsx`, а session-loss між слоями передається через `apps/web/src/shared/lib/authEvents.ts`.
 
 ### Onboarding gate
 `apps/api/src/common/interceptors/onboarding.interceptor.ts` глобально блокує authenticated requests, якщо profile onboarding не завершений, якщо endpoint не позначений `@SkipOnboarding()`. Web дублює це UX-рівнем через `apps/web/src/features/auth/AuthGuard.tsx`, який редиректить на `/profile?mode=new`.
 
 ### Billing/webhook processing
-Payments йдуть через provider abstraction; Stripe webhook-и потребують Nest `rawBody`, після чого `PaymentsService` вставляє `ProcessedWebhookEvent` як `pending`, застосовує бізнес-логіку і тільки тоді маркує його `applied`. Subscription ordering захищається через `billing.lastProviderEventAt`. Приклади: `apps/api/src/modules/payments/payments.service.ts`, `apps/api/src/modules/payments/providers/stripe.service.ts`. Повний опис: `docs/architecture/payments-flow/README.md`.
+Payments йдуть через provider abstraction; Stripe webhook-и потребують Nest `rawBody`, після чого `PaymentsService` вставляє `ProcessedWebhookEvent` як `pending`, застосовує бізнес-логіку і тільки тоді маркує його `applied`. Subscription ordering захищається через `billing.lastProviderEventAt`. Приклади: `apps/api/src/modules/payments/payments.service.ts`, `apps/api/src/modules/payments/providers/stripe.service.ts`.
 
 ### AI chat reservations
 `POST /api/ai/chat` працює як SSE: API спочатку резервує execution + AI request, потім стрімить відповіді провайдера, а успішний exchange комітить transcript і ledger entry транзакційно через `UsersService.commitReservation()`. Файли: `apps/api/src/modules/ai/ai.controller.ts`, `apps/api/src/modules/ai/ai.service.ts`, `apps/api/src/modules/users/users.service.ts`.
@@ -257,7 +255,6 @@ Full index: [docs/conventions/README.md](docs/conventions/README.md)
 - Boundary rules реально enforce-яться в `apps/web/eslint.config.mjs` і `apps/api/eslint.config.mjs`: немає глобального `src/stores/`, core не імпортує agency, `shared/` не імпортує вищі FSD layers, `app/overlays.tsx` є єдиним dynamic-import винятком
 - Якщо додаєш нові user-facing поля у `User`, онови privacy policy в `apps/web/src/app/[locale]/(agency)/privacy/page.tsx`
 - Runtime data layer зараз повністю на Mongoose schemas під `apps/api/src/modules/**/schemas`; `prisma/schema.prisma` у репозиторії відсутній
-- Детальні auth/billing flows не дублюються тут: дивись `docs/architecture/auth-flow/README.md` і `docs/architecture/payments-flow/README.md`
 
 ## Known Complexities
 

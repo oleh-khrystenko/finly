@@ -2,7 +2,7 @@
 
 Production-ready SaaS-бойлерплейт та одночасно живий лендінг агенції — все, що потрібно для швидкого запуску web-додатка: auth, payments, i18n, theming та модульна архітектура з коробки.
 
-При старті нового проекту робиться форк репозиторію, видаляється модуль agency, і розробка клієнтського продукту починається поверх готового ядра. Детальніше: [docs/vision/product.md](docs/vision/product.md).
+При старті нового проекту робиться форк репозиторію, видаляється модуль agency, і розробка клієнтського продукту починається поверх готового ядра.
 
 ---
 
@@ -47,7 +47,7 @@ cyanship/
 │       └── src/
 │           ├── index.ts              # Core exports
 │           └── agency.ts             # Agency exports (окремий entry point)
-├── docs/                     # Vision, planning, testing, conventions
+├── docs/                     # Conventions
 ├── docker-compose.yml        # Production (api + web)
 ├── docker-compose.dev.yml    # Development (mongo + redis + api + web)
 ├── turbo.json                # Build pipeline
@@ -179,7 +179,4 @@ docker compose up --build -d
 
 ## Документація
 
-- [Vision & Product](docs/vision/product.md) — опис проекту, бізнес-модель, позиціонування
 - [Conventions](docs/conventions/README.md) — правила та конвенції для розробки
-- [Architecture](docs/architecture/README.md) — опис реалізованих підсистем (auth, payments)
-- [Testing](docs/testing/) — тестові плани (auth, payments)
