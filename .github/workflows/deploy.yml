@@ -1,0 +1,77 @@
+name: Deploy
+
+on:
+    workflow_run:
+        workflows: [CI]
+        types: [completed]
+        branches: [main]
+
+concurrency:
+    group: deploy-production
+    cancel-in-progress: false
+
+jobs:
+    deploy:
+        name: Deploy to VPS
+        runs-on: ubuntu-latest
+        if: github.event.workflow_run.conclusion == 'success'
+
+        steps:
+            - name: Deploy via SSH
+              uses: appleboy/ssh-action@v1
+              with:
+                  host: ${{ secrets.VPS_HOST }}
+                  username: ${{ secrets.VPS_USER }}
+                  key: ${{ secrets.VPS_SSH_KEY }}
+                  command_timeout: 10m
+                  script: |
+                      set -euo pipefail
+
+                      cd ${{ secrets.VPS_DEPLOY_PATH }}
+
+                      # Save current commit for rollback
+                      PREV_COMMIT=$(git rev-parse HEAD)
+
+                      # Pull latest code
+                      git fetch origin main
+                      git reset --hard origin/main
+
+                      # Build and restart containers
+                      docker compose build --parallel
+                      docker compose up -d --remove-orphans
+
+                      # Health check with retries (wait up to 30s for services to start)
+                      check_health() {
+                          local url=$1
+                          local label=$2
+                          for i in 1 2 3 4 5 6; do
+                              if curl -sf --max-time 5 "$url" > /dev/null 2>&1; then
+                                  echo "$label OK"
+                                  return 0
+                              fi
+                              echo "$label attempt $i failed, retrying in 5s..."
+                              sleep 5
+                          done
+                          return 1
+                      }
+
+                      if ! check_health "http://127.0.0.1:3000" "Web"; then
+                          echo "Web health check failed — rolling back to $PREV_COMMIT"
+                          git reset --hard "$PREV_COMMIT"
+                          docker compose build --parallel
+                          docker compose up -d --remove-orphans
+                          exit 1
+                      fi
+
+                      if ! check_health "http://127.0.0.1:3000/api/health" "API"; then
+                          echo "API health check failed — rolling back to $PREV_COMMIT"
+                          git reset --hard "$PREV_COMMIT"
+                          docker compose build --parallel
+                          docker compose up -d --remove-orphans
+                          exit 1
+                      fi
+
+                      # Cleanup old images
+                      docker image prune -f
+
+                      echo "Deploy successful ($(git rev-parse --short HEAD))"

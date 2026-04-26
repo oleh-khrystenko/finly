@@ -1,0 +1,25 @@
+/* ---------------------------------------------------------------------------
+ * Liquid Glass — iOS 26-style frosted glass with specular highlight
+ *
+ * Uses design tokens (--liquid-glass-*) defined per-theme in themes.css.
+ * The effect combines:
+ *   1. Backdrop blur via --liquid-glass-blur
+ *   2. Multi-layer background (specular gradient over tinted fill)
+ *   3. Inner highlight (inset box-shadow) for top-edge luminance
+ *   4. Subtle outer shadow for depth
+ *
+ * Position-agnostic — works with static, relative, absolute, fixed, sticky.
+ *
+ * Note: only the unprefixed backdrop-filter is declared here.
+ * Lightning CSS adds the -webkit- prefix automatically during build.
+ * --------------------------------------------------------------------------- */
+
+.liquid-glass {
+    background:
+        linear-gradient(180deg, var(--liquid-glass-highlight) 0%, transparent 60%),
+        var(--liquid-glass-bg);
+    backdrop-filter: blur(var(--liquid-glass-blur));
+    box-shadow:
+        0 1px 3px var(--liquid-glass-shadow),
+        inset 0 1px 0 var(--liquid-glass-highlight);
+}

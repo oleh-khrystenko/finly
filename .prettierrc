@@ -1,0 +1,16 @@
+{
+    "singleQuote": true,
+    "trailingComma": "es5",
+    "tabWidth": 4,
+    "semi": true,
+    "printWidth": 80,
+
+    "overrides": [
+        {
+            "files": ["apps/web/**/*.{js,jsx,ts,tsx}"],
+            "options": {
+                "plugins": ["prettier-plugin-tailwindcss"]
+            }
+        }
+    ]
+}

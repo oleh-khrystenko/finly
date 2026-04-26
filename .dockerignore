@@ -1,0 +1,28 @@
+# Dependencies
+node_modules
+**/node_modules
+.pnpm-store
+
+
+# Builds & caches
+**/dist
+.next
+.next/cache
+**/.turbo
+**/coverage
+
+
+# Local env
+.env
+.env.*
+
+
+# VCS
+.git
+.gitignore
+
+
+# Editors
+.vscode
+.idea
+.DS_Store

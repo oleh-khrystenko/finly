@@ -1,0 +1,92 @@
+services:
+    redis:
+        image: redis:7-alpine
+        restart: unless-stopped
+        command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+        volumes:
+            - redis_data:/data
+        networks:
+            - internal
+
+    api:
+        build:
+            context: .
+            dockerfile: ./apps/api/Dockerfile
+        restart: unless-stopped
+        environment:
+            - NODE_ENV=${NODE_ENV}
+            - PORT=${API_PORT}
+            - MONGODB_URI=${MONGODB_URI}
+            - REDIS_URL=redis://redis:6379
+            - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
+            - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+            - WEB_URL=${WEB_URL}
+            - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+            - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+            - GOOGLE_CALLBACK_URL=${GOOGLE_CALLBACK_URL}
+            - RESEND_API_KEY=${RESEND_API_KEY}
+            - RESEND_FROM_EMAIL=${RESEND_FROM_EMAIL}
+            - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+            - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+            - PAYMENTS_SUBSCRIPTION_ENABLED=${PAYMENTS_SUBSCRIPTION_ENABLED}
+            - PAYMENTS_ONE_OFF_ENABLED=${PAYMENTS_ONE_OFF_ENABLED}
+            - AUTH_PASSWORD_MIN_LENGTH=${AUTH_PASSWORD_MIN_LENGTH}
+            - AUTH_LOCKOUT_THRESHOLDS=${AUTH_LOCKOUT_THRESHOLDS}
+            - AUTH_LOGIN_ATTEMPTS_TTL_MIN=${AUTH_LOGIN_ATTEMPTS_TTL_MIN}
+            - AUTH_MAGIC_LINK_TTL_MIN=${AUTH_MAGIC_LINK_TTL_MIN}
+            - AUTH_MAGIC_LINK_RATE_LIMIT=${AUTH_MAGIC_LINK_RATE_LIMIT}
+            - AUTH_MAGIC_LINK_RATE_WINDOW_MIN=${AUTH_MAGIC_LINK_RATE_WINDOW_MIN}
+            - AUTH_MAGIC_LINK_DEDUP_SEC=${AUTH_MAGIC_LINK_DEDUP_SEC}
+            - ACCOUNT_DELETION_GRACE_DAYS=${ACCOUNT_DELETION_GRACE_DAYS}
+            - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY}
+            - BRIEF_NOTIFICATION_EMAIL=${BRIEF_NOTIFICATION_EMAIL}
+            - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+            - AI_CHAT_MAX_TOKENS=${AI_CHAT_MAX_TOKENS}
+            - AI_CHAT_IP_LIMIT=${AI_CHAT_IP_LIMIT}
+            - AI_CHAT_FREE_LIMIT=${AI_CHAT_FREE_LIMIT}
+            - AI_CHAT_BONUS_AMOUNT=${AI_CHAT_BONUS_AMOUNT}
+            - R2_ACCOUNT_ID=${R2_ACCOUNT_ID}
+            - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
+            - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
+            - R2_BUCKET_NAME=${R2_BUCKET_NAME}
+            - R2_PUBLIC_URL=${R2_PUBLIC_URL}
+        depends_on:
+            - redis
+        networks:
+            - internal
+
+    web:
+        build:
+            context: .
+            dockerfile: ./apps/web/Dockerfile
+            args:
+                API_INTERNAL_URL: http://api:${API_PORT}
+                NEXT_PUBLIC_BASE_URL: ${NEXT_PUBLIC_BASE_URL}
+                NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+                NEXT_PUBLIC_PAYMENTS_SUBSCRIPTION_ENABLED: ${NEXT_PUBLIC_PAYMENTS_SUBSCRIPTION_ENABLED}
+                NEXT_PUBLIC_PAYMENTS_ONE_OFF_ENABLED: ${NEXT_PUBLIC_PAYMENTS_ONE_OFF_ENABLED}
+                NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${NEXT_PUBLIC_TURNSTILE_SITE_KEY}
+                NEXT_PUBLIC_STORAGE_HOSTNAME: ${NEXT_PUBLIC_STORAGE_HOSTNAME}
+                NEXT_PUBLIC_DEMO_VIDEO_URL: ${NEXT_PUBLIC_DEMO_VIDEO_URL}
+                NEXT_PUBLIC_DEMO_VIDEO_POSTER_URL: ${NEXT_PUBLIC_DEMO_VIDEO_POSTER_URL}
+        restart: unless-stopped
+        environment:
+            - NODE_ENV=${NODE_ENV}
+            - PORT=${WEB_PORT}
+            - API_INTERNAL_URL=http://api:${API_PORT}
+            - NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL}
+            - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+            - NEXT_PUBLIC_STORAGE_HOSTNAME=${NEXT_PUBLIC_STORAGE_HOSTNAME}
+        ports:
+            - '127.0.0.1:${WEB_PORT}:${WEB_PORT}'
+        depends_on:
+            - api
+        networks:
+            - internal
+
+networks:
+    internal:
+        driver: bridge
+
+volumes:
+    redis_data:

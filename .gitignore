@@ -1,0 +1,91 @@
+# --- Node ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+.pnp.*
+package-lock.json
+*.tsbuildinfo
+
+# --- Turbo / Monorepo ---
+.turbo/
+dist/
+build/
+out/
+.cache/
+.temp/
+.tmp/
+**/.next/
+**/.turbo/
+**/.vercel/
+**/.netlify/
+
+# --- Env Files ---
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+.env.*.local
+
+# --- Logs ---
+logs/
+*.log
+*.log.*
+log/
+pids/
+*.pid
+*.seed
+*.pid.lock
+npm-debug.log*
+lerna-debug.log*
+
+# --- Coverage & Testing ---
+coverage/
+*.lcov
+.nyc_output/
+jest-html-reporters-*.html
+
+# --- TypeScript ---
+*.tsbuildinfo
+*.d.ts.map
+next-env.d.ts
+
+# --- IDE / OS ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*.DS_Store
+Thumbs.db
+*.iml
+
+# --- Build outputs (Nest / Next / Packages) ---
+apps/api/dist/
+apps/api/email-previews/**/*.js
+apps/api/email-previews/**/*.d.ts
+apps/api/email-previews/**/*.js.map
+apps/web/.next/
+apps/web/out/
+apps/web/.cache/
+packages/*/dist/
+packages/*/src/**/*.js
+packages/*/src/**/*.d.ts
+packages/*/src/**/*.js.map
+packages/*/.tsbuildinfo
+
+# --- Misc ---
+.DS_Store
+*.tgz
+
+# --- Lock & Workspace Files (keep pnpm workspace config) ---
+!pnpm-workspace.yaml
+
+# --- Optional: local tool configs ---
+*.local
+
+# --- Repomix ---
+repomix-output.xml
+.repomixignore

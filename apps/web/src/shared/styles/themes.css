@@ -1,0 +1,117 @@
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+    /* Базові фони залишаємо холодними сірими (hue 260) */
+    --background: oklch(0.98 0.002 260); /* #f8f8fa */
+    --foreground: oklch(0.20 0.01 260); /* #13161b */
+    --card: oklch(0.99 0.001 260); /* #fbfcfc */
+    --card-foreground: oklch(0.20 0.01 260);
+
+    /* Твій бренд CyanShip: Ціановий колір для головних кнопок та акцентів */
+    --primary: oklch(0.65 0.16 195); /* #00a7a8 */
+    /* Темний текст на ціановій кнопці для кращої читабельності */
+    --primary-foreground: oklch(1 0 0); /* #05070b */
+
+    --secondary: oklch(0.95 0.005 260);
+    --secondary-foreground: oklch(0.20 0.01 260);
+    --muted: oklch(0.95 0.005 260);
+    --muted-foreground: oklch(0.55 0.01 260); /* #6e7278 */
+
+    /* Accent залишаємо приглушеним для hover-ефектів (не роби його яскравим) */
+    --accent: oklch(0.95 0.005 260);
+    --accent-foreground: oklch(0.20 0.01 260);
+
+    --destructive: oklch(0.60 0.15 20);
+    --destructive-foreground: oklch(0.98 0 0);
+    --border: oklch(0.90 0.01 260);
+    --input: oklch(0.90 0.01 260);
+
+    /* Обводка при фокусі (focus ring) тепер теж фірмового кольору */
+    --ring: oklch(0.65 0.16 195);
+
+    --success: oklch(0.65 0.15 150);
+    --warning: oklch(0.80 0.15 80);
+    --radius: 0.625rem;
+
+    /* Liquid Glass */
+    --liquid-glass-bg: oklch(0.98 0.002 260 / 0.55);
+    --liquid-glass-border: oklch(1 0 0 / 0.5);
+    --liquid-glass-highlight: oklch(1 0 0 / 0.12);
+    --liquid-glass-shadow: oklch(0.3 0.01 260 / 0.06);
+    --liquid-glass-blur: 8px;
+}
+
+.dark {
+    /* Темна тема: Глибокий Slate фон */
+    --background: oklch(0.13 0.01 260); /* #05070b */
+    --foreground: oklch(0.90 0.01 260); /* #dadee5 */
+    --card: oklch(0.16 0.01 260);
+    --card-foreground: oklch(0.90 0.01 260);
+
+    /* Cyan у темній темі робимо трохи яскравішим (неоновим) для контрасту */
+    --primary: oklch(0.70 0.18 195); /* #00b8b9 */
+    /* На неоновому ціані текст має бути темним */
+    --primary-foreground: oklch(0.13 0.01 260);
+
+    --secondary: oklch(0.20 0.01 260);
+    --secondary-foreground: oklch(0.90 0.01 260);
+    --muted: oklch(0.20 0.01 260);
+    --muted-foreground: oklch(0.65 0.01 260);
+
+    --accent: oklch(0.20 0.01 260);
+    --accent-foreground: oklch(0.90 0.01 260);
+
+    --destructive: oklch(0.45 0.15 20);
+    --destructive-foreground: oklch(0.98 0 0);
+    --border: oklch(0.22 0.01 260);
+    --input: oklch(0.22 0.01 260);
+
+    /* Обводка фокусу (Cyan) */
+    --ring: oklch(0.70 0.18 195);
+
+    --success: oklch(0.55 0.15 150);
+    --warning: oklch(0.70 0.15 80);
+
+    /* Liquid Glass */
+    --liquid-glass-bg: oklch(0.16 0.01 260 / 0.6);
+    --liquid-glass-border: oklch(1 0 0 / 0.1);
+    --liquid-glass-highlight: oklch(1 0 0 / 0.05);
+    --liquid-glass-shadow: oklch(0 0 0 / 0.25);
+    --liquid-glass-blur: 8px;
+}
+
+@theme inline {
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+    --color-success: var(--success);
+    --color-warning: var(--warning);
+    --color-liquid-glass-border: var(--liquid-glass-border);
+    --radius-sm: calc(var(--radius) - 4px);
+    --radius-md: calc(var(--radius) - 2px);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+    * {
+        @apply border-border;
+    }
+    body {
+        @apply bg-background text-foreground;
+    }
+}

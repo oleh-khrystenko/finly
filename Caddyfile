@@ -1,0 +1,28 @@
+cyanship.com {
+    reverse_proxy 127.0.0.1:3000
+
+    # Cloudflare Origin Certificate — issued via Cloudflare Dashboard:
+    # SSL/TLS → Origin Server → Create Certificate
+    # Place the certificate and key on the VPS:
+    #   /etc/caddy/tls/origin.pem
+    #   /etc/caddy/tls/origin-key.pem
+    tls /etc/caddy/tls/origin.pem /etc/caddy/tls/origin-key.pem
+
+    header {
+        # Prevent MIME-type sniffing
+        X-Content-Type-Options nosniff
+        # Clickjacking protection
+        X-Frame-Options DENY
+        # Disable referrer on cross-origin
+        Referrer-Policy strict-origin-when-cross-origin
+        # Remove server identity
+        -Server
+    }
+
+    log {
+        output file /var/log/caddy/cyanship.log {
+            roll_size 10mb
+            roll_keep 5
+        }
+    }
+}

@@ -1,0 +1,73 @@
+name: CI
+
+on:
+    push:
+        branches: [main]
+    pull_request:
+        branches: [main]
+
+jobs:
+    quality:
+        name: Lint & Build
+        runs-on: ubuntu-latest
+
+        env:
+            NEXT_PUBLIC_BASE_URL: http://localhost:3000
+            NEXT_PUBLIC_API_URL: http://localhost:4000/api
+            NEXT_PUBLIC_PAYMENTS_SUBSCRIPTION_ENABLED: 'true'
+            NEXT_PUBLIC_PAYMENTS_ONE_OFF_ENABLED: 'true'
+            NEXT_PUBLIC_TURNSTILE_SITE_KEY: '0x0000000000000000000000'
+            NEXT_PUBLIC_STORAGE_HOSTNAME: media.cyanship.com
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+
+            - run: corepack enable
+
+            - uses: actions/cache@v4
+              with:
+                  path: ~/.local/share/pnpm/store
+                  key: pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+                  restore-keys: pnpm-
+
+            - run: pnpm install --frozen-lockfile
+
+            - run: pnpm lint
+
+            - run: pnpm build
+
+    test:
+        name: API Tests
+        runs-on: ubuntu-latest
+
+        env:
+            MONGODB_URI: mongodb://localhost:27017/cyanship-test
+
+        services:
+            mongodb:
+                image: mongo:7
+                ports:
+                    - 27017:27017
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+
+            - run: corepack enable
+
+            - uses: actions/cache@v4
+              with:
+                  path: ~/.local/share/pnpm/store
+                  key: pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+                  restore-keys: pnpm-
+
+            - run: pnpm install --frozen-lockfile
+
+            - run: pnpm --filter api test

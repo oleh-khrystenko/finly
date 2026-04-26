@@ -1,0 +1,49 @@
+# Node / build artifacts
+node_modules
+dist
+build
+.out
+.next
+.cache
+coverage
+
+# Package managers
+pnpm-lock.yaml
+yarn.lock
+package-lock.json
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Turborepo / workspace cache
+.turbo
+pnpm-workspace.yaml
+
+# Logs and temporary files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE / Editor
+.vscode
+.idea
+
+# Generated files
+*.min.js
+*.min.css
+
+# App-specific build outputs
+apps/**/.next
+apps/**/out
+apps/**/dist
+packages/**/dist
+
+# Test snapshots
+**/__snapshots__/**
