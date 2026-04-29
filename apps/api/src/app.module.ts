@@ -15,7 +15,6 @@ import { UsersModule } from './modules/users/users.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { PaymentsModule } from './modules/payments/payments.module';
-import { AgencyModule } from './modules/agency/agency.module';
 import { AiModule } from './modules/ai/ai.module';
 
 @Module({
@@ -35,7 +34,6 @@ import { AiModule } from './modules/ai/ai.module';
         ReportsModule,
         StorageModule,
         PaymentsModule,
-        AgencyModule,
         AiModule,
     ],
     controllers: [AppController],

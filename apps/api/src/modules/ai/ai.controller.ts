@@ -117,7 +117,6 @@ export class AiController {
                 this.writeSSE<AiChatDoneEvent>(res, {
                     type: AI_CHAT_EVENT.DONE,
                     balanceAfter: result.balanceAfter,
-                    aiRequestsRemaining: result.aiRequestsRemaining,
                 });
             } else if (firstTokenReceived) {
                 // Client aborted after first token — non-refundable, commit silently.

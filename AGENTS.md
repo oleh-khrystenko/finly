@@ -1,6 +1,6 @@
 # CyanShip
 
-> Модульний monorepo-monolith на Next.js 16 + NestJS 11, де API керує auth/session lifecycle, billing, AI quota та agency lead intake, а web споживає це через спільні Zod/TypeScript контракти.
+> Модульний monorepo-monolith на Next.js 16 + NestJS 11, де API керує auth/session lifecycle, billing та AI chat, а web споживає це через спільні Zod/TypeScript контракти.
 
 ## Tech Stack
 
@@ -10,12 +10,12 @@
 | Web | Next.js, React, next-intl, Zustand, Tailwind CSS | Next 16 App Router, locale segments, client auth/bootstrap, shared UI |
 | API | NestJS, Passport, nestjs-zod | Nest 11, JWT + Google OAuth, global ZodValidationPipe |
 | Data | MongoDB, Mongoose, Redis, ioredis | schema-first documents, runtime token/rate-limit state, reservations |
-| Integrations | Stripe, Resend, Cloudflare Turnstile, Anthropic | billing, email, captcha, AI chat |
+| Integrations | Stripe, Resend, Anthropic | billing, email, AI chat |
 | Tooling | pnpm workspaces, Turborepo, Jest, Docker Compose | monorepo orchestration, unit/e2e tests, local/dev containers |
 
 ## Architecture Overview
 
-CyanShip поділений на три головні зони: `apps/api`, `apps/web`, `packages/types`. API є system of record для auth, refresh rotation, billing, execution ledger, AI chat reservations, brief intake й email delivery; web лишається thin Next.js shell з locale-aware routing, auth bootstrap, overlay registry та shared API clients. `packages/types` містить спільні Zod contracts, entities, enums і agency-specific types, які використовують обидва apps. `agency` та `ai` вже реалізовані як повноцінні модулі, тоді як `reports` і `storage` поки що scaffolds без бізнес-флоу. Core/agency boundary формалізований у `docs/conventions/modular-boundaries.md` і частково enforce-иться через ESLint.
+CyanShip поділений на три головні зони: `apps/api`, `apps/web`, `packages/types`. API є system of record для auth, refresh rotation, billing, execution ledger, AI chat reservations й email delivery; web лишається thin Next.js shell з locale-aware routing, auth bootstrap, overlay registry та shared API clients. `packages/types` містить спільні Zod contracts, entities, enums, які використовують обидва apps. `ai` реалізований як повноцінний модуль, тоді як `reports` і `storage` поки що scaffolds без бізнес-флоу.
 
 ## Project Structure
 
@@ -25,15 +25,15 @@ apps/
 │   ├── main.ts, app.module.ts
 │   ├── config/          # env loader
 │   ├── common/          # decorators, filters, guards, interceptors, redis
-│   └── modules/         # auth, users, payments, email, agency, ai, reports, storage
+│   └── modules/         # auth, users, payments, email, ai, reports, storage
 ├── web/src/
-│   ├── app/[locale]/    # (agency), (protected), auth
-│   ├── entities/        # user, navigation, brand, agency
-│   ├── features/        # auth, billing, profile, agency, theme/lang
-│   ├── widgets/         # header, agency landing
+│   ├── app/[locale]/    # root, auth, (protected), privacy, terms
+│   ├── entities/        # user, navigation, brand
+│   ├── features/        # auth, billing, profile, theme/lang
+│   ├── widgets/         # header
 │   └── shared/          # api, config, lib, seo, styles, ui
 packages/
-└── types/src/           # contracts, entities, enums, constants, agency
+└── types/src/           # contracts, entities, enums, constants
 docs/
 └── conventions/         # source-of-truth rules
 ```
@@ -42,7 +42,7 @@ docs/
 
 ### User
 Файл: `apps/api/src/modules/users/schemas/user.schema.ts` | Zod: `packages/types/src/entities/user.ts`
-- `profile`, `executions`, `ai`, `billing` зберігаються як embedded subdocuments; billing shape одразу шариться у web через `UserBillingSchema`.
+- `profile`, `executions`, `billing` зберігаються як embedded subdocuments; billing shape одразу шариться у web через `UserBillingSchema`.
 - Soft-delete трекається через `deletedAt`; recovery flow додатково використовує `accountDeletionRequestedAt` і `deletionReminderSentAt`.
 - Є sparse indexes на `provider.id`, billing provider IDs і `executions.activeReservation.expiresAt`.
 
@@ -70,24 +70,17 @@ docs/
 - Індекс `userId + createdAt` гарантує стабільне відтворення історії.
 - Повідомлення вставляються всередині reservation commit transaction, а не окремим post-write.
 
-### Brief
-Файл: `apps/api/src/modules/agency/schemas/brief.schema.ts` | Zod: `packages/types/src/agency/brief.ts`
-- Зберігає public/authenticated agency lead intake в колекції `briefs`.
-- `requestAiBonus` і опційний `userId` зв'язують brief із one-time AI bonus grant.
-- Індексований `status`; локалізовані `budget`, `deadline`, `lang`, `source` потрібні для ops/email флоу.
-
 ## Module Dependency Map
 
-- `AppModule` → `RedisModule`, `AuthModule`, `EmailModule`, `UsersModule`, `PaymentsModule`, `AgencyModule`, `AiModule`, `ReportsModule`, `StorageModule`
+- `AppModule` → `RedisModule`, `AuthModule`, `EmailModule`, `UsersModule`, `PaymentsModule`, `AiModule`, `ReportsModule`, `StorageModule`
 - `AuthModule` ↔ `UsersModule` (`forwardRef`, circular dependency)
 - `PaymentsModule` → `UsersModule` + `PAYMENT_PROVIDER` abstraction (`StripeService`)
 - `AiModule` → `UsersModule` + `AI_PROVIDER` abstraction (`AnthropicService`)
-- `AgencyModule` → `Brief` + `User` models; використовує глобальний `EmailService` і `TurnstileService`
 - `EmailModule` є `@Global()`, тому email sending інжектиться в інші модулі без локального `imports`
 - `app/[locale]/layout.tsx` → `Providers` + `NextIntlClientProvider` + `AuthInitializer` + `Overlays`
 - `app/[locale]/(protected)/layout.tsx` → `Header` + `AuthGuard`
 - `shared/api/client.ts` → axios interceptors + refresh dedupe + `authEvents`; `entities/user/authStore.ts` підписується на подію й володіє session state
-- `app/overlays.tsx` динамічно монтує overlay components; це єдиний санкціонований core → agency dynamic-import виняток
+- `app/overlays.tsx` динамічно монтує overlay components — єдина точка mount-у global overlays
 
 ## Key Patterns
 
@@ -95,7 +88,7 @@ docs/
 Controller + guard + DTO wrapper + service; відповідь іде через `{ data: ... }` envelope. Приклади: `apps/api/src/modules/auth/auth.controller.ts`, `apps/api/src/modules/users/users.controller.ts`, `apps/api/src/modules/payments/payments.controller.ts`, `apps/api/src/modules/ai/ai.controller.ts`.
 
 ### Валідація
-Zod schemas живуть у `packages/types/src/contracts/*` та `packages/types/src/agency/*`, після чого Nest DTO обгортають їх через `createZodDto()`. Приклади: `apps/api/src/modules/**/dto/*.ts`.
+Zod schemas живуть у `packages/types/src/contracts/*`, після чого Nest DTO обгортають їх через `createZodDto()`. Приклади: `apps/api/src/modules/**/dto/*.ts`.
 
 ### Auth/session lifecycle
 Access JWT зберігається лише in-memory у web (`apps/web/src/shared/api/client.ts`), refresh JWT живе в `bid_refresh` httpOnly cookie, rotation/rate limits/magic links трекаються Redis-ключами в `apps/api/src/modules/auth/auth.service.ts`. Bootstrap сесії робить `apps/web/src/features/auth/AuthInitializer.tsx`, а session-loss між слоями передається через `apps/web/src/shared/lib/authEvents.ts`.
@@ -107,13 +100,10 @@ Access JWT зберігається лише in-memory у web (`apps/web/src/sha
 Payments йдуть через provider abstraction; Stripe webhook-и потребують Nest `rawBody`, після чого `PaymentsService` вставляє `ProcessedWebhookEvent` як `pending`, застосовує бізнес-логіку і тільки тоді маркує його `applied`. Subscription ordering захищається через `billing.lastProviderEventAt`. Приклади: `apps/api/src/modules/payments/payments.service.ts`, `apps/api/src/modules/payments/providers/stripe.service.ts`.
 
 ### AI chat reservations
-`POST /api/ai/chat` працює як SSE: API спочатку резервує execution + AI request, потім стрімить відповіді провайдера, а успішний exchange комітить transcript і ledger entry транзакційно через `UsersService.commitReservation()`. Файли: `apps/api/src/modules/ai/ai.controller.ts`, `apps/api/src/modules/ai/ai.service.ts`, `apps/api/src/modules/users/users.service.ts`.
-
-### Agency brief intake
-Brief submission завжди верифікує Turnstile перед записом; authenticated path може поставити `requestAiBonus` і видати одноразовий AI bonus у user document. Confirmation/notification emails відправляються fire-and-forget через `EmailService`. Файли: `apps/api/src/modules/agency/brief.controller.ts`, `apps/api/src/modules/agency/services/brief.service.ts`, `apps/api/src/modules/agency/services/turnstile.service.ts`.
+`POST /api/ai/chat` працює як SSE: API спочатку резервує executions під вартість запиту, потім стрімить відповіді провайдера, а успішний exchange комітить transcript і ledger entry транзакційно через `UsersService.commitReservation()`. Файли: `apps/api/src/modules/ai/ai.controller.ts`, `apps/api/src/modules/ai/ai.service.ts`, `apps/api/src/modules/users/users.service.ts`.
 
 ### Overlay architecture
-Overlay state живе у in-slice Zustand stores, сам UI рендериться через `shared/ui` primitives, а глобальний mount відбувається один раз у `apps/web/src/app/overlays.tsx`. Cross-slice open intents проходять через `apps/web/src/shared/lib/uiIntents.ts`. Правило: `docs/conventions/overlays.md`.
+Overlay state живе у in-slice Zustand stores, сам UI рендериться через `shared/ui` primitives, а глобальний mount відбувається один раз у `apps/web/src/app/overlays.tsx`. Правило: `docs/conventions/overlays.md`.
 
 ### Error handling and i18n mapping
 Backend повертає machine-readable `code` через `apps/api/src/common/filters/all-exceptions.filter.ts`; frontend мапить цей код на locale keys через `apps/web/src/shared/api/mapApiCode.ts` і не повинен показувати backend `message` користувачу. Правило: `docs/conventions/i18n.md`.
@@ -158,10 +148,6 @@ Backend повертає machine-readable `code` через `apps/api/src/common
 - `POST /api/payments/reset` — `JwtActiveGuard` — clear billing state and execution history
 - `POST /api/payments/webhook/:provider` — public + `SkipThrottle` — ingest provider webhook with raw body
 
-**AgencyController** (`apps/api/src/modules/agency/brief.controller.ts`)
-- `POST /api/agency/brief` — public + Turnstile — submit public agency brief
-- `POST /api/agency/brief/authenticated` — `JwtActiveGuard` + Turnstile — submit brief and request AI bonus
-
 **AiController** (`apps/api/src/modules/ai/ai.controller.ts`)
 - `POST /api/ai/chat` — `JwtActiveGuard` + `AiRateLimitGuard` — SSE chat stream
 - `GET /api/ai/chat/history` — `JwtActiveGuard` — load chat transcript
@@ -184,9 +170,8 @@ Backend повертає machine-readable `code` через `apps/api/src/common
 - Auth: `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`
 - OAuth/email: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`
 - Payments: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `PAYMENTS_SUBSCRIPTION_ENABLED`, `PAYMENTS_ONE_OFF_ENABLED`
-- Agency/security: `TURNSTILE_SECRET_KEY`, `BRIEF_NOTIFICATION_EMAIL`
 - Auth tuning: `AUTH_PASSWORD_MIN_LENGTH`, `AUTH_LOCKOUT_THRESHOLDS`, `AUTH_LOGIN_ATTEMPTS_TTL_MIN`, `AUTH_MAGIC_LINK_TTL_MIN`, `AUTH_MAGIC_LINK_RATE_LIMIT`, `AUTH_MAGIC_LINK_RATE_WINDOW_MIN`, `AUTH_MAGIC_LINK_DEDUP_SEC`, `ACCOUNT_DELETION_GRACE_DAYS`
-- AI: `ANTHROPIC_API_KEY`, `AI_CHAT_MAX_TOKENS`, `AI_CHAT_IP_LIMIT`, `AI_CHAT_FREE_LIMIT`, `AI_CHAT_BONUS_AMOUNT`
+- AI: `ANTHROPIC_API_KEY`, `AI_CHAT_MAX_TOKENS`, `AI_CHAT_IP_LIMIT`
 
 **API env invariants**
 - `PAYMENTS_SUBSCRIPTION_ENABLED` і `PAYMENTS_ONE_OFF_ENABLED` є required booleans; якщо обидва `false`, API падає на старті
@@ -196,10 +181,9 @@ Backend повертає machine-readable `code` через `apps/api/src/common
 **Web env: required**
 - Public base/API: `NEXT_PUBLIC_BASE_URL`, `NEXT_PUBLIC_API_URL`
 - Payments flags: `NEXT_PUBLIC_PAYMENTS_SUBSCRIPTION_ENABLED`, `NEXT_PUBLIC_PAYMENTS_ONE_OFF_ENABLED`
-- Agency captcha: `NEXT_PUBLIC_TURNSTILE_SITE_KEY`
+- Storage: `NEXT_PUBLIC_STORAGE_HOSTNAME`
 
 **Web env: optional**
-- `NEXT_PUBLIC_DEMO_VIDEO_URL` — вмикає demo video section; `DEMO_VIDEO_ENABLED` вираховується з його наявності
 - `API_INTERNAL_URL` — server-side rewrite target для `/api`; rewrite додається лише коли змінна задана
 
 **Infra / orchestration**
@@ -252,8 +236,7 @@ Full index: [docs/conventions/README.md](docs/conventions/README.md)
 
 - Source of truth for repo-wide rules: `docs/conventions/README.md`
 - Перед змінами у user-facing copy, env/config, language sync, modular boundaries, overlays або shared UI перечитуй відповідні rules: `tone.md`, `fail-fast.md`, `i18n.md`, `modular-boundaries.md`, `overlays.md`, `ui-primitives.md`, `design-tokens.md`
-- Boundary rules реально enforce-яться в `apps/web/eslint.config.mjs` і `apps/api/eslint.config.mjs`: немає глобального `src/stores/`, core не імпортує agency, `shared/` не імпортує вищі FSD layers, `app/overlays.tsx` є єдиним dynamic-import винятком
-- Якщо додаєш нові user-facing поля у `User`, онови privacy policy в `apps/web/src/app/[locale]/(agency)/privacy/page.tsx`
+- Boundary rules реально enforce-яться в `apps/web/eslint.config.mjs` і `apps/api/eslint.config.mjs`: немає глобального `src/stores/`, `shared/` не імпортує вищі FSD layers
 - Runtime data layer зараз повністю на Mongoose schemas під `apps/api/src/modules/**/schemas`; `prisma/schema.prisma` у репозиторії відсутній
 
 ## Known Complexities

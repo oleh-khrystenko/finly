@@ -45,9 +45,6 @@ export const ENV = {
     STRIPE_SECRET_KEY: getEnvVar('STRIPE_SECRET_KEY'),
     STRIPE_WEBHOOK_SECRET: getEnvVar('STRIPE_WEBHOOK_SECRET'),
 
-    TURNSTILE_SECRET_KEY: getEnvVar('TURNSTILE_SECRET_KEY'),
-    BRIEF_NOTIFICATION_EMAIL: getEnvVar('BRIEF_NOTIFICATION_EMAIL'),
-
     PAYMENTS_SUBSCRIPTION_ENABLED: subscriptionEnabled,
     PAYMENTS_ONE_OFF_ENABLED: oneOffEnabled,
 
@@ -81,8 +78,6 @@ export const ENV = {
     ANTHROPIC_API_KEY: getEnvVar('ANTHROPIC_API_KEY'),
     AI_CHAT_MAX_TOKENS: parseInt(getEnvVar('AI_CHAT_MAX_TOKENS'), 10),
     AI_CHAT_IP_LIMIT: parseInt(getEnvVar('AI_CHAT_IP_LIMIT'), 10),
-    AI_CHAT_FREE_LIMIT: parseInt(getEnvVar('AI_CHAT_FREE_LIMIT'), 10),
-    AI_CHAT_BONUS_AMOUNT: parseInt(getEnvVar('AI_CHAT_BONUS_AMOUNT'), 10),
 
     // Cloudflare R2 — media storage (presigned uploads, Google avatar re-upload).
     // R2_PUBLIC_URL hostname MUST match NEXT_PUBLIC_STORAGE_HOSTNAME on the web

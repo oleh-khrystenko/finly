@@ -7,9 +7,7 @@ import { toast } from 'sonner';
 import { MessageSquare, Send, Trash2 } from 'lucide-react';
 import {
     AI_CHAT_COST,
-    AI_CHAT_BONUS_AMOUNT,
     AI_CHAT_EVENT,
-    AI_CHAT_FREE_LIMIT,
     AI_CHAT_MESSAGE_MAX_LENGTH,
 } from '@cyanship/types';
 
@@ -28,7 +26,7 @@ import {
     getApiMessageKey,
 } from '@/shared/api';
 import { useAuthStore } from '@/entities/user';
-import { toIntlLocale, uiIntents } from '@/shared/lib';
+import { toIntlLocale } from '@/shared/lib';
 
 interface ChatMessage {
     id: string;
@@ -43,15 +41,6 @@ const SUGGESTION_KEYS = [
     'suggestion_4',
 ] as const;
 
-function computeIsExhausted(
-    ai: { requestsUsed: number; bonusGranted: boolean } | null | undefined,
-): boolean {
-    if (!ai) return false;
-    const limit =
-        AI_CHAT_FREE_LIMIT + (ai.bonusGranted ? AI_CHAT_BONUS_AMOUNT : 0);
-    return ai.requestsUsed >= limit;
-}
-
 export default function AiChatPage() {
     const t = useTranslations('ai_chat_page');
     const tGlobal = useTranslations();
@@ -61,11 +50,6 @@ export default function AiChatPage() {
 
     const balance = user?.executions.balance ?? 0;
     const canAfford = balance >= AI_CHAT_COST;
-    const ai = user?.ai ?? { requestsUsed: 0, bonusGranted: false };
-    const bonusGranted = ai.bonusGranted;
-    const totalLimit =
-        AI_CHAT_FREE_LIMIT + (bonusGranted ? AI_CHAT_BONUS_AMOUNT : 0);
-    const triesRemaining = Math.max(0, totalLimit - ai.requestsUsed);
     const formattedBalance = balance.toLocaleString(toIntlLocale(locale));
     const formattedCost = AI_CHAT_COST.toLocaleString(toIntlLocale(locale));
 
@@ -73,20 +57,12 @@ export default function AiChatPage() {
     const [input, setInput] = useState('');
     const [isStreaming, setIsStreaming] = useState(false);
     const [isLoadingHistory, setIsLoadingHistory] = useState(true);
-    const [isLimitExhausted, setIsLimitExhausted] = useState(() =>
-        computeIsExhausted(user?.ai),
-    );
     const [isClearing, setIsClearing] = useState(false);
     const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const abortRef = useRef<AbortController | null>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
-
-    // Sync limit state with auth store (covers bonus grant, page revisit, etc.)
-    useEffect(() => {
-        setIsLimitExhausted(computeIsExhausted(user?.ai));
-    }, [user?.ai?.requestsUsed, user?.ai?.bonusGranted]);
 
     // Load history on mount
     useEffect(() => {
@@ -191,17 +167,7 @@ export default function AiChatPage() {
                                         ...currentUser.executions,
                                         balance: event.balanceAfter,
                                     },
-                                    ai: currentUser.ai
-                                        ? {
-                                              ...currentUser.ai,
-                                              requestsUsed:
-                                                  currentUser.ai.requestsUsed + 1,
-                                          }
-                                        : null,
                                 });
-                            }
-                            if (event.aiRequestsRemaining === 0) {
-                                setIsLimitExhausted(true);
                             }
                             break;
                         }
@@ -218,9 +184,7 @@ export default function AiChatPage() {
             );
         } catch (err) {
             if (err instanceof AiChatError) {
-                if (err.code === 'AI_LIMIT_EXHAUSTED') {
-                    setIsLimitExhausted(true);
-                } else if (
+                if (
                     err.code === 'AI_RATE_LIMIT_EXCEEDED' ||
                     err.code === 'AI_MESSAGE_TOO_LONG'
                 ) {
@@ -268,10 +232,6 @@ export default function AiChatPage() {
         [handleSubmit],
     );
 
-    const handleOpenBriefDialog = useCallback(() => {
-        uiIntents.emit('open-brief-dialog', { requestAiBonus: true });
-    }, []);
-
     return (
         <UiPageContainer fixed>
             {/* ── Header ── */}
@@ -295,15 +255,6 @@ export default function AiChatPage() {
                 <div>
                     <span className="font-medium text-foreground">{formattedBalance}</span>
                     {' '}{t('balance_unit')}
-                    <span className="mx-2">·</span>
-                    {isLimitExhausted ? (
-                        t('tries_exhausted')
-                    ) : (
-                        <>
-                            <span className="font-medium text-foreground">{triesRemaining}</span>
-                            {' '}{t('tries_remaining_label')}
-                        </>
-                    )}
                 </div>
                 {canAfford ? (
                     <span>{t('cost_info', { cost: formattedCost })}</span>
@@ -337,24 +288,22 @@ export default function AiChatPage() {
                                 {t('empty_state')}
                             </p>
                         </div>
-                        {!isLimitExhausted && (
-                            <div className="grid w-full gap-2 sm:grid-cols-2">
-                                {SUGGESTION_KEYS.map((key) => (
-                                    <UiButton
-                                        key={key}
-                                        variant="soft"
-                                        size="sm"
-                                        className="w-full"
-                                        onClick={() => {
-                                            setInput(t(key));
-                                            inputRef.current?.focus();
-                                        }}
-                                    >
-                                        {t(key)}
-                                    </UiButton>
-                                ))}
-                            </div>
-                        )}
+                        <div className="grid w-full gap-2 sm:grid-cols-2">
+                            {SUGGESTION_KEYS.map((key) => (
+                                <UiButton
+                                    key={key}
+                                    variant="soft"
+                                    size="sm"
+                                    className="w-full"
+                                    onClick={() => {
+                                        setInput(t(key));
+                                        inputRef.current?.focus();
+                                    }}
+                                >
+                                    {t(key)}
+                                </UiButton>
+                            ))}
+                        </div>
                     </div>
                 ) : (
                     <div className="space-y-4">
@@ -399,104 +348,66 @@ export default function AiChatPage() {
 
             {/* ── Footer ── */}
             <div className="border-t border-border py-3">
-                {isLimitExhausted ? (
-                    <div className="text-center">
-                        {!bonusGranted ? (
-                            <>
-                                <p className="text-sm text-muted-foreground">
-                                    {t('limit_exhausted')}
-                                </p>
-                                <UiButton
-                                    variant="filled"
-                                    size="sm"
-                                    className="mt-2"
-                                    onClick={handleOpenBriefDialog}
+                <UiTextarea
+                    ref={inputRef}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder={t('placeholder')}
+                    rows={1}
+                    disabled={isStreaming}
+                    size="sm"
+                    autoGrow
+                    suffix={
+                        <div className="flex items-center justify-between">
+                            {input.length >= 400 ? (
+                                <span
+                                    className={`text-xs ${
+                                        input.length >
+                                        AI_CHAT_MESSAGE_MAX_LENGTH
+                                            ? 'text-destructive'
+                                            : input.length > 490
+                                              ? 'text-warning'
+                                              : 'text-muted-foreground'
+                                    }`}
                                 >
-                                    {t('request_bonus')}
-                                </UiButton>
-                            </>
-                        ) : (
-                            <div className="flex flex-wrap justify-center gap-x-1 text-sm text-muted-foreground">
-                                <span>{t('all_tries_exhausted_line1')}</span>
-                                <span>
-                                    {t.rich('all_tries_exhausted_line2', {
-                                        email: (chunks) => (
-                                            <UiLink
-                                                href="mailto:oleg@cyanship.com"
-                                                className="font-medium"
-                                            >
-                                                {chunks}
-                                            </UiLink>
-                                        ),
-                                    })}
+                                    {input.length}/
+                                    {AI_CHAT_MESSAGE_MAX_LENGTH}
+                                    {input.length >
+                                        AI_CHAT_MESSAGE_MAX_LENGTH &&
+                                        ` (-${input.length - AI_CHAT_MESSAGE_MAX_LENGTH})`}
                                 </span>
-                            </div>
-                        )}
-                    </div>
-                ) : (
-                    <>
-                        <UiTextarea
-                            ref={inputRef}
-                            value={input}
-                            onChange={(e) => setInput(e.target.value)}
-                            onKeyDown={handleKeyDown}
-                            placeholder={t('placeholder')}
-                            rows={1}
-                            disabled={isStreaming}
-                            size="sm"
-                            autoGrow
-                            suffix={
-                                <div className="flex items-center justify-between">
-                                    {input.length >= 400 ? (
-                                        <span
-                                            className={`text-xs ${
-                                                input.length >
-                                                AI_CHAT_MESSAGE_MAX_LENGTH
-                                                    ? 'text-destructive'
-                                                    : input.length > 490
-                                                      ? 'text-warning'
-                                                      : 'text-muted-foreground'
-                                            }`}
-                                        >
-                                            {input.length}/
-                                            {AI_CHAT_MESSAGE_MAX_LENGTH}
-                                            {input.length >
-                                                AI_CHAT_MESSAGE_MAX_LENGTH &&
-                                                ` (-${input.length - AI_CHAT_MESSAGE_MAX_LENGTH})`}
-                                        </span>
-                                    ) : (
-                                        <span />
-                                    )}
-                                    <UiButton
-                                        variant="filled"
-                                        size="sm"
-                                        className="shrink-0"
-                                        disabled={
-                                            isStreaming ||
-                                            !input.trim() ||
-                                            input.length >
-                                                AI_CHAT_MESSAGE_MAX_LENGTH
-                                        }
-                                        onClick={handleSubmit}
-                                        aria-label={t('send')}
-                                    >
-                                        {isStreaming ? (
-                                            <UiSpinner size="sm" />
-                                        ) : (
-                                            <Send className="h-4 w-4" />
-                                        )}
-                                    </UiButton>
-                                </div>
-                            }
-                        />
-                        <div className="mt-1.5 space-y-0.5 text-center text-xs text-muted-foreground">
-                            <p>{t('disclaimer')}</p>
-                            <p className="text-muted-foreground/60">
-                                {t('non_refundable_warning')}
-                            </p>
+                            ) : (
+                                <span />
+                            )}
+                            <UiButton
+                                variant="filled"
+                                size="sm"
+                                className="shrink-0"
+                                disabled={
+                                    isStreaming ||
+                                    !input.trim() ||
+                                    input.length >
+                                        AI_CHAT_MESSAGE_MAX_LENGTH
+                                }
+                                onClick={handleSubmit}
+                                aria-label={t('send')}
+                            >
+                                {isStreaming ? (
+                                    <UiSpinner size="sm" />
+                                ) : (
+                                    <Send className="h-4 w-4" />
+                                )}
+                            </UiButton>
                         </div>
-                    </>
-                )}
+                    }
+                />
+                <div className="mt-1.5 space-y-0.5 text-center text-xs text-muted-foreground">
+                    <p>{t('disclaimer')}</p>
+                    <p className="text-muted-foreground/60">
+                        {t('non_refundable_warning')}
+                    </p>
+                </div>
             </div>
             <UiConfirmDialog
                 open={isClearDialogOpen}

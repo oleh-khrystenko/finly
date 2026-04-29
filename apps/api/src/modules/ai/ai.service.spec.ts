@@ -1,7 +1,6 @@
 import {
     BadRequestException,
     ConflictException,
-    ForbiddenException,
     NotFoundException,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -17,8 +16,6 @@ import { AiService } from './ai.service';
 jest.mock('../../config/env', () => ({
     ENV: {
         AI_CHAT_MAX_TOKENS: 800,
-        AI_CHAT_FREE_LIMIT: 5,
-        AI_CHAT_BONUS_AMOUNT: 5,
         AI_CHAT_IP_LIMIT: 20,
     },
 }));
@@ -81,7 +78,6 @@ describe('AiService', () => {
         it('should reserve successfully and return ticket with all fields', async () => {
             mockUserModel.findOneAndUpdate.mockResolvedValue({
                 executions: { balance: 800 },
-                ai: { requestsUsed: 3, bonusGranted: false },
             });
 
             const ticket = await service.reserveChatRequest(userId);
@@ -90,8 +86,6 @@ describe('AiService', () => {
             expect(ticket.amount).toBe(200);
             expect(ticket.feature).toBe('ai_chat');
             expect(ticket.balanceAfterReserve).toBe(800);
-            expect(ticket.aiRequestsUsedAfterReserve).toBe(3);
-            expect(ticket.bonusGranted).toBe(false);
             expect(ticket.reservationId).toMatch(
                 /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
             );
@@ -101,7 +95,6 @@ describe('AiService', () => {
         it('should use atomic findOneAndUpdate with correct filter', async () => {
             mockUserModel.findOneAndUpdate.mockResolvedValue({
                 executions: { balance: 800 },
-                ai: { requestsUsed: 1, bonusGranted: false },
             });
 
             await service.reserveChatRequest(userId);
@@ -112,14 +105,13 @@ describe('AiService', () => {
             expect(filter._id).toBe(userId);
             expect(filter['executions.balance']).toEqual({ $gte: 200 });
             expect(filter['executions.activeReservation']).toBeNull();
-            expect(filter.$expr).toBeDefined();
+            expect(filter.$expr).toBeUndefined();
             expect(update.$inc).toEqual({
                 'executions.balance': -200,
-                'ai.requestsUsed': 1,
             });
             expect(
                 update.$set['executions.activeReservation'].compensationOps
-            ).toEqual({ inc: { 'ai.requestsUsed': -1 } });
+            ).toEqual({ inc: {} });
             expect(options).toEqual({ new: true });
         });
 
@@ -127,7 +119,6 @@ describe('AiService', () => {
             mockUserModel.findOneAndUpdate.mockResolvedValue(null);
             mockUserModel.findById.mockResolvedValue({
                 executions: { balance: 50, activeReservation: null },
-                ai: { requestsUsed: 0, bonusGranted: false },
             });
 
             await expect(service.reserveChatRequest(userId)).rejects.toThrow(
@@ -147,7 +138,6 @@ describe('AiService', () => {
                     balance: 1000,
                     activeReservation: { id: 'existing-uuid' },
                 },
-                ai: { requestsUsed: 0, bonusGranted: false },
             });
 
             await expect(service.reserveChatRequest(userId)).rejects.toThrow(
@@ -162,23 +152,6 @@ describe('AiService', () => {
             });
         });
 
-        it('should throw AI_LIMIT_EXHAUSTED when lifetime limit reached', async () => {
-            mockUserModel.findOneAndUpdate.mockResolvedValue(null);
-            mockUserModel.findById.mockResolvedValue({
-                executions: { balance: 1000, activeReservation: null },
-                ai: { requestsUsed: 5, bonusGranted: false },
-            });
-
-            await expect(service.reserveChatRequest(userId)).rejects.toThrow(
-                ForbiddenException
-            );
-            await expect(
-                service.reserveChatRequest(userId)
-            ).rejects.toMatchObject({
-                response: { code: RESPONSE_CODE.AI_LIMIT_EXHAUSTED },
-            });
-        });
-
         it('should throw NotFoundException when user does not exist', async () => {
             mockUserModel.findOneAndUpdate.mockResolvedValue(null);
             mockUserModel.findById.mockResolvedValue(null);
@@ -186,30 +159,6 @@ describe('AiService', () => {
             await expect(service.reserveChatRequest(userId)).rejects.toThrow(
                 NotFoundException
             );
-        });
-
-        it('should allow user with bonus when requestsUsed equals free limit', async () => {
-            mockUserModel.findOneAndUpdate.mockResolvedValue({
-                executions: { balance: 800 },
-                ai: { requestsUsed: 6, bonusGranted: true },
-            });
-
-            const ticket = await service.reserveChatRequest(userId);
-
-            expect(ticket.aiRequestsUsedAfterReserve).toBe(6);
-            expect(ticket.bonusGranted).toBe(true);
-        });
-
-        it('should handle null ai subdocument', async () => {
-            mockUserModel.findOneAndUpdate.mockResolvedValue({
-                executions: { balance: 800 },
-                ai: null,
-            });
-
-            const ticket = await service.reserveChatRequest(userId);
-
-            expect(ticket.aiRequestsUsedAfterReserve).toBe(0);
-            expect(ticket.bonusGranted).toBe(false);
         });
     });
 
@@ -221,8 +170,6 @@ describe('AiService', () => {
             balanceAfterReserve: 800,
             expiresAt: new Date(Date.now() + 300_000),
             feature: 'ai_chat' as const,
-            aiRequestsUsedAfterReserve: 3,
-            bonusGranted: false,
         };
 
         it('should call usersService.commitReservation with correct params', async () => {
@@ -244,9 +191,9 @@ describe('AiService', () => {
             });
         });
 
-        it('should compute aiRequestsRemaining correctly (no bonus)', async () => {
+        it('should return balanceAfter from commitReservation', async () => {
             mockUsersService.commitReservation.mockResolvedValue({
-                balanceAfter: 800,
+                balanceAfter: 600,
             });
 
             const result = await service.commitChatRequest(
@@ -255,28 +202,7 @@ describe('AiService', () => {
                 'response'
             );
 
-            // limit=5, used=3 → remaining=2
-            expect(result.aiRequestsRemaining).toBe(2);
-            expect(result.balanceAfter).toBe(800);
-        });
-
-        it('should compute aiRequestsRemaining correctly (with bonus)', async () => {
-            mockUsersService.commitReservation.mockResolvedValue({
-                balanceAfter: 600,
-            });
-
-            const result = await service.commitChatRequest(
-                {
-                    ...ticket,
-                    bonusGranted: true,
-                    aiRequestsUsedAfterReserve: 8,
-                },
-                'hello',
-                'response'
-            );
-
-            // limit=5+5=10, used=8 → remaining=2
-            expect(result.aiRequestsRemaining).toBe(2);
+            expect(result.balanceAfter).toBe(600);
         });
 
         it('should propagate commitReservation errors', async () => {
@@ -328,8 +254,6 @@ describe('AiService', () => {
             balanceAfterReserve: 800,
             expiresAt: new Date(Date.now() + 300_000),
             feature: 'ai_chat' as const,
-            aiRequestsUsedAfterReserve: 3,
-            bonusGranted: false,
         };
 
         it('should call usersService.refundReservation', async () => {

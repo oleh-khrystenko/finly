@@ -5,17 +5,15 @@ import { EventEmitter } from 'events';
 import { AiController } from './ai.controller';
 import { AiService } from './ai.service';
 import { AiRateLimitGuard } from './guards/ai-rate-limit.guard';
-import type { AiChatReservationTicket } from './interfaces/ai-chat-reservation';
+import type { ReservationTicket } from '../users/interfaces/reservation';
 
-const mockTicket: AiChatReservationTicket = {
+const mockTicket: ReservationTicket = {
     reservationId: 'test-reservation-uuid',
     userId: '507f1f77bcf86cd799439011',
     amount: 200,
     balanceAfterReserve: 800,
     expiresAt: new Date(Date.now() + 300_000),
     feature: 'ai_chat',
-    aiRequestsUsedAfterReserve: 3,
-    bonusGranted: false,
 };
 
 const mockAiService = {
@@ -85,7 +83,6 @@ describe('AiController', () => {
             );
             mockAiService.commitChatRequest.mockResolvedValue({
                 balanceAfter: 800,
-                aiRequestsRemaining: 2,
             });
 
             const req = buildReq();
@@ -288,7 +285,6 @@ describe('AiController', () => {
             mockAiService.reserveChatRequest.mockResolvedValue(mockTicket);
             mockAiService.commitChatRequest.mockResolvedValue({
                 balanceAfter: 800,
-                aiRequestsRemaining: 2,
             });
 
             const controlledStream = new Readable({ read() {} });
@@ -374,7 +370,6 @@ describe('AiController', () => {
             mockAiService.reserveChatRequest.mockResolvedValue(mockTicket);
             mockAiService.commitChatRequest.mockResolvedValue({
                 balanceAfter: 800,
-                aiRequestsRemaining: 2,
             });
 
             // Stream that yields one chunk then throws when aborted

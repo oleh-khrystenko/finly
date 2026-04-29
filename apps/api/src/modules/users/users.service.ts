@@ -308,20 +308,6 @@ export class UsersService {
         return user.executions.balance > 0 || !user.executions.freeReportUsed;
     }
 
-    // Returns true only for the single caller that flipped the flag; concurrent/repeat calls return false.
-    async grantAiBonus(userId: string): Promise<boolean> {
-        const result = await this.userModel.findOneAndUpdate(
-            {
-                _id: userId,
-                'ai.bonusGranted': { $ne: true },
-            },
-            { $set: { 'ai.bonusGranted': true } },
-            { projection: { _id: 1 } }
-        );
-
-        return result !== null;
-    }
-
     // ── Reservation core API ─────────────────────────────────────
 
     async commitReservation(

@@ -67,10 +67,6 @@ jest.mock('../src/config/env', () => ({
         ANTHROPIC_API_KEY: 'test-key',
         AI_CHAT_MAX_TOKENS: 800,
         AI_CHAT_IP_LIMIT: 100,
-        AI_CHAT_FREE_LIMIT: 5,
-        AI_CHAT_BONUS_AMOUNT: 5,
-        TURNSTILE_SECRET_KEY: 'test-turnstile',
-        BRIEF_NOTIFICATION_EMAIL: 'test@test.dev',
     },
     parseLockoutThresholds: (raw: string) =>
         raw.split(',').map((entry: string) => {
@@ -172,7 +168,6 @@ async function createUser(
             freeReportUsed: false,
             activeReservation: null,
         },
-        ai: { requestsUsed: 0, bonusGranted: false },
         profile: { firstName: 'Test' },
         termsAcceptedAt: new Date(),
         termsVersion: '1.0',
@@ -307,7 +302,6 @@ describe('AI Chat E2E', () => {
             const updatedUser = await userModel.findById(user._id);
             expect(updatedUser!.executions.balance).toBe(800);
             expect(updatedUser!.executions.activeReservation).toBeNull();
-            expect(updatedUser!.ai.requestsUsed).toBe(1);
 
             // Verify ledger
             const txns = await transactionModel.find({ userId: user._id });
@@ -367,11 +361,10 @@ describe('AI Chat E2E', () => {
                 expect([400, 409]).toContain(fail.status);
             }
 
-            // DB: balance=0, requestsUsed=1, reservation cleared
+            // DB: balance=0, reservation cleared
             const updatedUser = await userModel.findById(user._id);
             expect(updatedUser!.executions.balance).toBe(0);
             expect(updatedUser!.executions.activeReservation).toBeNull();
-            expect(updatedUser!.ai.requestsUsed).toBe(1);
 
             // Exactly 1 ledger entry
             const txns = await transactionModel.find({ userId: user._id });
@@ -379,56 +372,8 @@ describe('AI Chat E2E', () => {
         });
     });
 
-    describe('Race on lifetime limit', () => {
-        it('should allow exactly 1 of 5 parallel requests when requestsUsed = limit - 1', async () => {
-            const user = await createUser(userModel, {
-                executions: {
-                    balance: 10000,
-                    freeReportUsed: false,
-                    activeReservation: null,
-                },
-                ai: { requestsUsed: 4, bonusGranted: false },
-            });
-            const token = getAccessToken(app, user._id.toString());
-
-            const results = await Promise.allSettled(
-                Array.from({ length: 5 }, () =>
-                    supertest(app.getHttpServer())
-                        .post('/api/ai/chat')
-                        .set('Authorization', `Bearer ${token}`)
-                        .send({ message: 'Limit race' })
-                )
-            );
-
-            const responses = results
-                .filter(
-                    (r): r is PromiseFulfilledResult<supertest.Response> =>
-                        r.status === 'fulfilled'
-                )
-                .map((r) => r.value);
-
-            const successes = responses.filter((r) =>
-                r.text.includes('"type":"done"')
-            );
-            const failures = responses.filter(
-                (r) => !r.text.includes('"type":"done"')
-            );
-
-            expect(successes).toHaveLength(1);
-            expect(failures).toHaveLength(4);
-
-            for (const fail of failures.filter((r) => r.status >= 400)) {
-                expect([403, 409]).toContain(fail.status);
-            }
-
-            const updatedUser = await userModel.findById(user._id);
-            expect(updatedUser!.ai.requestsUsed).toBe(5);
-            expect(updatedUser!.executions.activeReservation).toBeNull();
-        });
-    });
-
     describe('Cron reconcile', () => {
-        it('should refund expired reservation with compensation', async () => {
+        it('should refund expired reservation', async () => {
             // Create user with an expired reservation (manually set)
             const user = await createUser(userModel, {
                 executions: {
@@ -440,10 +385,9 @@ describe('AI Chat E2E', () => {
                         reservedAt: new Date(Date.now() - 600_000),
                         expiresAt: new Date(Date.now() - 60_000), // expired 1 min ago
                         feature: 'ai_chat',
-                        compensationOps: { inc: { 'ai.requestsUsed': -1 } },
+                        compensationOps: { inc: {} },
                     },
                 },
-                ai: { requestsUsed: 3, bonusGranted: false },
             });
 
             await reconcileService.reconcileExpiredReservations();
@@ -451,7 +395,6 @@ describe('AI Chat E2E', () => {
             const updatedUser = await userModel.findById(user._id);
             expect(updatedUser!.executions.activeReservation).toBeNull();
             expect(updatedUser!.executions.balance).toBe(1000); // 800 + 200 restored
-            expect(updatedUser!.ai.requestsUsed).toBe(2); // 3 - 1 compensation
         });
     });
 
@@ -486,7 +429,7 @@ describe('AI Chat E2E', () => {
     });
 
     describe('Double refund safety', () => {
-        it('should decrement requestsUsed exactly once on double refund', async () => {
+        it('should restore balance exactly once on double refund', async () => {
             const user = await createUser(userModel, {
                 executions: {
                     balance: 800,
@@ -497,10 +440,9 @@ describe('AI Chat E2E', () => {
                         reservedAt: new Date(),
                         expiresAt: new Date(Date.now() + 300_000),
                         feature: 'ai_chat',
-                        compensationOps: { inc: { 'ai.requestsUsed': -1 } },
+                        compensationOps: { inc: {} },
                     },
                 },
-                ai: { requestsUsed: 3, bonusGranted: false },
             });
 
             // Get UsersService and call refund twice
@@ -519,13 +461,12 @@ describe('AI Chat E2E', () => {
 
             const updatedUser = await userModel.findById(user._id);
             expect(updatedUser!.executions.balance).toBe(1000); // 800 + 200 (once)
-            expect(updatedUser!.ai.requestsUsed).toBe(2); // 3 - 1 (once)
             expect(updatedUser!.executions.activeReservation).toBeNull();
         });
     });
 
     describe('Client abort before first token', () => {
-        it('should refund: balance restored, requestsUsed compensated, no ledger/history', async () => {
+        it('should refund: balance restored, no ledger/history', async () => {
             const user = await createUser(userModel);
             const token = getAccessToken(app, user._id.toString());
 
@@ -588,7 +529,6 @@ describe('AI Chat E2E', () => {
             // Verify DB state: fully refunded
             const updatedUser = await userModel.findById(user._id);
             expect(updatedUser!.executions.balance).toBe(1000); // restored
-            expect(updatedUser!.ai.requestsUsed).toBe(0); // compensated
             expect(updatedUser!.executions.activeReservation).toBeNull();
 
             // No ledger entry
@@ -602,7 +542,7 @@ describe('AI Chat E2E', () => {
     });
 
     describe('Client abort after first token', () => {
-        it('should commit (non-refundable): balance debited, requestsUsed incremented, ledger+history present', async () => {
+        it('should commit (non-refundable): balance debited, ledger+history present', async () => {
             const user = await createUser(userModel);
             const token = getAccessToken(app, user._id.toString());
 
@@ -669,7 +609,6 @@ describe('AI Chat E2E', () => {
             // Verify DB state: committed (non-refundable)
             const updatedUser = await userModel.findById(user._id);
             expect(updatedUser!.executions.balance).toBe(800); // 1000 - 200, NOT restored
-            expect(updatedUser!.ai.requestsUsed).toBe(1); // incremented, NOT compensated
             expect(updatedUser!.executions.activeReservation).toBeNull();
 
             // 1 ledger entry

@@ -47,13 +47,4 @@ export const en = {
         cta: 'Sign In',
         footer: "If you didn't request deletion, please sign in immediately to secure your account.",
     },
-    briefConfirmation: {
-        subject: 'We received your project request',
-        heading: 'Request received',
-        body: (name: string) =>
-            `Thank you, ${name}. We have received your project brief and will review it shortly.`,
-        instruction:
-            'Our team will get back to you within 24 hours. You will receive a detailed response to this email address.',
-        footer: 'If you did not submit this request, you can safely ignore this email.',
-    },
 } satisfies EmailTranslations;

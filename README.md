@@ -1,19 +1,6 @@
 # CyanShip
 
-Production-ready SaaS-бойлерплейт та одночасно живий лендінг агенції — все, що потрібно для швидкого запуску web-додатка: auth, payments, i18n, theming та модульна архітектура з коробки.
-
-При старті нового проекту робиться форк репозиторію, видаляється модуль agency, і розробка клієнтського продукту починається поверх готового ядра.
-
----
-
-## Архітектура
-
-Turborepo-монорепозиторій з жорстким розділенням на два шари:
-
-- **Core** — авторизація, користувачі, платежі, shared UI, валідація, i18n. Стабільне ядро, що повторно використовується в кожному проекті.
-- **Agency** — бізнес-логіка агенції (лендінг, лід-магніти). Ізольований модуль, який видаляється за 15 хвилин при форку.
-
-Одностороння залежність: Agency -> Core, ніколи навпаки (enforced ESLint).
+Web-додаток на Next.js 16 + NestJS 11: auth, payments, AI chat, media storage, i18n, theming та модульна архітектура з коробки.
 
 ---
 
@@ -25,28 +12,28 @@ cyanship/
 │   ├── web/                  # Frontend (Next.js 16, React 19)
 │   │   └── src/
 │   │       ├── app/[locale]/
-│   │       │   ├── auth/             # Signin, callback, verify
-│   │       │   ├── (protected)/      # Profile, billing
-│   │       │   └── (agency)/         # Agency pages (scaffold)
-│   │       ├── features/             # Auth, profile, change-lang, change-theme
-│   │       ├── entities/             # Brand, agency (scaffold)
+│   │       │   ├── auth/             # Signin, callback, verify, reset-password
+│   │       │   ├── (protected)/      # Dashboard, profile, billing, ai-chat
+│   │       │   ├── privacy/          # Privacy policy
+│   │       │   ├── terms/            # Terms of service
+│   │       │   └── page.tsx          # Root landing
+│   │       ├── features/             # Auth, billing, profile, change-lang, change-theme
+│   │       ├── entities/             # User, navigation, brand
 │   │       ├── widgets/              # Header
 │   │       └── shared/               # API client, UI, config, styles, i18n
 │   └── api/                  # Backend (NestJS 11)
 │       └── src/
 │           ├── modules/
 │           │   ├── auth/             # Google OAuth, Magic Link, Password, JWT
-│           │   ├── users/            # CRUD, profile, soft-delete, credits
-│           │   ├── payments/         # Stripe subscriptions + one-off credit packs
-│           │   ├── agency/           # Agency module (scaffold)
+│           │   ├── users/            # CRUD, profile, soft-delete, executions ledger
+│           │   ├── payments/         # Stripe subscriptions + one-off execution packs
+│           │   ├── ai/               # Streaming chat (Anthropic SSE)
+│           │   ├── storage/          # Cloudflare R2 avatar pipeline
 │           │   ├── reports/          # Skeleton
-│           │   └── storage/          # Skeleton
+│           │   └── email/            # Resend transactional emails
 │           └── common/               # Guards, filters, decorators, Redis provider
 ├── packages/
 │   └── types/                # @cyanship/types — Zod-схеми, типи, контракти
-│       └── src/
-│           ├── index.ts              # Core exports
-│           └── agency.ts             # Agency exports (окремий entry point)
 ├── docs/                     # Conventions
 ├── docker-compose.yml        # Production (api + web)
 ├── docker-compose.dev.yml    # Development (mongo + redis + api + web)

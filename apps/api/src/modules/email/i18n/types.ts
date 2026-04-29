@@ -23,17 +23,8 @@ export interface DeletionReminderTranslations {
     footer: string;
 }
 
-export interface BriefConfirmationTranslations {
-    subject: string;
-    heading: string;
-    body: (name: string) => string;
-    instruction: string;
-    footer: string;
-}
-
 export interface EmailTranslations {
     magicLink: Record<MagicLinkPurpose, MagicLinkTranslations>;
     deletionConfirmation: DeletionConfirmationTranslations;
     deletionReminder: DeletionReminderTranslations;
-    briefConfirmation: BriefConfirmationTranslations;
 }

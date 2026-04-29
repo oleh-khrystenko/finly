@@ -70,12 +70,12 @@ apps/
 │   ├── main.ts, app.module.ts
 │   ├── config/
 │   ├── common/          # decorators, filters, guards, providers
-│   └── modules/         # auth, users, payments, agency, reports, storage
+│   └── modules/         # auth, users, payments, ai, storage, reports, email
 ├── web/src/
-│   ├── app/[locale]/    # pages: auth, (protected), (agency)
-│   ├── features/        # auth, change-lang, change-theme, profile, agency
-│   ├── widgets/         # header, agency/landing
-│   └── shared/          # api, ui, config, stores, i18n, styles
+│   ├── app/[locale]/    # pages: root, auth, (protected), privacy, terms
+│   ├── features/        # auth, billing, profile, change-lang, change-theme
+│   ├── widgets/         # header
+│   └── shared/          # api, ui, config, lib, i18n, styles
 packages/
 └── types/src/           # constants, enums, entities, contracts, validation
 ```
@@ -187,7 +187,7 @@ Compact список.
 
 - ❌ Таблиці з переліком полів моделей — агент відкриє schema файл
 - ❌ Таблиці UI компонентів з описом кожного — агент відкриє shared/ui/
-- ❌ Таблиці секцій landing page — агент відкриє widgets/agency/landing/
+- ❌ Таблиці секцій сторінок — агент відкриє відповідний widget/feature
 - ❌ Code blocks з прикладами патернів — достатньо шляху до файлу
 - ❌ Повний опис auth/payments flow кроками — описуй коротко й посилайся на код
 - ❌ Перелік enum values — агент прочитає enum файл

@@ -2,191 +2,31 @@
     "brand": {
         "slogan": "Real code. Unfair speed."
     },
-    "legal": {
-        "privacy": {
-            "title": "Privacy Policy – CyanShip",
-            "description": "How CyanShip handles your data: what we collect, why, and your rights."
-        },
-        "terms": {
-            "title": "Terms of Service – CyanShip",
-            "description": "Terms and conditions for using CyanShip products and services."
-        }
-    },
-    "landing_page": {
+    "home_page": {
         "head": {
-            "title": "CyanShip – From Idea to Revenue in 4 Weeks",
-            "description": "B2B platform development with AI, payments, and auth built in. Next.js + NestJS. Fast time-to-market, zero agency overhead."
+            "title": "CyanShip",
+            "description": "Sign in to access the app."
         },
-        "nav": {
-            "approach": "Approach",
-            "proof": "Proof",
-            "demo": "Demo",
-            "workflow": "Workflow",
-            "pricing": "Pricing",
-            "get_started": "Contact"
+        "heading": "CyanShip",
+        "description": "Landing page placeholder. Sign in to access the app.",
+        "cta_get_started": "Get started",
+        "cta_signin": "Sign in"
+    },
+    "privacy_page": {
+        "head": {
+            "title": "Privacy Policy — CyanShip",
+            "description": "Privacy policy for CyanShip."
         },
-        "hero": {
-            "heading_line1": "From Idea to Revenue",
-            "heading_line2": "in 4 Weeks.",
-            "description": "Production-ready B2B platforms — AI, payments, and auth baked in from day one. Built on a battle-tested Next.js & NestJS core. Zero agency overhead.",
-            "cta_primary": "Request a Technical Estimate",
-            "cta_secondary": "Try Live Demo"
+        "heading": "Privacy Policy",
+        "placeholder": "Privacy policy placeholder."
+    },
+    "terms_page": {
+        "head": {
+            "title": "Terms of Service — CyanShip",
+            "description": "Terms of service for CyanShip."
         },
-        "problem": {
-            "label": "Approach",
-            "heading": "Skip the Boilerplate. Focus on Business.",
-            "paragraph_1": "Most startup budgets are burned on rebuilding authentication, payment integrations, and now — AI features. I've already built all of it.",
-            "paragraph_2": "With \"CyanShip\" — my pre-built core — we bypass the setup phase and start building your custom logic on day one.",
-            "feature_architecture_title": "Zero Tech Debt",
-            "feature_architecture_description": "Built on industry standards. When you hire an in-house team, they can take over instantly without rewriting legacy code.",
-            "feature_typed_title": "Built to Scale",
-            "feature_typed_description": "Built for absolute reliability. Your product won't crash during critical investor demos or sudden traffic spikes.",
-            "feature_scale_title": "Scale Without Rewrites",
-            "feature_scale_description": "A solid foundation with built-in Stripe billing and AI integration. Handles your first 10 paying customers just as easily as your first 10,000."
-        },
-        "dogfooding": {
-            "label": "Proof",
-            "heading": "You Are Looking at the Code Right Now",
-            "description": "I don't just sell this architecture; I run my business on it. This site — including its AI chat, Stripe billing, and auth — is built on the exact same CyanShip core your product will use.",
-            "step_1": "Create an account to test the auth flow",
-            "step_2": "Click the Stripe checkout to see the payment integration",
-            "step_3": "Test the usage-based billing logic",
-            "proof_shell": {
-                "sheet_title_auth": "One-Click Auth",
-                "sheet_title_billing": "Stripe-Powered Checkout",
-                "sheet_title_usage": "Usage Demo",
-                "try_it": "Try it"
-            },
-            "proof_auth": {
-                "terms_agree": "I agree to the <terms>Terms of Service</terms> and <privacy>Privacy Policy</privacy>",
-                "terms_required": "Please accept the Terms to continue",
-                "google_button": "Sign in with Google",
-                "or_divider": "or",
-                "email_placeholder": "your@email.com",
-                "continue_button": "Continue",
-                "magic_link_sent_title": "Check your email",
-                "magic_link_sent_description": "We sent a link to <bold>{email}</bold>.",
-                "resend_button": "Resend",
-                "resend_countdown": "Resend in {seconds}s",
-                "other_email": "Use different email",
-                "authenticated_greeting": "Signed in as",
-                "logout_button": "Log out",
-                "error_generic": "Something went wrong. Please try again",
-                "error_rate_limit": "Too many attempts. Please try again later",
-                "validation_email_required": "Please enter your email address",
-                "validation_email_format": "Enter a valid email address"
-            },
-            "proof_billing": {
-                "plans_tab": "Plans",
-                "packs_tab": "Packs",
-                "subscribe_button": "Subscribe",
-                "buy_button": "Purchase",
-                "error": "Could not load pricing"
-            },
-            "proof_usage": {
-                "balance_label": "Your Balance",
-                "balance_executions": "{count} executions",
-                "generate_report": "Generate Report",
-                "run_analysis": "Run AI Analysis",
-                "cost_label": "-{cost} exec",
-                "insufficient_balance": "Not enough executions",
-                "transactions_title": "Recent Activity",
-                "no_transactions": "No activity yet. Purchase executions in the Billing tab to get started.",
-                "not_authenticated": "Sign in to test the usage-based billing",
-                "sign_in_button": "Sign in",
-                "actions": {
-                    "standard_report": "Report generated",
-                    "ai_analysis": "AI analysis completed",
-                    "deep_analysis": "Deep analysis completed",
-                    "full_audit": "Full audit completed",
-                    "subscription_activation": "Subscription activated",
-                    "pack_purchase": "Execution pack purchased",
-                    "plan_change": "Plan changed",
-                    "billing_reset": "Billing reset",
-                    "ai_chat": "AI Chat"
-                },
-                "time_just_now": "Just now",
-                "time_minutes_ago": "{count}m ago",
-                "time_hours_ago": "{count}h ago"
-            }
-        },
-        "demo_video": {
-            "label": "Demo",
-            "heading": "See It Working. All of It.",
-            "description": "You've tried the individual features. Now watch the complete flow — from first sign-in to AI chat — in one uncut walkthrough.",
-            "play_button": "Play video",
-            "highlight_auth": "Google sign-in — three seconds, you're in",
-            "highlight_billing": "Stripe checkout with a live payment",
-            "highlight_ai": "AI chat — streaming response, auto-billed",
-            "highlight_dashboard": "Dashboard — balance updates in real time",
-            "note": "Full source code. Zero tech debt. This is your starting point."
-        },
-        "workflow": {
-            "label": "Workflow",
-            "heading": "No Useless Meetings. Just Daily Progress.",
-            "description": "I value your time. My workflow is designed for founders who prefer tangible results over endless Zoom calls.",
-            "step_async_title": "Async Communication",
-            "step_async_description": "Slack and email for structured, searchable decisions.",
-            "step_video_title": "Video Updates",
-            "step_video_description": "Concise Loom screen recordings showcasing new features and UI/UX flows.",
-            "step_code_title": "Code Transparency",
-            "step_code_description": "Regular repository pushes. You always own your IP."
-        },
-        "pricing": {
-            "label": "Pricing",
-            "heading": "Predictable Pricing. Zero Hidden Fees.",
-            "package_label": "MVP Launch Package",
-            "price": "$2,500",
-            "delivery": "4 weeks delivery",
-            "includes_label": "What's included",
-            "include_1": "Custom business logic development",
-            "include_2": "Stripe subscription/payment integration",
-            "include_3": "User authentication & authorization",
-            "include_4": "AI chat integration with usage-based billing",
-            "include_5": "Full source code ownership",
-            "cta": "Request a Technical Estimate",
-            "faq_heading": "Frequently Asked Questions",
-            "faq_1_q": "What if I need more complex features?",
-            "faq_1_a": "Send a brief or a quick Loom video with your requirements. I'll review it asynchronously and provide a fixed-price quote. No endless discovery calls.",
-            "faq_2_q": "Do I own the code and IP?",
-            "faq_2_a": "Absolutely. I sign an NDA before we even discuss your idea. Upon final payment, 100% of the Intellectual Property (IP) and source code rights are legally transferred to your entity. No vendor lock-in.",
-            "faq_3_q": "What's the payment structure?",
-            "faq_3_a": "50% upfront to secure your slot, 50% upon successful delivery. I operate as a registered independent contractor. Payments are made securely via SWIFT, Payoneer, or wire transfer against official B2B invoices.",
-            "faq_4_q": "Can you help with hosting?",
-            "faq_4_a": "I'll set up your deployment on Vercel or your preferred platform as part of the package.",
-            "faq_5_q": "What happens after the MVP is launched?",
-            "faq_5_a": "You have full control. You can take the clean, documented Next.js/NestJS codebase to an in-house team, or retain me for ongoing feature development via a monthly retainer or fixed hourly rate.",
-            "faq_6_q": "Does the MVP include AI features?",
-            "faq_6_a": "Yes. The CyanShip core ships with a production-ready AI chat module — streaming responses, per-message billing, rate limiting, and abuse protection. You can use it as-is for customer support or adapt it to your domain. No extra cost."
-        },
-        "footer_cta": {
-            "label": "Contact",
-            "heading": "Have a raw idea? Let's map it out.",
-            "description": "Turn your concept into an actionable technical plan. Submit your details, and you'll get a clear architecture roadmap and a fixed-price estimate. The document is yours to keep, even if we don't work together.",
-            "cta": "Submit Your Idea",
-            "step_1_title": "Submit your idea",
-            "step_1_sub": "Loom, doc, or quick note",
-            "step_2_title": "24h turnaround",
-            "step_2_sub": "I review and scope it",
-            "step_3_title": "Get your roadmap",
-            "step_3_sub": "Clear scope and estimate",
-            "step_4_title": "Decide with confidence",
-            "step_4_sub": "No pressure, no sales calls"
-        },
-        "footer": {
-            "col_product": "Product",
-            "col_legal": "Legal",
-            "col_connect": "Connect",
-            "nav_pricing": "Pricing",
-            "nav_demo": "Demo",
-            "nav_proof": "Proof",
-            "legal_terms": "Terms of Service",
-            "legal_privacy": "Privacy Policy",
-            "email": "oleg@cyanship.com",
-            "social_linkedin": "LinkedIn",
-            "social_github": "GitHub",
-            "copyright": "© {year} CyanShip. Built by Oleh Khrystenko."
-        }
+        "heading": "Terms of Service",
+        "placeholder": "Terms of service placeholder."
     },
     "auth_page": {
         "signin": {
@@ -268,9 +108,6 @@
             "terms_accepted": "Terms accepted.",
             "onboarding_required": "Please complete your profile to continue"
         },
-        "agency": {
-            "brief_submitted": "Request submitted. We will respond within 24 hours."
-        },
         "storage": {
             "avatar_updated": "Photo updated",
             "avatar_deleted": "Photo removed"
@@ -297,9 +134,6 @@
             "internal_error": "Server error occurred. Please try again later",
             "unknown": "Something went wrong. Please try again later"
         },
-        "agency": {
-            "captcha_failed": "Security verification failed. Please try again."
-        },
         "ai": {
             "ai_limit_exhausted": "AI request limit has been reached.",
             "ai_rate_limit_exceeded": "Too many AI requests. Please try again later.",
@@ -325,56 +159,16 @@
         "suggestion_3": "What's included in the development cost?",
         "suggestion_4": "How are you different from other agencies?",
         "balance_unit": "executions",
-        "tries_remaining_label": "free tries left",
-        "tries_exhausted": "No free tries left",
         "cost_info": "{cost} executions per message",
         "balance_top_up": "Top up balance",
         "disclaimer": "AI can make mistakes. Please double-check responses.",
         "non_refundable_warning": "Once AI starts responding, executions are not refunded if you cancel.",
-        "limit_exhausted": "Free tries exhausted. Tell us about your project to unlock 5 more.",
-        "all_tries_exhausted_line1": "All AI tries have been used. Still have questions?",
-        "all_tries_exhausted_line2": "Drop me a line at <email>oleg@cyanship.com</email>",
-        "request_bonus": "Get 5 more tries",
         "clear_dialog": {
             "title": "Clear chat history?",
             "description": "All messages will be permanently deleted. This action cannot be undone.",
             "confirm": "Clear history",
             "cancel": "Cancel"
         }
-    },
-    "brief_form": {
-        "title": "Submit Your Project Brief",
-        "name_label": "Name",
-        "name_placeholder": "Your name",
-        "email_label": "Email",
-        "email_placeholder": "Email address",
-        "description_label": "Project description",
-        "description_placeholder": "Describe your project idea, goals, and any technical requirements...",
-        "budget_label": "Budget",
-        "budget_placeholder": "Select budget range",
-        "budget_under_2500": "< $2,500 (Consulting only)",
-        "budget_2500_5000": "$2,500 – $5,000",
-        "budget_5000_10000": "$5,000 – $10,000",
-        "budget_over_10000": "$10,000+",
-        "deadline_label": "Timeline",
-        "deadline_placeholder": "Timeline (optional)",
-        "deadline_asap": "ASAP",
-        "deadline_1_3_months": "1–3 months",
-        "deadline_flexible": "Flexible",
-        "submit": "Submit Brief",
-        "submitting": "Submitting...",
-        "captcha_not_ready": "Security verification in progress. Please try again in a moment.",
-        "validation_name_required": "Please enter your name",
-        "validation_name_min": "Name must be at least 2 characters",
-        "validation_name_max": "Name must not exceed 100 characters",
-        "validation_name_format": "Name can only contain letters, spaces, apostrophes, and hyphens",
-        "validation_email_required": "Please enter your email address",
-        "validation_email_format": "Please enter a valid email address",
-        "validation_email_max": "Email must not exceed 254 characters",
-        "validation_description_required": "Please describe your project",
-        "validation_description_min": "Description must be at least 10 characters",
-        "validation_description_max": "Description must not exceed 5,000 characters",
-        "validation_budget": "Please select a budget range"
     },
     "dashboard_page": {
         "greeting": "Welcome, {name}",
@@ -426,9 +220,7 @@
         "ai_chat_teaser": {
             "heading": "AI Chat",
             "description": "Try real AI integration — send a message and see how executions billing works live.",
-            "cta_link": "Open chat",
-            "tries_remaining": "{count} free tries remaining",
-            "limit_exhausted": "Free tries exhausted"
+            "cta_link": "Open chat"
         }
     },
     "profile_page": {
@@ -613,7 +405,6 @@
     "components": {
         "header": {
             "signin": "Sign in",
-            "get_started": "Get Started",
             "logout": "Log out",
             "dashboard": "Dashboard",
             "profile": "Profile",

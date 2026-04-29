@@ -18,7 +18,7 @@ const AI_IP_TTL_SECONDS = 86_400; // 24 hours
 
 /**
  * IP-based rate limit guard for AI chat.
- * Account-level limits (lifetime free limit, balance, single-flight)
+ * Account-level limits (executions balance, single-flight reservation)
  * are enforced atomically in AiService.reserveChatRequest.
  */
 @Injectable()

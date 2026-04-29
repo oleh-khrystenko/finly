@@ -1,7 +1,6 @@
 import {
     BadRequestException,
     ConflictException,
-    ForbiddenException,
     Inject,
     Injectable,
     Logger,
@@ -23,6 +22,7 @@ import {
 import { ENV } from '../../config/env';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { UsersService } from '../users/users.service';
+import type { ReservationTicket } from '../users/interfaces/reservation';
 import {
     ChatMessage,
     ChatMessageDocument,
@@ -32,7 +32,6 @@ import {
     type AiChatMessage,
     type IAiProvider,
 } from './interfaces/ai-provider.interface';
-import type { AiChatReservationTicket } from './interfaces/ai-chat-reservation';
 
 const SYSTEM_PROMPT = `You are the AI assistant on CyanShip — a done-for-you SaaS MVP development agency run by Oleh Khrystenko.
 
@@ -178,46 +177,20 @@ export class AiService {
         );
     }
 
-    async reserveChatRequest(userId: string): Promise<AiChatReservationTicket> {
+    async reserveChatRequest(userId: string): Promise<ReservationTicket> {
         const reservationId = randomUUID();
         const now = new Date();
         const expiresAt = new Date(now.getTime() + AI_CHAT_RESERVATION_TTL_MS);
-
-        const freeLimit = ENV.AI_CHAT_FREE_LIMIT;
-        const bonusAmount = ENV.AI_CHAT_BONUS_AMOUNT;
 
         const updated = await this.userModel.findOneAndUpdate(
             {
                 _id: userId,
                 'executions.balance': { $gte: AI_CHAT_COST },
                 'executions.activeReservation': null,
-                $expr: {
-                    $lt: [
-                        { $ifNull: ['$ai.requestsUsed', 0] },
-                        {
-                            $add: [
-                                freeLimit,
-                                {
-                                    $cond: [
-                                        {
-                                            $ifNull: [
-                                                '$ai.bonusGranted',
-                                                false,
-                                            ],
-                                        },
-                                        bonusAmount,
-                                        0,
-                                    ],
-                                },
-                            ],
-                        },
-                    ],
-                },
             },
             {
                 $inc: {
                     'executions.balance': -AI_CHAT_COST,
-                    'ai.requestsUsed': 1,
                 },
                 $set: {
                     'executions.activeReservation': {
@@ -227,7 +200,7 @@ export class AiService {
                         expiresAt,
                         feature: 'ai_chat',
                         compensationOps: {
-                            inc: { 'ai.requestsUsed': -1 },
+                            inc: {},
                         },
                     },
                 },
@@ -236,10 +209,6 @@ export class AiService {
         );
 
         if (updated) {
-            const ai = updated.ai ?? {
-                requestsUsed: 0,
-                bonusGranted: false,
-            };
             return {
                 reservationId,
                 userId,
@@ -247,8 +216,6 @@ export class AiService {
                 balanceAfterReserve: updated.executions.balance,
                 expiresAt,
                 feature: 'ai_chat',
-                aiRequestsUsedAfterReserve: ai.requestsUsed,
-                bonusGranted: ai.bonusGranted,
             };
         }
 
@@ -256,7 +223,6 @@ export class AiService {
         const user = await this.userModel.findById(userId, {
             'executions.balance': 1,
             'executions.activeReservation': 1,
-            ai: 1,
         });
 
         if (!user) {
@@ -270,16 +236,6 @@ export class AiService {
             });
         }
 
-        const ai = user.ai ?? { requestsUsed: 0, bonusGranted: false };
-        const limit = freeLimit + (ai.bonusGranted ? bonusAmount : 0);
-
-        if (ai.requestsUsed >= limit) {
-            throw new ForbiddenException({
-                code: RESPONSE_CODE.AI_LIMIT_EXHAUSTED,
-                message: 'AI request limit exhausted',
-            });
-        }
-
         throw new BadRequestException({
             code: RESPONSE_CODE.INSUFFICIENT_EXECUTIONS,
             message: 'Insufficient executions',
@@ -287,10 +243,10 @@ export class AiService {
     }
 
     async commitChatRequest(
-        ticket: AiChatReservationTicket,
+        ticket: ReservationTicket,
         userMessage: string,
         assistantContent: string
-    ): Promise<{ balanceAfter: number; aiRequestsRemaining: number }> {
+    ): Promise<{ balanceAfter: number }> {
         const result = await this.usersService.commitReservation({
             userId: ticket.userId,
             reservationId: ticket.reservationId,
@@ -318,21 +274,12 @@ export class AiService {
             },
         });
 
-        const limit =
-            ENV.AI_CHAT_FREE_LIMIT +
-            (ticket.bonusGranted ? ENV.AI_CHAT_BONUS_AMOUNT : 0);
-        const aiRequestsRemaining = Math.max(
-            0,
-            limit - ticket.aiRequestsUsedAfterReserve
-        );
-
         return {
             balanceAfter: result.balanceAfter,
-            aiRequestsRemaining,
         };
     }
 
-    async refundChatRequest(ticket: AiChatReservationTicket): Promise<void> {
+    async refundChatRequest(ticket: ReservationTicket): Promise<void> {
         try {
             await this.usersService.refundReservation(
                 ticket.userId,
