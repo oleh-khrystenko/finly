@@ -1,7 +1,7 @@
 import { type ReactNode } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { useRouter, usePathname } from 'next/navigation';
-import { getFullName, getInitials } from '@cyanship/types';
+import { getFullName, getInitials } from '@neatslip/types';
 import { logout } from '@/shared/api';
 import { useAuthStore } from '@/entities/user';
 

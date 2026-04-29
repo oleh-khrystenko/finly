@@ -1,13 +1,17 @@
-# CyanShip
+# NeatSlip
 
-Web-додаток на Next.js 16 + NestJS 11: auth, payments, AI chat, media storage, i18n, theming та модульна архітектура з коробки.
+> **Product vision (neatslip.com):** SaaS для українських ФОП та їх бухгалтерів. Генерація платіжних QR-кодів і посилань за стандартом НБУ — клієнт сканує QR і платить без ручного введення реквізитів. У планах: зберігання документів з AI-тегуванням для швидкого пошуку.
+
+## Поточний стан
+
+QR/НБУ-флоу та document storage ще **не реалізовані**. Цей репозиторій містить тех-фундамент: monorepo-monolith на Next.js 16 + NestJS 11 з auth, Stripe payments, AI chat (Anthropic), executions ledger, R2 avatar storage, i18n, theming та модульною архітектурою. Структура та сервіси нижче описують саме цей фундамент.
 
 ---
 
 ## Структура проєкту
 
 ```
-cyanship/
+neatslip/
 ├── apps/
 │   ├── web/                  # Frontend (Next.js 16, React 19)
 │   │   └── src/
@@ -33,7 +37,7 @@ cyanship/
 │           │   └── email/            # Resend transactional emails
 │           └── common/               # Guards, filters, decorators, Redis provider
 ├── packages/
-│   └── types/                # @cyanship/types — Zod-схеми, типи, контракти
+│   └── types/                # @neatslip/types — Zod-схеми, типи, контракти
 ├── docs/                     # Conventions
 ├── docker-compose.yml        # Production (api + web)
 ├── docker-compose.dev.yml    # Development (mongo + redis + api + web)
@@ -160,7 +164,7 @@ docker compose up --build -d
 | `pnpm --filter api test:e2e`              | API E2E тести               |
 | `pnpm --filter api test:cov`              | API coverage                |
 | `pnpm --filter web test`                  | Web unit тести              |
-| `pnpm --filter @cyanship/types build`    | Build shared types          |
+| `pnpm --filter @neatslip/types build`    | Build shared types          |
 
 ---
 

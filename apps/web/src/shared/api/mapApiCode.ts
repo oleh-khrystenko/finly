@@ -1,4 +1,4 @@
-import { RESPONSE_CODE_TYPE, RESPONSE_TYPE } from '@cyanship/types';
+import { RESPONSE_CODE_TYPE, RESPONSE_TYPE } from '@neatslip/types';
 
 /**
  * Returns an i18n key for the given API response code.

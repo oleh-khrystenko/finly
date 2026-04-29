@@ -1,4 +1,4 @@
-cyanship.com {
+neatslip.com {
     reverse_proxy 127.0.0.1:3000
 
     # Cloudflare Origin Certificate — issued via Cloudflare Dashboard:
@@ -20,7 +20,7 @@ cyanship.com {
     }
 
     log {
-        output file /var/log/caddy/cyanship.log {
+        output file /var/log/caddy/neatslip.log {
             roll_size 10mb
             roll_keep 5
         }

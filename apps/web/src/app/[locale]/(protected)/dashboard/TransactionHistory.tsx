@@ -6,7 +6,7 @@ import { ArrowDownRight, ArrowUpRight } from 'lucide-react';
 import {
     EXECUTION_TRANSACTION_TYPE,
     type ExecutionTransactionItem,
-} from '@cyanship/types';
+} from '@neatslip/types';
 import { getExecutionTransactions } from '@/shared/api';
 import { toIntlLocale } from '@/shared/lib';
 import UiButton from '@/shared/ui/UiButton';

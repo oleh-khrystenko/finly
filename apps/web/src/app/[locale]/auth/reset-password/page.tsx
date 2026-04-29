@@ -8,7 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { AxiosError } from 'axios';
 import { toast } from 'sonner';
 import { z } from 'zod';
-import { passwordSchema } from '@cyanship/types';
+import { passwordSchema } from '@neatslip/types';
 
 import UiButton from '@/shared/ui/UiButton';
 import UiPasswordInput from '@/shared/ui/UiPasswordInput';

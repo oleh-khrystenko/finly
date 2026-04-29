@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import { CURRENT_TERMS_VERSION } from '@cyanship/types';
+import { CURRENT_TERMS_VERSION } from '@neatslip/types';
 import {
     UiModal,
     UiModalContent,

@@ -16,7 +16,7 @@ import {
     LANG,
     MAGIC_LINK_PURPOSE,
     type MagicLinkPurpose,
-} from '@cyanship/types';
+} from '@neatslip/types';
 import Redis from 'ioredis';
 
 import { REDIS_CLIENT } from '../../common/modules/redis.module';

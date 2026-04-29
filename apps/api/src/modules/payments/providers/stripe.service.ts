@@ -6,7 +6,7 @@ import {
     PAYMENT_TYPE,
     SUBSCRIPTION_STATUS,
     type SubscriptionStatus,
-} from '@cyanship/types';
+} from '@neatslip/types';
 import { ENV } from '../../../config/env';
 import {
     IPaymentProvider,

@@ -1,4 +1,4 @@
-import type { MagicLinkPurpose } from '@cyanship/types';
+import type { MagicLinkPurpose } from '@neatslip/types';
 
 export interface MagicLinkTranslations {
     subject: string;

@@ -7,7 +7,7 @@ import { EmailService } from './email.service';
 jest.mock('../../config/env', () => ({
     ENV: {
         RESEND_API_KEY: 'test-key',
-        RESEND_FROM_EMAIL: 'CyanShip <test@resend.dev>',
+        RESEND_FROM_EMAIL: 'NeatSlip <test@resend.dev>',
         WEB_URL: 'http://localhost:3000',
         ACCOUNT_DELETION_GRACE_DAYS: 2,
     },
@@ -55,7 +55,7 @@ describe('EmailService', () => {
             expect(sendSpy).toHaveBeenCalledWith(
                 expect.objectContaining({
                     to: email,
-                    subject: 'Посилання для входу в CyanShip',
+                    subject: 'Посилання для входу в NeatSlip',
                     react: expect.anything(),
                 })
             );
@@ -74,7 +74,7 @@ describe('EmailService', () => {
 
             expect(sendSpy).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    subject: 'Ласкаво просимо до CyanShip',
+                    subject: 'Ласкаво просимо до NeatSlip',
                 })
             );
 
@@ -92,7 +92,7 @@ describe('EmailService', () => {
 
             expect(sendSpy).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    subject: 'Скидання пароля CyanShip',
+                    subject: 'Скидання пароля NeatSlip',
                 })
             );
 
@@ -128,7 +128,7 @@ describe('EmailService', () => {
 
             expect(sendSpy).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    subject: 'Your sign-in link for CyanShip',
+                    subject: 'Your sign-in link for NeatSlip',
                 })
             );
 
@@ -146,7 +146,7 @@ describe('EmailService', () => {
 
             expect(sendSpy).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    subject: 'Welcome to CyanShip',
+                    subject: 'Welcome to NeatSlip',
                 })
             );
 
@@ -164,7 +164,7 @@ describe('EmailService', () => {
 
             expect(sendSpy).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    subject: 'Reset your CyanShip password',
+                    subject: 'Reset your NeatSlip password',
                 })
             );
 
@@ -256,7 +256,7 @@ describe('EmailService', () => {
 
             expect(sendSpy).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    subject: 'Your sign-in link for CyanShip',
+                    subject: 'Your sign-in link for NeatSlip',
                 })
             );
         });
@@ -291,7 +291,7 @@ describe('EmailService', () => {
             expect(sendSpy).toHaveBeenCalledWith(
                 expect.objectContaining({
                     to: email,
-                    subject: 'Ваш акаунт CyanShip деактивовано',
+                    subject: 'Ваш акаунт NeatSlip деактивовано',
                     react: expect.anything(),
                 })
             );
@@ -306,7 +306,7 @@ describe('EmailService', () => {
 
             expect(sendSpy).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    subject: 'Your CyanShip account has been deactivated',
+                    subject: 'Your NeatSlip account has been deactivated',
                 })
             );
         });
@@ -342,7 +342,7 @@ describe('EmailService', () => {
 
             expect(sendSpy).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    subject: 'Your CyanShip account has been deactivated',
+                    subject: 'Your NeatSlip account has been deactivated',
                 })
             );
         });

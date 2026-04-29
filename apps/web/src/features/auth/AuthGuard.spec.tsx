@@ -17,7 +17,7 @@ jest.mock('sonner', () => ({
     toast: { info: jest.fn(), error: jest.fn(), success: jest.fn() },
 }));
 
-jest.mock('@cyanship/types', () => ({
+jest.mock('@neatslip/types', () => ({
     isOnboardingComplete: () => true,
 }));
 

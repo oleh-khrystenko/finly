@@ -38,7 +38,7 @@ importers:
       '@aws-sdk/s3-request-presigner':
         specifier: ^3.1031.0
         version: 3.1031.0
-      '@cyanship/types':
+      '@neatslip/types':
         specifier: workspace:*
         version: link:../../packages/types
       '@nestjs/common':
@@ -231,15 +231,15 @@ importers:
 
   apps/web:
     dependencies:
-      '@cyanship/types':
-        specifier: workspace:*
-        version: link:../../packages/types
       '@headlessui/react':
         specifier: ^2.2.9
         version: 2.2.9(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@hookform/resolvers':
         specifier: ^5.2.2
         version: 5.2.2(react-hook-form@7.72.0(react@19.2.4))
+      '@neatslip/types':
+        specifier: workspace:*
+        version: link:../../packages/types
       '@radix-ui/react-alert-dialog':
         specifier: ^1.1.15
         version: 1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)

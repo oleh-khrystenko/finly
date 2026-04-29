@@ -1,9 +1,18 @@
 import { Metadata } from 'next';
 import { MetaProps } from '@/shared/types/settings';
-import { LANG } from '@cyanship/types';
+import { LANG, type Lang } from '@neatslip/types';
 import { ENV } from '@/shared/config';
 
 const BASE_URL = ENV.NEXT_PUBLIC_BASE_URL;
+
+const FALLBACK_DESCRIPTION: Record<Lang, string> = {
+    [LANG.UK]: 'NeatSlip — сервіс для українських ФОП та їх бухгалтерів.',
+    [LANG.EN]: 'NeatSlip — service for Ukrainian sole proprietors and their accountants.',
+};
+
+function resolveLang(locale: string): Lang {
+    return locale === LANG.EN ? LANG.EN : LANG.UK;
+}
 
 export async function fetchMetadata({
     params,
@@ -22,8 +31,8 @@ export async function fetchMetadata({
         locale = LANG.UK;
     }
 
-    let title = 'CyanShip';
-    let description = 'CyanShip';
+    let title = 'NeatSlip';
+    let description = FALLBACK_DESCRIPTION[resolveLang(locale)];
 
     if (page === null) {
         if (meta) {
@@ -81,7 +90,7 @@ export async function fetchMetadata({
             title,
             description,
             url: canonicalUrl,
-            siteName: 'CyanShip',
+            siteName: 'NeatSlip',
             locale: locale === 'uk' ? 'uk_UA' : 'en_US',
             type: 'website',
             images: [

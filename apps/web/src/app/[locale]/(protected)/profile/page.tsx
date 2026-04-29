@@ -3,7 +3,7 @@
 import { Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
-import { isOnboardingComplete } from '@cyanship/types';
+import { isOnboardingComplete } from '@neatslip/types';
 import UiFullPageLoader from '@/shared/ui/UiFullPageLoader';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
 import UiPageHeading from '@/shared/ui/UiPageHeading';

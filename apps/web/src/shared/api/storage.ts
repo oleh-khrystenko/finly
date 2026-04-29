@@ -2,7 +2,7 @@ import {
     AVATAR,
     type AvatarUploadUrlResponse,
     type CommitAvatarUploadResponse,
-} from '@cyanship/types';
+} from '@neatslip/types';
 
 import { apiClient } from './client';
 

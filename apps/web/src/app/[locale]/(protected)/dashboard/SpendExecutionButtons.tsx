@@ -8,7 +8,7 @@ import {
     EXECUTION_ACTION,
     EXECUTION_ACTION_COST,
     type SpendableAction,
-} from '@cyanship/types';
+} from '@neatslip/types';
 import { spendExecutions, getApiMessageKey } from '@/shared/api';
 import { useAuthStore } from '@/entities/user';
 import { toIntlLocale } from '@/shared/lib';

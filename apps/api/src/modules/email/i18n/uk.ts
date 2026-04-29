@@ -1,36 +1,36 @@
-import { MAGIC_LINK_PURPOSE } from '@cyanship/types';
+import { MAGIC_LINK_PURPOSE } from '@neatslip/types';
 
 import type { EmailTranslations } from './types';
 
 export const uk = {
     magicLink: {
         [MAGIC_LINK_PURPOSE.LOGIN]: {
-            subject: 'Посилання для входу в CyanShip',
+            subject: 'Посилання для входу в NeatSlip',
             body: 'Ми отримали запит на вхід у ваш акаунт. Натисніть кнопку нижче, щоб продовжити.',
             cta: 'Увійти',
             footer: 'Посилання дійсне 15 хвилин. Якщо ви не запитували вхід, просто ігноруйте цей лист.',
         },
         [MAGIC_LINK_PURPOSE.REGISTER]: {
-            subject: 'Ласкаво просимо до CyanShip',
+            subject: 'Ласкаво просимо до NeatSlip',
             body: 'Дякуємо за реєстрацію. Натисніть кнопку нижче, щоб завершити створення акаунту.',
             cta: 'Завершити реєстрацію',
             footer: 'Посилання дійсне 15 хвилин. Якщо ви не створювали акаунт, просто ігноруйте цей лист.',
         },
         [MAGIC_LINK_PURPOSE.RESET_PASSWORD]: {
-            subject: 'Скидання пароля CyanShip',
+            subject: 'Скидання пароля NeatSlip',
             body: 'Ми отримали запит на скидання пароля для вашого акаунту. Натисніть кнопку нижче, щоб встановити новий пароль.',
             cta: 'Скинути пароль',
             footer: 'Посилання дійсне 15 хвилин. Якщо ви не запитували скидання, ваш пароль залишається незмінним — жодних дій не потрібно.',
         },
         [MAGIC_LINK_PURPOSE.DELETE_ACCOUNT]: {
             subject: 'Підтвердження видалення акаунту',
-            body: 'Ми отримали запит на видалення вашого акаунту CyanShip. Натисніть кнопку нижче, щоб підтвердити.',
+            body: 'Ми отримали запит на видалення вашого акаунту NeatSlip. Натисніть кнопку нижче, щоб підтвердити.',
             cta: 'Підтвердити видалення',
             footer: 'Посилання дійсне 15 хвилин. Якщо ви не запитували видалення, просто ігноруйте цей лист — ваш акаунт залишиться без змін.',
         },
     },
     deletionConfirmation: {
-        subject: 'Ваш акаунт CyanShip деактивовано',
+        subject: 'Ваш акаунт NeatSlip деактивовано',
         body: (formattedDate: string) =>
             `Ваш акаунт деактивовано за вашим запитом. Усі дані буде остаточно видалено ${formattedDate}.`,
         instruction: (graceDays: number) => {
@@ -48,7 +48,7 @@ export const uk = {
     deletionReminder: {
         subject: 'Нагадування: ваш акаунт буде видалено завтра',
         body: (formattedDate: string) =>
-            `Нагадуємо, що ваш акаунт CyanShip буде остаточно видалено ${formattedDate}.`,
+            `Нагадуємо, що ваш акаунт NeatSlip буде остаточно видалено ${formattedDate}.`,
         instruction:
             'Якщо ви хочете зберегти акаунт, просто увійдіть до цієї дати.',
         cta: 'Увійти',

@@ -16,7 +16,7 @@ import {
     SUBSCRIPTION_STATUS,
     type BillingWebhookEvent,
     type CreateCheckoutSession,
-} from '@cyanship/types';
+} from '@neatslip/types';
 import { ENV } from '../../config/env';
 import {
     PAYMENT_PROVIDER,

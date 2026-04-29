@@ -1,4 +1,4 @@
-import { MAGIC_LINK_PURPOSE } from '@cyanship/types';
+import { MAGIC_LINK_PURPOSE } from '@neatslip/types';
 
 import { resolveTranslations } from '../src/modules/email/i18n/resolve';
 import { MagicLinkEmail } from '../src/modules/email/templates/magic-link';

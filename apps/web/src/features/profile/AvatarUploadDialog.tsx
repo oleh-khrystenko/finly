@@ -11,7 +11,7 @@ import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import Cropper, { type Area } from 'react-easy-crop';
 import { AxiosError } from 'axios';
-import { AVATAR, RESPONSE_CODE } from '@cyanship/types';
+import { AVATAR, RESPONSE_CODE } from '@neatslip/types';
 
 import {
     UiModal,

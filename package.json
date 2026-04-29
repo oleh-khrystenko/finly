@@ -1,8 +1,8 @@
 {
-    "name": "cyanship",
+    "name": "neatslip",
     "version": "0.1.0",
     "private": true,
-    "description": "",
+    "description": "NeatSlip monorepo (apps/api, apps/web, packages/types). Product vision: payment QR codes by NBU standard for Ukrainian sole proprietors; current code is the auth/payments/AI/storage scaffolding.",
     "workspaces": [
         "apps/*",
         "packages/*"

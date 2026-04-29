@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import { getFullName, getInitials } from '@cyanship/types';
+import { getFullName, getInitials } from '@neatslip/types';
 import { useAuthStore } from '@/entities/user';
 import { toIntlLocale } from '@/shared/lib';
 import { UiAvatar } from '@/shared/ui/UiAvatar';

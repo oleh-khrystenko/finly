@@ -8,7 +8,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { Observable } from 'rxjs';
-import { RESPONSE_CODE, isOnboardingComplete } from '@cyanship/types';
+import { RESPONSE_CODE, isOnboardingComplete } from '@neatslip/types';
 
 import { SKIP_ONBOARDING_KEY } from '../decorators/skip-onboarding.decorator';
 import type { UserDocument } from '../../modules/users/schemas/user.schema';

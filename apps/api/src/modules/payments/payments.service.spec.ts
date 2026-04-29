@@ -8,7 +8,7 @@ import {
     SUBSCRIPTION_STATUS,
     type BillingWebhookEvent,
     type ExecutionPackCode,
-} from '@cyanship/types';
+} from '@neatslip/types';
 
 import { PaymentsService } from './payments.service';
 import { CatalogService } from './catalog.service';

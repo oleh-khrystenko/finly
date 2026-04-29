@@ -1,6 +1,6 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { RESPONSE_CODE, MAGIC_LINK_PURPOSE } from '@cyanship/types';
+import { RESPONSE_CODE, MAGIC_LINK_PURPOSE } from '@neatslip/types';
 
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';

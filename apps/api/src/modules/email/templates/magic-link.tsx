@@ -1,5 +1,5 @@
 import { Button, Text } from '@react-email/components';
-import { EMAIL_COLORS } from '@cyanship/types';
+import { EMAIL_COLORS } from '@neatslip/types';
 
 import type { MagicLinkTranslations } from '../i18n/types';
 import { BaseLayout } from './layouts/base';

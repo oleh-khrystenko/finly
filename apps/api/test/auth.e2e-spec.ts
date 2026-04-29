@@ -24,7 +24,7 @@ import { StorageModule } from '../src/modules/storage/storage.module';
 import { PaymentsModule } from '../src/modules/payments/payments.module';
 import { User, UserDocument } from '../src/modules/users/schemas/user.schema';
 import { EmailService } from '../src/modules/email/email.service';
-import { CURRENT_TERMS_VERSION } from '@cyanship/types';
+import { CURRENT_TERMS_VERSION } from '@neatslip/types';
 
 // Mock ENV
 jest.mock('../src/config/env', () => ({
@@ -40,7 +40,7 @@ jest.mock('../src/config/env', () => ({
         GOOGLE_CLIENT_SECRET: 'GOCSPX-test-secret',
         GOOGLE_CALLBACK_URL: 'http://localhost:4000/api/auth/google/callback',
         RESEND_API_KEY: 're_test_key',
-        RESEND_FROM_EMAIL: 'CyanShip <test@test.com>',
+        RESEND_FROM_EMAIL: 'NeatSlip <test@test.com>',
         STRIPE_SECRET_KEY: 'sk_test_xxx',
         STRIPE_WEBHOOK_SECRET: 'whsec_test',
         AUTH_LOCKOUT_THRESHOLDS: '5:1,10:5,20:15',

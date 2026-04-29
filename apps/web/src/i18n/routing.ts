@@ -1,5 +1,5 @@
 import { defineRouting } from 'next-intl/routing';
-import { LANG } from '@cyanship/types';
+import { LANG } from '@neatslip/types';
 
 export const routing = defineRouting({
     locales: Object.values(LANG),

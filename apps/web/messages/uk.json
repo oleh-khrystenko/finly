@@ -1,33 +1,33 @@
 {
     "home_page": {
         "head": {
-            "title": "CyanShip",
+            "title": "NeatSlip",
             "description": "Увійдіть, щоб користуватися застосунком."
         },
-        "heading": "CyanShip",
+        "heading": "NeatSlip",
         "description": "Заглушка лендінгу. Увійдіть, щоб користуватися застосунком.",
         "cta_get_started": "Почати",
         "cta_signin": "Увійти"
     },
     "privacy_page": {
         "head": {
-            "title": "Політика конфіденційності — CyanShip",
-            "description": "Політика конфіденційності CyanShip."
+            "title": "Політика конфіденційності — NeatSlip",
+            "description": "Політика конфіденційності NeatSlip."
         },
         "heading": "Політика конфіденційності",
         "placeholder": "Заглушка політики конфіденційності."
     },
     "terms_page": {
         "head": {
-            "title": "Умови використання — CyanShip",
-            "description": "Умови використання CyanShip."
+            "title": "Умови використання — NeatSlip",
+            "description": "Умови використання NeatSlip."
         },
         "heading": "Умови використання",
         "placeholder": "Заглушка умов використання."
     },
     "auth_page": {
         "signin": {
-            "heading": "Вхід до CyanShip",
+            "heading": "Вхід до NeatSlip",
             "subheading": "Запустіть свій SaaS швидше — auth, payments та i18n з коробки",
             "email_label": "Email",
             "email_placeholder": "your@email.com",
@@ -308,7 +308,8 @@
     },
     "billing_page": {
         "head": {
-            "title": "Білінг"
+            "title": "Білінг",
+            "description": "Керуйте підпискою та виконаннями NeatSlip."
         },
         "heading": "Білінг",
         "description": "Керуйте підпискою та виконаннями. Усі платежі безпечно обробляються через Stripe.",

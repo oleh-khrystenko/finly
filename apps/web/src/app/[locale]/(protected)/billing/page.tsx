@@ -18,7 +18,7 @@ import {
 import { useAuthStore } from '@/entities/user';
 import { formatLocalDate, toIntlLocale } from '@/shared/lib';
 import { useBillingResetDialogStore } from '@/features/billing';
-import { formatPrice, type PaymentsCatalog } from '@cyanship/types';
+import { formatPrice, type PaymentsCatalog } from '@neatslip/types';
 import UiButton from '@/shared/ui/UiButton';
 import UiLink from '@/shared/ui/UiLink';
 import UiPageContainer from '@/shared/ui/UiPageContainer';

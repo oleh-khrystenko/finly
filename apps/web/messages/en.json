@@ -1,33 +1,33 @@
 {
     "home_page": {
         "head": {
-            "title": "CyanShip",
+            "title": "NeatSlip",
             "description": "Sign in to access the app."
         },
-        "heading": "CyanShip",
+        "heading": "NeatSlip",
         "description": "Landing page placeholder. Sign in to access the app.",
         "cta_get_started": "Get started",
         "cta_signin": "Sign in"
     },
     "privacy_page": {
         "head": {
-            "title": "Privacy Policy — CyanShip",
-            "description": "Privacy policy for CyanShip."
+            "title": "Privacy Policy — NeatSlip",
+            "description": "Privacy policy for NeatSlip."
         },
         "heading": "Privacy Policy",
         "placeholder": "Privacy policy placeholder."
     },
     "terms_page": {
         "head": {
-            "title": "Terms of Service — CyanShip",
-            "description": "Terms of service for CyanShip."
+            "title": "Terms of Service — NeatSlip",
+            "description": "Terms of service for NeatSlip."
         },
         "heading": "Terms of Service",
         "placeholder": "Terms of service placeholder."
     },
     "auth_page": {
         "signin": {
-            "heading": "Sign in to CyanShip",
+            "heading": "Sign in to NeatSlip",
             "subheading": "Launch your SaaS faster with production-ready auth, payments, and more",
             "email_label": "Email",
             "email_placeholder": "your@email.com",
@@ -308,7 +308,8 @@
     },
     "billing_page": {
         "head": {
-            "title": "Billing"
+            "title": "Billing",
+            "description": "Manage your NeatSlip subscription and executions."
         },
         "heading": "Billing",
         "description": "Manage your subscription and executions. All payments are processed securely via Stripe.",

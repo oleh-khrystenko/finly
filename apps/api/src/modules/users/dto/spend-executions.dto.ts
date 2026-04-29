@@ -1,5 +1,5 @@
 import { createZodDto } from 'nestjs-zod';
 
-import { SpendExecutionsSchema } from '@cyanship/types';
+import { SpendExecutionsSchema } from '@neatslip/types';
 
 export class SpendExecutionsDto extends createZodDto(SpendExecutionsSchema) {}

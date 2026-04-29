@@ -12,7 +12,7 @@ import {
     type AvatarUploadUrlResponse,
     type CommitAvatarUploadResponse,
     type ResponseCode,
-} from '@cyanship/types';
+} from '@neatslip/types';
 
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';

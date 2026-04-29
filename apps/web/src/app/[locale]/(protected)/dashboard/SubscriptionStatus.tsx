@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import type { PaymentsCatalog } from '@cyanship/types';
+import type { PaymentsCatalog } from '@neatslip/types';
 import { getCatalog } from '@/shared/api/payments';
 import { useAuthStore } from '@/entities/user';
 import { formatLocalDate, toIntlLocale } from '@/shared/lib';

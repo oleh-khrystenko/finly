@@ -15,7 +15,7 @@ import {
     BILLING_EVENT_TYPE,
     SUBSCRIPTION_STATUS,
     type BillingWebhookEvent,
-} from '@cyanship/types';
+} from '@neatslip/types';
 
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 import { REDIS_CLIENT } from '../src/common/providers/redis.provider';
@@ -51,7 +51,7 @@ jest.mock('../src/config/env', () => ({
         GOOGLE_CLIENT_SECRET: 'GOCSPX-test-secret',
         GOOGLE_CALLBACK_URL: 'http://localhost:4000/api/auth/google/callback',
         RESEND_API_KEY: 're_test_key',
-        RESEND_FROM_EMAIL: 'CyanShip <test@test.com>',
+        RESEND_FROM_EMAIL: 'NeatSlip <test@test.com>',
         AUTH_LOCKOUT_THRESHOLDS: '5:1,10:5,20:15',
         AUTH_LOGIN_ATTEMPTS_TTL_MIN: 15,
         AUTH_MAGIC_LINK_TTL_MIN: 15,

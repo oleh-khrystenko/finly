@@ -1,6 +1,8 @@
-# CyanShip
+# NeatSlip
 
-> Модульний monorepo-monolith на Next.js 16 + NestJS 11, де API керує auth/session lifecycle, billing та AI chat, а web споживає це через спільні Zod/TypeScript контракти.
+> **Product vision (neatslip.com):** SaaS для українських ФОП та їх бухгалтерів — генерація платіжних QR-кодів і посилань за стандартом НБУ; у планах сховище документів з AI-тегуванням.
+>
+> **Поточний стан:** product flow ще не реалізовано. Репозиторій містить модульний monorepo-monolith на Next.js 16 + NestJS 11: API керує auth/session lifecycle, billing та AI chat, web споживає це через спільні Zod/TypeScript контракти. Документація нижче описує цей тех-фундамент, а не QR/document features.
 
 ## Tech Stack
 
@@ -15,7 +17,7 @@
 
 ## Architecture Overview
 
-CyanShip поділений на три головні зони: `apps/api`, `apps/web`, `packages/types`. API є system of record для auth, refresh rotation, billing, execution ledger, AI chat reservations й email delivery; web лишається thin Next.js shell з locale-aware routing, auth bootstrap, overlay registry та shared API clients. `packages/types` містить спільні Zod contracts, entities, enums, які використовують обидва apps. `ai` реалізований як повноцінний модуль, тоді як `reports` і `storage` поки що scaffolds без бізнес-флоу.
+NeatSlip поділений на три головні зони: `apps/api`, `apps/web`, `packages/types`. API є system of record для auth, refresh rotation, billing, execution ledger, AI chat reservations й email delivery; web лишається thin Next.js shell з locale-aware routing, auth bootstrap, overlay registry та shared API clients. `packages/types` містить спільні Zod contracts, entities, enums, які використовують обидва apps. `ai` реалізований як повноцінний модуль, тоді як `reports` і `storage` поки що scaffolds без бізнес-флоу.
 
 ## Project Structure
 
@@ -189,7 +191,7 @@ Backend повертає machine-readable `code` через `apps/api/src/common
 **Infra / orchestration**
 - `docker-compose.dev.yml` піднімає `redis`, `api`, `web`; MongoDB у compose немає, він приходить з зовнішнього `MONGODB_URI`
 - `docker-compose.yml` також очікує зовнішній MongoDB і передає env у build/runtime
-- Dev compose збирає `@cyanship/types` перед запуском apps
+- Dev compose збирає `@neatslip/types` перед запуском apps
 
 **Policy**
 - Rule source: `docs/conventions/fail-fast.md`
@@ -205,7 +207,7 @@ Backend повертає machine-readable `code` через `apps/api/src/common
 - `pnpm test` — run workspace tests
 - `pnpm --filter api dev|build|test|test:e2e|test:cov|email:dev` — API-only workflow
 - `pnpm --filter web dev|build|test|lint` — web-only workflow
-- `pnpm --filter @cyanship/types build|dev` — build/watch shared contracts
+- `pnpm --filter @neatslip/types build|dev` — build/watch shared contracts
 - `docker compose -f docker-compose.dev.yml up --build` — local dev stack with Redis + apps
 - `docker compose up --build -d` — production-like container stack
 
@@ -246,5 +248,5 @@ Full index: [docs/conventions/README.md](docs/conventions/README.md)
 - `apps/web/src/shared/api/mapApiCode.ts` будує ключі виду `errors.generic.<code>`, але сам не робить runtime fallback до `errors.generic.unknown`; caller або словники мають це покривати
 - AI chat списує запит як non-refundable після першого успішно отриманого токена; abort до першого токена повертається одразу або через `apps/api/src/modules/users/reservation-reconcile.service.ts` кожні 5 хвилин
 - `apps/api/src/modules/payments/payments.service.ts` при billing reset спочатку чистить Mongo billing state і execution history, а cleanup Stripe customer у разі збою відкладає в `OrphanedProviderCustomer` для cron retry
-- `@cyanship/types` резолвиться через `dist` entry; при app-only запуску з чистого checkout часто треба спочатку зібрати або watch-ити `packages/types`
+- `@neatslip/types` резолвиться через `dist` entry; при app-only запуску з чистого checkout часто треба спочатку зібрати або watch-ити `packages/types`
 - `apps/api/src/modules/reports/` і `apps/api/src/modules/storage/` залишаються scaffold-модулями без реального route/business flow

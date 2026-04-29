@@ -9,7 +9,7 @@ import {
     AI_CHAT_COST,
     AI_CHAT_EVENT,
     AI_CHAT_MESSAGE_MAX_LENGTH,
-} from '@cyanship/types';
+} from '@neatslip/types';
 
 import UiButton from '@/shared/ui/UiButton';
 import UiLink from '@/shared/ui/UiLink';

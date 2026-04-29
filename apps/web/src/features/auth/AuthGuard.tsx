@@ -4,7 +4,7 @@ import { ReactNode, useEffect } from 'react';
 import { useRouter, useParams, usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
-import { isOnboardingComplete } from '@cyanship/types';
+import { isOnboardingComplete } from '@neatslip/types';
 
 import UiFullPageLoader from '@/shared/ui/UiFullPageLoader';
 import { useAuthStore } from '@/entities/user';

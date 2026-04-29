@@ -5,7 +5,7 @@ import {
     Injectable,
 } from '@nestjs/common';
 import { Request } from 'express';
-import { RESPONSE_CODE } from '@cyanship/types';
+import { RESPONSE_CODE } from '@neatslip/types';
 import { UserDocument } from '../../modules/users/schemas/user.schema';
 
 @Injectable()

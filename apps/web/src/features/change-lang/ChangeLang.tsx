@@ -5,7 +5,7 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { Globe } from 'lucide-react';
 import { UA, US } from 'country-flag-icons/react/3x2';
-import { LANG } from '@cyanship/types';
+import { LANG } from '@neatslip/types';
 import { ChangeLangProps } from './types';
 import UiButton from '@/shared/ui/UiButton';
 import UiDropdownMenu from '@/shared/ui/UiDropdownMenu';
