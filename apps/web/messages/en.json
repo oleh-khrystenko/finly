@@ -1,7 +1,4 @@
 {
-    "brand": {
-        "slogan": "Real code. Unfair speed."
-    },
     "home_page": {
         "head": {
             "title": "CyanShip",
@@ -135,7 +132,6 @@
             "unknown": "Something went wrong. Please try again later"
         },
         "ai": {
-            "ai_limit_exhausted": "AI request limit has been reached.",
             "ai_rate_limit_exceeded": "Too many AI requests. Please try again later.",
             "ai_provider_error": "AI is temporarily unavailable. Please try again later.",
             "ai_message_too_long": "Your message is too long for the current conversation. Try shortening it or clearing chat history."
@@ -154,10 +150,10 @@
         "clear_history": "Clear history",
         "empty_state_title": "How can I help you?",
         "empty_state": "Send a message to start a conversation with AI.",
-        "suggestion_1": "What technologies do you use and why?",
-        "suggestion_2": "How long does it take to build an MVP?",
-        "suggestion_3": "What's included in the development cost?",
-        "suggestion_4": "How are you different from other agencies?",
+        "suggestion_1": "What can you help me with?",
+        "suggestion_2": "Recommend a book to read.",
+        "suggestion_3": "Help me brainstorm ideas.",
+        "suggestion_4": "Write a short poem.",
         "balance_unit": "executions",
         "cost_info": "{cost} executions per message",
         "balance_top_up": "Top up balance",

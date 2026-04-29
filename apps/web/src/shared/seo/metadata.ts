@@ -22,9 +22,8 @@ export async function fetchMetadata({
         locale = LANG.UK;
     }
 
-    let title = 'CyanShip – Запустіть SaaS MVP за 4 тижні';
-    let description =
-        'Розробка production-ready B2B платформ на Next.js та NestJS. Швидкий вихід на ринок без агенційних витрат.';
+    let title = 'CyanShip';
+    let description = 'CyanShip';
 
     if (page === null) {
         if (meta) {

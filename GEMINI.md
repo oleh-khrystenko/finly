@@ -1,5 +1,5 @@
 # CyanShip
-> Modern monorepo SaaS boilerplate з Next.js 16, NestJS 11 та Feature-Sliced Design.
+> Modern monorepo SaaS-додаток з Next.js 16, NestJS 11 та Feature-Sliced Design.
 
 ## Tech Stack
 - **Frameworks:** Next.js 16 (App Router), NestJS 11
@@ -12,7 +12,7 @@
 - **Testing:** Jest, Supertest
 
 ## Architecture Overview
-Проєкт побудований як Modular Monolith з жорстким розділенням на **Core** (стабільне ядро) та **Agency** (ізольований бізнес-модуль). Frontend реалізовано за методологією **Feature-Sliced Design (FSD)**. Backend використовує модульну структуру NestJS. Всі типи та Zod-схеми винесені в спільний пакет `@cyanship/types`.
+Modular Monolith. Frontend реалізовано за методологією **Feature-Sliced Design (FSD)**. Backend використовує модульну структуру NestJS. Всі типи та Zod-схеми винесені в спільний пакет `@cyanship/types`.
 
 ## Project Structure
 - `apps/api/` # Backend (NestJS 11)
@@ -30,7 +30,6 @@
 - **Audit Logs** — (в планах) для відстеження критичних дій.
 
 ## Module Dependency Map
-`Agency` → `Core` (Однонаправлена залежність)
 `apps/web` → `@cyanship/types`
 `apps/api` → `@cyanship/types`
 
