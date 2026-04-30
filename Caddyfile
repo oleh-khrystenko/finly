@@ -1,4 +1,4 @@
-neatslip.com {
+finly.com.ua {
     reverse_proxy 127.0.0.1:3000
 
     # Cloudflare Origin Certificate — issued via Cloudflare Dashboard:
@@ -20,7 +20,7 @@ neatslip.com {
     }
 
     log {
-        output file /var/log/caddy/neatslip.log {
+        output file /var/log/caddy/finly.log {
             roll_size 10mb
             roll_keep 5
         }

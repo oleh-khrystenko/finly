@@ -14,7 +14,7 @@ import {
 import { SkipThrottle } from '@nestjs/throttler';
 import { RawBodyRequest } from '@nestjs/common/interfaces';
 import { Request } from 'express';
-import type { PaymentsCatalog } from '@neatslip/types';
+import type { PaymentsCatalog } from '@finly/types';
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { SkipOnboarding } from '../../common/decorators/skip-onboarding.decorator';

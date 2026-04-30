@@ -1,6 +1,6 @@
 import { type ReactNode } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { getFullName, getInitials } from '@neatslip/types';
+import { getFullName, getInitials } from '@finly/types';
 import { logout } from '@/shared/api';
 import { useAuthStore } from '@/entities/user';
 

@@ -1,9 +1,9 @@
 import { Button, Text } from '@react-email/components';
-import { EMAIL_COLORS } from '@neatslip/types';
+import { EMAIL_COLORS } from '@finly/types';
 
 import { BaseLayout } from './layouts/base';
 
-export const DELETION_CONFIRMATION_SUBJECT = 'Ваш акаунт NeatSlip деактивовано';
+export const DELETION_CONFIRMATION_SUBJECT = 'Ваш акаунт Finly деактивовано';
 
 const CTA = 'Увійти';
 const FOOTER =

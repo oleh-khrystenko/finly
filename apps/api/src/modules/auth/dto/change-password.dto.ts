@@ -1,4 +1,4 @@
 import { createZodDto } from 'nestjs-zod';
-import { ChangePasswordSchema } from '@neatslip/types';
+import { ChangePasswordSchema } from '@finly/types';
 
 export class ChangePasswordDto extends createZodDto(ChangePasswordSchema) {}

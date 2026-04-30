@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { PaymentsCatalog } from '@neatslip/types';
+import type { PaymentsCatalog } from '@finly/types';
 import { getCatalog } from '@/shared/api/payments';
 import { useAuthStore } from '@/entities/user';
 import { formatLocalDate, INTL_LOCALE } from '@/shared/lib';

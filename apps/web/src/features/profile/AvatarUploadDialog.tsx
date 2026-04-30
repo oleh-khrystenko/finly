@@ -10,7 +10,7 @@ import {
 import { toast } from 'sonner';
 import Cropper, { type Area } from 'react-easy-crop';
 import { AxiosError } from 'axios';
-import { AVATAR, RESPONSE_CODE } from '@neatslip/types';
+import { AVATAR, RESPONSE_CODE } from '@finly/types';
 
 import {
     UiModal,

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { getFullName, getInitials } from '@neatslip/types';
+import { getFullName, getInitials } from '@finly/types';
 import { useAuthStore } from '@/entities/user';
 import { INTL_LOCALE } from '@/shared/lib';
 import { UiAvatar } from '@/shared/ui/UiAvatar';

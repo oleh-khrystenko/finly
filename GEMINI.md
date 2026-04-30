@@ -1,5 +1,5 @@
-# NeatSlip
-> **Vision (neatslip.com):** SaaS для українських ФОП та їх бухгалтерів — генерація платіжних QR-кодів і посилань за стандартом НБУ; у планах — сховище документів з AI-тегуванням.
+# Finly
+> **Vision (finly.com.ua):** SaaS для українських ФОП та їх бухгалтерів — генерація платіжних QR-кодів і посилань за стандартом НБУ; у планах — сховище документів з AI-тегуванням.
 >
 > **Поточний код:** QR/document features ще не реалізовано. Репозиторій — monorepo SaaS-фундамент на Next.js 16 + NestJS 11 з Feature-Sliced Design (auth, payments, AI chat, executions ledger).
 
@@ -14,7 +14,7 @@
 - **Testing:** Jest, Supertest
 
 ## Architecture Overview
-Modular Monolith. Frontend реалізовано за методологією **Feature-Sliced Design (FSD)**. Backend використовує модульну структуру NestJS. Всі типи та Zod-схеми винесені в спільний пакет `@neatslip/types`.
+Modular Monolith. Frontend реалізовано за методологією **Feature-Sliced Design (FSD)**. Backend використовує модульну структуру NestJS. Всі типи та Zod-схеми винесені в спільний пакет `@finly/types`.
 
 ## Project Structure
 - `apps/api/` # Backend (NestJS 11)
@@ -32,8 +32,8 @@ Modular Monolith. Frontend реалізовано за методологією 
 - **Audit Logs** — (в планах) для відстеження критичних дій.
 
 ## Module Dependency Map
-`apps/web` → `@neatslip/types`
-`apps/api` → `@neatslip/types`
+`apps/web` → `@finly/types`
+`apps/api` → `@finly/types`
 
 ## Key Patterns (CodeDNA)
 - **Створення Endpoint:** Controller + DTO + Guard. Приклад: `apps/api/src/modules/users/users.controller.ts`.

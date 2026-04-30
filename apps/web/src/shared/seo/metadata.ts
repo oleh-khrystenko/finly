@@ -4,9 +4,9 @@ import { ENV } from '@/shared/config';
 
 const BASE_URL = ENV.NEXT_PUBLIC_BASE_URL;
 
-const FALLBACK_TITLE = 'NeatSlip';
+const FALLBACK_TITLE = 'Finly';
 const FALLBACK_DESCRIPTION =
-    'NeatSlip — сервіс для українських ФОП та їх бухгалтерів.';
+    'Finly — сервіс для українських ФОП та їх бухгалтерів.';
 
 export function fetchMetadata({
     page,
@@ -37,7 +37,7 @@ export function fetchMetadata({
             title,
             description,
             url: canonicalUrl,
-            siteName: 'NeatSlip',
+            siteName: 'Finly',
             locale: 'uk_UA',
             type: 'website',
             images: [

@@ -6,7 +6,7 @@ import {
     type UpdateProfileDto,
     type UserProfile,
     type VerifyMagicLinkResponse,
-} from '@neatslip/types';
+} from '@finly/types';
 
 import { getTimezone } from '@/shared/lib';
 

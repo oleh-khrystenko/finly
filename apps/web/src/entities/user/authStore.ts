@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { UserProfile } from '@neatslip/types';
+import type { UserProfile } from '@finly/types';
 
 import { authEvents } from '@/shared/lib';
 

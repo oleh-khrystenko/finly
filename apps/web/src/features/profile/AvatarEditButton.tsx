@@ -1,8 +1,8 @@
 'use client';
 
 import { Camera } from 'lucide-react';
-import type { UserProfile } from '@neatslip/types';
-import { getFullName, getInitials } from '@neatslip/types';
+import type { UserProfile } from '@finly/types';
+import { getFullName, getInitials } from '@finly/types';
 
 import { UiAvatarButton } from '@/shared/ui/UiAvatarButton';
 

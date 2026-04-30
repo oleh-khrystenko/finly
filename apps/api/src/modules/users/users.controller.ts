@@ -18,7 +18,7 @@ import {
     RESPONSE_CODE,
     type ExecutionTransactionItem,
     type ApiMessageResponse,
-} from '@neatslip/types';
+} from '@finly/types';
 import { Response } from 'express';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';

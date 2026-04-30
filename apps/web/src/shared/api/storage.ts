@@ -2,7 +2,7 @@ import {
     AVATAR,
     type AvatarUploadUrlResponse,
     type CommitAvatarUploadResponse,
-} from '@neatslip/types';
+} from '@finly/types';
 
 import { apiClient } from './client';
 

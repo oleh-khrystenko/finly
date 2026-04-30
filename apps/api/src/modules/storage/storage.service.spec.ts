@@ -1,6 +1,6 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { AVATAR, RESPONSE_CODE } from '@neatslip/types';
+import { AVATAR, RESPONSE_CODE } from '@finly/types';
 
 import { UsersService } from '../users/users.service';
 import { StorageService } from './storage.service';

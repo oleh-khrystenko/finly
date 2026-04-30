@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
-import { RESPONSE_CODE } from '@neatslip/types';
+import { RESPONSE_CODE } from '@finly/types';
 
 import { User } from '../users/schemas/user.schema';
 import { UsersService } from '../users/users.service';

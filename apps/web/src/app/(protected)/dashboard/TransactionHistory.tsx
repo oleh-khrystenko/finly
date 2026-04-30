@@ -5,7 +5,7 @@ import { ArrowDownRight, ArrowUpRight } from 'lucide-react';
 import {
     EXECUTION_TRANSACTION_TYPE,
     type ExecutionTransactionItem,
-} from '@neatslip/types';
+} from '@finly/types';
 import { getExecutionTransactions } from '@/shared/api';
 import { INTL_LOCALE } from '@/shared/lib';
 import UiButton from '@/shared/ui/UiButton';

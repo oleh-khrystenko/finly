@@ -12,7 +12,7 @@ import {
     UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { MAGIC_LINK_PURPOSE, type MagicLinkPurpose } from '@neatslip/types';
+import { MAGIC_LINK_PURPOSE, type MagicLinkPurpose } from '@finly/types';
 import Redis from 'ioredis';
 
 import { REDIS_CLIENT } from '../../common/modules/redis.module';

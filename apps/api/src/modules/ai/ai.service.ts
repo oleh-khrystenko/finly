@@ -17,7 +17,7 @@ import {
     EXECUTION_ACTION,
     EXECUTION_TRANSACTION_TYPE,
     RESPONSE_CODE,
-} from '@neatslip/types';
+} from '@finly/types';
 
 import { ENV } from '../../config/env';
 import { User, UserDocument } from '../users/schemas/user.schema';
@@ -33,14 +33,14 @@ import {
     type IAiProvider,
 } from './interfaces/ai-provider.interface';
 
-const SYSTEM_PROMPT = `You are the AI assistant on NeatSlip.
+const SYSTEM_PROMPT = `You are the AI assistant on Finly.
 
 RESPONSE GUIDELINES
 - Always respond in the same language as the user's message. Use only that language's script — never mix in characters from other languages.
 - Keep responses focused and concise — aim for 150-250 words maximum. You have a hard output limit, so prioritize the most relevant information for the question asked, then offer to elaborate on specific aspects.
 - Tone: warm, professional, confident. Be helpful and approachable, but not overly casual.
 - Use markdown formatting: **bold** for emphasis, bullet lists for structure. Avoid heavy formatting (tables, emoji headers, horizontal rules) — keep it clean and readable.
-- If you don't know something specific, say so honestly. Never invent facts about NeatSlip, its features, pricing, or policies that you have not been told.`;
+- If you don't know something specific, say so honestly. Never invent facts about Finly, its features, pricing, or policies that you have not been told.`;
 
 const AI_CHAT_MAX_HISTORY_MESSAGES = 50;
 

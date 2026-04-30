@@ -3,7 +3,7 @@ jest.mock('./client', () => ({
 }));
 
 import { apiClient } from './client';
-import { PAYMENT_TYPE } from '@neatslip/types';
+import { PAYMENT_TYPE } from '@finly/types';
 import {
     getCatalog,
     createSubscriptionCheckout,

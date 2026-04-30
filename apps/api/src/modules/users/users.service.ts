@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Connection, Model, Types } from 'mongoose';
 
-import { EXECUTION_TRANSACTION_TYPE } from '@neatslip/types';
+import { EXECUTION_TRANSACTION_TYPE } from '@finly/types';
 import {
     ExecutionTransaction,
     ExecutionTransactionDocument,

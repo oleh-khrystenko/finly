@@ -7,14 +7,11 @@ import {
     MAGIC_LINK_PURPOSE,
     RESPONSE_CODE,
     type MagicLinkPurpose,
-} from '@neatslip/types';
+} from '@finly/types';
 import { Resend } from 'resend';
 
 import { ENV } from '../../config/env';
-import {
-    MagicLinkEmail,
-    getMagicLinkSubject,
-} from './templates/magic-link';
+import { MagicLinkEmail, getMagicLinkSubject } from './templates/magic-link';
 import {
     DeletionConfirmationEmail,
     DELETION_CONFIRMATION_SUBJECT,

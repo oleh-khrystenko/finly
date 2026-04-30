@@ -26,7 +26,7 @@ import {
     UiSheetTitle,
 } from '@/shared/ui/UiSheet';
 import { useAuthStore } from '@/entities/user';
-import { getFullName } from '@neatslip/types';
+import { getFullName } from '@finly/types';
 import { useHeaderNavStore } from '@/entities/navigation';
 import { useMobileMenuSheetStore } from './mobileMenuSheetStore';
 import { useUserMenu } from './useUserMenu';

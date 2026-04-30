@@ -1,4 +1,4 @@
-import { MAGIC_LINK_PURPOSE } from '@neatslip/types';
+import { MAGIC_LINK_PURPOSE } from '@finly/types';
 
 import { MagicLinkEmail } from '../src/modules/email/templates/magic-link';
 

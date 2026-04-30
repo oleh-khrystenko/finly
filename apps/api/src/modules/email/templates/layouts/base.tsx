@@ -8,7 +8,7 @@ import {
     Section,
     Text,
 } from '@react-email/components';
-import { EMAIL_COLORS } from '@neatslip/types';
+import { EMAIL_COLORS } from '@finly/types';
 
 interface BaseLayoutProps {
     children: React.ReactNode;
@@ -21,8 +21,8 @@ export function BaseLayout({ children }: BaseLayoutProps) {
             <Body style={body}>
                 <Container style={container}>
                     <Section style={header}>
-                        <Link href="https://neatslip.com" style={brandLink}>
-                            <Text style={brand}>NeatSlip</Text>
+                        <Link href="https://finly.com.ua" style={brandLink}>
+                            <Text style={brand}>Finly</Text>
                         </Link>
                     </Section>
                     {children}
@@ -44,10 +44,10 @@ export function BaseLayout({ children }: BaseLayoutProps) {
                     </Section>
                     <Text style={siteLink}>
                         <Link
-                            href="https://neatslip.com"
+                            href="https://finly.com.ua"
                             style={siteLinkAnchor}
                         >
-                            neatslip.com
+                            finly.com.ua
                         </Link>
                     </Text>
                 </Container>

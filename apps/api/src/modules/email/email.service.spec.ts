@@ -7,7 +7,7 @@ import { EmailService } from './email.service';
 jest.mock('../../config/env', () => ({
     ENV: {
         RESEND_API_KEY: 'test-key',
-        RESEND_FROM_EMAIL: 'NeatSlip <test@resend.dev>',
+        RESEND_FROM_EMAIL: 'Finly <test@resend.dev>',
         WEB_URL: 'http://localhost:3000',
         ACCOUNT_DELETION_GRACE_DAYS: 2,
     },
@@ -54,7 +54,7 @@ describe('EmailService', () => {
             expect(sendSpy).toHaveBeenCalledWith(
                 expect.objectContaining({
                     to: email,
-                    subject: 'Посилання для входу в NeatSlip',
+                    subject: 'Посилання для входу в Finly',
                     react: expect.anything(),
                 })
             );
@@ -73,7 +73,7 @@ describe('EmailService', () => {
 
             expect(sendSpy).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    subject: 'Ласкаво просимо до NeatSlip',
+                    subject: 'Ласкаво просимо до Finly',
                 })
             );
 
@@ -90,7 +90,7 @@ describe('EmailService', () => {
 
             expect(sendSpy).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    subject: 'Скидання пароля NeatSlip',
+                    subject: 'Скидання пароля Finly',
                 })
             );
 
@@ -195,7 +195,7 @@ describe('EmailService', () => {
             expect(sendSpy).toHaveBeenCalledWith(
                 expect.objectContaining({
                     to: email,
-                    subject: 'Ваш акаунт NeatSlip деактивовано',
+                    subject: 'Ваш акаунт Finly деактивовано',
                     react: expect.anything(),
                 })
             );

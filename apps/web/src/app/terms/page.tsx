@@ -7,8 +7,8 @@ export function generateMetadata(): Metadata {
         page: 'terms',
         href: 'terms',
         meta: {
-            title: 'Умови використання — NeatSlip',
-            description: 'Умови використання NeatSlip.',
+            title: 'Умови використання — Finly',
+            description: 'Умови використання Finly.',
         },
     });
 }

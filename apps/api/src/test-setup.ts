@@ -12,7 +12,7 @@ process.env.GOOGLE_CLIENT_SECRET ??= 'google-client-secret-placeholder';
 process.env.GOOGLE_CALLBACK_URL ??=
     'http://localhost:4000/api/auth/google/callback';
 process.env.RESEND_API_KEY ??= 're_test_placeholder';
-process.env.RESEND_FROM_EMAIL ??= 'NeatSlip <test@test.dev>';
+process.env.RESEND_FROM_EMAIL ??= 'Finly <test@test.dev>';
 process.env.STRIPE_SECRET_KEY ??= 'sk_test_placeholder';
 process.env.STRIPE_WEBHOOK_SECRET ??= 'whsec_test_placeholder';
 process.env.PAYMENTS_SUBSCRIPTION_ENABLED ??= 'true';

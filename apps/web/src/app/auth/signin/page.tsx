@@ -8,8 +8,8 @@ import { Mail } from 'lucide-react';
 import { AxiosError } from 'axios';
 import { toast } from 'sonner';
 import { z } from 'zod';
-import { CheckEmailSchema } from '@neatslip/types';
-import type { MagicLinkPurpose } from '@neatslip/types';
+import { CheckEmailSchema } from '@finly/types';
+import type { MagicLinkPurpose } from '@finly/types';
 import UiButton from '@/shared/ui/UiButton';
 import UiLink from '@/shared/ui/UiLink';
 import UiCheckbox from '@/shared/ui/UiCheckbox';
@@ -326,7 +326,7 @@ function SigninContent() {
             <h1 className="text-foreground text-3xl font-bold">
                 {state === 'recovery'
                     ? 'Акаунт деактивовано'
-                    : 'Вхід до NeatSlip'}
+                    : 'Вхід до Finly'}
             </h1>
             {state === 'email' && (
                 <p className="text-muted-foreground mt-2">

@@ -7,8 +7,8 @@ export function generateMetadata(): Metadata {
         page: 'privacy',
         href: 'privacy',
         meta: {
-            title: 'Політика конфіденційності — NeatSlip',
-            description: 'Політика конфіденційності NeatSlip.',
+            title: 'Політика конфіденційності — Finly',
+            description: 'Політика конфіденційності Finly.',
         },
     });
 }

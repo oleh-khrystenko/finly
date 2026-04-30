@@ -1,4 +1,4 @@
-import { BillingWebhookEvent, PaymentType } from '@neatslip/types';
+import { BillingWebhookEvent, PaymentType } from '@finly/types';
 
 export interface CreateCheckoutInput {
     userId: string;

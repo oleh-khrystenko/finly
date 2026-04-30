@@ -18,7 +18,7 @@ import {
     type AiChatErrorEvent,
     type AiChatTokenEvent,
     type ChatMessageItem,
-} from '@neatslip/types';
+} from '@finly/types';
 
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';

@@ -16,7 +16,7 @@ import {
     MAGIC_LINK_PURPOSE,
     RESPONSE_CODE,
     type ApiMessageResponse,
-} from '@neatslip/types';
+} from '@finly/types';
 import { CookieOptions, Request, Response } from 'express';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';

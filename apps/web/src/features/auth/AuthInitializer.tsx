@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
-import { CURRENT_TERMS_VERSION } from '@neatslip/types';
+import { CURRENT_TERMS_VERSION } from '@finly/types';
 
 import { getMe, refreshToken } from '@/shared/api';
 import { useAuthStore } from '@/entities/user';

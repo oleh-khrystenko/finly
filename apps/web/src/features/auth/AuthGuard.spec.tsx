@@ -12,7 +12,7 @@ jest.mock('sonner', () => ({
     toast: { info: jest.fn(), error: jest.fn(), success: jest.fn() },
 }));
 
-jest.mock('@neatslip/types', () => ({
+jest.mock('@finly/types', () => ({
     isOnboardingComplete: () => true,
 }));
 

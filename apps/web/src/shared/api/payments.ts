@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import { PAYMENT_TYPE, type PaymentsCatalog } from '@neatslip/types';
+import { PAYMENT_TYPE, type PaymentsCatalog } from '@finly/types';
 
 export async function getCatalog(): Promise<PaymentsCatalog> {
     const { data } = await apiClient.get<{ data: PaymentsCatalog }>(

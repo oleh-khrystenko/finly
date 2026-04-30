@@ -2,7 +2,7 @@
 
 import { Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { isOnboardingComplete } from '@neatslip/types';
+import { isOnboardingComplete } from '@finly/types';
 import UiFullPageLoader from '@/shared/ui/UiFullPageLoader';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
 import UiPageHeading from '@/shared/ui/UiPageHeading';

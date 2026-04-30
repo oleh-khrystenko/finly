@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { CURRENT_TERMS_VERSION } from '@neatslip/types';
+import { CURRENT_TERMS_VERSION } from '@finly/types';
 import {
     UiModal,
     UiModalContent,

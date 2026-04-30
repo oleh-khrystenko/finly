@@ -3,7 +3,7 @@ import type {
     ExecutionTransactionItem,
     PaginatedTransactions,
     SpendableAction,
-} from '@neatslip/types';
+} from '@finly/types';
 
 export async function spendExecutions(
     action: SpendableAction,

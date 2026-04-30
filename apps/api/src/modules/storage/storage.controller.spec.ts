@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { APP_PIPE } from '@nestjs/core';
-import { RESPONSE_CODE } from '@neatslip/types';
+import { RESPONSE_CODE } from '@finly/types';
 
 import { StorageController } from './storage.controller';
 import { StorageService } from './storage.service';

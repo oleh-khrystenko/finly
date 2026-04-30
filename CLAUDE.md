@@ -1,6 +1,6 @@
-# NeatSlip
+# Finly
 
-> **Product vision (neatslip.com):** SaaS для українських ФОП та їх бухгалтерів — генерація платіжних QR-кодів і посилань за стандартом НБУ, щоб клієнти сканували й оплачували без ручного введення реквізитів. У планах — зберігання документів із AI-тегуванням для швидкого пошуку.
+> **Product vision (finly.com.ua):** SaaS для українських ФОП та їх бухгалтерів — генерація платіжних QR-кодів і посилань за стандартом НБУ, щоб клієнти сканували й оплачували без ручного введення реквізитів. У планах — зберігання документів із AI-тегуванням для швидкого пошуку.
 >
 > **Поточний стан репозиторію:** QR/НБУ-флоу та document storage ще не реалізовані. Зараз це monorepo-monolith на Next.js 16 + NestJS 11 з тех-фундаментом — auth/session lifecycle, billing (Stripe), executions ledger, AI chat (Anthropic), avatar storage (R2). Shared Zod/TypeScript контракти використовуються обома застосунками. Доменна модель і ендпоінти нижче описують саме цей фундамент.
 
@@ -259,7 +259,7 @@ pnpm test                                             # test all
 
 pnpm --filter api dev|build|test|test:e2e|test:cov    # API-only
 pnpm --filter web dev|build|test                      # Web-only
-pnpm --filter @neatslip/types build                  # rebuild shared types
+pnpm --filter @finly/types build                  # rebuild shared types
 
 pnpm --filter api -- jest path/to/file.spec.ts        # один API тест
 pnpm --filter web -- jest path/to/file.test.ts        # один Web тест

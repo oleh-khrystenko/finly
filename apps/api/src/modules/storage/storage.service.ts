@@ -10,7 +10,7 @@ import {
     NotFoundException,
 } from '@nestjs/common';
 import sharp from 'sharp';
-import { AVATAR, AVATAR_FILE_KEY_REGEX, RESPONSE_CODE } from '@neatslip/types';
+import { AVATAR, AVATAR_FILE_KEY_REGEX, RESPONSE_CODE } from '@finly/types';
 
 import { ENV } from '../../config/env';
 import { UsersService } from '../users/users.service';

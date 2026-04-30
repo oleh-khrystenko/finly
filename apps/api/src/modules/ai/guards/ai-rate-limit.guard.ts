@@ -8,7 +8,7 @@ import {
     Logger,
 } from '@nestjs/common';
 import { Request } from 'express';
-import { RESPONSE_CODE } from '@neatslip/types';
+import { RESPONSE_CODE } from '@finly/types';
 
 import { RedisCounterService } from '../../../common/services/redis-counter.service';
 import { ENV } from '../../../config/env';

@@ -1,5 +1,5 @@
 import { Button, Text } from '@react-email/components';
-import { EMAIL_COLORS } from '@neatslip/types';
+import { EMAIL_COLORS } from '@finly/types';
 
 import { BaseLayout } from './layouts/base';
 
@@ -13,7 +13,7 @@ const FOOTER =
     'Якщо ви не запитували видалення, негайно увійдіть у свій акаунт для його захисту.';
 
 function buildBody(formattedDate: string): string {
-    return `Нагадуємо, що ваш акаунт NeatSlip буде остаточно видалено ${formattedDate}.`;
+    return `Нагадуємо, що ваш акаунт Finly буде остаточно видалено ${formattedDate}.`;
 }
 
 interface DeletionReminderEmailProps {

@@ -7,7 +7,7 @@ import {
     EXECUTION_ACTION,
     EXECUTION_ACTION_COST,
     type SpendableAction,
-} from '@neatslip/types';
+} from '@finly/types';
 import { spendExecutions, getApiMessage } from '@/shared/api';
 import { useAuthStore } from '@/entities/user';
 import { INTL_LOCALE } from '@/shared/lib';

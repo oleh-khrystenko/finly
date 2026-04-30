@@ -8,7 +8,7 @@ import {
     SUBSCRIPTION_STATUS,
     type BillingWebhookEvent,
     type ExecutionPackCode,
-} from '@neatslip/types';
+} from '@finly/types';
 
 import { PaymentsService } from './payments.service';
 import { CatalogService } from './catalog.service';

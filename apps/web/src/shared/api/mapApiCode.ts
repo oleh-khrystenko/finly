@@ -1,4 +1,4 @@
-import { RESPONSE_CODE_TYPE, RESPONSE_TYPE } from '@neatslip/types';
+import { RESPONSE_CODE_TYPE, RESPONSE_TYPE } from '@finly/types';
 
 /**
  * Returns a localized Ukrainian message for the given API response code.
