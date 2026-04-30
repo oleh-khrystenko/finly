@@ -89,10 +89,7 @@ export class UsersService {
         });
     }
 
-    async findOrCreateByEmail(
-        email: string,
-        lang?: string
-    ): Promise<UserDocument> {
+    async findOrCreateByEmail(email: string): Promise<UserDocument> {
         const normalizedEmail = email.toLowerCase();
         const existing = await this.userModel
             .findOne({ email: normalizedEmail })
@@ -106,7 +103,6 @@ export class UsersService {
         return this.userModel.create({
             email: normalizedEmail,
             lastLoginAt: new Date(),
-            ...(lang && { preferredLang: lang }),
         });
     }
 
@@ -230,12 +226,6 @@ export class UsersService {
         await this.userModel.findByIdAndUpdate(userId, { timezone }).exec();
     }
 
-    async updateLang(userId: string, lang: string): Promise<void> {
-        await this.userModel
-            .findByIdAndUpdate(userId, { preferredLang: lang })
-            .exec();
-    }
-
     async setPasswordHash(userId: string, hash: string): Promise<void> {
         await this.userModel.findByIdAndUpdate(userId, { passwordHash: hash });
     }
@@ -267,7 +257,6 @@ export class UsersService {
             firstName?: string;
             lastName?: string;
             avatar?: string;
-            preferredLang?: string;
         }
     ): Promise<UserDocument | null> {
         const update: Record<string, unknown> = {};
@@ -276,8 +265,6 @@ export class UsersService {
         if (data.lastName !== undefined)
             update['profile.lastName'] = data.lastName;
         if (data.avatar !== undefined) update['profile.avatar'] = data.avatar;
-        if (data.preferredLang !== undefined)
-            update.preferredLang = data.preferredLang;
         return this.userModel.findByIdAndUpdate(userId, update, { new: true });
     }
 

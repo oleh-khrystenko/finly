@@ -9,7 +9,7 @@
 | Шар | Технологія | Версія |
 |-----|-----------|--------|
 | Core | TypeScript, Node.js, pnpm, Turborepo | TS 5.9, Node 20, pnpm 10.30 |
-| Frontend | Next.js (App Router + Turbopack), React, Zustand, TailwindCSS, next-intl | Next 16.0.1, React 19.2, Zustand 5, Tailwind 4, next-intl 4.4 |
+| Frontend | Next.js (App Router + Turbopack), React, Zustand, TailwindCSS | Next 16.0.1, React 19.2, Zustand 5, Tailwind 4 |
 | Forms | React Hook Form + @hookform/resolvers (Zod) | RHF 7.72 |
 | Backend | NestJS, Mongoose, ioredis, Passport | NestJS 11.1, Mongoose 8 |
 | Validation | Zod (shared contracts) | Zod 4.3 |
@@ -33,12 +33,11 @@ apps/
 │   ├── common/          # decorators, filters, guards, interceptors, modules (Redis)
 │   └── modules/         # auth, email, users, payments, ai, reports, storage
 ├── web/src/
-│   ├── app/[locale]/    # pages: root, auth, (protected), privacy, terms
+│   ├── app/             # pages: root, auth, (protected), privacy, terms (single-locale, uk only)
 │   ├── entities/        # user (authStore), navigation (headerNavStore), brand (Logo)
-│   ├── features/        # auth, billing, profile, change-lang, change-theme — own their dialog/state stores in-slice
+│   ├── features/        # auth, billing, profile, change-theme — own their dialog/state stores in-slice
 │   ├── widgets/         # header (mobileMenuSheetStore)
-│   ├── shared/          # api, ui, config, styles, icons, seo, lib (authEvents bus), fonts, types
-│   └── i18n/            # routing, request config
+│   └── shared/          # api, ui, config, styles, icons, seo, lib (authEvents bus), fonts, types
 packages/
 └── types/src/           # contracts, entities, enums, constants, validation, utils
 docs/
@@ -120,7 +119,7 @@ Access JWT в пам'яті (web), refresh JWT в `bid_refresh` httpOnly cookie,
 Provider abstraction (`PAYMENT_PROVIDER` → `StripeService`), two-phase idempotency через `ProcessedWebhookEvent`, atomic out-of-order guard через `lastProviderEventAt` в MongoDB query. Feature flags контролюють subscription/one-off. Orphaned customer cleanup через `OrphanedProviderCustomer` + daily cron.
 
 ### Billing catalog (Stripe as single source of truth)
-`CatalogService` (`apps/api/src/modules/payments/catalog.service.ts`) fetches Products/Prices from Stripe API, caches in Redis (TTL 5 min). Has own Stripe SDK instance (not via `IPaymentProvider`) to avoid circular DI. Warms cache on startup (fail-fast). Public endpoint `GET /payments/catalog` — no auth, applies feature flags. Plan/pack codes remain as TypeScript union types (`SubscriptionPlanCode`, `ExecutionPackCode`) — structural identifiers for i18n keys, images, DB records. Business data (prices, executions, display order, featured) comes exclusively from Stripe Product metadata.
+`CatalogService` (`apps/api/src/modules/payments/catalog.service.ts`) fetches Products/Prices from Stripe API, caches in Redis (TTL 5 min). Has own Stripe SDK instance (not via `IPaymentProvider`) to avoid circular DI. Warms cache on startup (fail-fast). Public endpoint `GET /payments/catalog` — no auth, applies feature flags. Plan/pack codes remain as TypeScript union types (`SubscriptionPlanCode`, `ExecutionPackCode`) — structural identifiers for UI labels, images, DB records. Business data (prices, executions, display order, featured) comes exclusively from Stripe Product metadata.
 
 ### AI chat streaming
 Provider abstraction (`AI_PROVIDER` → `AnthropicService`), SSE streaming через `res.write()`. Durable reservation pattern: `AiService.reserveChatRequest()` робить atomic `findOneAndUpdate` (balance + single-flight guard), потім stream, потім commit або refund. 2-layer protection: IP rate limit (Redis Lua) і atomic durable reservation (single-document Mongo op). Abort policy: refundable до першого токена, non-refundable після. Файл: `apps/api/src/modules/ai/ai.controller.ts`
@@ -134,8 +133,8 @@ Provider abstraction (`STORAGE_PROVIDER` → `CloudflareR2Service`, S3-compatibl
 ### Google OAuth avatar re-upload
 При Google OAuth callback (перший signup або legacy users з зовнішнім URL) `AuthService.handleGoogleAuth` **синхронно** викликає `StorageService.reUploadExternalAvatar()` (fetch Google URL → `sharp.resize(512×512, cover).webp({ quality: 85 })` → `uploadBuffer` у R2), мутує `user.profile.avatar` і `user.save()` — все перед `generateTokens`. UX trade-off: +300-800ms до callback, але без URL-jump після рендеру. Failure → `logger.warn` + fall through з external URL (наступний login повторить спробу). R2 URL detection для скіпа re-upload legacy-рейсів: prefix-check проти `ENV.R2_PUBLIC_URL`.
 
-### Error handling та i18n mapping
-API повертає machine-readable `code` через `AllExceptionsFilter`; web маппить codes на locale keys через `shared/api/mapApiCode.ts`. Конвенція: `docs/conventions/i18n.md`
+### Error handling та message mapping
+API повертає machine-readable `code` через `AllExceptionsFilter`; web маппить codes на українські рядки через `shared/api/mapApiCode.ts` (`getApiMessage(code, module?, vars?)`). Додаток single-locale (uk only) — рядки інлайн, без catalog-файлів.
 
 ### Soft-delete lifecycle
 Запит на видалення → `accountDeletionRequestedAt` + `deletedAt` → grace period (configurable) → `CleanupService` cron кожні 6 годин hard-delete + revoke tokens. Файл: `apps/api/src/modules/users/cleanup.service.ts`
@@ -185,7 +184,6 @@ Global prefix: `/api`. Rate limiting: `ThrottlerModule` (60 req/min global). Glo
 |-------|------|-------|------|
 | GET | `/users/me` | `JwtActiveGuard` | Профіль + billing snapshot |
 | PATCH | `/users/me` | `JwtActiveGuard` | Оновлення профілю |
-| PATCH | `/users/me/lang` | `JwtActiveGuard` | Зміна мови |
 | POST | `/users/me/accept-terms` | `JwtActiveGuard` | Прийняття ToS версії |
 | POST | `/users/me/executions/spend` | `JwtActiveGuard` | Витрата executions |
 | GET | `/users/me/executions/transactions` | `JwtActiveGuard` | Історія транзакцій executions |
@@ -298,7 +296,7 @@ Full index: [docs/conventions/README.md](docs/conventions/README.md)
 ## Rules & Conventions
 
 - Source of truth для repo-wide правил: `docs/conventions/README.md`
-- Читай перед роботою з відповідними зонами: `tone.md`, `fail-fast.md`, `i18n.md`, `modular-boundaries.md`, `ui-primitives.md`, `design-tokens.md`, `overlays.md`
+- Читай перед роботою з відповідними зонами: `tone.md`, `fail-fast.md`, `modular-boundaries.md`, `ui-primitives.md`, `design-tokens.md`, `overlays.md`
 
 ## Known Complexities
 
@@ -309,7 +307,7 @@ Full index: [docs/conventions/README.md](docs/conventions/README.md)
 - **Refresh cookie працює через proxy**: `next.config.ts` проксує `/api/*` на backend — тому `bid_refresh` cookie (httpOnly) видимий і в middleware, і в API (same origin).
 - **`test-setup.ts` fallback env**: Без цього файлу fail-fast policy крашить Jest ще до запуску тестів. Використовує `??=` оператор — не перезаписує реальні env vars.
 - **`packages/types` build order**: Має бути зібраний ДО `apps/api` та `apps/web`. Turborepo `dependsOn: ["^build"]` це забезпечує, але manual build без turbo зламається.
-- **Magic link locale**: `AuthService.sendMagicLink()` визначає локаль листа за пріоритетом `user?.preferredLang ?? requestLang ?? LANG.EN`. Тобто існуючий користувач завжди отримує листа своєю збереженою мовою (фронтовий `lang` ігнорується, щоб не перезаписати явний вибір у профілі); `requestLang` підхоплюється лише для нових адрес без профілю, а остаточний fallback — `LANG.EN`.
+- **Single-locale (uk only)**: продукт — українською без перемикача мов. Email-тексти інлайн у `apps/api/src/modules/email/translations.ts` (`EMAIL_TEXT`); `<Html lang="uk">` як константа в `BaseLayout`; `formatDate` хардкод `'uk-UA'`. Web-рядки інлайн у JSX/компонентах. Усі URL без локаль-префікса (`/billing`, `/auth/signin`, тощо). Якщо колись треба буде повернути локалізацію — це окрема велика міграція, не одна правка прапорця.
 - **Webhook route dynamic provider**: URL шаблон `/webhook/:provider`, але наразі підтримується тільки `stripe`. Невідомий provider тихо відхиляється.
 - **Orphaned customer retry cap**: `PaymentsCleanupService` робить максимум 5 спроб видалити Stripe customer. Після 5 невдач запис залишається в колекції назавжни — потребує ручного втручання.
 - **CatalogService own Stripe instance**: `CatalogService` створює власний `new Stripe(...)` для читання Products/Prices. Це зроблено щоб уникнути circular DI з `IPaymentProvider` → `StripeService`. Обидва інстанси використовують один `STRIPE_SECRET_KEY`.

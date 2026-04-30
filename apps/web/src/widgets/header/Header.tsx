@@ -1,9 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useLocale, useTranslations } from 'next-intl';
-import { LogOut, User, CreditCard, Menu, LayoutDashboard, Bot } from 'lucide-react';
-import ChangeLang from '@/features/change-lang';
+import {
+    LogOut,
+    User,
+    CreditCard,
+    Menu,
+    LayoutDashboard,
+    Bot,
+} from 'lucide-react';
 import ChangeTheme from '@/features/change-theme';
 import { Logo } from '@/entities/brand';
 import UiButton from '@/shared/ui/UiButton';
@@ -34,8 +39,6 @@ function useScrolled(threshold: number) {
 }
 
 const Header = () => {
-    const t = useTranslations('components.header');
-    const locale = useLocale();
     const user = useAuthStore((s) => s.user);
     const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
     const isLoading = useAuthStore((s) => s.isLoading);
@@ -90,7 +93,7 @@ const Header = () => {
                             history.replaceState(
                                 null,
                                 '',
-                                window.location.pathname
+                                window.location.pathname,
                             );
                         }}
                     >
@@ -99,7 +102,7 @@ const Header = () => {
                 ) : (
                     <UiButton
                         as="link"
-                        href={`/${locale}`}
+                        href="/"
                         variant="text"
                         size="md"
                         aria-label="Go to home page"
@@ -134,7 +137,6 @@ const Header = () => {
 
                 {/* Desktop right side */}
                 <div className="hidden items-center gap-2 lg:flex">
-                    <ChangeLang />
                     <ChangeTheme />
 
                     {isLoading ? (
@@ -149,12 +151,20 @@ const Header = () => {
                                     <UiAvatar
                                         size="sm"
                                         src={user.profile.avatar}
-                                        alt={getFullName(user.profile.firstName, user.profile.lastName) ?? ''}
+                                        alt={
+                                            getFullName(
+                                                user.profile.firstName,
+                                                user.profile.lastName,
+                                            ) ?? ''
+                                        }
                                         fallback={initials}
                                     />
                                     <div className="flex flex-col">
                                         <span className="text-foreground text-sm font-medium">
-                                            {getFullName(user.profile.firstName, user.profile.lastName)}
+                                            {getFullName(
+                                                user.profile.firstName,
+                                                user.profile.lastName,
+                                            )}
                                         </span>
                                         <span className="text-muted-foreground text-xs">
                                             {user.email}
@@ -170,7 +180,12 @@ const Header = () => {
                                     <UiAvatar
                                         size="sm"
                                         src={user.profile.avatar}
-                                        alt={getFullName(user.profile.firstName, user.profile.lastName) ?? ''}
+                                        alt={
+                                            getFullName(
+                                                user.profile.firstName,
+                                                user.profile.lastName,
+                                            ) ?? ''
+                                        }
                                         fallback={initials}
                                         priority
                                     />
@@ -180,11 +195,11 @@ const Header = () => {
                     ) : (
                         <UiButton
                             as="link"
-                            href={`/${locale}/auth/signin`}
+                            href="/auth/signin"
                             variant="text"
                             size="sm"
                         >
-                            {t('signin')}
+                            Увійти
                         </UiButton>
                     )}
 
@@ -205,7 +220,7 @@ const Header = () => {
                     <UiButton
                         variant="icon"
                         size="md"
-                        aria-label={t('menu')}
+                        aria-label="Відкрити меню"
                         IconLeft={<Menu />}
                         onClick={openMobileMenu}
                     />

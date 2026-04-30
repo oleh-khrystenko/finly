@@ -1,6 +1,5 @@
 'use client';
 
-import { useTranslations } from 'next-intl';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
@@ -37,14 +36,22 @@ interface ProfileFormProps {
     onSaved?: () => void;
 }
 
+const NAME_MESSAGES = {
+    required: "Ім'я обов'язкове",
+    too_small: "Ім'я має містити щонайменше 2 символи",
+    too_big: 'Має містити не більше 50 символів',
+    invalid_string:
+        "Ім'я може містити лише літери, пробіли, дефіси та апострофи",
+    invalid_format:
+        "Ім'я може містити лише літери, пробіли, дефіси та апострофи",
+};
+
 const ProfileForm = ({
     user,
     editable,
     onboardingMode = false,
     onSaved,
 }: ProfileFormProps) => {
-    const t = useTranslations('profile_page.form');
-    const tAvatar = useTranslations('profile_page.avatar');
     const setUser = useAuthStore((s) => s.setUser);
     const openAvatarDialog = useAvatarUploadDialogStore((s) => s.open);
 
@@ -78,10 +85,10 @@ const ProfileForm = ({
                 firstName: me.profile.firstName ?? '',
                 lastName: me.profile.lastName ?? '',
             });
-            toast.success(t('saved'));
+            toast.success('Профіль оновлено');
             onSaved?.();
         } catch {
-            toast.error(t('save_error'));
+            toast.error('Не вдалося зберегти профіль');
         }
     };
 
@@ -89,22 +96,14 @@ const ProfileForm = ({
         form.reset();
     };
 
-    const nameMessages = {
-        required: t('name_required'),
-        too_small: t('name_too_short'),
-        too_big: t('name_too_long'),
-        invalid_string: t('name_invalid_chars'),
-        invalid_format: t('name_invalid_chars'),
-    };
-
     return (
-        <UiSectionCard title={t('heading')}>
+        <UiSectionCard title="Особисті дані">
             {!onboardingMode && (
                 <div className="mt-5 flex justify-start">
                     <AvatarEditButton
                         user={user}
                         editable={editable}
-                        ariaLabel={tAvatar('edit_aria_label')}
+                        ariaLabel="Редагувати фото профілю"
                         onPress={openAvatarDialog}
                     />
                 </div>
@@ -112,7 +111,7 @@ const ProfileForm = ({
 
             <dl className="mt-5">
                 <dt className="text-muted-foreground text-sm">
-                    {t('email_label')}
+                    Електронна пошта
                 </dt>
                 <dd className="text-foreground mt-1">{user.email}</dd>
             </dl>
@@ -123,17 +122,17 @@ const ProfileForm = ({
             >
                 <div>
                     <label className="text-muted-foreground mb-1.5 block text-sm">
-                        {t('name_label')}
+                        Ім&apos;я
                         <span className="text-destructive ml-1">*</span>
                     </label>
                     <UiInput
                         {...form.register('firstName')}
                         type="text"
-                        placeholder={t('name_placeholder')}
+                        placeholder="Ваше ім'я"
                         error={getFieldError(
                             errors.firstName,
-                            nameMessages,
-                            firstNameValue
+                            NAME_MESSAGES,
+                            firstNameValue,
                         )}
                         disabled={!editable}
                         size="lg"
@@ -142,16 +141,16 @@ const ProfileForm = ({
 
                 <div>
                     <label className="text-muted-foreground mb-1.5 block text-sm">
-                        {t('last_name_label')}
+                        Прізвище
                     </label>
                     <UiInput
                         {...form.register('lastName')}
                         type="text"
-                        placeholder={t('last_name_placeholder')}
+                        placeholder="Ваше прізвище"
                         error={getFieldError(
                             errors.lastName,
-                            nameMessages,
-                            lastNameValue
+                            NAME_MESSAGES,
+                            lastNameValue,
                         )}
                         disabled={!editable}
                         size="lg"
@@ -169,7 +168,7 @@ const ProfileForm = ({
                             {isSubmitting ? (
                                 <UiSpinner size="sm" />
                             ) : (
-                                t('save_button')
+                                'Зберегти'
                             )}
                         </UiButton>
                         <UiButton
@@ -179,7 +178,7 @@ const ProfileForm = ({
                             onClick={handleCancel}
                             disabled={isSubmitting}
                         >
-                            {t('cancel_button')}
+                            Скасувати
                         </UiButton>
                     </div>
                 )}

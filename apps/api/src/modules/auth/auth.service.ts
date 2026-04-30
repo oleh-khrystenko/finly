@@ -12,11 +12,7 @@ import {
     UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import {
-    LANG,
-    MAGIC_LINK_PURPOSE,
-    type MagicLinkPurpose,
-} from '@neatslip/types';
+import { MAGIC_LINK_PURPOSE, type MagicLinkPurpose } from '@neatslip/types';
 import Redis from 'ioredis';
 
 import { REDIS_CLIENT } from '../../common/modules/redis.module';
@@ -206,7 +202,6 @@ export class AuthService {
     async sendMagicLink(
         email: string,
         purpose: MagicLinkPurpose = MAGIC_LINK_PURPOSE.LOGIN,
-        requestLang?: string,
         redirectTo?: string
     ): Promise<void> {
         const normalizedEmail = email.trim().toLowerCase();
@@ -236,7 +231,6 @@ export class AuthService {
         const payload = JSON.stringify({
             email: normalizedEmail,
             purpose,
-            lang: requestLang,
             ...(redirectTo && { redirectTo }),
         });
         const magicLinkTtl = ENV.AUTH_MAGIC_LINK_TTL_MIN * 60;
@@ -246,14 +240,10 @@ export class AuthService {
         pipeline.set(dedupKey, token, 'EX', ENV.AUTH_MAGIC_LINK_DEDUP_SEC);
         await pipeline.exec();
 
-        const user = await this.usersService.findByEmail(normalizedEmail);
-        const lang = user?.preferredLang ?? requestLang ?? LANG.EN;
-
         await this.emailService.sendMagicLink({
             email: normalizedEmail,
             token,
             purpose,
-            lang,
             redirectTo,
         });
     }
@@ -281,17 +271,16 @@ export class AuthService {
             );
         }
 
-        const { email, purpose, lang } = JSON.parse(raw) as {
+        const { email, purpose } = JSON.parse(raw) as {
             email: string;
             purpose: MagicLinkPurpose;
-            lang?: string;
         };
 
         if (purpose === MAGIC_LINK_PURPOSE.DELETE_ACCOUNT) {
             return this.handleDeleteAccountVerification(email);
         }
 
-        const user = await this.usersService.findOrCreateByEmail(email, lang);
+        const user = await this.usersService.findOrCreateByEmail(email);
 
         user.lastLoginAt = new Date();
         await user.save();
@@ -309,10 +298,7 @@ export class AuthService {
         };
     }
 
-    async sendDeletionConfirmationEmail(
-        email: string,
-        lang: string
-    ): Promise<void> {
+    async sendDeletionConfirmationEmail(email: string): Promise<void> {
         const deletionDate = new Date();
         deletionDate.setDate(
             deletionDate.getDate() + ENV.ACCOUNT_DELETION_GRACE_DAYS
@@ -320,7 +306,6 @@ export class AuthService {
         await this.emailService.sendDeletionConfirmation({
             email,
             deletionDate,
-            lang,
         });
     }
 
@@ -334,7 +319,7 @@ export class AuthService {
 
         await this.usersService.softDelete(user._id.toString());
         await this.revokeAllUserTokens(user._id.toString());
-        await this.sendDeletionConfirmationEmail(email, user.preferredLang);
+        await this.sendDeletionConfirmationEmail(email);
 
         return {
             deleted: true,

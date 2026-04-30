@@ -1,30 +1,38 @@
 import { Button, Text } from '@react-email/components';
 import { EMAIL_COLORS } from '@neatslip/types';
 
-import type { DeletionReminderTranslations } from '../i18n/types';
 import { BaseLayout } from './layouts/base';
+
+export const DELETION_REMINDER_SUBJECT =
+    'Нагадування: ваш акаунт буде видалено завтра';
+
+const INSTRUCTION =
+    'Якщо ви хочете зберегти акаунт, просто увійдіть до цієї дати.';
+const CTA = 'Увійти';
+const FOOTER =
+    'Якщо ви не запитували видалення, негайно увійдіть у свій акаунт для його захисту.';
+
+function buildBody(formattedDate: string): string {
+    return `Нагадуємо, що ваш акаунт NeatSlip буде остаточно видалено ${formattedDate}.`;
+}
 
 interface DeletionReminderEmailProps {
     signInUrl: string;
-    translations: DeletionReminderTranslations;
     formattedDate: string;
-    lang: string;
 }
 
 export function DeletionReminderEmail({
     signInUrl,
-    translations: t,
     formattedDate,
-    lang,
 }: DeletionReminderEmailProps) {
     return (
-        <BaseLayout lang={lang}>
-            <Text style={bodyText}>{t.body(formattedDate)}</Text>
-            <Text style={instructionText}>{t.instruction}</Text>
+        <BaseLayout>
+            <Text style={bodyText}>{buildBody(formattedDate)}</Text>
+            <Text style={instructionText}>{INSTRUCTION}</Text>
             <Button style={ctaButton} href={signInUrl}>
-                {t.cta}
+                {CTA}
             </Button>
-            <Text style={footer}>{t.footer}</Text>
+            <Text style={footer}>{FOOTER}</Text>
         </BaseLayout>
     );
 }

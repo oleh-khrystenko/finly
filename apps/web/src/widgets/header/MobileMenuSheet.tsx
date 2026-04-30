@@ -1,11 +1,19 @@
 'use client';
 
-import { useLocale, useTranslations } from 'next-intl';
 import { usePathname } from 'next/navigation';
 import { useTheme } from 'next-themes';
-import { LogOut, User, CreditCard, LogIn, Globe, LayoutDashboard, Bot } from 'lucide-react';
-import ChangeLang from '@/features/change-lang';
-import ChangeTheme, { THEME_ICONS } from '@/features/change-theme';
+import {
+    LogOut,
+    User,
+    CreditCard,
+    LogIn,
+    LayoutDashboard,
+    Bot,
+} from 'lucide-react';
+import ChangeTheme, {
+    THEME_ICONS,
+    THEME_LABELS,
+} from '@/features/change-theme';
 import type { Theme } from '@/shared/types/settings';
 import { THEME } from '@/shared/types/settings';
 import { Logo } from '@/entities/brand';
@@ -28,9 +36,6 @@ const menuItemBase =
 const menuItemStyles = `${menuItemBase} text-muted-foreground hover:bg-muted/50 hover:text-foreground`;
 
 export default function MobileMenuSheet() {
-    const t = useTranslations('components.header');
-    const tTheme = useTranslations('components.change_theme');
-    const locale = useLocale();
     const pathname = usePathname();
     const { theme } = useTheme();
 
@@ -54,8 +59,9 @@ export default function MobileMenuSheet() {
         logout: <LogOut />,
     });
 
-    const ThemeIcon = THEME_ICONS[(theme as Theme) ?? THEME.SYSTEM];
-    const themeLabel = tTheme((theme as Theme) ?? 'system');
+    const activeTheme: Theme = (theme as Theme) ?? THEME.SYSTEM;
+    const ThemeIcon = THEME_ICONS[activeTheme];
+    const themeLabel = THEME_LABELS[activeTheme];
 
     return (
         <UiSheet open={isOpen} onOpenChange={(open) => !open && close()}>
@@ -72,8 +78,7 @@ export default function MobileMenuSheet() {
                         <nav className="flex flex-col gap-1">
                             {navItems.map(({ href, label }) => {
                                 const isActive =
-                                    activeSection ===
-                                    href.replace('#', '');
+                                    activeSection === href.replace('#', '');
                                 return (
                                     <a
                                         key={href}
@@ -109,12 +114,20 @@ export default function MobileMenuSheet() {
                                 <UiAvatar
                                     size="md"
                                     src={user.profile.avatar}
-                                    alt={getFullName(user.profile.firstName, user.profile.lastName) ?? ''}
+                                    alt={
+                                        getFullName(
+                                            user.profile.firstName,
+                                            user.profile.lastName,
+                                        ) ?? ''
+                                    }
                                     fallback={initials}
                                 />
                                 <div className="flex min-w-0 flex-col">
                                     <span className="truncate text-sm font-medium">
-                                        {getFullName(user.profile.firstName, user.profile.lastName)}
+                                        {getFullName(
+                                            user.profile.firstName,
+                                            user.profile.lastName,
+                                        )}
                                     </span>
                                     <span className="text-muted-foreground truncate text-xs">
                                         {user.email}
@@ -147,23 +160,6 @@ export default function MobileMenuSheet() {
 
                             <div className="bg-border mx-1 my-2 h-px" />
 
-                            <ChangeLang
-                                align="start"
-                                trigger={
-                                    <button
-                                        type="button"
-                                        className={menuItemStyles}
-                                    >
-                                        <span className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4">
-                                            <Globe />
-                                        </span>
-                                        <span>{t('language')}</span>
-                                        <span className="text-muted-foreground ml-auto text-xs">
-                                            {locale.toUpperCase()}
-                                        </span>
-                                    </button>
-                                }
-                            />
                             <ChangeTheme
                                 align="start"
                                 trigger={
@@ -174,7 +170,7 @@ export default function MobileMenuSheet() {
                                         <span className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4">
                                             <ThemeIcon />
                                         </span>
-                                        <span>{t('theme')}</span>
+                                        <span>Тема</span>
                                         <span className="text-muted-foreground ml-auto text-xs">
                                             {themeLabel}
                                         </span>
@@ -192,31 +188,11 @@ export default function MobileMenuSheet() {
                                 <span className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4">
                                     <LogOut />
                                 </span>
-                                <span>{t('logout')}</span>
+                                <span>Вийти</span>
                             </button>
                         </div>
                     ) : (
                         <div className="flex flex-col gap-1">
-                            <span className="text-muted-foreground px-1 text-xs font-medium tracking-wider uppercase">
-                                {t('settings')}
-                            </span>
-                            <ChangeLang
-                                align="start"
-                                trigger={
-                                    <button
-                                        type="button"
-                                        className={menuItemStyles}
-                                    >
-                                        <span className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4">
-                                            <Globe />
-                                        </span>
-                                        <span>{t('language')}</span>
-                                        <span className="text-muted-foreground ml-auto text-xs">
-                                            {locale.toUpperCase()}
-                                        </span>
-                                    </button>
-                                }
-                            />
                             <ChangeTheme
                                 align="start"
                                 trigger={
@@ -227,7 +203,7 @@ export default function MobileMenuSheet() {
                                         <span className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4">
                                             <ThemeIcon />
                                         </span>
-                                        <span>{t('theme')}</span>
+                                        <span>Тема</span>
                                         <span className="text-muted-foreground ml-auto text-xs">
                                             {themeLabel}
                                         </span>
@@ -240,14 +216,14 @@ export default function MobileMenuSheet() {
                                     <div className="bg-border mx-1 my-2 h-px" />
                                     <UiButton
                                         as="link"
-                                        href={`/${locale}/auth/signin`}
+                                        href="/auth/signin"
                                         variant="text"
                                         size="md"
                                         IconLeft={<LogIn />}
                                         className="justify-start"
                                         onClick={close}
                                     >
-                                        {t('signin')}
+                                        Увійти
                                     </UiButton>
                                 </>
                             )}

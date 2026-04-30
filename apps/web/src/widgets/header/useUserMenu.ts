@@ -1,5 +1,4 @@
 import { type ReactNode } from 'react';
-import { useLocale, useTranslations } from 'next-intl';
 import { useRouter, usePathname } from 'next/navigation';
 import { getFullName, getInitials } from '@neatslip/types';
 import { logout } from '@/shared/api';
@@ -20,50 +19,50 @@ export function useUserMenu(icons: {
     billing: ReactNode;
     logout: ReactNode;
 }) {
-    const t = useTranslations('components.header');
-    const locale = useLocale();
     const router = useRouter();
     const pathname = usePathname();
     const user = useAuthStore((s) => s.user);
     const clearUser = useAuthStore((s) => s.clearUser);
 
-    const formattedExecutions = (user?.executions.balance ?? 0).toLocaleString('en-US');
+    const formattedExecutions = (user?.executions.balance ?? 0).toLocaleString(
+        'en-US',
+    );
 
     const allItems: UserMenuItem[] = [
         {
             value: 'dashboard',
-            label: t('dashboard'),
+            label: 'Дашборд',
             icon: icons.dashboard,
-            route: `/${locale}/dashboard`,
+            route: '/dashboard',
         },
         {
             value: 'ai-chat',
-            label: t('ai_chat'),
+            label: 'AI Чат',
             icon: icons.aiChat,
-            route: `/${locale}/ai-chat`,
+            route: '/ai-chat',
         },
         {
             value: 'profile',
-            label: t('profile'),
+            label: 'Профіль',
             icon: icons.profile,
-            route: `/${locale}/profile`,
+            route: '/profile',
         },
         {
             value: 'billing',
-            label: t('billing'),
+            label: 'Білінг',
             icon: icons.billing,
-            route: `/${locale}/billing`,
+            route: '/billing',
             badge: formattedExecutions,
         },
         {
             value: 'logout',
-            label: t('logout'),
+            label: 'Вийти',
             icon: icons.logout,
         },
     ];
 
     const visibleItems = allItems.filter(
-        (item) => !item.route || !pathname.startsWith(item.route)
+        (item) => !item.route || !pathname.startsWith(item.route),
     );
 
     const handleSelect = (value: string, onBeforeNavigate?: () => void) => {
@@ -75,7 +74,7 @@ export function useUserMenu(icons: {
             void (async () => {
                 await logout();
                 clearUser();
-                window.location.assign(`/${locale}`);
+                window.location.assign('/');
             })();
         }
     };

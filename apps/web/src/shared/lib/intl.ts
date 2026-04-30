@@ -1,18 +1,8 @@
-const LOCALE_MAP: Record<string, string> = {
-    uk: 'uk-UA',
-    en: 'en-US',
-};
+export const INTL_LOCALE = 'uk-UA';
 
-export function toIntlLocale(locale: string): string {
-    return LOCALE_MAP[locale] ?? locale;
-}
-
-export function formatLocalDate(
-    date: Date | string | null,
-    locale: string
-): string {
+export function formatLocalDate(date: Date | string | null): string {
     if (!date) return '';
-    return new Intl.DateTimeFormat(toIntlLocale(locale), {
+    return new Intl.DateTimeFormat(INTL_LOCALE, {
         year: 'numeric',
         month: 'long',
         day: 'numeric',

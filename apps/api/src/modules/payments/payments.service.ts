@@ -90,12 +90,11 @@ export class PaymentsService {
             throw new BadRequestException('User not found');
         }
 
-        const locale = user.preferredLang;
         const returnQuery = returnPath
             ? `?returnPath=${encodeURIComponent(returnPath)}`
             : '';
-        const successUrl = `${ENV.WEB_URL}/${locale}/billing/success${returnQuery}`;
-        const cancelUrl = `${ENV.WEB_URL}/${locale}/billing/cancel${returnQuery}`;
+        const successUrl = `${ENV.WEB_URL}/billing/success${returnQuery}`;
+        const cancelUrl = `${ENV.WEB_URL}/billing/cancel${returnQuery}`;
 
         // Subscription-specific validation
         if (paymentType === PAYMENT_TYPE.SUBSCRIPTION) {
@@ -160,7 +159,7 @@ export class PaymentsService {
             });
         }
 
-        const returnUrl = `${ENV.WEB_URL}/${user.preferredLang}/billing`;
+        const returnUrl = `${ENV.WEB_URL}/billing`;
         const result = await this.paymentProvider.createPortalSession(
             user.billing.providerCustomerId,
             returnUrl

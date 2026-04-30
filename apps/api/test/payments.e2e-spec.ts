@@ -18,7 +18,7 @@ import {
 } from '@neatslip/types';
 
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
-import { REDIS_CLIENT } from '../src/common/providers/redis.provider';
+import { REDIS_CLIENT } from '../src/common/modules/redis.module';
 import { AppController } from '../src/app.controller';
 import { AppService } from '../src/app.service';
 import { AuthModule } from '../src/modules/auth/auth.module';

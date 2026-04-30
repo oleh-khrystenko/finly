@@ -1,6 +1,5 @@
 'use client';
 
-import { useTranslations } from 'next-intl';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AxiosError } from 'axios';
@@ -27,7 +26,6 @@ interface ChangePasswordFormProps {
 }
 
 const ChangePasswordForm = ({ onDone, onCancel }: ChangePasswordFormProps) => {
-    const t = useTranslations('profile_page.security');
     const setUser = useAuthStore((s) => s.setUser);
 
     const form = useForm<ChangePasswordFormValues>({
@@ -44,7 +42,7 @@ const ChangePasswordForm = ({ onDone, onCancel }: ChangePasswordFormProps) => {
         if (data.currentPassword === data.newPassword) {
             form.setError('newPassword', {
                 type: 'same_as_current',
-                message: t('password_same_as_current'),
+                message: 'Новий пароль має відрізнятися від поточного',
             });
             return;
         }
@@ -53,7 +51,7 @@ const ChangePasswordForm = ({ onDone, onCancel }: ChangePasswordFormProps) => {
             await changePassword(data.currentPassword, data.newPassword);
             const me = await getMe();
             setUser(me);
-            toast.success(t('password_changed'));
+            toast.success('Пароль змінено. Інші пристрої було відключено');
             onDone();
         } catch (err) {
             const code =
@@ -64,12 +62,16 @@ const ChangePasswordForm = ({ onDone, onCancel }: ChangePasswordFormProps) => {
             if (code === 'UNAUTHORIZED') {
                 form.setError('currentPassword', {
                     type: 'server',
-                    message: t('password_invalid'),
+                    message: 'Невірний пароль',
                 });
             } else if (code === 'RATE_LIMIT_EXCEEDED') {
-                toast.error(t('error_rate_limit'));
+                toast.error(
+                    'Забагато запитів. Спробуйте через 15 хвилин',
+                );
             } else {
-                toast.error(t('error_generic'));
+                toast.error(
+                    'Не вдалося виконати операцію. Спробуйте пізніше',
+                );
             }
         }
     };
@@ -78,7 +80,7 @@ const ChangePasswordForm = ({ onDone, onCancel }: ChangePasswordFormProps) => {
         <form onSubmit={form.handleSubmit(onSubmit)} className="mt-5 space-y-4">
             <div>
                 <label className="text-muted-foreground mb-1.5 block text-sm">
-                    {t('current_password_label')}
+                    Поточний пароль
                 </label>
                 <UiPasswordInput
                     {...form.register('currentPassword', {
@@ -91,7 +93,7 @@ const ChangePasswordForm = ({ onDone, onCancel }: ChangePasswordFormProps) => {
                             }
                         },
                     })}
-                    placeholder={t('password_placeholder')}
+                    placeholder="Мінімум 8 символів"
                     error={
                         errors.currentPassword?.type === 'server'
                             ? errors.currentPassword.message
@@ -99,14 +101,14 @@ const ChangePasswordForm = ({ onDone, onCancel }: ChangePasswordFormProps) => {
                     }
                     required
                     size="lg"
-                    showLabel={t('show_password')}
-                    hideLabel={t('hide_password')}
+                    showLabel="Показати пароль"
+                    hideLabel="Сховати пароль"
                 />
             </div>
 
             <div>
                 <label className="text-muted-foreground mb-1.5 block text-sm">
-                    {t('new_password_label')}
+                    Новий пароль
                 </label>
                 <UiPasswordInput
                     {...form.register('newPassword', {
@@ -116,23 +118,24 @@ const ChangePasswordForm = ({ onDone, onCancel }: ChangePasswordFormProps) => {
                             }
                         },
                     })}
-                    placeholder={t('password_placeholder')}
+                    placeholder="Мінімум 8 символів"
                     error={
                         errors.newPassword?.type === 'same_as_current'
                             ? errors.newPassword.message
                             : getFieldError(
                                   errors.newPassword,
                                   {
-                                      required: t('password_required'),
-                                      too_small: t('password_too_short'),
+                                      required: 'Введіть пароль',
+                                      too_small:
+                                          'Пароль повинен містити мінімум 8 символів',
                                   },
                                   newPwd,
                               )
                     }
                     required
                     size="lg"
-                    showLabel={t('show_password')}
-                    hideLabel={t('hide_password')}
+                    showLabel="Показати пароль"
+                    hideLabel="Сховати пароль"
                 />
             </div>
 
@@ -146,7 +149,7 @@ const ChangePasswordForm = ({ onDone, onCancel }: ChangePasswordFormProps) => {
                     {isSubmitting ? (
                         <UiSpinner size="sm" />
                     ) : (
-                        t('change_password')
+                        'Змінити пароль'
                     )}
                 </UiButton>
 
@@ -157,7 +160,7 @@ const ChangePasswordForm = ({ onDone, onCancel }: ChangePasswordFormProps) => {
                     onClick={onCancel}
                     disabled={isSubmitting}
                 >
-                    {t('cancel')}
+                    Скасувати
                 </UiButton>
             </div>
         </form>

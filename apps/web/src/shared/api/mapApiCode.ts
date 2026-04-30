@@ -1,25 +1,118 @@
 import { RESPONSE_CODE_TYPE, RESPONSE_TYPE } from '@neatslip/types';
 
 /**
- * Returns an i18n key for the given API response code.
+ * Returns a localized Ukrainian message for the given API response code.
  *
- * Priority:
+ * Lookup priority:
  * 1. notifications.{module}.{code_lower}  (success codes, if module provided)
  * 2. errors.{module}.{code_lower}         (error codes, if module provided)
  * 3. errors.generic.{code_lower}          (fallback)
  * 4. errors.generic.unknown               (final fallback)
+ *
+ * Some messages support `{minutes}` placeholder for rate-limit responses.
  */
-export function getApiMessageKey(code: string, module?: string): string {
+
+type MessageDict = Record<string, string>;
+
+const NOTIFICATIONS: Record<string, MessageDict> = {
+    auth: {
+        magic_link_sent: 'Посилання надіслано на вашу пошту',
+        logged_out: 'Ви вийшли з акаунту',
+        account_deleted: 'Акаунт видалено',
+        password_reset: 'Пароль успішно змінено',
+    },
+    users: {
+        terms_accepted: 'Умови прийнято.',
+        onboarding_required: 'Будь ласка, заповніть профіль для продовження',
+    },
+    storage: {
+        avatar_updated: 'Фото оновлено',
+        avatar_deleted: 'Фото видалено',
+    },
+};
+
+const ERRORS: Record<string, MessageDict> = {
+    auth: {
+        unauthorized: 'Час сесії вичерпано. Увійдіть знову',
+        invalid_magic_link: 'Посилання недійсне або прострочене',
+    },
+    payments: {
+        already_subscribed: 'У вас вже є активна підписка.',
+        subscription_required: 'Для доступу потрібна активна підписка.',
+        no_billing_account:
+            'Платіжний акаунт не знайдено. Оформіть підписку.',
+    },
+    users: {
+        insufficient_executions:
+            'Недостатньо виконань для цієї операції. Придбайте більше або оновіть підписку.',
+        executions_reservation_active:
+            'Попередній запит ще обробляється. Зачекайте кілька секунд і спробуйте знову.',
+    },
+    generic: {
+        validation_error: 'Перевірте введені дані',
+        rate_limit_exceeded:
+            'Забагато запитів. Спробуйте через {minutes} хвилин',
+        email_send_failed: 'Не вдалося надіслати лист. Спробуйте пізніше',
+        internal_error: 'Сталася помилка на сервері. Спробуйте пізніше',
+        unknown: 'Сталася помилка. Спробуйте пізніше',
+    },
+    ai: {
+        ai_rate_limit_exceeded: 'Забагато AI-запитів. Спробуйте пізніше.',
+        ai_provider_error: 'AI тимчасово недоступний. Спробуйте пізніше.',
+        ai_message_too_long:
+            'Повідомлення занадто довге для поточної розмови. Скоротіть його або очистіть історію чату.',
+    },
+    storage: {
+        avatar_upload_failed:
+            'Не вдалося завантажити фото. Спробуйте пізніше',
+        avatar_file_key_invalid:
+            'Сесія завантаження закінчилась. Спробуйте ще раз',
+        avatar_upload_not_found:
+            'Не вдалося знайти завантажене фото. Спробуйте ще раз',
+        avatar_upload_invalid:
+            'Цей файл не може бути використаний як фото. Спробуйте інше зображення',
+    },
+};
+
+const UNKNOWN_FALLBACK = ERRORS.generic.unknown;
+
+function interpolate(
+    template: string,
+    vars?: Record<string, string | number>,
+): string {
+    if (!vars) return template;
+    return template.replace(/\{(\w+)\}/g, (match, key) =>
+        key in vars ? String(vars[key]) : match,
+    );
+}
+
+/**
+ * Resolve API response code to a Ukrainian message.
+ *
+ * @param code  Response code from API (any case; will be lowercased for lookup).
+ * @param module Optional module hint (e.g. 'auth', 'ai', 'users').
+ * @param vars Optional template variables (e.g. `{ minutes: 15 }`).
+ */
+export function getApiMessage(
+    code: string,
+    module?: string,
+    vars?: Record<string, string | number>,
+): string {
     const lower = code.toLowerCase();
     const type = RESPONSE_CODE_TYPE[code as keyof typeof RESPONSE_CODE_TYPE];
 
     if (type === RESPONSE_TYPE.SUCCESS && module) {
-        return `notifications.${module}.${lower}`;
+        const msg = NOTIFICATIONS[module]?.[lower];
+        if (msg) return interpolate(msg, vars);
     }
 
     if (module) {
-        return `errors.${module}.${lower}`;
+        const msg = ERRORS[module]?.[lower];
+        if (msg) return interpolate(msg, vars);
     }
 
-    return `errors.generic.${lower}`;
+    const generic = ERRORS.generic[lower];
+    if (generic) return interpolate(generic, vars);
+
+    return UNKNOWN_FALLBACK;
 }

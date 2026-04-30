@@ -35,11 +35,14 @@ export async function loginWithPassword(
 
 export async function sendMagicLink(
     email: string,
-    lang?: string,
     purpose?: MagicLinkPurpose,
     redirectTo?: string
 ): Promise<void> {
-    await apiClient.post('/auth/magic-link/send', { email, lang, purpose, redirectTo });
+    await apiClient.post('/auth/magic-link/send', {
+        email,
+        purpose,
+        redirectTo,
+    });
 }
 
 export async function setPassword(password: string): Promise<void> {
@@ -146,10 +149,6 @@ export async function logout(): Promise<void> {
 export async function getMe(): Promise<UserProfile> {
     const { data } = await apiClient.get<{ data: UserProfile }>('/users/me');
     return data.data;
-}
-
-export async function updatePreferredLang(lang: string): Promise<void> {
-    await apiClient.patch('/users/me/lang', { lang });
 }
 
 export async function acceptTerms(): Promise<void> {

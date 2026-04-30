@@ -5,12 +5,7 @@ const mockReplace = jest.fn();
 
 jest.mock('next/navigation', () => ({
     useRouter: () => ({ replace: mockReplace }),
-    useParams: () => ({ locale: 'uk' }),
-    usePathname: () => '/uk/dashboard',
-}));
-
-jest.mock('next-intl', () => ({
-    useTranslations: () => (key: string) => key,
+    usePathname: () => '/dashboard',
 }));
 
 jest.mock('sonner', () => ({
@@ -49,7 +44,7 @@ describe('AuthGuard', () => {
         render(
             <AuthGuard>
                 <div>Protected content</div>
-            </AuthGuard>
+            </AuthGuard>,
         );
 
         expect(screen.getByTestId('spinner')).toBeInTheDocument();
@@ -62,14 +57,14 @@ describe('AuthGuard', () => {
             return selector(state);
         });
 
-        const { container } = render(
+        render(
             <AuthGuard>
                 <div>Protected content</div>
-            </AuthGuard>
+            </AuthGuard>,
         );
 
         expect(screen.queryByText('Protected content')).not.toBeInTheDocument();
-        expect(mockReplace).toHaveBeenCalledWith('/uk/auth/signin');
+        expect(mockReplace).toHaveBeenCalledWith('/auth/signin');
     });
 
     it('renders children when authenticated and not loading', () => {
@@ -81,7 +76,7 @@ describe('AuthGuard', () => {
         render(
             <AuthGuard>
                 <div>Protected content</div>
-            </AuthGuard>
+            </AuthGuard>,
         );
 
         expect(screen.getByText('Protected content')).toBeInTheDocument();

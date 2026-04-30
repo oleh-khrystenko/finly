@@ -162,7 +162,6 @@ async function createUser(
 ) {
     return userModel.create({
         email: `test-${Date.now()}@test.com`,
-        preferredLang: 'en',
         executions: {
             balance: 1000,
             freeReportUsed: false,

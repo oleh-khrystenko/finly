@@ -187,7 +187,6 @@ describe('CleanupService', () => {
                 {
                     _id: { toString: () => 'user-r1' },
                     email: 'remind@test.com',
-                    preferredLang: 'en',
                     deletedAt,
                     timezone: null,
                 },
@@ -204,7 +203,6 @@ describe('CleanupService', () => {
             expect(mockEmailService.sendDeletionReminder).toHaveBeenCalledWith({
                 email: 'remind@test.com',
                 deletionDate: expect.any(Date),
-                lang: 'en',
             });
             expect(mockModel.findByIdAndUpdate).toHaveBeenCalledWith(
                 'user-r1',
@@ -230,14 +228,12 @@ describe('CleanupService', () => {
                 {
                     _id: { toString: () => 'user-r1' },
                     email: 'fail@test.com',
-                    preferredLang: 'en',
                     deletedAt,
                     timezone: null,
                 },
                 {
                     _id: { toString: () => 'user-r2' },
                     email: 'ok@test.com',
-                    preferredLang: 'uk',
                     deletedAt,
                     timezone: null,
                 },
@@ -271,7 +267,6 @@ describe('CleanupService', () => {
                 {
                     _id: { toString: () => 'user-r1' },
                     email: 'date@test.com',
-                    preferredLang: 'en',
                     deletedAt,
                     timezone: null,
                 },
@@ -337,7 +332,6 @@ describe('CleanupService', () => {
                         {
                             _id: { toString: () => 'user-1' },
                             email: 'no-tz@test.com',
-                            preferredLang: 'en',
                             deletedAt,
                             timezone: null,
                         },
@@ -364,7 +358,6 @@ describe('CleanupService', () => {
                         {
                             _id: { toString: () => 'user-1' },
                             email: 'day@test.com',
-                            preferredLang: 'en',
                             deletedAt,
                             timezone: daytimeTimezone,
                         },
@@ -391,7 +384,6 @@ describe('CleanupService', () => {
                         {
                             _id: { toString: () => 'user-1' },
                             email: 'night@test.com',
-                            preferredLang: 'en',
                             deletedAt,
                             timezone: nighttimeTimezone,
                         },
@@ -416,7 +408,6 @@ describe('CleanupService', () => {
                         {
                             _id: { toString: () => 'user-1' },
                             email: 'bad-tz@test.com',
-                            preferredLang: 'en',
                             deletedAt,
                             timezone: 'Invalid/Timezone',
                         },
@@ -444,14 +435,12 @@ describe('CleanupService', () => {
                         {
                             _id: { toString: () => 'day-user' },
                             email: 'day@test.com',
-                            preferredLang: 'en',
                             deletedAt,
                             timezone: daytimeTimezone,
                         },
                         {
                             _id: { toString: () => 'night-user' },
                             email: 'night@test.com',
-                            preferredLang: 'uk',
                             deletedAt,
                             timezone: nighttimeTimezone,
                         },

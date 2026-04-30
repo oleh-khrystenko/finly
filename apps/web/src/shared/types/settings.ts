@@ -6,16 +6,12 @@ export const THEME = {
 
 export type Theme = (typeof THEME)[keyof typeof THEME];
 
-export interface PageParams {
-    params: Promise<{ locale: string }>;
-}
-
 interface Meta {
     title: string;
     description: string;
 }
 
-export interface MetaProps extends PageParams {
+export interface MetaProps {
     page: string | null;
     href: string;
     meta?: Meta;

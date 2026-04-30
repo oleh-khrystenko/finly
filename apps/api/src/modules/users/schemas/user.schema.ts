@@ -1,5 +1,4 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { LANG } from '@neatslip/types';
 import { HydratedDocument } from 'mongoose';
 
 export type UserDocument = HydratedDocument<User>;
@@ -99,9 +98,6 @@ export class User {
 
     @Prop({ type: String, default: null })
     timezone!: string | null;
-
-    @Prop({ required: true, default: LANG.EN })
-    preferredLang!: string;
 
     @Prop({ type: Date, default: null })
     termsAcceptedAt!: Date | null;

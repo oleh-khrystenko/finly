@@ -1,8 +1,7 @@
 'use client';
 
 import { ReactNode, useEffect } from 'react';
-import { useRouter, useParams, usePathname } from 'next/navigation';
-import { useTranslations } from 'next-intl';
+import { useRouter, usePathname } from 'next/navigation';
 import { toast } from 'sonner';
 import { isOnboardingComplete } from '@neatslip/types';
 
@@ -13,31 +12,30 @@ interface AuthGuardProps {
     children: ReactNode;
 }
 
+const ONBOARDING_REQUIRED = 'Будь ласка, заповніть профіль для продовження';
+
 const AuthGuard = ({ children }: AuthGuardProps) => {
     const router = useRouter();
     const pathname = usePathname();
-    const { locale } = useParams<{ locale: string }>();
-    const t = useTranslations('notifications.users');
     const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
     const isLoading = useAuthStore((s) => s.isLoading);
     const user = useAuthStore((s) => s.user);
 
     const onboardingDone = user ? isOnboardingComplete(user.profile) : true;
     const isProfilePage = pathname.includes('/profile');
-    const onboardingMessage = t('onboarding_required');
 
     useEffect(() => {
         if (!isLoading && !isAuthenticated) {
-            router.replace(`/${locale}/auth/signin`);
+            router.replace('/auth/signin');
         }
-    }, [isLoading, isAuthenticated, router, locale]);
+    }, [isLoading, isAuthenticated, router]);
 
     useEffect(() => {
         if (isAuthenticated && !onboardingDone && !isProfilePage) {
-            toast.info(onboardingMessage);
-            router.replace(`/${locale}/profile?mode=new`);
+            toast.info(ONBOARDING_REQUIRED);
+            router.replace('/profile?mode=new');
         }
-    }, [isAuthenticated, onboardingDone, isProfilePage, router, locale, onboardingMessage]);
+    }, [isAuthenticated, onboardingDone, isProfilePage, router]);
 
     if (isLoading) {
         return <UiFullPageLoader />;

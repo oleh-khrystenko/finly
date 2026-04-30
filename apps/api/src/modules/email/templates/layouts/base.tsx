@@ -11,13 +11,12 @@ import {
 import { EMAIL_COLORS } from '@neatslip/types';
 
 interface BaseLayoutProps {
-    lang: string;
     children: React.ReactNode;
 }
 
-export function BaseLayout({ lang, children }: BaseLayoutProps) {
+export function BaseLayout({ children }: BaseLayoutProps) {
     return (
-        <Html lang={lang}>
+        <Html lang="uk">
             <Head />
             <Body style={body}>
                 <Container style={container}>
