@@ -15,4 +15,11 @@ export interface MetaProps {
     page: string | null;
     href: string;
     meta?: Meta;
+    /**
+     * `true` adds `<meta name="robots" content="noindex, nofollow">`. Used
+     * for legal pages whose text is in draft state until lawyer review
+     * (Sprint 6) — keeps drafts out of search-engine indexes on staging /
+     * preview deployments.
+     */
+    noindex?: boolean;
 }
