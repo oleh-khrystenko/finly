@@ -40,7 +40,7 @@ jobs:
             - run: pnpm build
 
     test:
-        name: API Tests
+        name: Tests
         runs-on: ubuntu-latest
 
         env:
@@ -69,4 +69,4 @@ jobs:
 
             - run: pnpm install --frozen-lockfile
 
-            - run: pnpm --filter api test
+            - run: pnpm test
