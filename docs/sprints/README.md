@@ -6,7 +6,7 @@
 
 ---
 
-## 1. Архітектурний фундамент
+## [1. Архітектурний фундамент](01-foundation/README.md)
 
 - [ ] Схеми БД (closed-end, без UI там, де "заготовка")
   - [ ] `User`: `lastName` required, `role` enum, `worksAsBookkeeper`
