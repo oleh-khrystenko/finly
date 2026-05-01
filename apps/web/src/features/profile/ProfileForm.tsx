@@ -19,7 +19,7 @@ import { useAvatarUploadDialogStore } from './avatarUploadDialogStore';
 
 const ProfileFormSchema = z.object({
     firstName: firstNameSchema,
-    lastName: z.union([lastNameSchema, z.literal('')]),
+    lastName: lastNameSchema,
 });
 
 type ProfileFormValues = z.input<typeof ProfileFormSchema>;
@@ -36,7 +36,7 @@ interface ProfileFormProps {
     onSaved?: () => void;
 }
 
-const NAME_MESSAGES = {
+const FIRST_NAME_MESSAGES = {
     required: "Ім'я обов'язкове",
     too_small: "Ім'я має містити щонайменше 2 символи",
     too_big: 'Має містити не більше 50 символів',
@@ -44,6 +44,16 @@ const NAME_MESSAGES = {
         "Ім'я може містити лише літери, пробіли, дефіси та апострофи",
     invalid_format:
         "Ім'я може містити лише літери, пробіли, дефіси та апострофи",
+};
+
+const LAST_NAME_MESSAGES = {
+    required: "Прізвище обов'язкове",
+    too_small: 'Прізвище має містити щонайменше 2 символи',
+    too_big: 'Має містити не більше 50 символів',
+    invalid_string:
+        'Прізвище може містити лише літери, пробіли, дефіси та апострофи',
+    invalid_format:
+        'Прізвище може містити лише літери, пробіли, дефіси та апострофи',
 };
 
 const ProfileForm = ({
@@ -75,10 +85,7 @@ const ProfileForm = ({
         const lastName = data.lastName.trim();
 
         try {
-            await updateProfile({
-                firstName,
-                ...(lastName ? { lastName } : { lastName: '' }),
-            });
+            await updateProfile({ firstName, lastName });
             const me = await getMe();
             setUser(me);
             form.reset({
@@ -131,7 +138,7 @@ const ProfileForm = ({
                         placeholder="Ваше ім'я"
                         error={getFieldError(
                             errors.firstName,
-                            NAME_MESSAGES,
+                            FIRST_NAME_MESSAGES,
                             firstNameValue,
                         )}
                         disabled={!editable}
@@ -142,6 +149,7 @@ const ProfileForm = ({
                 <div>
                     <label className="text-muted-foreground mb-1.5 block text-sm">
                         Прізвище
+                        <span className="text-destructive ml-1">*</span>
                     </label>
                     <UiInput
                         {...form.register('lastName')}
@@ -149,7 +157,7 @@ const ProfileForm = ({
                         placeholder="Ваше прізвище"
                         error={getFieldError(
                             errors.lastName,
-                            NAME_MESSAGES,
+                            LAST_NAME_MESSAGES,
                             lastNameValue,
                         )}
                         disabled={!editable}

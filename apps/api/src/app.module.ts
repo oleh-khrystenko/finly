@@ -10,7 +10,9 @@ import { OnboardingInterceptor } from './common/interceptors/onboarding.intercep
 import { ENV } from './config/env';
 import { RedisModule } from './common/modules/redis.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { BusinessesModule } from './modules/businesses/businesses.module';
 import { EmailModule } from './modules/email/email.module';
+import { InvoicesModule } from './modules/invoices/invoices.module';
 import { UsersModule } from './modules/users/users.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { StorageModule } from './modules/storage/storage.module';
@@ -31,6 +33,8 @@ import { AiModule } from './modules/ai/ai.module';
         AuthModule,
         EmailModule,
         UsersModule,
+        BusinessesModule,
+        InvoicesModule,
         ReportsModule,
         StorageModule,
         PaymentsModule,

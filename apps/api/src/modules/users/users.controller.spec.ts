@@ -10,6 +10,8 @@ const mockUser = {
     id: '507f1f77bcf86cd799439011',
     _id: { toString: () => '507f1f77bcf86cd799439011' },
     email: 'test@gmail.com',
+    role: 'user',
+    worksAsBookkeeper: false,
     profile: { firstName: 'John', lastName: 'Doe', avatar: null },
     executions: { balance: 5, freeReportUsed: false },
     passwordHash: '$2b$10$hash',
@@ -55,6 +57,8 @@ describe('UsersController', () => {
                 data: {
                     id: '507f1f77bcf86cd799439011',
                     email: 'test@gmail.com',
+                    role: 'user',
+                    worksAsBookkeeper: false,
                     profile: {
                         firstName: 'John',
                         lastName: 'Doe',
@@ -68,6 +72,32 @@ describe('UsersController', () => {
                     billing: null,
                 },
             });
+        });
+
+        it('falls back to defaults for legacy users without role / worksAsBookkeeper', () => {
+            const legacy = {
+                ...mockUser,
+                role: undefined,
+                worksAsBookkeeper: undefined,
+            };
+            const result = controller.getMe(legacy as any);
+
+            expect(result.data.role).toBe('user');
+            expect(result.data.worksAsBookkeeper).toBe(false);
+        });
+
+        it('passes through admin role for admin users', () => {
+            const admin = { ...mockUser, role: 'admin' };
+            const result = controller.getMe(admin as any);
+
+            expect(result.data.role).toBe('admin');
+        });
+
+        it('passes through worksAsBookkeeper=true', () => {
+            const bookkeeper = { ...mockUser, worksAsBookkeeper: true };
+            const result = controller.getMe(bookkeeper as any);
+
+            expect(result.data.worksAsBookkeeper).toBe(true);
         });
 
         it('should return hasPassword: false when no passwordHash', () => {

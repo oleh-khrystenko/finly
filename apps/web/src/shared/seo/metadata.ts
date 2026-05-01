@@ -12,6 +12,7 @@ export function fetchMetadata({
     page,
     href,
     meta,
+    noindex,
 }: MetaProps): Metadata {
     let title = FALLBACK_TITLE;
     let description = FALLBACK_DESCRIPTION;
@@ -33,6 +34,9 @@ export function fetchMetadata({
         alternates: {
             canonical: canonicalUrl,
         },
+        ...(noindex && {
+            robots: { index: false, follow: false },
+        }),
         openGraph: {
             title,
             description,

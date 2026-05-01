@@ -25,6 +25,15 @@ jest.mock('@/entities/user', () => ({
     },
 }));
 
+const mockOpenTermsReacceptDialog = jest.fn();
+
+jest.mock('./termsReacceptDialogStore', () => ({
+    useTermsReacceptDialogStore: {
+        getState: () => ({ open: mockOpenTermsReacceptDialog }),
+    },
+}));
+
+import { CURRENT_TERMS_VERSION } from '@finly/types';
 import AuthInitializer from './AuthInitializer';
 
 describe('AuthInitializer', () => {
@@ -95,5 +104,47 @@ describe('AuthInitializer', () => {
         const { container } = render(<AuthInitializer />);
 
         expect(container.innerHTML).toBe('');
+    });
+
+    it('opens TermsReacceptDialog when user.termsVersion is outdated', async () => {
+        mockRefreshToken.mockResolvedValue('token');
+        mockGetMe.mockResolvedValue({
+            id: '1',
+            email: 'user@finly.com.ua',
+            termsVersion: '2020-01-01',
+        });
+
+        render(<AuthInitializer />);
+        await new Promise((r) => setTimeout(r, 50));
+
+        expect(mockOpenTermsReacceptDialog).toHaveBeenCalledTimes(1);
+    });
+
+    it('does NOT open TermsReacceptDialog when user.termsVersion matches current', async () => {
+        mockRefreshToken.mockResolvedValue('token');
+        mockGetMe.mockResolvedValue({
+            id: '1',
+            email: 'user@finly.com.ua',
+            termsVersion: CURRENT_TERMS_VERSION,
+        });
+
+        render(<AuthInitializer />);
+        await new Promise((r) => setTimeout(r, 50));
+
+        expect(mockOpenTermsReacceptDialog).not.toHaveBeenCalled();
+    });
+
+    it('opens TermsReacceptDialog when user.termsVersion is null (never accepted)', async () => {
+        mockRefreshToken.mockResolvedValue('token');
+        mockGetMe.mockResolvedValue({
+            id: '1',
+            email: 'user@finly.com.ua',
+            termsVersion: null,
+        });
+
+        render(<AuthInitializer />);
+        await new Promise((r) => setTimeout(r, 50));
+
+        expect(mockOpenTermsReacceptDialog).toHaveBeenCalledTimes(1);
     });
 });
