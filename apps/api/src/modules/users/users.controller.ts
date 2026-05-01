@@ -35,6 +35,7 @@ import type {
     ExecutionTransactionLean,
 } from './schemas/execution-transaction.schema';
 import { UserDocument } from './schemas/user.schema';
+import { mapUserToProfileResponse } from './user-profile.mapper';
 import { UsersService } from './users.service';
 
 @Controller('users')
@@ -50,36 +51,7 @@ export class UsersController {
     getMe(@CurrentUser() user: UserDocument): {
         data: Record<string, unknown>;
     } {
-        return {
-            data: {
-                id: user.id as string,
-                email: user.email,
-                profile: user.profile,
-                executions: {
-                    balance: user.executions.balance,
-                    freeReportUsed: user.executions.freeReportUsed,
-                },
-                hasPassword: !!user.passwordHash,
-                deletedAt: user.deletedAt ?? null,
-                accountDeletionRequestedAt:
-                    user.accountDeletionRequestedAt ?? null,
-                termsVersion: user.termsVersion ?? null,
-                billing: user.billing
-                    ? {
-                          hasActiveSubscription:
-                              user.billing.hasActiveSubscription,
-                          planCode: user.billing.planCode,
-                          subscriptionStatus: user.billing.subscriptionStatus,
-                          currentPeriodEnd: user.billing.currentPeriodEnd,
-                          cancelAtPeriodEnd: user.billing.cancelAtPeriodEnd,
-                          scheduledPlanCode:
-                              user.billing.scheduledPlanCode ?? null,
-                          scheduledChangeDate:
-                              user.billing.scheduledChangeDate ?? null,
-                      }
-                    : null,
-            },
-        };
+        return { data: mapUserToProfileResponse(user) };
     }
 
     @Patch('me')
@@ -93,21 +65,7 @@ export class UsersController {
             user._id.toString(),
             dto
         );
-        return {
-            data: {
-                id: updated!._id,
-                email: updated!.email,
-                profile: updated!.profile,
-                executions: {
-                    balance: updated!.executions.balance,
-                    freeReportUsed: updated!.executions.freeReportUsed,
-                },
-                hasPassword: !!updated!.passwordHash,
-                deletedAt: updated!.deletedAt ?? null,
-                accountDeletionRequestedAt:
-                    updated!.accountDeletionRequestedAt ?? null,
-            },
-        };
+        return { data: mapUserToProfileResponse(updated!) };
     }
 
     @Post('me/accept-terms')

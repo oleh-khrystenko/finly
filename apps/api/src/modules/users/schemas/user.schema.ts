@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
+import { DEFAULT_USER_ROLE, USER_ROLES, type UserRole } from '@finly/types';
 
 export type UserDocument = HydratedDocument<User>;
 
@@ -67,6 +68,26 @@ class UserExecutions {
 export class User {
     @Prop({ required: true, unique: true, lowercase: true, trim: true })
     email!: string;
+
+    /**
+     * System-level role. "Гість" свідомо не у БД (це стан "немає JWT").
+     * Default спрацьовує лише для нових документів — legacy users без поля
+     * нормалізуються на read-time у controller-helper'і `mapUserToProfileResponse`.
+     */
+    @Prop({
+        type: String,
+        enum: USER_ROLES,
+        default: DEFAULT_USER_ROLE,
+        required: true,
+    })
+    role!: UserRole;
+
+    /**
+     * "Режим бухгалтера" — capability на акаунті, не окрема роль. Toggle-логіка
+     * (вплив на форму створення Business) — Sprint 3.
+     */
+    @Prop({ type: Boolean, default: false, required: true })
+    worksAsBookkeeper!: boolean;
 
     @Prop({ type: UserProvider })
     provider?: UserProvider;

@@ -24,6 +24,7 @@ import { SkipOnboarding } from '../../common/decorators/skip-onboarding.decorato
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
 import { ENV } from '../../config/env';
 import { UserDocument } from '../users/schemas/user.schema';
+import { mapUserToProfileResponse } from '../users/user-profile.mapper';
 import { AuthService } from './auth.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
@@ -103,17 +104,7 @@ export class AuthController {
 
         return {
             data: {
-                user: {
-                    id: user.id as string,
-                    email: user.email,
-                    profile: user.profile,
-                    executions: {
-                        balance: user.executions.balance,
-                        freeReportUsed: user.executions.freeReportUsed,
-                    },
-                    hasPassword: !!user.passwordHash,
-                    deletedAt: user.deletedAt ?? null,
-                },
+                user: mapUserToProfileResponse(user),
                 accessToken,
                 ...(accountDeleted && { accountDeleted }),
             },
@@ -165,17 +156,7 @@ export class AuthController {
 
         return {
             data: {
-                user: {
-                    id: user.id as string,
-                    email: user.email,
-                    profile: user.profile,
-                    executions: {
-                        balance: user.executions.balance,
-                        freeReportUsed: user.executions.freeReportUsed,
-                    },
-                    hasPassword: !!user.passwordHash,
-                    deletedAt: user.deletedAt ?? null,
-                },
+                user: mapUserToProfileResponse(user),
                 accessToken: tokens.accessToken,
                 purpose,
                 ...(accountDeleted && { accountDeleted }),

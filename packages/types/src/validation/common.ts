@@ -16,10 +16,11 @@ export const firstNameSchema = z
     .max(50)
     .regex(/^[\p{L}\s'\-]+$/u);
 
-/** Last name: up to 50 chars, Unicode letters, spaces, apostrophes, hyphens. */
+/** Last name: 1–50 chars, Unicode letters, spaces, apostrophes, hyphens. */
 export const lastNameSchema = z
     .string()
     .trim()
+    .min(1)
     .max(50)
     .regex(/^[\p{L}\s'\-]+$/u);
 
