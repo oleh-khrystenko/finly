@@ -1,4 +1,4 @@
 import { createZodDto } from 'nestjs-zod';
-import { AiChatRequestSchema } from '@cyanship/types';
+import { AiChatRequestSchema } from '@finly/types';
 
 export class AiChatDto extends createZodDto(AiChatRequestSchema) {}

@@ -18,7 +18,7 @@ import {
     type AiChatErrorEvent,
     type AiChatTokenEvent,
     type ChatMessageItem,
-} from '@cyanship/types';
+} from '@finly/types';
 
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -117,7 +117,6 @@ export class AiController {
                 this.writeSSE<AiChatDoneEvent>(res, {
                     type: AI_CHAT_EVENT.DONE,
                     balanceAfter: result.balanceAfter,
-                    aiRequestsRemaining: result.aiRequestsRemaining,
                 });
             } else if (firstTokenReceived) {
                 // Client aborted after first token — non-refundable, commit silently.

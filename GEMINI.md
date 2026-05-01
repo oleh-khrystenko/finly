@@ -1,5 +1,7 @@
-# CyanShip
-> Modern monorepo SaaS boilerplate з Next.js 16, NestJS 11 та Feature-Sliced Design.
+# Finly
+> **Vision (finly.com.ua):** SaaS для українських ФОП та їх бухгалтерів — генерація платіжних QR-кодів і посилань за стандартом НБУ; у планах — сховище документів з AI-тегуванням.
+>
+> **Поточний код:** QR/document features ще не реалізовано. Репозиторій — monorepo SaaS-фундамент на Next.js 16 + NestJS 11 з Feature-Sliced Design (auth, payments, AI chat, executions ledger).
 
 ## Tech Stack
 - **Frameworks:** Next.js 16 (App Router), NestJS 11
@@ -12,7 +14,7 @@
 - **Testing:** Jest, Supertest
 
 ## Architecture Overview
-Проєкт побудований як Modular Monolith з жорстким розділенням на **Core** (стабільне ядро) та **Agency** (ізольований бізнес-модуль). Frontend реалізовано за методологією **Feature-Sliced Design (FSD)**. Backend використовує модульну структуру NestJS. Всі типи та Zod-схеми винесені в спільний пакет `@cyanship/types`.
+Modular Monolith. Frontend реалізовано за методологією **Feature-Sliced Design (FSD)**. Backend використовує модульну структуру NestJS. Всі типи та Zod-схеми винесені в спільний пакет `@finly/types`.
 
 ## Project Structure
 - `apps/api/` # Backend (NestJS 11)
@@ -30,9 +32,8 @@
 - **Audit Logs** — (в планах) для відстеження критичних дій.
 
 ## Module Dependency Map
-`Agency` → `Core` (Однонаправлена залежність)
-`apps/web` → `@cyanship/types`
-`apps/api` → `@cyanship/types`
+`apps/web` → `@finly/types`
+`apps/api` → `@finly/types`
 
 ## Key Patterns (CodeDNA)
 - **Створення Endpoint:** Controller + DTO + Guard. Приклад: `apps/api/src/modules/users/users.controller.ts`.

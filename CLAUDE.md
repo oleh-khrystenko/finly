@@ -1,26 +1,27 @@
-# CyanShip
+# Finly
 
-> Monorepo-monolith на Next.js 16 + NestJS 11: API володіє auth/session lifecycle, billing, executions, AI chat та agency brief submission, а shared Zod/TypeScript контракти використовуються обома застосунками.
+> **Product vision (finly.com.ua):** SaaS для українських ФОП та їх бухгалтерів — генерація платіжних QR-кодів і посилань за стандартом НБУ, щоб клієнти сканували й оплачували без ручного введення реквізитів. У планах — зберігання документів із AI-тегуванням для швидкого пошуку.
+>
+> **Поточний стан репозиторію:** QR/НБУ-флоу та document storage ще не реалізовані. Зараз це monorepo-monolith на Next.js 16 + NestJS 11 з тех-фундаментом — auth/session lifecycle, billing (Stripe), executions ledger, AI chat (Anthropic), avatar storage (R2). Shared Zod/TypeScript контракти використовуються обома застосунками. Доменна модель і ендпоінти нижче описують саме цей фундамент.
 
 ## Tech Stack
 
 | Шар | Технологія | Версія |
 |-----|-----------|--------|
 | Core | TypeScript, Node.js, pnpm, Turborepo | TS 5.9, Node 20, pnpm 10.30 |
-| Frontend | Next.js (App Router + Turbopack), React, Zustand, TailwindCSS, next-intl | Next 16.0.1, React 19.2, Zustand 5, Tailwind 4, next-intl 4.4 |
+| Frontend | Next.js (App Router + Turbopack), React, Zustand, TailwindCSS | Next 16.0.1, React 19.2, Zustand 5, Tailwind 4 |
 | Forms | React Hook Form + @hookform/resolvers (Zod) | RHF 7.72 |
 | Backend | NestJS, Mongoose, ioredis, Passport | NestJS 11.1, Mongoose 8 |
 | Validation | Zod (shared contracts) | Zod 4.3 |
 | AI | Anthropic SDK (Claude Haiku 4.5) | SDK 0.80 |
 | Payments | Stripe | 20.4 |
 | Email | Resend + React Email | 6.9 |
-| CAPTCHA | Cloudflare Turnstile | — |
 | Storage | Cloudflare R2 (S3 SDK + presigner), `sharp`, `react-easy-crop` | SDK 3, sharp 0.34 |
 | Тести | Jest, Supertest, MongoMemoryServer, @testing-library/react | Jest 30.2 |
 
 ## Architecture Overview
 
-Monorepo з трьома workspace: `apps/api`, `apps/web`, `packages/types`. API — system of record для auth, session lifecycle, billing, executions, AI chat, agency brief submission та media storage; web залишається тонким клієнтом і спілкується з API через shared Zod контракти. Frontend використовує Feature-Sliced Design. Модульний моноліт зі строгим Core/Agency розділенням — agency код живе в ізольованих шляхах, core не може імпортувати agency (ESLint `no-restricted-imports`). Модуль `reports` (API) — scaffold/placeholder без бізнес-логіки. Модуль `storage` — avatar upload pipeline через Cloudflare R2 (presigned PUT + server-side Google avatar re-upload з `sharp`). Модуль `agency` — brief submission з Turnstile CAPTCHA + authenticated brief для AI bonus grant. Модуль `ai` — streaming chat з Anthropic через SSE, з execution-based billing та rate limiting.
+Monorepo з трьома workspace: `apps/api`, `apps/web`, `packages/types`. API — system of record для auth, session lifecycle, billing, executions, AI chat та media storage; web залишається тонким клієнтом і спілкується з API через shared Zod контракти. Frontend використовує Feature-Sliced Design. Модуль `reports` (API) — scaffold/placeholder без бізнес-логіки. Модуль `storage` — avatar upload pipeline через Cloudflare R2 (presigned PUT + server-side Google avatar re-upload з `sharp`). Модуль `ai` — streaming chat з Anthropic через SSE з execution-based billing та IP rate limiting.
 
 ## Project Structure
 
@@ -30,21 +31,17 @@ apps/
 │   ├── main.ts, app.module.ts
 │   ├── config/          # fail-fast env loader
 │   ├── common/          # decorators, filters, guards, interceptors, modules (Redis)
-│   └── modules/         # auth, email, users, payments, agency, ai, reports, storage
+│   └── modules/         # auth, email, users, payments, ai, reports, storage
 ├── web/src/
-│   ├── app/[locale]/    # pages: auth, (protected), (agency)
-│   ├── entities/        # user (authStore), navigation (headerNavStore), brand (Logo), agency (placeholder)
-│   ├── features/        # auth, billing, agency, profile, change-lang, change-theme — own their dialog/state stores in-slice
-│   ├── widgets/         # header (mobileMenuSheetStore), agency/landing (dogfoodingSheetStore)
-│   ├── shared/          # api, ui, config, styles, icons, seo, lib (authEvents + uiIntents buses), fonts, types
-│   └── i18n/            # routing, request config
+│   ├── app/             # pages: root, auth, (protected), privacy, terms (single-locale, uk only)
+│   ├── entities/        # user (authStore), navigation (headerNavStore), brand (Logo)
+│   ├── features/        # auth, billing, profile, change-theme — own their dialog/state stores in-slice
+│   ├── widgets/         # header (mobileMenuSheetStore)
+│   └── shared/          # api, ui, config, styles, icons, seo, lib (authEvents bus), fonts, types
 packages/
-└── types/src/           # contracts, entities, enums, constants, validation, utils, agency
+└── types/src/           # contracts, entities, enums, constants, validation, utils
 docs/
-├── architecture/        # auth-flow, payments-flow
-├── conventions/         # source-of-truth правила
-├── sprints/             # ai-chat, ai-chat-parallel-bypass, brief-submission, auth-turnstile, upload-media
-└── vision/              # product vision & business model
+└── conventions/         # source-of-truth правила
 ```
 
 ## Domain Model
@@ -54,7 +51,6 @@ docs/
 - Soft-delete через `deletedAt` + `accountDeletionRequestedAt` (grace period, cron hard-delete)
 - Embedded `billing` subdocument (nullable, створюється лише при першій billing-події) з `lastProviderEventAt` для out-of-order webhook protection
 - Embedded `executions` subdocument (`balance`, `freeReportUsed`, `activeReservation`) з atomic `$inc` операціями
-- Embedded `ai` subdocument (`requestsUsed`, `bonusGranted`) — lifetime AI chat usage tracking
 - Sparse indexes: `provider.id`, `billing.providerCustomerId`, `billing.providerSubscriptionId`, `executions.activeReservation.expiresAt`
 
 ### ExecutionTransaction
@@ -77,14 +73,9 @@ docs/
 - Unique `(provider, providerCustomerId)` — черга невдалих видалень Stripe customers
 - Retry з лічильником `attempts` (max 5), cron `PaymentsCleanupService`
 
-### Brief
-Файл: `apps/api/src/modules/agency/schemas/brief.schema.ts`
-- Заявка від клієнта (name, email, description, budget, deadline, status)
-- Status index; статуси визначені в `packages/types/src/agency/brief.ts`
-
 ## Module Dependency Map
 
-- `AppModule` → `AuthModule`, `EmailModule`, `UsersModule`, `PaymentsModule`, `ReportsModule`, `StorageModule`, `AgencyModule`, `AiModule`
+- `AppModule` → `AuthModule`, `EmailModule`, `UsersModule`, `PaymentsModule`, `ReportsModule`, `StorageModule`, `AiModule`
 - `AppModule` global providers: `ThrottlerGuard` (APP_GUARD), `OnboardingInterceptor` (APP_INTERCEPTOR)
 - `AuthModule` ↔ `UsersModule` (`forwardRef`, circular)
 - `AuthModule` → `StorageModule` (for Google avatar re-upload у `handleGoogleAuth`)
@@ -92,7 +83,6 @@ docs/
 - `RedisModule` — `@Global()`, exports `REDIS_CLIENT` token + `RedisCounterService` (Lua-based atomic counters)
 - `PaymentsModule` → `UsersModule` + `PAYMENT_PROVIDER` injection token + `CatalogService` + `REDIS_CLIENT`
 - `CatalogService` → own Stripe SDK instance + `REDIS_CLIENT` (no dependency on `IPaymentProvider`)
-- `AgencyModule` → `EmailModule` (global) + `UsersModule` (for AI bonus) + `TurnstileService` + `BriefService`
 - `AiModule` → `UsersModule` + `REDIS_CLIENT` + `AI_PROVIDER` injection token (AnthropicService)
 - `StorageModule` → `UsersModule` + `STORAGE_PROVIDER` injection token (CloudflareR2Service); exports `StorageService` (consumed by `AuthModule`)
 - `CleanupService` (cron, every 6h) → `AuthService` + `UserModel`
@@ -100,7 +90,6 @@ docs/
 - `PaymentsCleanupService` (cron, 4 AM) → `PAYMENT_PROVIDER` + `OrphanedProviderCustomerModel`
 - Web: `shared/api/client.ts` → axios interceptors → refresh dedupe → `authStore`
 - Web: protected routes → `AuthGuard` компонент → auth store → `shared/api/auth.ts`
-- Agency → Core (одностороння залежність); core НЕ імпортує agency
 
 ## Key Patterns
 
@@ -117,38 +106,35 @@ React Hook Form + Zod resolver для всіх форм. Приклад: `apps/w
 - `JwtActiveGuard` — **основний**, перевіряє JWT + блокує soft-deleted users
 - `JwtAuthGuard` — тільки JWT без перевірки soft-delete (використовується для restore)
 - `SubscriptionGuard` — перевіряє `hasActiveSubscription`
-- `AiRateLimitGuard` — перевіряє lifetime account limit (MongoDB) + IP-based Redis rate limit (24h TTL)
+- `AiRateLimitGuard` — IP-based Redis rate limit (24h TTL); account-level guards (executions balance + single-flight reservation) живуть атомарно у `AiService.reserveChatRequest`
 - Файли: `apps/api/src/common/guards/`, `apps/api/src/modules/ai/guards/`
 
 ### Onboarding enforcement
 Глобальний `OnboardingInterceptor` (APP_INTERCEPTOR) блокує роути з кодом `ONBOARDING_INCOMPLETE` поки профіль не заповнений. Пропускається через `@SkipOnboarding()` decorator. Файли: `apps/api/src/common/interceptors/onboarding.interceptor.ts`, `apps/api/src/common/decorators/skip-onboarding.decorator.ts`
 
 ### Auth/session lifecycle
-Access JWT в пам'яті (web), refresh JWT в `bid_refresh` httpOnly cookie, Redis token families з ротацією і reuse detection. Axios дедуплікує concurrent refresh calls. Повна документація: `docs/architecture/auth-flow/README.md`
+Access JWT в пам'яті (web), refresh JWT в `bid_refresh` httpOnly cookie, Redis token families з ротацією і reuse detection. Axios дедуплікує concurrent refresh calls.
 
 ### Billing/webhook processing
-Provider abstraction (`PAYMENT_PROVIDER` → `StripeService`), two-phase idempotency через `ProcessedWebhookEvent`, atomic out-of-order guard через `lastProviderEventAt` в MongoDB query. Feature flags контролюють subscription/one-off. Orphaned customer cleanup через `OrphanedProviderCustomer` + daily cron. Повна документація: `docs/architecture/payments-flow/README.md`
+Provider abstraction (`PAYMENT_PROVIDER` → `StripeService`), two-phase idempotency через `ProcessedWebhookEvent`, atomic out-of-order guard через `lastProviderEventAt` в MongoDB query. Feature flags контролюють subscription/one-off. Orphaned customer cleanup через `OrphanedProviderCustomer` + daily cron.
 
 ### Billing catalog (Stripe as single source of truth)
-`CatalogService` (`apps/api/src/modules/payments/catalog.service.ts`) fetches Products/Prices from Stripe API, caches in Redis (TTL 5 min). Has own Stripe SDK instance (not via `IPaymentProvider`) to avoid circular DI. Warms cache on startup (fail-fast). Public endpoint `GET /payments/catalog` — no auth, applies feature flags. Plan/pack codes remain as TypeScript union types (`SubscriptionPlanCode`, `ExecutionPackCode`) — structural identifiers for i18n keys, images, DB records. Business data (prices, executions, display order, featured) comes exclusively from Stripe Product metadata.
+`CatalogService` (`apps/api/src/modules/payments/catalog.service.ts`) fetches Products/Prices from Stripe API, caches in Redis (TTL 5 min). Has own Stripe SDK instance (not via `IPaymentProvider`) to avoid circular DI. Warms cache on startup (fail-fast). Public endpoint `GET /payments/catalog` — no auth, applies feature flags. Plan/pack codes remain as TypeScript union types (`SubscriptionPlanCode`, `ExecutionPackCode`) — structural identifiers for UI labels, images, DB records. Business data (prices, executions, display order, featured) comes exclusively from Stripe Product metadata.
 
 ### AI chat streaming
-Provider abstraction (`AI_PROVIDER` → `AnthropicService`), SSE streaming через `res.write()`. Durable reservation pattern: `AiService.reserveChatRequest()` робить atomic `findOneAndUpdate` (balance + account limit + single-flight guard + compensationOps), потім stream, потім commit або refund. 2-layer protection: IP rate limit (Redis Lua) і atomic durable reservation (single-document Mongo op). Abort policy: refundable до першого токена, non-refundable після. Файл: `apps/api/src/modules/ai/ai.controller.ts`. Спринт-документація: `docs/sprints/ai-chat/`, `docs/sprints/ai-chat-parallel-bypass/`
+Provider abstraction (`AI_PROVIDER` → `AnthropicService`), SSE streaming через `res.write()`. Durable reservation pattern: `AiService.reserveChatRequest()` робить atomic `findOneAndUpdate` (balance + single-flight guard), потім stream, потім commit або refund. 2-layer protection: IP rate limit (Redis Lua) і atomic durable reservation (single-document Mongo op). Abort policy: refundable до першого токена, non-refundable після. Файл: `apps/api/src/modules/ai/ai.controller.ts`
 
 ### Reservation primitives (generic core API)
 `UsersService.commitReservation()` — MongoDB transaction з claim-first порядком (active claim резервації перед side effects). `UsersService.refundReservation()` — single atomic `findOneAndUpdate`, що застосовує `compensationOps` зі збереженого reservation document. `ReservationReconcileService` — generic cron (кожні 5 хвилин), знаходить expired reservations і викликає той самий `refundReservation`. Будь-який feature, що мутує власні поля під час reserve, декларує compensation у `activeReservation.compensationOps`; core refund застосовує їх атомарно.
 
-### AI bonus grant через brief
-Authenticated brief endpoint (`POST /agency/brief/authenticated`) дозволяє отримати AI bonus (5 додаткових запитів). Server-side sets `requestAiBonus: true` + `userId`. `BriefService` atomically sets `user.ai.bonusGranted: true`. Frontend brief dialog підтримує `requestAiBonus` mode через Zustand store.
-
 ### Avatar upload pipeline (R2)
-Provider abstraction (`STORAGE_PROVIDER` → `CloudflareR2Service`, S3-compatible SDK). Three-step client flow: `POST /storage/avatar/upload-url` → direct PUT до R2 → `POST /storage/avatar/commit`. API сервер ніколи не проксує файли. Presigned PUT URL підписує лише `Content-Type: image/webp` (клієнт мусить відправити рівно таке значення, інакше R2 → 403). Size enforcement на application layer: client pre-check → `HeadObject` при commit з `deleteObject` cleanup при rejection → throttler на presigned URL endpoint. Commit ідемпотентний: повторний виклик з тим самим fileKey повертає existing URL без повторного `safeDeleteR2File(oldUrl)` — захист від race при retry. File key формат: `avatars/{userId}/{uuid}.webp` (shared `AVATAR_FILE_KEY_REGEX` у `packages/types/src/contracts/storage.ts`). Client: `react-easy-crop` (round mask, pinch-zoom) → `canvas.toBlob('image/webp', 0.85)` → `uploadToR2()` (native `fetch`, не `apiClient`). HEIC свідомо **не підтримується**: будь-який browser-side HEIC-декодер транзитивно залежить від libheif (LGPL-3.0), що несумісне з permissive-ліцензійним профілем репо. iOS Safari ≥14 автоматично конвертує HEIC → JPEG при виборі файла, якщо `accept` не містить `image/heic`, тож iPhone UX зберігається без shipping'у декодера. Файл: `apps/api/src/modules/storage/storage.service.ts`. Спринт-документація: `docs/sprints/upload-media/`.
+Provider abstraction (`STORAGE_PROVIDER` → `CloudflareR2Service`, S3-compatible SDK). Three-step client flow: `POST /storage/avatar/upload-url` → direct PUT до R2 → `POST /storage/avatar/commit`. API сервер ніколи не проксує файли. Presigned PUT URL підписує лише `Content-Type: image/webp` (клієнт мусить відправити рівно таке значення, інакше R2 → 403). Size enforcement на application layer: client pre-check → `HeadObject` при commit з `deleteObject` cleanup при rejection → throttler на presigned URL endpoint. Commit ідемпотентний: повторний виклик з тим самим fileKey повертає existing URL без повторного `safeDeleteR2File(oldUrl)` — захист від race при retry. File key формат: `avatars/{userId}/{uuid}.webp` (shared `AVATAR_FILE_KEY_REGEX` у `packages/types/src/contracts/storage.ts`). Client: `react-easy-crop` (round mask, pinch-zoom) → `canvas.toBlob('image/webp', 0.85)` → `uploadToR2()` (native `fetch`, не `apiClient`). HEIC свідомо **не підтримується**: будь-який browser-side HEIC-декодер транзитивно залежить від libheif (LGPL-3.0), що несумісне з permissive-ліцензійним профілем репо. iOS Safari ≥14 автоматично конвертує HEIC → JPEG при виборі файла, якщо `accept` не містить `image/heic`, тож iPhone UX зберігається без shipping'у декодера. Файл: `apps/api/src/modules/storage/storage.service.ts`.
 
 ### Google OAuth avatar re-upload
 При Google OAuth callback (перший signup або legacy users з зовнішнім URL) `AuthService.handleGoogleAuth` **синхронно** викликає `StorageService.reUploadExternalAvatar()` (fetch Google URL → `sharp.resize(512×512, cover).webp({ quality: 85 })` → `uploadBuffer` у R2), мутує `user.profile.avatar` і `user.save()` — все перед `generateTokens`. UX trade-off: +300-800ms до callback, але без URL-jump після рендеру. Failure → `logger.warn` + fall through з external URL (наступний login повторить спробу). R2 URL detection для скіпа re-upload legacy-рейсів: prefix-check проти `ENV.R2_PUBLIC_URL`.
 
-### Error handling та i18n mapping
-API повертає machine-readable `code` через `AllExceptionsFilter`; web маппить codes на locale keys через `shared/api/mapApiCode.ts`. Конвенція: `docs/conventions/i18n.md`
+### Error handling та message mapping
+API повертає machine-readable `code` через `AllExceptionsFilter`; web маппить codes на українські рядки через `shared/api/mapApiCode.ts` (`getApiMessage(code, module?, vars?)`). Додаток single-locale (uk only) — рядки інлайн, без catalog-файлів.
 
 ### Soft-delete lifecycle
 Запит на видалення → `accountDeletionRequestedAt` + `deletedAt` → grace period (configurable) → `CleanupService` cron кожні 6 годин hard-delete + revoke tokens. Файл: `apps/api/src/modules/users/cleanup.service.ts`
@@ -157,15 +143,12 @@ API повертає machine-readable `code` через `AllExceptionsFilter`; w
 `AuthInitializer` (client effect) → `refreshToken()` → `getMe()` → hydrate `authStore`. Перевіряє terms version, показує modal при outdated. `AuthGuard` компонент в protected layout перевіряє auth + onboarding completion. Middleware (`middleware.ts`) перевіряє `bid_refresh` cookie для server-side redirects.
 
 ### Overlay management
-Zustand store → `UiModal`/`UiSheet`/`UiConfirmDialog` → реєстрація в `app/overlays.tsx` (єдиний global mount + єдиний санкціонований core→agency dynamic-import exception). Конвенція: `docs/conventions/overlays.md`. Кожен dialog store живе **усередині свого slice** (feature/widget), що ним володіє — глобального `src/stores/` шару не існує (enforced ESLint правилом `no-restricted-imports` + `no-restricted-syntax` в `apps/web/eslint.config.mjs`). **In-module trigger** (та сама agency / той самий core): прямий import store з барелю slice. **Cross-module trigger** (core хоче відкрити agency-овий overlay чи навпаки): через `uiIntents` bus (див. наступний розділ) — прямий import заблокований.
+Zustand store → `UiModal`/`UiSheet`/`UiConfirmDialog` → реєстрація в `app/overlays.tsx` (єдиний global mount). Конвенція: `docs/conventions/overlays.md`. Кожен dialog store живе **усередині свого slice** (feature/widget), що ним володіє — глобального `src/stores/` шару не існує (enforced ESLint правилом `no-restricted-imports` + `no-restricted-syntax` в `apps/web/eslint.config.mjs`).
 
 ### FSD layer inversion via event bus
-Два механізми інверсії залежностей у `shared/lib/`:
+`shared/lib/authEvents` — parameterless lifecycle events для інверсії залежностей. Використовується коли нижчий шар (`shared/api`) потребує реакції від вищого шару (`entities/user/authStore` очищується при `'session-lost'`). Нижчий шар лише публікує; верхній підписується зі свого місця.
 
-- **`authEvents`** — parameterless lifecycle events. Використовується коли нижчий шар (`shared/api`) потребує реакції від вищого шару (`entities/user/authStore` очищується при `'session-lost'`). Нижчий шар лише публікує; верхній підписується зі свого місця.
-- **`uiIntents`** — типізовані cross-slice imperative UI commands з payload. Використовується для cross-module dialog opens (`'open-brief-dialog'` від core до agency). Owning slice підписується при module init; будь-який інший slice публікує без імпорту owning slice.
-
-ESLint guardrails блокують усі прямі обходи: `SHARED_MUST_NOT_IMPORT_HIGHER_LAYERS` для shared→higher layers, `CORE_MUST_NOT_IMPORT_AGENCY` для core→agency, обидва — і для static `import` statements (`no-restricted-imports`), і для dynamic `import()` expressions (`no-restricted-syntax`). Єдиний санкціонований виняток для dynamic imports — `app/overlays.tsx`, він явно файл-scoped у конфізі.
+ESLint guardrail `SHARED_MUST_NOT_IMPORT_HIGHER_LAYERS` блокує прямі імпорти з shared/ у вищі FSD-шари (і для static `import`, і для dynamic `import()`).
 
 ### Execution ledger
 Atomic `$inc` на `user.executions.balance` + створення `ExecutionTransaction` запису. Spend-ендпоінт перевіряє достатність балансу. AI chat також створює transaction з action `AI_CHAT`. Файл: `apps/api/src/modules/users/users.service.ts`
@@ -201,7 +184,6 @@ Global prefix: `/api`. Rate limiting: `ThrottlerModule` (60 req/min global). Glo
 |-------|------|-------|------|
 | GET | `/users/me` | `JwtActiveGuard` | Профіль + billing snapshot |
 | PATCH | `/users/me` | `JwtActiveGuard` | Оновлення профілю |
-| PATCH | `/users/me/lang` | `JwtActiveGuard` | Зміна мови |
 | POST | `/users/me/accept-terms` | `JwtActiveGuard` | Прийняття ToS версії |
 | POST | `/users/me/executions/spend` | `JwtActiveGuard` | Витрата executions |
 | GET | `/users/me/executions/transactions` | `JwtActiveGuard` | Історія транзакцій executions |
@@ -224,12 +206,6 @@ Global prefix: `/api`. Rate limiting: `ThrottlerModule` (60 req/min global). Glo
 | POST | `/ai/chat` | `JwtActiveGuard` + `AiRateLimitGuard` | SSE streaming chat (execution cost: 200) |
 | GET | `/ai/chat/history` | `JwtActiveGuard` | Історія повідомлень чату |
 | DELETE | `/ai/chat/history` | `JwtActiveGuard` | Очищення історії чату |
-
-### BriefController (`apps/api/src/modules/agency/brief.controller.ts`)
-| Метод | Шлях | Guard | Опис |
-|-------|------|-------|------|
-| POST | `/agency/brief` | — + `@SkipOnboarding()` | Подача brief (Turnstile CAPTCHA) |
-| POST | `/agency/brief/authenticated` | `JwtActiveGuard` | Brief + AI bonus grant |
 
 ### StorageController (`apps/api/src/modules/storage/storage.controller.ts`)
 | Метод | Шлях | Guard | Опис |
@@ -256,21 +232,18 @@ Scaffold без ендпоінтів.
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL`
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
 - `RESEND_API_KEY`, `RESEND_FROM_EMAIL`
-- `TURNSTILE_SECRET_KEY`, `BRIEF_NOTIFICATION_EMAIL`
 - `PAYMENTS_SUBSCRIPTION_ENABLED`, `PAYMENTS_ONE_OFF_ENABLED` (хоча б один `true`)
 - Auth tuning: `AUTH_PASSWORD_MIN_LENGTH`, `AUTH_LOCKOUT_THRESHOLDS`, `AUTH_LOGIN_ATTEMPTS_TTL_MIN`, `AUTH_MAGIC_LINK_TTL_MIN`, `AUTH_MAGIC_LINK_RATE_LIMIT`, `AUTH_MAGIC_LINK_RATE_WINDOW_MIN`, `AUTH_MAGIC_LINK_DEDUP_SEC`, `ACCOUNT_DELETION_GRACE_DAYS`
-- AI: `ANTHROPIC_API_KEY`, `AI_CHAT_MAX_TOKENS`, `AI_CHAT_IP_LIMIT`, `AI_CHAT_FREE_LIMIT`, `AI_CHAT_BONUS_AMOUNT`
+- AI: `ANTHROPIC_API_KEY`, `AI_CHAT_MAX_TOKENS`, `AI_CHAT_IP_LIMIT`
 - Storage (R2): `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_URL` (hostname частина мусить збігатись з `NEXT_PUBLIC_STORAGE_HOSTNAME` на web — див. Known Complexities)
 
 **Web — ALL required (crash if missing)**
 - `NEXT_PUBLIC_BASE_URL`, `NEXT_PUBLIC_API_URL`
 - `NEXT_PUBLIC_PAYMENTS_SUBSCRIPTION_ENABLED`, `NEXT_PUBLIC_PAYMENTS_ONE_OFF_ENABLED`
-- `NEXT_PUBLIC_TURNSTILE_SITE_KEY`
 - `NEXT_PUBLIC_STORAGE_HOSTNAME` — R2 CDN hostname (використовується `next/image` `remotePatterns`; `next.config.ts` fail-fast'ить при його відсутності)
 
 **Web — optional**
 - `API_INTERNAL_URL` — server-side reverse proxy target (rewrites в `next.config.ts`)
-- `NEXT_PUBLIC_DEMO_VIDEO_URL` — якщо задано, вмикає demo video секцію на landing
 
 **Infra**
 - `WEB_PORT`, `API_PORT` — Docker compose порти
@@ -286,7 +259,7 @@ pnpm test                                             # test all
 
 pnpm --filter api dev|build|test|test:e2e|test:cov    # API-only
 pnpm --filter web dev|build|test                      # Web-only
-pnpm --filter @cyanship/types build                  # rebuild shared types
+pnpm --filter @finly/types build                  # rebuild shared types
 
 pnpm --filter api -- jest path/to/file.spec.ts        # один API тест
 pnpm --filter web -- jest path/to/file.test.ts        # один Web тест
@@ -301,7 +274,6 @@ docker compose up --build -d                          # prod-like
 - API e2e: `apps/api/test/*.e2e-spec.ts` (MongoMemoryServer + provider overrides)
 - Web: Jest + jsdom, поруч з source файлами
 - Test env setup: `apps/api/src/test-setup.ts` — fallback env vars для unit тестів (placeholder values через `??=`, запобігає fail-fast crash)
-- Test docs: `docs/testing/auth/`, `docs/testing/payments/` — unit/integration + manual E2E test plans
 - CI: `.github/workflows/ci.yml` (lint → build → API tests з MongoDB service)
 - Deploy: `.github/workflows/deploy.yml` (SSH → Docker build → health checks → auto-rollback)
 
@@ -324,8 +296,7 @@ Full index: [docs/conventions/README.md](docs/conventions/README.md)
 ## Rules & Conventions
 
 - Source of truth для repo-wide правил: `docs/conventions/README.md`
-- Читай перед роботою з відповідними зонами: `tone.md`, `fail-fast.md`, `i18n.md`, `modular-boundaries.md`, `ui-primitives.md`, `design-tokens.md`, `overlays.md`
-- Повна документація auth та billing flow: `docs/architecture/auth-flow/README.md`, `docs/architecture/payments-flow/README.md`
+- Читай перед роботою з відповідними зонами: `tone.md`, `fail-fast.md`, `modular-boundaries.md`, `ui-primitives.md`, `design-tokens.md`, `overlays.md`
 
 ## Known Complexities
 
@@ -336,7 +307,7 @@ Full index: [docs/conventions/README.md](docs/conventions/README.md)
 - **Refresh cookie працює через proxy**: `next.config.ts` проксує `/api/*` на backend — тому `bid_refresh` cookie (httpOnly) видимий і в middleware, і в API (same origin).
 - **`test-setup.ts` fallback env**: Без цього файлу fail-fast policy крашить Jest ще до запуску тестів. Використовує `??=` оператор — не перезаписує реальні env vars.
 - **`packages/types` build order**: Має бути зібраний ДО `apps/api` та `apps/web`. Turborepo `dependsOn: ["^build"]` це забезпечує, але manual build без turbo зламається.
-- **Magic link locale**: `AuthService.sendMagicLink()` визначає локаль листа за пріоритетом `user?.preferredLang ?? requestLang ?? LANG.EN`. Тобто існуючий користувач завжди отримує листа своєю збереженою мовою (фронтовий `lang` ігнорується, щоб не перезаписати явний вибір у профілі); `requestLang` підхоплюється лише для нових адрес без профілю, а остаточний fallback — `LANG.EN`.
+- **Single-locale (uk only)**: продукт — українською без перемикача мов. Email-тексти інлайн у `apps/api/src/modules/email/translations.ts` (`EMAIL_TEXT`); `<Html lang="uk">` як константа в `BaseLayout`; `formatDate` хардкод `'uk-UA'`. Web-рядки інлайн у JSX/компонентах. Усі URL без локаль-префікса (`/billing`, `/auth/signin`, тощо). Якщо колись треба буде повернути локалізацію — це окрема велика міграція, не одна правка прапорця.
 - **Webhook route dynamic provider**: URL шаблон `/webhook/:provider`, але наразі підтримується тільки `stripe`. Невідомий provider тихо відхиляється.
 - **Orphaned customer retry cap**: `PaymentsCleanupService` робить максимум 5 спроб видалити Stripe customer. Після 5 невдач запис залишається в колекції назавжни — потребує ручного втручання.
 - **CatalogService own Stripe instance**: `CatalogService` створює власний `new Stripe(...)` для читання Products/Prices. Це зроблено щоб уникнути circular DI з `IPaymentProvider` → `StripeService`. Обидва інстанси використовують один `STRIPE_SECRET_KEY`.
@@ -345,14 +316,13 @@ Full index: [docs/conventions/README.md](docs/conventions/README.md)
 - **AI chat SSE після headers**: Після `res.flushHeaders()` помилки більше не можуть бути HTTP errors — йдуть як SSE events з типом `ERROR`. Reservation (`reserveChatRequest`) відбувається ДО встановлення SSE headers — будь-яка 4xx помилка (balance, limit, active reservation) йде як звичайний HTTP error.
 - **AI chat durable reservation**: Reserve (atomic `findOneAndUpdate`, без транзакції) → stream → commit (MongoDB transaction, claim-first) або refund (atomic single-doc op). Abort policy: refundable до першого токена, non-refundable після. `ReservationReconcileService` cron — generic safety net для crash-window (кожні 5 хвилин).
 - **Redis atomic counters via Lua**: `RedisCounterService` використовує `redis.eval()` Lua scripts для atomicity. Fixed-window: TTL тільки при першому increment. Sliding-window: TTL оновлюється при кожному increment. Обидва повертають post-increment count.
-- **Reservation compensation pattern**: `activeReservation.compensationOps` зберігає `$inc` операції, які core `refundReservation` застосовує атомарно. Cron-reconciler повністю generic — не знає про feature-specific поля. Для AI: `{ inc: { 'ai.requestsUsed': -1 } }`.
-- **AI bonus grant one-time**: `BriefService` використовує MongoDB atomic guard (`ai.bonusGranted: false`) щоб запобігти повторному нарахуванню бонусу.
+- **Reservation compensation pattern**: `activeReservation.compensationOps` зберігає `$inc` операції, які core `refundReservation` застосовує атомарно. Cron-reconciler повністю generic — не знає про feature-specific поля. Для AI зараз `{ inc: {} }` (executions-only); якщо feature почне мутувати власні поля під час reserve, відповідні `$inc`-компенсації декларуються тут.
 - **Presigned PUT signs Content-Type only**: лише `Content-Type` підписується. `Content-Length` НЕ підписується навмисно — це forbidden request header у Fetch (браузер встановлює автоматично з blob body), а signed `ContentLength` у PUT — це exact-match, не upper bound. Клієнт мусить відправити `Content-Type: image/webp` рівно таке саме, що підписав бекенд, інакше R2 → 403 `SignatureDoesNotMatch`.
 - **Avatar size enforcement на application layer**: upper-bound контроль через три шари — client-side pre-check, commit-time `HeadObject` валідація з `deleteObject` cleanup при rejection, global `ThrottlerGuard` на presigned URL endpoint. Attack surface: authenticated user може тимчасово upload'ити oversized файл у свій namespace, але commit одразу зловить і видалить. Для великих/публічних media-типів у майбутньому — міграція на presigned POST з `content-length-range` policy.
 - **R2 URL detection для safe delete**: `StorageService.isR2Url()` — prefix-check проти `ENV.R2_PUBLIC_URL`. Зовнішні URL (наприклад, legacy Google `lh3.googleusercontent.com`) пропускають R2 delete без помилки.
 - **Commit idempotency**: повторний `commitAvatarUpload` з тим самим fileKey (мережевий retry) повертає existing URL без повторного `safeDeleteR2File(oldUrl)` — без цього guard второй виклик видалив би щойно збережений файл (`oldUrl` == актуальний URL).
 - **Storage error mapping contract**: всі raw SDK/network/sharp помилки у avatar pipeline (`generatePresignedUploadUrl`, `getObjectMetadata`, `uploadBuffer`, `fetch`, `response.arrayBuffer`, `sharp`) обгорнуті в `mapStorageError()` helper → `InternalServerErrorException({ code: AVATAR_UPLOAD_FAILED })`. Структуровані `HttpException` з власним кодом (AVATAR_UPLOAD_INVALID тощо) пропускаються untouched.
-- **Orphaned R2 files trade-off**: upload без commit залишає файл у `avatars/{userId}/`. На MVP acceptable (після crop+WebP ~50-200 KB, R2 storage $0.015/GB/міс). На scale — TTL cron або lifecycle policy. Задокументовано у `docs/sprints/upload-media/README.md` `Known Limitations`.
+- **Orphaned R2 files trade-off**: upload без commit залишає файл у `avatars/{userId}/`. На MVP acceptable (після crop+WebP ~50-200 KB, R2 storage $0.015/GB/міс). На scale — TTL cron або lifecycle policy.
 - **R2 public URL ↔ web hostname invariant**: `R2_PUBLIC_URL` hostname (backend) МУСИТЬ дорівнювати `NEXT_PUBLIC_STORAGE_HOSTNAME` (web). Не збігаються → `next/image` блокує завантажені фото runtime. `next.config.ts` fail-fast'ить при відсутності `NEXT_PUBLIC_STORAGE_HOSTNAME` — hard build failure краще за silent omit.
 - **Sharp на Alpine Docker**: sharp 0.33+ підтягує prebuilt libvips для Linux musl автоматично через `optionalDependencies` — `node:20-alpine` працює без правок Dockerfile у стандартному випадку. Якщо prebuilt недоступний (рідкісні архітектурні edge cases) — fallback `apk add --no-cache vips` у runtime stage. Верифікувати локальним build + `node -e "require('sharp')"` у контейнері.
-- **OAuth callback sync re-upload**: `AuthService.handleGoogleAuth` викликає `reUploadExternalAvatar` **синхронно** перед видачею токенів. Додає 300-800ms до callback, але уникає UX-стрибка URL (async варіант спричинив би показ Google URL до першого refresh). Failure non-critical: `logger.warn` + fall through з external URL, наступний login повторює спробу. Trade-off зафіксовано у sprint README.
+- **OAuth callback sync re-upload**: `AuthService.handleGoogleAuth` викликає `reUploadExternalAvatar` **синхронно** перед видачею токенів. Додає 300-800ms до callback, але уникає UX-стрибка URL (async варіант спричинив би показ Google URL до першого refresh). Failure non-critical: `logger.warn` + fall through з external URL, наступний login повторює спробу.

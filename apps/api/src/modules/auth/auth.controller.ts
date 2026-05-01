@@ -13,11 +13,10 @@ import { AuthGuard } from '@nestjs/passport';
 import {
     AuthResponse,
     CheckEmailResponse,
-    Lang,
     MAGIC_LINK_PURPOSE,
     RESPONSE_CODE,
     type ApiMessageResponse,
-} from '@cyanship/types';
+} from '@finly/types';
 import { CookieOptions, Request, Response } from 'express';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -114,7 +113,6 @@ export class AuthController {
                     },
                     hasPassword: !!user.passwordHash,
                     deletedAt: user.deletedAt ?? null,
-                    preferredLang: user.preferredLang as Lang,
                 },
                 accessToken,
                 ...(accountDeleted && { accountDeleted }),
@@ -133,7 +131,6 @@ export class AuthController {
         await this.authService.sendMagicLink(
             dto.email,
             dto.purpose ?? MAGIC_LINK_PURPOSE.LOGIN,
-            dto.lang,
             dto.redirectTo
         );
         return {
@@ -178,7 +175,6 @@ export class AuthController {
                     },
                     hasPassword: !!user.passwordHash,
                     deletedAt: user.deletedAt ?? null,
-                    preferredLang: user.preferredLang as Lang,
                 },
                 accessToken: tokens.accessToken,
                 purpose,

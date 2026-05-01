@@ -1,4 +1,4 @@
-import type { ChatMessageItem, AiChatSSEEvent } from '@cyanship/types';
+import type { ChatMessageItem, AiChatSSEEvent } from '@finly/types';
 
 import { apiClient, getAccessToken, setAccessToken } from './client';
 import { ENV } from '@/shared/config';

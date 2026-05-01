@@ -8,7 +8,7 @@ import {
     SUBSCRIPTION_STATUS,
     type BillingWebhookEvent,
     type ExecutionPackCode,
-} from '@cyanship/types';
+} from '@finly/types';
 
 import { PaymentsService } from './payments.service';
 import { CatalogService } from './catalog.service';
@@ -113,7 +113,6 @@ const MOCK_USER_ID = '507f1f77bcf86cd799439011';
 const mockUser = (overrides: Record<string, unknown> = {}) => ({
     _id: { toString: () => MOCK_USER_ID },
     email: 'test@example.com',
-    preferredLang: 'en',
     billing: null as unknown,
     ...overrides,
 });
@@ -223,38 +222,13 @@ describe('PaymentsService', () => {
                     planCode: 'pro',
                     priceId: 'price_test_pro',
                     executions: 50000,
-                    successUrl: 'http://localhost:3000/en/billing/success',
-                    cancelUrl: 'http://localhost:3000/en/billing/cancel',
+                    successUrl: 'http://localhost:3000/billing/success',
+                    cancelUrl: 'http://localhost:3000/billing/cancel',
                 })
             );
             expect(result).toEqual({
                 checkoutUrl: 'https://checkout.stripe.com/test',
             });
-        });
-
-        it('should build locale-aware billing URLs from user preferredLang', async () => {
-            const user = mockUser({ billing: null });
-            mockUserModel.findById.mockReturnValue({
-                lean: jest.fn().mockResolvedValue(user),
-            });
-            mockPaymentProvider.createCheckoutSession.mockResolvedValue({
-                checkoutUrl: 'https://checkout.stripe.com/test',
-                providerSessionId: 'cs_test',
-            });
-
-            await service.createCheckoutSession(MOCK_USER_ID, {
-                paymentType: PAYMENT_TYPE.SUBSCRIPTION,
-                planCode: 'pro',
-            });
-
-            expect(
-                mockPaymentProvider.createCheckoutSession
-            ).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    successUrl: 'http://localhost:3000/en/billing/success',
-                    cancelUrl: 'http://localhost:3000/en/billing/cancel',
-                })
-            );
         });
 
         it('should throw ConflictException with ALREADY_SUBSCRIBED when user has active subscription', async () => {
@@ -387,7 +361,7 @@ describe('PaymentsService', () => {
                 mockPaymentProvider.createPortalSession
             ).toHaveBeenCalledWith(
                 'cus_test_xxx',
-                'http://localhost:3000/en/billing'
+                'http://localhost:3000/billing'
             );
             expect(result).toEqual({
                 portalUrl: 'https://billing.stripe.com/test',

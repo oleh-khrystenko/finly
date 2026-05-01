@@ -3,10 +3,9 @@
  *
  * Size is enforced on the application layer (client pre-check + server
  * `HeadObject` validation at commit time) because presigned PUT URLs cannot
- * carry an upper-bound `Content-Length` constraint (S3/R2 treat a signed
+ * carry an upper-bound `Content-Length` constraint: S3/R2 treat a signed
  * `ContentLength` as an exact match, and `Content-Length` is a forbidden
- * request header in the Fetch API). See docs/sprints/upload-media/README.md
- * for the full rationale.
+ * request header in the Fetch API.
  */
 export const AVATAR = {
     /** Max size of the post-crop WebP blob that clients may upload (5 MB). */

@@ -7,7 +7,7 @@ import {
     type PaymentsCatalog,
     type SubscriptionPlanItem,
     type ExecutionPackItem,
-} from '@cyanship/types';
+} from '@finly/types';
 import { ENV } from '../../config/env';
 import { REDIS_CLIENT } from '../../common/modules/redis.module';
 

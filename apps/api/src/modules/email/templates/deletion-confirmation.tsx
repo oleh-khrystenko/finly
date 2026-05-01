@@ -1,34 +1,47 @@
 import { Button, Text } from '@react-email/components';
-import { EMAIL_COLORS } from '@cyanship/types';
+import { EMAIL_COLORS } from '@finly/types';
 
 import { BaseLayout } from './layouts/base';
 
+export const DELETION_CONFIRMATION_SUBJECT = 'Ваш акаунт Finly деактивовано';
+
+const CTA = 'Увійти';
+const FOOTER =
+    'Якщо ви не запитували видалення, негайно увійдіть у свій акаунт для його захисту.';
+
+function buildBody(formattedDate: string): string {
+    return `Ваш акаунт деактивовано за вашим запитом. Усі дані буде остаточно видалено ${formattedDate}.`;
+}
+
+function buildInstruction(graceDays: number): string {
+    const dayWord =
+        graceDays === 1
+            ? 'день'
+            : graceDays >= 2 && graceDays <= 4
+              ? 'дні'
+              : 'днів';
+    return `Передумали? Просто увійдіть протягом ${graceDays} ${dayWord}, щоб відновити акаунт.`;
+}
+
 interface DeletionConfirmationEmailProps {
     signInUrl: string;
-    translations: {
-        body: (formattedDate: string) => string;
-        instruction: string;
-        cta: string;
-        footer: string;
-    };
     formattedDate: string;
-    lang: string;
+    graceDays: number;
 }
 
 export function DeletionConfirmationEmail({
     signInUrl,
-    translations: t,
     formattedDate,
-    lang,
+    graceDays,
 }: DeletionConfirmationEmailProps) {
     return (
-        <BaseLayout lang={lang}>
-            <Text style={bodyText}>{t.body(formattedDate)}</Text>
-            <Text style={instructionText}>{t.instruction}</Text>
+        <BaseLayout>
+            <Text style={bodyText}>{buildBody(formattedDate)}</Text>
+            <Text style={instructionText}>{buildInstruction(graceDays)}</Text>
             <Button style={ctaButton} href={signInUrl}>
-                {t.cta}
+                {CTA}
             </Button>
-            <Text style={footer}>{t.footer}</Text>
+            <Text style={footer}>{FOOTER}</Text>
         </BaseLayout>
     );
 }

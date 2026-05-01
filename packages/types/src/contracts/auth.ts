@@ -1,10 +1,7 @@
 import { z } from 'zod';
 
-import { LANG } from '../constants/lang';
 import { UserProfileSchema } from '../entities/user';
 import { emailSchema, passwordSchema } from '../validation/common';
-
-const langValues = Object.values(LANG) as [string, ...string[]];
 
 // --- Magic Link Purpose ---
 
@@ -29,7 +26,6 @@ export const MagicLinkPurposeSchema = z.enum([
 
 export const SendMagicLinkSchema = z.object({
     email: z.string().email(),
-    lang: z.enum(langValues).optional(),
     purpose: MagicLinkPurposeSchema.optional(),
     redirectTo: z.string().startsWith('/').max(2048).optional(),
 });

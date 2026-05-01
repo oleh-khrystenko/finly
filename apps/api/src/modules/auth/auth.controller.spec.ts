@@ -1,6 +1,6 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { RESPONSE_CODE, MAGIC_LINK_PURPOSE } from '@cyanship/types';
+import { RESPONSE_CODE, MAGIC_LINK_PURPOSE } from '@finly/types';
 
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
@@ -20,7 +20,6 @@ const mockUser = {
     executions: { balance: 0, freeReportUsed: false },
     passwordHash: '$2b$10$hash',
     deletedAt: null as Date | null,
-    preferredLang: 'en',
 };
 
 const mockAuthService = {
@@ -206,7 +205,6 @@ describe('AuthController', () => {
             expect(mockAuthService.sendMagicLink).toHaveBeenCalledWith(
                 'test@gmail.com',
                 MAGIC_LINK_PURPOSE.LOGIN,
-                undefined,
                 undefined
             );
         });
@@ -222,7 +220,6 @@ describe('AuthController', () => {
             expect(mockAuthService.sendMagicLink).toHaveBeenCalledWith(
                 'test@gmail.com',
                 MAGIC_LINK_PURPOSE.REGISTER,
-                undefined,
                 undefined
             );
         });

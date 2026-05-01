@@ -1,8 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useLocale, useTranslations } from 'next-intl';
-import { CURRENT_TERMS_VERSION } from '@cyanship/types';
+import { CURRENT_TERMS_VERSION } from '@finly/types';
 import {
     UiModal,
     UiModalContent,
@@ -17,17 +16,18 @@ import { acceptTerms } from '@/shared/api';
 import { useAuthStore } from '@/entities/user';
 import { useTermsReacceptDialogStore } from './termsReacceptDialogStore';
 
-function TermsReacceptForm({ onClose }: { onClose: () => void }) {
-    const t = useTranslations('components.terms_reaccept');
-    const locale = useLocale();
+const REQUIRED_ERROR =
+    'Необхідно прийняти оновлені умови для продовження.';
+const GENERIC_ERROR = 'Щось пішло не так. Спробуйте ще раз.';
 
+function TermsReacceptForm({ onClose }: { onClose: () => void }) {
     const [agreed, setAgreed] = useState(false);
     const [error, setError] = useState('');
     const [submitting, setSubmitting] = useState(false);
 
     const handleSubmit = async () => {
         if (!agreed) {
-            setError(t('required'));
+            setError(REQUIRED_ERROR);
             return;
         }
         setSubmitting(true);
@@ -35,11 +35,14 @@ function TermsReacceptForm({ onClose }: { onClose: () => void }) {
             await acceptTerms();
             const store = useAuthStore.getState();
             if (store.user) {
-                store.setUser({ ...store.user, termsVersion: CURRENT_TERMS_VERSION });
+                store.setUser({
+                    ...store.user,
+                    termsVersion: CURRENT_TERMS_VERSION,
+                });
             }
             onClose();
         } catch {
-            setError(t('error'));
+            setError(GENERIC_ERROR);
             setSubmitting(false);
         }
     };
@@ -47,11 +50,13 @@ function TermsReacceptForm({ onClose }: { onClose: () => void }) {
     return (
         <>
             <UiModalHeader>
-                <UiModalTitle className="text-xl">{t('title')}</UiModalTitle>
+                <UiModalTitle className="text-xl">Оновлені умови</UiModalTitle>
             </UiModalHeader>
             <div className="space-y-6 px-4 pb-6">
                 <p className="text-muted-foreground text-sm">
-                    {t('description')}
+                    Наші Умови використання або Політика конфіденційності були
+                    оновлені. Перегляньте та прийміть зміни для продовження
+                    роботи.
                 </p>
 
                 <UiCheckbox
@@ -62,30 +67,26 @@ function TermsReacceptForm({ onClose }: { onClose: () => void }) {
                     }}
                     error={error}
                 >
-                    {t.rich('agree', {
-                        terms: (chunks) => (
-                            <UiLink
-                                href={`/${locale}/terms`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                variant="primary-underline"
-                                onClick={(e) => e.stopPropagation()}
-                            >
-                                {chunks}
-                            </UiLink>
-                        ),
-                        privacy: (chunks) => (
-                            <UiLink
-                                href={`/${locale}/privacy`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                variant="primary-underline"
-                                onClick={(e) => e.stopPropagation()}
-                            >
-                                {chunks}
-                            </UiLink>
-                        ),
-                    })}
+                    Я погоджуюсь з оновленими{' '}
+                    <UiLink
+                        href="/terms"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        variant="primary-underline"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        Умовами використання
+                    </UiLink>{' '}
+                    та{' '}
+                    <UiLink
+                        href="/privacy"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        variant="primary-underline"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        Політикою конфіденційності
+                    </UiLink>
                 </UiCheckbox>
 
                 <UiButton
@@ -95,7 +96,11 @@ function TermsReacceptForm({ onClose }: { onClose: () => void }) {
                     disabled={submitting}
                     onClick={handleSubmit}
                 >
-                    {submitting ? <UiSpinner size="sm" /> : t('button')}
+                    {submitting ? (
+                        <UiSpinner size="sm" />
+                    ) : (
+                        'Прийняти та продовжити'
+                    )}
                 </UiButton>
             </div>
         </>

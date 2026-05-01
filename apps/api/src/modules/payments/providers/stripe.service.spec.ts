@@ -12,7 +12,7 @@ import {
     BILLING_EVENT_TYPE,
     PAYMENT_TYPE,
     SUBSCRIPTION_STATUS,
-} from '@cyanship/types';
+} from '@finly/types';
 
 import { StripeService } from './stripe.service';
 import { CatalogService } from '../catalog.service';

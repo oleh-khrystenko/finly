@@ -58,9 +58,9 @@ Store може містити payload для параметризації overla
 
 ### 3. Один overlay — один mount через `app/overlays.tsx`
 
-Всі overlay монтуються через єдиний реєстр — `app/overlays.tsx`, який рендериться один раз у root layout. Lazy-завантаження вирішується через `dynamic(() => import(...))` на рівні реєстру. `app/overlays.tsx` — **єдиний санкціонований виняток** для core→agency dynamic-import, оголошений file-scoped override'ом у `apps/web/eslint.config.mjs`. Жоден інший файл не може dynamic-import з agency.
+Всі overlay монтуються через єдиний реєстр — `app/overlays.tsx`, який рендериться один раз у root layout. Lazy-завантаження вирішується через `dynamic(() => import(...))` на рівні реєстру.
 
-**Заборонено:** монтувати overlay в секційних layout'ах, монтувати один overlay в кількох місцях, обгортати trigger компонентом overlay, додавати dynamic-imports з agency у будь-який файл крім `app/overlays.tsx`.
+**Заборонено:** монтувати overlay в секційних layout'ах, монтувати один overlay в кількох місцях, обгортати trigger компонентом overlay.
 
 ### 4. Вибір примітиву
 
@@ -86,7 +86,7 @@ Overlay-компонент:
 - Не приймає `children` і не рендерить trigger
 - Містить весь контент overlay (або делегує internal-компонентам feature)
 
-**Внутрішньо-slice'ові споживачі** (в тому ж каталозі feature) — використовують relative import. **Зовнішні споживачі того ж модуля** (інша feature/widget у тому ж module) можуть імпортувати через барель `@/features/{domain}` — але тільки якщо store експортовано там явно. Не експортуй store з барелю, якщо у нього немає external консьюмерів — менший public API краще.
+**Внутрішньо-slice'ові споживачі** (в тому ж каталозі feature) — використовують relative import. **Зовнішні споживачі того ж модуля** (інша feature/widget) можуть імпортувати через барель `@/features/{domain}` — але тільки якщо store експортовано там явно. Не експортуй store з барелю, якщо у нього немає external консьюмерів — менший public API краще.
 
 ### 6. Payload для параметризованих overlay
 
@@ -111,26 +111,26 @@ Overlay не може відкривати інший overlay. Якщо потр
 
 **Store (поруч з overlay компонентом):**
 ```ts
-// features/agency/brief/briefDialogStore.ts
+// features/profile/avatarUploadDialogStore.ts
 import { create } from 'zustand';
 
-export const useBriefDialogStore = create<BriefDialogState>((set) => ({
-    isOpen: false,
-    requestAiBonus: false,
-    open: (opts) =>
-        set({ isOpen: true, requestAiBonus: opts?.requestAiBonus ?? false }),
-    close: () => set({ isOpen: false, requestAiBonus: false }),
-}));
+export const useAvatarUploadDialogStore = create<AvatarUploadDialogState>(
+    (set) => ({
+        isOpen: false,
+        open: () => set({ isOpen: true }),
+        close: () => set({ isOpen: false }),
+    })
+);
 ```
 
 **Overlay компонент (relative import зі свого slice):**
 ```tsx
-// features/agency/brief/BriefDialog.tsx
-import { useBriefDialogStore } from './briefDialogStore';
+// features/profile/AvatarUploadDialog.tsx
+import { useAvatarUploadDialogStore } from './avatarUploadDialogStore';
 
-export default function BriefDialog() {
-    const isOpen = useBriefDialogStore((s) => s.isOpen);
-    const close = useBriefDialogStore((s) => s.close);
+export default function AvatarUploadDialog() {
+    const isOpen = useAvatarUploadDialogStore((s) => s.isOpen);
+    const close = useAvatarUploadDialogStore((s) => s.close);
 
     return (
         <UiModal open={isOpen} onOpenChange={(open) => !open && close()}>
@@ -142,55 +142,25 @@ export default function BriefDialog() {
 
 **Реєстрація в overlay registry (єдиний global mount point):**
 ```tsx
-// app/overlays.tsx — sanctioned cross-module overlay registry
-const BriefDialog = dynamic(() => import('@/features/agency/brief/BriefDialog'));
+// app/overlays.tsx
+const AvatarUploadDialog = dynamic(
+    () => import('@/features/profile/AvatarUploadDialog'),
+);
 
 export function Overlays() {
-    return <><BriefDialog />{/* ... */}</>;
+    return <><AvatarUploadDialog />{/* ... */}</>;
 }
 ```
 
-**Trigger зсередини того ж модуля (наприклад, інша agency feature):**
+**Trigger зсередини того ж slice (профільна сторінка):**
 ```tsx
-// features/agency/landing-nav/LandingNav.tsx — agency → agency, direct OK
-import { useBriefDialogStore } from '@/features/agency/brief';
+// app/[locale]/(protected)/profile/AvatarSection.tsx
+import { useAvatarUploadDialogStore } from '@/features/profile/avatarUploadDialogStore';
 
-const open = useBriefDialogStore((s) => s.open);
-<UiButton onClick={() => open({ requestAiBonus: false })}>Get started</UiButton>
+const open = useAvatarUploadDialogStore((s) => s.open);
+<UiButton onClick={open}>Upload avatar</UiButton>
 ```
 
-**Trigger ззовні модуля (наприклад, з core ai-chat) — через intent bus:**
-```tsx
-// app/(protected)/ai-chat/page.tsx — core, MUST NOT import agency
-import { uiIntents } from '@/shared/lib';
+## Cross-slice триггер
 
-<UiButton onClick={() => uiIntents.emit('open-brief-dialog', { requestAiBonus: true })}>
-    Get AI bonus
-</UiButton>
-```
-
-## Cross-slice trigger через intent bus
-
-Коли trigger лежить в **іншому модулі** (типово: core хоче відкрити agency-overlay або навпаки), прямий імпорт overlay store блокується ESLint правилом `CORE_MUST_NOT_IMPORT_AGENCY`. Замість цього використовується typed intent bus у `shared/lib/uiIntents.ts`:
-
-1. **Owning slice** (де живе overlay) підписується на intent при module init:
-   ```ts
-   // features/agency/brief/briefDialogStore.ts
-   uiIntents.on('open-brief-dialog', (payload) => {
-       useBriefDialogStore.getState().open(payload);
-   });
-   ```
-
-2. **Trigger slice** (звідки відкривається overlay) публікує intent:
-   ```ts
-   uiIntents.emit('open-brief-dialog', { requestAiBonus: true });
-   ```
-
-3. **Новий intent type** додається в `UiIntent` union у `shared/lib/uiIntents.ts`. Шар shared не знає implementation — лише контракт topic + payload.
-
-**Чому:** owning slice володіє і UI, і реакцією на intent. Trigger slice залишається ignorant про implementation. Заміна owning slice — це зміна тільки в одному файлі (subscribe handler), trigger-сторона не торкається.
-
-**Гарантії:**
-- Subscription активується автоматично при першому імпорті overlay компонента (через `app/overlays.tsx` dynamic import — мовиться у Rule 3).
-- Listener-failures ізольовані (intent bus має try/catch навколо delivery).
-- Якщо listener ще не зареєстровано (race window після hydration) — intent silently dropped. Для click-driven workflow це безпечно: hydration завжди завершується до взаємодії.
+Cross-slice triggers (коли overlay живе в одному slice, а trigger у зовсім іншому) зараз не використовуються. Якщо знадобиться — стандартний підхід: інверсія залежностей через event bus у `shared/lib/`, аналогічно до `authEvents`. Прямий імпорт store між незв'язаними slice'ами не використовується, щоб видалення/перестановка одного slice не ламала чужий код.

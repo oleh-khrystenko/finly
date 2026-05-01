@@ -25,7 +25,7 @@
         "@anthropic-ai/sdk": "^0.80.0",
         "@aws-sdk/client-s3": "^3.1031.0",
         "@aws-sdk/s3-request-presigner": "^3.1031.0",
-        "@cyanship/types": "workspace:*",
+        "@finly/types": "workspace:*",
         "@nestjs/common": "^11.1.8",
         "@nestjs/config": "^4.0.2",
         "@nestjs/core": "^11.1.8",
@@ -112,7 +112,7 @@
             "./test-setup.ts"
         ],
         "moduleNameMapper": {
-            "^@cyanship/types$": "<rootDir>/../../../packages/types/src/index.ts"
+            "^@finly/types$": "<rootDir>/../../../packages/types/src/index.ts"
         }
     }
 }

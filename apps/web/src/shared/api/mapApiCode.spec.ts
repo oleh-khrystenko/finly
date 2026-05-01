@@ -1,51 +1,48 @@
-import { getApiMessageKey } from './mapApiCode';
+import { getApiMessage } from './mapApiCode';
 
-describe('getApiMessageKey', () => {
-    it('returns notifications path for success code with module', () => {
-        expect(getApiMessageKey('MAGIC_LINK_SENT', 'auth')).toBe(
-            'notifications.auth.magic_link_sent'
+describe('getApiMessage', () => {
+    it('returns Ukrainian notification for success code with module', () => {
+        expect(getApiMessage('MAGIC_LINK_SENT', 'auth')).toBe(
+            'Посилання надіслано на вашу пошту',
         );
     });
 
-    it('returns notifications path for other success codes', () => {
-        expect(getApiMessageKey('LOGGED_OUT', 'auth')).toBe(
-            'notifications.auth.logged_out'
+    it('returns Ukrainian notification for other success codes', () => {
+        expect(getApiMessage('LOGGED_OUT', 'auth')).toBe(
+            'Ви вийшли з акаунту',
         );
-        expect(getApiMessageKey('PASSWORD_SET', 'auth')).toBe(
-            'notifications.auth.password_set'
-        );
-        expect(getApiMessageKey('LANG_UPDATED', 'users')).toBe(
-            'notifications.users.lang_updated'
+        expect(getApiMessage('TERMS_ACCEPTED', 'users')).toBe(
+            'Умови прийнято.',
         );
     });
 
-    it('returns errors path for error code with module', () => {
-        expect(getApiMessageKey('UNAUTHORIZED', 'auth')).toBe(
-            'errors.auth.unauthorized'
+    it('returns Ukrainian error message for auth error code', () => {
+        expect(getApiMessage('UNAUTHORIZED', 'auth')).toBe(
+            'Час сесії вичерпано. Увійдіть знову',
         );
     });
 
-    it('returns errors.generic path for error code without module', () => {
-        expect(getApiMessageKey('UNAUTHORIZED')).toBe(
-            'errors.generic.unauthorized'
+    it('falls back to unknown when no module and code has no generic entry', () => {
+        expect(getApiMessage('UNAUTHORIZED')).toBe(
+            'Сталася помилка. Спробуйте пізніше',
         );
     });
 
-    it('returns errors.generic path for unknown code without module', () => {
-        expect(getApiMessageKey('UNKNOWN_CODE')).toBe(
-            'errors.generic.unknown_code'
+    it('returns generic unknown fallback for completely unknown code', () => {
+        expect(getApiMessage('SOMETHING_WEIRD')).toBe(
+            'Сталася помилка. Спробуйте пізніше',
         );
     });
 
-    it('returns errors path for unknown code with module (no type mapping)', () => {
-        expect(getApiMessageKey('SOME_UNKNOWN', 'auth')).toBe(
-            'errors.auth.some_unknown'
+    it('falls through to generic when module has no entry for code', () => {
+        expect(getApiMessage('SOME_UNKNOWN', 'auth')).toBe(
+            'Сталася помилка. Спробуйте пізніше',
         );
     });
 
-    it('lowercases the code in the key', () => {
-        expect(getApiMessageKey('RATE_LIMIT_EXCEEDED', 'auth')).toBe(
-            'errors.auth.rate_limit_exceeded'
-        );
+    it('interpolates {minutes} placeholder for rate limit', () => {
+        expect(
+            getApiMessage('RATE_LIMIT_EXCEEDED', 'generic', { minutes: 15 }),
+        ).toBe('Забагато запитів. Спробуйте через 15 хвилин');
     });
 });

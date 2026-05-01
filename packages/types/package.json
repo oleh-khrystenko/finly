@@ -1,5 +1,5 @@
 {
-    "name": "@cyanship/types",
+    "name": "@finly/types",
     "version": "1.0.0",
     "main": "./dist/index.js",
     "types": "./src/index.ts",

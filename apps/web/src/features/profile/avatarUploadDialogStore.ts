@@ -7,9 +7,8 @@ interface AvatarUploadDialogState {
 }
 
 /**
- * In-slice dialog store for the avatar upload flow. Owned by `features/profile`
- * per the overlays convention — cross-module triggers go through `uiIntents`,
- * but the profile page opens this store directly (same slice).
+ * In-slice dialog store for the avatar upload flow. Owned by `features/profile`;
+ * the profile page opens this store directly (same slice).
  */
 export const useAvatarUploadDialogStore = create<AvatarUploadDialogState>(
     (set) => ({

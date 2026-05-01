@@ -1,5 +1,4 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { LANG } from '@cyanship/types';
 import { HydratedDocument } from 'mongoose';
 
 export type UserDocument = HydratedDocument<User>;
@@ -64,9 +63,6 @@ class UserExecutions {
     activeReservation!: ActiveReservation | null;
 }
 
-// NOTE: When adding user-facing fields, update the Privacy Policy
-// (apps/web/src/app/[locale]/(agency)/privacy/page.tsx)
-// "What We Collect and Why" section to reflect the new data collected.
 @Schema({ timestamps: true })
 export class User {
     @Prop({ required: true, unique: true, lowercase: true, trim: true })
@@ -88,19 +84,6 @@ export class User {
     })
     executions!: UserExecutions;
 
-    @Prop({
-        type: {
-            requestsUsed: { type: Number, default: 0, min: 0 },
-            bonusGranted: { type: Boolean, default: false },
-        },
-        default: () => ({ requestsUsed: 0, bonusGranted: false }),
-        _id: false,
-    })
-    ai!: {
-        requestsUsed: number;
-        bonusGranted: boolean;
-    };
-
     @Prop({ type: String, default: null })
     passwordHash!: string | null;
 
@@ -115,9 +98,6 @@ export class User {
 
     @Prop({ type: String, default: null })
     timezone!: string | null;
-
-    @Prop({ required: true, default: LANG.EN })
-    preferredLang!: string;
 
     @Prop({ type: Date, default: null })
     termsAcceptedAt!: Date | null;

@@ -7,7 +7,7 @@ import { EmailService } from './email.service';
 jest.mock('../../config/env', () => ({
     ENV: {
         RESEND_API_KEY: 'test-key',
-        RESEND_FROM_EMAIL: 'CyanShip <test@resend.dev>',
+        RESEND_FROM_EMAIL: 'Finly <test@resend.dev>',
         WEB_URL: 'http://localhost:3000',
         ACCOUNT_DELETION_GRACE_DAYS: 2,
     },
@@ -44,37 +44,36 @@ describe('EmailService', () => {
         const email = 'user@example.com';
         const token = 'abc123';
 
-        it('should send login email with UK translations', async () => {
+        it('should send login email', async () => {
             await emailService.sendMagicLink({
                 email,
                 token,
                 purpose: 'login',
-                lang: 'uk',
             });
 
             expect(sendSpy).toHaveBeenCalledWith(
                 expect.objectContaining({
                     to: email,
-                    subject: 'Посилання для входу в CyanShip',
+                    subject: 'Посилання для входу в Finly',
                     react: expect.anything(),
                 })
             );
 
             const html = getRenderedHtml();
             expect(html).toContain('Увійти');
+            expect(html).toContain('lang="uk"');
         });
 
-        it('should send register email with UK translations', async () => {
+        it('should send register email', async () => {
             await emailService.sendMagicLink({
                 email,
                 token,
                 purpose: 'register',
-                lang: 'uk',
             });
 
             expect(sendSpy).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    subject: 'Ласкаво просимо до CyanShip',
+                    subject: 'Ласкаво просимо до Finly',
                 })
             );
 
@@ -82,17 +81,16 @@ describe('EmailService', () => {
             expect(html).toContain('Завершити реєстрацію');
         });
 
-        it('should send reset-password email with UK translations', async () => {
+        it('should send reset-password email', async () => {
             await emailService.sendMagicLink({
                 email,
                 token,
                 purpose: 'reset-password',
-                lang: 'uk',
             });
 
             expect(sendSpy).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    subject: 'Скидання пароля CyanShip',
+                    subject: 'Скидання пароля Finly',
                 })
             );
 
@@ -100,12 +98,11 @@ describe('EmailService', () => {
             expect(html).toContain('Скинути пароль');
         });
 
-        it('should send delete-account email with UK translations', async () => {
+        it('should send delete-account email', async () => {
             await emailService.sendMagicLink({
                 email,
                 token,
                 purpose: 'delete-account',
-                lang: 'uk',
             });
 
             expect(sendSpy).toHaveBeenCalledWith(
@@ -118,84 +115,11 @@ describe('EmailService', () => {
             expect(html).toContain('Підтвердити видалення');
         });
 
-        it('should send login email with EN translations', async () => {
-            await emailService.sendMagicLink({
-                email,
-                token,
-                purpose: 'login',
-                lang: 'en',
-            });
-
-            expect(sendSpy).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    subject: 'Your sign-in link for CyanShip',
-                })
-            );
-
-            const html = getRenderedHtml();
-            expect(html).toContain('Sign In');
-        });
-
-        it('should send register email with EN translations', async () => {
-            await emailService.sendMagicLink({
-                email,
-                token,
-                purpose: 'register',
-                lang: 'en',
-            });
-
-            expect(sendSpy).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    subject: 'Welcome to CyanShip',
-                })
-            );
-
-            const html = getRenderedHtml();
-            expect(html).toContain('Complete Registration');
-        });
-
-        it('should send reset-password email with EN translations', async () => {
-            await emailService.sendMagicLink({
-                email,
-                token,
-                purpose: 'reset-password',
-                lang: 'en',
-            });
-
-            expect(sendSpy).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    subject: 'Reset your CyanShip password',
-                })
-            );
-
-            const html = getRenderedHtml();
-            expect(html).toContain('Reset Password');
-        });
-
-        it('should send delete-account email with EN translations', async () => {
-            await emailService.sendMagicLink({
-                email,
-                token,
-                purpose: 'delete-account',
-                lang: 'en',
-            });
-
-            expect(sendSpy).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    subject: 'Confirm account deletion',
-                })
-            );
-
-            const html = getRenderedHtml();
-            expect(html).toContain('Confirm Deletion');
-        });
-
         it('should include token in verify link for login purpose', async () => {
             await emailService.sendMagicLink({
                 email,
                 token,
                 purpose: 'login',
-                lang: 'en',
             });
 
             const html = getRenderedHtml();
@@ -209,7 +133,6 @@ describe('EmailService', () => {
                 email,
                 token,
                 purpose: 'reset-password',
-                lang: 'en',
             });
 
             const html = getRenderedHtml();
@@ -223,7 +146,6 @@ describe('EmailService', () => {
                 email,
                 token,
                 purpose: 'login',
-                lang: 'en',
                 redirectTo: '/dashboard',
             });
 
@@ -238,27 +160,11 @@ describe('EmailService', () => {
                 email,
                 token,
                 purpose: 'reset-password',
-                lang: 'en',
                 redirectTo: '/dashboard',
             });
 
             const html = getRenderedHtml();
             expect(html).not.toContain('redirect=');
-        });
-
-        it('should fallback to EN when unknown lang provided', async () => {
-            await emailService.sendMagicLink({
-                email,
-                token,
-                purpose: 'login',
-                lang: 'fr',
-            });
-
-            expect(sendSpy).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    subject: 'Your sign-in link for CyanShip',
-                })
-            );
         });
 
         it('should throw error when Resend fails', async () => {
@@ -271,7 +177,6 @@ describe('EmailService', () => {
                     email,
                     token,
                     purpose: 'login',
-                    lang: 'uk',
                 })
             ).rejects.toThrow(InternalServerErrorException);
         });
@@ -281,32 +186,17 @@ describe('EmailService', () => {
         const email = 'user@example.com';
         const deletionDate = new Date('2026-03-29T12:00:00Z');
 
-        it('should send UK deletion confirmation', async () => {
+        it('should send deletion confirmation', async () => {
             await emailService.sendDeletionConfirmation({
                 email,
                 deletionDate,
-                lang: 'uk',
             });
 
             expect(sendSpy).toHaveBeenCalledWith(
                 expect.objectContaining({
                     to: email,
-                    subject: 'Ваш акаунт CyanShip деактивовано',
+                    subject: 'Ваш акаунт Finly деактивовано',
                     react: expect.anything(),
-                })
-            );
-        });
-
-        it('should send EN deletion confirmation', async () => {
-            await emailService.sendDeletionConfirmation({
-                email,
-                deletionDate,
-                lang: 'en',
-            });
-
-            expect(sendSpy).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    subject: 'Your CyanShip account has been deactivated',
                 })
             );
         });
@@ -315,36 +205,21 @@ describe('EmailService', () => {
             await emailService.sendDeletionConfirmation({
                 email,
                 deletionDate,
-                lang: 'uk',
             });
 
             const html = getRenderedHtml();
             expect(html).toContain('http://localhost:3000/auth/signin');
         });
 
-        it('should include formatted date in deletion email', async () => {
+        it('should include formatted date in Ukrainian locale', async () => {
             await emailService.sendDeletionConfirmation({
                 email,
                 deletionDate,
-                lang: 'en',
             });
 
             const html = getRenderedHtml();
             expect(html).toContain('2026');
-        });
-
-        it('should fallback to EN for unknown lang', async () => {
-            await emailService.sendDeletionConfirmation({
-                email,
-                deletionDate,
-                lang: 'fr',
-            });
-
-            expect(sendSpy).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    subject: 'Your CyanShip account has been deactivated',
-                })
-            );
+            expect(html).toContain('березня');
         });
 
         it('should throw error when Resend fails', async () => {
@@ -356,7 +231,6 @@ describe('EmailService', () => {
                 emailService.sendDeletionConfirmation({
                     email,
                     deletionDate,
-                    lang: 'uk',
                 })
             ).rejects.toThrow(InternalServerErrorException);
         });

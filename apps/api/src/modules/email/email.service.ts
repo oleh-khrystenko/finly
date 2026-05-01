@@ -4,25 +4,24 @@ import {
     Logger,
 } from '@nestjs/common';
 import {
-    LANG,
     MAGIC_LINK_PURPOSE,
     RESPONSE_CODE,
     type MagicLinkPurpose,
-} from '@cyanship/types';
+} from '@finly/types';
 import { Resend } from 'resend';
 
 import { ENV } from '../../config/env';
-import { resolveTranslations } from './i18n/resolve';
-import { MagicLinkEmail } from './templates/magic-link';
-import { DeletionConfirmationEmail } from './templates/deletion-confirmation';
-import { DeletionReminderEmail } from './templates/deletion-reminder';
-import { BriefConfirmationEmail } from './templates/brief-confirmation';
-import { BriefNotificationEmail } from './templates/brief-notification';
+import { MagicLinkEmail, getMagicLinkSubject } from './templates/magic-link';
+import {
+    DeletionConfirmationEmail,
+    DELETION_CONFIRMATION_SUBJECT,
+} from './templates/deletion-confirmation';
+import {
+    DeletionReminderEmail,
+    DELETION_REMINDER_SUBJECT,
+} from './templates/deletion-reminder';
 
-const DATE_LOCALE: Record<string, string> = {
-    [LANG.UK]: 'uk-UA',
-    [LANG.EN]: 'en-US',
-};
+const DATE_LOCALE = 'uk-UA';
 
 @Injectable()
 export class EmailService {
@@ -33,21 +32,15 @@ export class EmailService {
         email: string;
         token: string;
         purpose: MagicLinkPurpose;
-        lang: string;
         redirectTo?: string;
     }): Promise<void> {
-        const { email, token, purpose, lang, redirectTo } = params;
-        const t = resolveTranslations(lang);
+        const { email, token, purpose, redirectTo } = params;
         const link = this.buildMagicLink(token, purpose, redirectTo);
 
         await this.send({
             to: email,
-            subject: t.magicLink[purpose].subject,
-            react: MagicLinkEmail({
-                link,
-                translations: t.magicLink[purpose],
-                lang,
-            }),
+            subject: getMagicLinkSubject(purpose),
+            react: MagicLinkEmail({ purpose, link }),
         });
 
         this.logger.log(`Magic link (${purpose}) sent to ${email}`);
@@ -56,26 +49,16 @@ export class EmailService {
     async sendDeletionConfirmation(params: {
         email: string;
         deletionDate: Date;
-        lang: string;
     }): Promise<void> {
-        const { email, deletionDate, lang } = params;
-        const t = resolveTranslations(lang);
-
-        const formattedDate = this.formatDate(deletionDate, lang);
+        const { email, deletionDate } = params;
 
         await this.send({
             to: email,
-            subject: t.deletionConfirmation.subject,
+            subject: DELETION_CONFIRMATION_SUBJECT,
             react: DeletionConfirmationEmail({
                 signInUrl: `${ENV.WEB_URL}/auth/signin`,
-                translations: {
-                    ...t.deletionConfirmation,
-                    instruction: t.deletionConfirmation.instruction(
-                        ENV.ACCOUNT_DELETION_GRACE_DAYS
-                    ),
-                },
-                formattedDate,
-                lang,
+                formattedDate: this.formatDate(deletionDate),
+                graceDays: ENV.ACCOUNT_DELETION_GRACE_DAYS,
             }),
         });
 
@@ -85,72 +68,27 @@ export class EmailService {
     async sendDeletionReminder(params: {
         email: string;
         deletionDate: Date;
-        lang: string;
     }): Promise<void> {
-        const { email, deletionDate, lang } = params;
-        const t = resolveTranslations(lang);
-
-        const formattedDate = this.formatDate(deletionDate, lang);
+        const { email, deletionDate } = params;
 
         await this.send({
             to: email,
-            subject: t.deletionReminder.subject,
+            subject: DELETION_REMINDER_SUBJECT,
             react: DeletionReminderEmail({
                 signInUrl: `${ENV.WEB_URL}/auth/signin`,
-                translations: t.deletionReminder,
-                formattedDate,
-                lang,
+                formattedDate: this.formatDate(deletionDate),
             }),
         });
 
         this.logger.log(`Deletion reminder sent to ${email}`);
     }
 
-    async sendBriefConfirmation(params: {
-        email: string;
-        name: string;
-        lang: string;
-    }): Promise<void> {
-        const { email, name, lang } = params;
-        const t = resolveTranslations(lang);
-
-        await this.send({
-            to: email,
-            subject: t.briefConfirmation.subject,
-            react: BriefConfirmationEmail({
-                name,
-                translations: t.briefConfirmation,
-                lang,
-            }),
+    private formatDate(date: Date): string {
+        return date.toLocaleDateString(DATE_LOCALE, {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
         });
-
-        this.logger.log(`Brief confirmation sent to ${email}`);
-    }
-
-    async sendBriefNotification(params: {
-        name: string;
-        email: string;
-        description: string;
-        budget: string;
-        budgetLabel: string;
-        deadline: string | null;
-        deadlineLabel: string | null;
-        source: string | null;
-    }): Promise<void> {
-        await this.send({
-            to: ENV.BRIEF_NOTIFICATION_EMAIL,
-            subject: `New brief: ${params.name} — ${params.budgetLabel}`,
-            react: BriefNotificationEmail(params),
-        });
-
-        this.logger.log(`Brief notification sent for ${params.email}`);
-    }
-
-    private formatDate(date: Date, lang: string): string {
-        return date.toLocaleDateString(
-            DATE_LOCALE[lang] ?? DATE_LOCALE[LANG.EN],
-            { year: 'numeric', month: 'long', day: 'numeric' }
-        );
     }
 
     private async send(options: {

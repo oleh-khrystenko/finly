@@ -9,7 +9,7 @@ jest.mock('@/shared/api', () => ({
     getMe: (...args: any[]) => mockGetMe(...args),
 }));
 
-let mockPathname = '/uk/profile';
+let mockPathname = '/profile';
 
 jest.mock('next/navigation', () => ({
     usePathname: () => mockPathname,
@@ -30,7 +30,7 @@ import AuthInitializer from './AuthInitializer';
 describe('AuthInitializer', () => {
     beforeEach(() => {
         jest.clearAllMocks();
-        mockPathname = '/uk/profile';
+        mockPathname = '/profile';
     });
 
     it('calls refreshToken and getMe on normal path, then setUser', async () => {
@@ -48,7 +48,7 @@ describe('AuthInitializer', () => {
     });
 
     it('calls clearUser immediately on /auth/callback path without refresh', async () => {
-        mockPathname = '/uk/auth/callback';
+        mockPathname = '/auth/callback';
 
         render(<AuthInitializer />);
         await new Promise((r) => setTimeout(r, 50));
@@ -59,7 +59,7 @@ describe('AuthInitializer', () => {
     });
 
     it('calls clearUser immediately on /auth/verify path without refresh', async () => {
-        mockPathname = '/uk/auth/verify';
+        mockPathname = '/auth/verify';
 
         render(<AuthInitializer />);
         await new Promise((r) => setTimeout(r, 50));

@@ -1,53 +1,44 @@
-# CyanShip
+# Finly
 
-Production-ready SaaS-бойлерплейт та одночасно живий лендінг агенції — все, що потрібно для швидкого запуску web-додатка: auth, payments, i18n, theming та модульна архітектура з коробки.
+> **Product vision (finly.com.ua):** SaaS для українських ФОП та їх бухгалтерів. Генерація платіжних QR-кодів і посилань за стандартом НБУ — клієнт сканує QR і платить без ручного введення реквізитів. У планах: зберігання документів з AI-тегуванням для швидкого пошуку.
 
-При старті нового проекту робиться форк репозиторію, видаляється модуль agency, і розробка клієнтського продукту починається поверх готового ядра. Детальніше: [docs/vision/product.md](docs/vision/product.md).
+## Поточний стан
 
----
-
-## Архітектура
-
-Turborepo-монорепозиторій з жорстким розділенням на два шари:
-
-- **Core** — авторизація, користувачі, платежі, shared UI, валідація, i18n. Стабільне ядро, що повторно використовується в кожному проекті.
-- **Agency** — бізнес-логіка агенції (лендінг, лід-магніти). Ізольований модуль, який видаляється за 15 хвилин при форку.
-
-Одностороння залежність: Agency -> Core, ніколи навпаки (enforced ESLint).
+QR/НБУ-флоу та document storage ще **не реалізовані**. Цей репозиторій містить тех-фундамент: monorepo-monolith на Next.js 16 + NestJS 11 з auth, Stripe payments, AI chat (Anthropic), executions ledger, R2 avatar storage, i18n, theming та модульною архітектурою. Структура та сервіси нижче описують саме цей фундамент.
 
 ---
 
 ## Структура проєкту
 
 ```
-cyanship/
+finly/
 ├── apps/
 │   ├── web/                  # Frontend (Next.js 16, React 19)
 │   │   └── src/
 │   │       ├── app/[locale]/
-│   │       │   ├── auth/             # Signin, callback, verify
-│   │       │   ├── (protected)/      # Profile, billing
-│   │       │   └── (agency)/         # Agency pages (scaffold)
-│   │       ├── features/             # Auth, profile, change-lang, change-theme
-│   │       ├── entities/             # Brand, agency (scaffold)
+│   │       │   ├── auth/             # Signin, callback, verify, reset-password
+│   │       │   ├── (protected)/      # Dashboard, profile, billing, ai-chat
+│   │       │   ├── privacy/          # Privacy policy
+│   │       │   ├── terms/            # Terms of service
+│   │       │   └── page.tsx          # Root landing
+│   │       ├── features/             # Auth, billing, profile, change-lang, change-theme
+│   │       ├── entities/             # User, navigation, brand
 │   │       ├── widgets/              # Header
 │   │       └── shared/               # API client, UI, config, styles, i18n
 │   └── api/                  # Backend (NestJS 11)
 │       └── src/
 │           ├── modules/
 │           │   ├── auth/             # Google OAuth, Magic Link, Password, JWT
-│           │   ├── users/            # CRUD, profile, soft-delete, credits
-│           │   ├── payments/         # Stripe subscriptions + one-off credit packs
-│           │   ├── agency/           # Agency module (scaffold)
+│           │   ├── users/            # CRUD, profile, soft-delete, executions ledger
+│           │   ├── payments/         # Stripe subscriptions + one-off execution packs
+│           │   ├── ai/               # Streaming chat (Anthropic SSE)
+│           │   ├── storage/          # Cloudflare R2 avatar pipeline
 │           │   ├── reports/          # Skeleton
-│           │   └── storage/          # Skeleton
+│           │   └── email/            # Resend transactional emails
 │           └── common/               # Guards, filters, decorators, Redis provider
 ├── packages/
-│   └── types/                # @cyanship/types — Zod-схеми, типи, контракти
-│       └── src/
-│           ├── index.ts              # Core exports
-│           └── agency.ts             # Agency exports (окремий entry point)
-├── docs/                     # Vision, planning, testing, conventions
+│   └── types/                # @finly/types — Zod-схеми, типи, контракти
+├── docs/                     # Conventions
 ├── docker-compose.yml        # Production (api + web)
 ├── docker-compose.dev.yml    # Development (mongo + redis + api + web)
 ├── turbo.json                # Build pipeline
@@ -173,13 +164,10 @@ docker compose up --build -d
 | `pnpm --filter api test:e2e`              | API E2E тести               |
 | `pnpm --filter api test:cov`              | API coverage                |
 | `pnpm --filter web test`                  | Web unit тести              |
-| `pnpm --filter @cyanship/types build`    | Build shared types          |
+| `pnpm --filter @finly/types build`    | Build shared types          |
 
 ---
 
 ## Документація
 
-- [Vision & Product](docs/vision/product.md) — опис проекту, бізнес-модель, позиціонування
 - [Conventions](docs/conventions/README.md) — правила та конвенції для розробки
-- [Architecture](docs/architecture/README.md) — опис реалізованих підсистем (auth, payments)
-- [Testing](docs/testing/) — тестові плани (auth, payments)

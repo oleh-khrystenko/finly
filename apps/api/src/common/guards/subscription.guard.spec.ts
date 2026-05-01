@@ -1,6 +1,6 @@
 import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { RESPONSE_CODE } from '@cyanship/types';
+import { RESPONSE_CODE } from '@finly/types';
 
 import { SubscriptionGuard } from './subscription.guard';
 

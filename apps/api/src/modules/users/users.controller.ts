@@ -18,7 +18,7 @@ import {
     RESPONSE_CODE,
     type ExecutionTransactionItem,
     type ApiMessageResponse,
-} from '@cyanship/types';
+} from '@finly/types';
 import { Response } from 'express';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -29,7 +29,6 @@ import { AuthService } from '../auth/auth.service';
 import { VerifyPasswordDto } from '../auth/dto/verify-password.dto';
 import { AcceptTermsDto } from './dto/accept-terms.dto';
 import { SpendExecutionsDto } from './dto/spend-executions.dto';
-import { UpdateLangDto } from './dto/update-lang.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import type {
     ExecutionTransactionDocument,
@@ -64,9 +63,7 @@ export class UsersController {
                 deletedAt: user.deletedAt ?? null,
                 accountDeletionRequestedAt:
                     user.accountDeletionRequestedAt ?? null,
-                preferredLang: user.preferredLang,
                 termsVersion: user.termsVersion ?? null,
-                ai: user.ai ?? null,
                 billing: user.billing
                     ? {
                           hasActiveSubscription:
@@ -109,23 +106,6 @@ export class UsersController {
                 deletedAt: updated!.deletedAt ?? null,
                 accountDeletionRequestedAt:
                     updated!.accountDeletionRequestedAt ?? null,
-                preferredLang: updated!.preferredLang,
-            },
-        };
-    }
-
-    @Patch('me/lang')
-    @UseGuards(JwtActiveGuard)
-    @SkipOnboarding()
-    async updateLang(
-        @CurrentUser() user: UserDocument,
-        @Body() dto: UpdateLangDto
-    ): Promise<ApiMessageResponse> {
-        await this.usersService.updateLang(user.id as string, dto.lang);
-        return {
-            data: {
-                code: RESPONSE_CODE.LANG_UPDATED,
-                message: 'Language updated',
             },
         };
     }
@@ -266,10 +246,7 @@ export class UsersController {
 
         await this.usersService.softDelete(user._id.toString());
         await this.authService.revokeAllUserTokens(user._id.toString());
-        await this.authService.sendDeletionConfirmationEmail(
-            user.email,
-            user.preferredLang
-        );
+        await this.authService.sendDeletionConfirmationEmail(user.email);
 
         res.clearCookie('bid_refresh', { path: '/' });
 

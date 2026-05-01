@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-import { LANG } from '../constants/lang';
 import { UserBillingSchema } from '../contracts/payments';
 
 export const UserProviderSchema = z.object({
@@ -19,11 +18,6 @@ export const UserExecutionsSchema = z.object({
     freeReportUsed: z.boolean(),
 });
 
-export const UserAiSchema = z.object({
-    requestsUsed: z.number().int().min(0),
-    bonusGranted: z.boolean(),
-});
-
 export const UserSchema = z.object({
     id: z.string(),
     email: z.string().email(),
@@ -33,11 +27,9 @@ export const UserSchema = z.object({
     hasPassword: z.boolean(),
     deletedAt: z.coerce.date().nullable().optional(),
     accountDeletionRequestedAt: z.coerce.date().nullable().optional(),
-    preferredLang: z.enum([LANG.UK, LANG.EN]),
     createdAt: z.coerce.date(),
     lastLoginAt: z.coerce.date().optional(),
     billing: UserBillingSchema.nullable().optional(),
-    ai: UserAiSchema.nullable().optional(),
     termsAcceptedAt: z.coerce.date().nullable().optional(),
     termsVersion: z.string().nullable().optional(),
 });
@@ -50,9 +42,7 @@ export const UserProfileSchema = UserSchema.pick({
     hasPassword: true,
     deletedAt: true,
     accountDeletionRequestedAt: true,
-    preferredLang: true,
     billing: true,
-    ai: true,
     termsVersion: true,
 });
 

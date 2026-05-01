@@ -1,26 +1,12 @@
 # Documentation
 
-Документація впорядкована за блоками.
+Документація розділена на три блоки: правила/конвенції репозиторію, продуктові артефакти та план спринтів. Conventions — канонічні; продуктові документи та план спринтів можуть бути в статусі working draft (див. заголовок кожного файла).
 
 ## Блоки
 
-- `docs/vision/` — опис проекту, бізнес-модель, позиціонування.
-- `docs/architecture/` — опис реалізованих підсистем (auth, payments).
-- `docs/testing/` — тестові плани та документація (unit, integration, manual E2E).
-- `docs/conventions/` — загальні конвенції та правила для AI-агентів/розробників.
-- `docs/prompts/` — службові prompt-и для агентів/асистентів.
-
-## Поточне наповнення
-
-- `docs/vision/product.md` — повний опис проекту CyanShip
-- `docs/architecture/auth-flow/` — опис реалізації авторизації (16 документів)
-- `docs/architecture/payments-flow/` — опис реалізації платіжної системи (12 документів)
-- `docs/testing/auth/` — unit + integration + manual E2E тести для auth
-- `docs/testing/payments/` — automated + manual тести для payments
-- `docs/conventions/README.md`
-- `docs/conventions/fail-fast.md`
-- `docs/conventions/tone.md`
-- `docs/conventions/i18n.md`
-- `docs/conventions/modular-boundaries.md`
-- `docs/prompts/codex/update-context.md`
-- `docs/prompts/gemini/update-context.md`
+- [`docs/conventions/`](conventions/README.md) — загальні конвенції та правила для AI-агентів і розробників. Канонічне джерело.
+- [`docs/product/`](product/) — продуктові артефакти:
+  - [`business-flow.md`](product/business-flow.md) — бізнес-флоу MVP та майбутніх фаз (working draft, з відкритими питаннями).
+  - [`tech-backlog.md`](product/tech-backlog.md) — нетехнічна памʼятка про доопрацювання, що випливають з business-flow.
+  - [`qr-decisions.md`](product/qr-decisions.md) — журнал продуктових рішень по QR / платіжних посиланнях (working draft).
+- [`docs/sprints/`](sprints/README.md) — план спринтів MVP (working draft, tree-overview + детальні документи по мірі планування).

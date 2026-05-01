@@ -2,9 +2,6 @@
 
 import dynamic from 'next/dynamic';
 
-const BriefDialog = dynamic(
-    () => import('@/features/agency/brief/BriefDialog'),
-);
 const DeleteAccountDialog = dynamic(
     () => import('@/features/profile/DeleteAccountDialog'),
 );
@@ -23,21 +20,16 @@ const BillingResetDialog = dynamic(
 const MobileMenuSheet = dynamic(
     () => import('@/widgets/header/MobileMenuSheet'),
 );
-const DogfoodingSheet = dynamic(
-    () => import('@/widgets/agency/landing/DogfoodingSection/DogfoodingSheet'),
-);
 
 export function Overlays() {
     return (
         <>
-            <BriefDialog />
             <DeleteAccountDialog />
             <AvatarUploadDialog />
             <AvatarDeleteConfirmDialog />
             <TermsReacceptDialog />
             <BillingResetDialog />
             <MobileMenuSheet />
-            <DogfoodingSheet />
         </>
     );
 }

@@ -42,7 +42,7 @@ export class CleanupService {
                 deletedAt: { $lte: reminderCutoff, $gt: hardDeleteCutoff },
                 deletionReminderSentAt: null,
             })
-            .select('_id email preferredLang deletedAt timezone')
+            .select('_id email deletedAt timezone')
             .lean()
             .exec();
 
@@ -66,7 +66,6 @@ export class CleanupService {
                 await this.emailService.sendDeletionReminder({
                     email: user.email,
                     deletionDate,
-                    lang: user.preferredLang,
                 });
 
                 await this.userModel.findByIdAndUpdate(userId, {
