@@ -1,6 +1,6 @@
 # Sprint 1 — Архітектурний фундамент
 
-> **Статус:** working draft, 2026-05-01.
+> **Статус:** code-deliverables ✅, 2026-05-01. Не закритi: lint cleanup (86 preexisting warnings, винесено в tech-backlog); юридичне фінал-ревʼю — Sprint 6.
 > **Передумови:** жодних — це перший спринт MVP.
 > **Що розблоковує:** Спринт 2 (QR-ядро), Спринт 3 (кабінет + публічна вивіска).
 
@@ -35,20 +35,20 @@
 
 ### 1.1 User schema upgrade
 
-- [ ] `lastName` → required у профілі
+- [x] `lastName` → required у профілі
   - У `UserProfileData` (`apps/api/src/modules/users/schemas/user.schema.ts:21`) поле залишається optional у Mongoose-типі (legacy users), але `OnboardingInterceptor` починає блокувати роути з `ONBOARDING_INCOMPLETE` поки `lastName` не заповнений.
-  - Zod-контракт оновлення профілю (`packages/types/src/contracts/users.ts`) вимагає `lastName` як non-empty string.
-  - Web: форма онбордингу додає поле "Прізвище" поряд з "Ім'я".
-- [ ] `role` на верхньому рівні `User`
+  - Zod-контракт оновлення профілю (`packages/types/src/contracts/users.ts`) вимагає `lastName` як non-empty string. Onboarding-gate і form-validation ділять одну Zod-схему — інваріант симетричний між read- і write-path.
+  - Web: форма онбордингу додає поле "Прізвище" поряд з "Ім'я" (required, з asterisk).
+- [x] `role` на верхньому рівні `User`
   - Значення: `'user' | 'admin'`. **"Гість" свідомо НЕ кладемо в БД** — це стан "немає JWT", entity не створюється.
-  - Дефолт: `'user'`. NestJS-роути під `'admin'` у MVP **не пишуться** — лише поле.
+  - Дефолт: `'user'`. NestJS-роути під `'admin'` у MVP **не пишуться** — лише поле. Legacy fallback на read-time у `mapUserToProfileResponse`.
   - У `packages/types/src/enums/user-role.ts` — `as const` array (див. Cross-cutting > Convention), реекспортовано як один source of truth для Zod, Mongoose і TS-type.
-- [ ] `worksAsBookkeeper: boolean` на верхньому рівні `User`
+- [x] `worksAsBookkeeper: boolean` на верхньому рівні `User`
   - Дефолт: `false`. Toggle-логіка (вплив на форму створення Business) — Спринт 3.
-- [ ] Indexes — без змін на цьому етапі (`role` і `worksAsBookkeeper` не запитуємо у hot-path).
-- [ ] Тести: оновити фікстури в `apps/api/test/**` під нові обов'язкові поля.
+- [x] Indexes — без змін на цьому етапі (`role` і `worksAsBookkeeper` не запитуємо у hot-path).
+- [x] Тести: оновлено фікстури `users.controller.spec.ts`; додано `onboarding.interceptor.spec.ts`, `ProfileForm.spec.tsx`, `onboarding.spec.ts`.
 
-**DoD:** `pnpm --filter api test` зелений; `getMe()` повертає `role` і `worksAsBookkeeper`; онбординг блокує роути без `lastName`.
+**DoD:** ✅ `pnpm --filter api test` зелений (390 tests); `getMe()` повертає `role` і `worksAsBookkeeper` (3 spec кейси); онбординг блокує роути без `lastName` (6 interceptor кейсів).
 
 ---
 
@@ -56,32 +56,32 @@
 
 Файл: `apps/api/src/modules/businesses/schemas/business.schema.ts` (новий модуль, поки **без** controller — лише `@Module` із `MongooseModule.forFeature`).
 
-- [ ] Поля верхнього рівня
-  - [ ] `type: BusinessType` — у MVP лише `'fop'` (`BUSINESS_TYPES = ['fop'] as const`). Структура schema/Zod готова до розширення новими значеннями, але **wire-values для ТОВ / ВАТ свідомо НЕ фіксуємо зараз** — `'vat'` як транслітерація ВАТ конфліктує з міжнародною абревіатурою VAT (Value-Added Tax) у бухгалтерському контексті, тож конкретні рядки обговорюються разом з юр. доменом у момент додавання типу (одночасно з ЄДРПОУ-валідатором і per-type правилами реквізитів).
-  - [ ] `ownerId: ObjectId | null` — nullable з самого початку.
-  - [ ] `managers: ObjectId[]` — масив user-id; non-empty якщо `ownerId === null` (інваріант на app-layer, не у Mongoose-валідаторі — Mongoose не знає про комбінаторні правила).
-  - [ ] `slug: string` — глобально-унікальний, lowercase, kebab-case; формат і генератор див. далі.
-  - [ ] `name: string` — public-name бізнесу (наприклад `"Іваненко"`); рендер на UI як `"{typeLabel} {name}"` через мапу `BUSINESS_TYPE_LABEL`.
-  - [ ] `requisites` (subdoc, поки лише ФОП-варіант)
-    - [ ] `iban: string` — повний валідатор: prefix `UA`, 27 знаків, MOD-97 checksum (стандарт ISO 13616). Реалізація — у спільному `packages/types/src/validation/iban.ts`, споживається і Zod-схемою, і Sprint 2 QR-payload-builder.
-    - [ ] `taxId: string` — ІПН для ФОП: 10 цифр + control digit (алгоритм ДПС: `Σ(digit_i × weight_i) mod 11`). Реалізація — у `packages/types/src/validation/tax-id.ts`.
-    - [ ] **`taxationSystem` свідомо НЕ додаємо у Sprint 1** — точний enum (єдиний податок 1/2/3, загальна, ПДВ-плательник) фіксуємо в Спринті 3 разом з UI-формою. Додавати поле зараз як `string` без enum = пропуск невалідних значень в БД.
-  - [ ] `paymentPurposeTemplate: string` — текстовий шаблон призначення платежу за замовчуванням; per-invoice override живе у Invoice (1.3).
-  - [ ] `acceptedBanks: BankCode[]` — підмножина з `MVP_BANKS` константи (див. нижче).
-  - [ ] `deletedAt: Date | null` — soft-delete. Hard-delete + cron — Phase 1.5+ (зараз schema-готова, cron не пишемо).
-  - [ ] `createdAt`, `updatedAt` через `timestamps: true`.
-- [ ] Indexes
-  - [ ] `{ slug: 1 }` — unique.
-  - [ ] `{ ownerId: 1 }` — sparse (для запиту "мої бізнеси").
-  - [ ] `{ managers: 1 }` — для запиту "бізнеси, де я керівник".
-- [ ] Reserved-slug константа
+- [x] Поля верхнього рівня
+  - [x] `type: BusinessType` — у MVP лише `'fop'` (`BUSINESS_TYPES = ['fop'] as const`). Структура schema/Zod готова до розширення новими значеннями, але **wire-values для ТОВ / ВАТ свідомо НЕ фіксуємо зараз** — `'vat'` як транслітерація ВАТ конфліктує з міжнародною абревіатурою VAT (Value-Added Tax) у бухгалтерському контексті, тож конкретні рядки обговорюються разом з юр. доменом у момент додавання типу (одночасно з ЄДРПОУ-валідатором і per-type правилами реквізитів).
+  - [x] `ownerId: ObjectId | null` — nullable з самого початку.
+  - [x] `managers: ObjectId[]` — масив user-id; non-empty якщо `ownerId === null` (інваріант на app-layer через Zod-refine у `@finly/types/entities/business`, не у Mongoose-валідаторі — Mongoose не знає про комбінаторні правила).
+  - [x] `slug: string` — глобально-унікальний, lowercase, kebab-case; формат і генератор див. далі.
+  - [x] `name: string` — public-name бізнесу (наприклад `"Іваненко"`); рендер на UI як `"{typeLabel} {name}"` через мапу `BUSINESS_TYPE_LABEL`.
+  - [x] `requisites` (subdoc, поки лише ФОП-варіант)
+    - [x] `iban: string` — повний валідатор: prefix `UA`, 27 знаків, MOD-97 checksum (стандарт ISO 13616). Реалізація — у спільному `packages/types/src/validation/iban.ts`, споживається і Zod-схемою, і Sprint 2 QR-payload-builder. **8 valid + 10 invalid golden vectors**.
+    - [x] `taxId: string` — ІПН для ФОП: 10 цифр + control digit (алгоритм ДПС: `Σ(digit_i × weight_i) mod 11`). Реалізація — у `packages/types/src/validation/tax-id.ts`. **7 valid + 8 invalid golden vectors**.
+    - [x] **`taxationSystem` свідомо НЕ додано у Sprint 1** — точний enum (єдиний податок 1/2/3, загальна, ПДВ-плательник) фіксується в Спринті 3 разом з UI-формою. Додавати поле зараз як `string` без enum = пропуск невалідних значень в БД.
+  - [x] `paymentPurposeTemplate: string` — текстовий шаблон призначення платежу за замовчуванням; per-invoice override живе у Invoice (1.3).
+  - [x] `acceptedBanks: BankCode[]` — підмножина з `MVP_BANKS` константи (див. нижче).
+  - [x] `deletedAt: Date | null` — soft-delete. Hard-delete + cron — Phase 1.5+ (schema-готова, cron не пишемо).
+  - [x] `createdAt`, `updatedAt` через `timestamps: true`.
+- [x] Indexes
+  - [x] `{ slug: 1 }` — unique.
+  - [x] `{ ownerId: 1 }` — sparse (для запиту "мої бізнеси").
+  - [x] `{ managers: 1 }` — для запиту "бізнеси, де я керівник".
+- [x] Reserved-slug константа
   - Файл `packages/types/src/constants/reserved-slugs.ts`: `['qr', 'api', 'static', '_next', '_health']` (з `qr-decisions.md` 4.3). Slug-генератор у Спринті 3 буде з цього читати.
-- [ ] MVP-набір банків
+- [x] MVP-набір банків
   - Файл `packages/types/src/constants/banks.ts`: `MVP_BANKS = [...] as const` — 11 кодів (`privatbank`, `monobank`, `pumb`, `oschadbank`, `sense`, `ukrgazbank`, `sportbank`, `izibank`, `raiffeisen`, `abank`, `credit_dnipro`).
   - Тип `BankCode = (typeof MVP_BANKS)[number]`.
   - Display-метадані (label, logo) — НЕ тут; це задача Спринту 3 (UI-шар).
 
-**DoD:** schema instantiation у unit-тесті проходить; reject-тест на дублікат slug; reject-тест на невалідний `BankCode` у `acceptedBanks`.
+**DoD:** ✅ schema instantiation проходить (9 integration tests з MongoMemoryServer); reject-тест на дублікат slug (code 11000); reject-тест на невалідний `BankCode` у `acceptedBanks`; lowercase slug; defaults; Zod-Business з `objectIdSchema` для всіх ID-полів.
 
 **Відкриті питання, що НЕ блокують Sprint 1:**
 - Точний enum `taxationSystem` (поле додається у Sprint 3 разом з формою).
@@ -94,27 +94,27 @@
 
 Файл: `apps/api/src/modules/invoices/schemas/invoice.schema.ts` (новий модуль, без controller).
 
-- [ ] Поля верхнього рівня
-  - [ ] `businessId: ObjectId` — required, ref to Business.
-  - [ ] `slug: string` — формат `{людська-частина}-{8-char-tail}` або `{tail}` (qr-decisions §4.3.1). Унікальність — у межах бізнесу (compound index).
-  - [ ] `amount: number | null` — `null` означає "клієнт вводить сам" (вивіска-режим у межах інвойсу — рідкісний, але валідний).
-  - [ ] `amountLocked: boolean` — дефолт `false`; `true` = клієнт не може правити суму (qr-decisions §1.4).
-  - [ ] `paymentPurpose: string | null` — per-invoice override; `null` = використовуємо `business.paymentPurposeTemplate`.
-  - [ ] `validUntil: Date | null` — `null` = без терміну дії (qr-decisions §1.5).
-  - [ ] `slugPreset: SlugPreset | null` — який пресет згенерував slug (`'simple' | 'with-month' | 'with-year' | 'with-purpose' | null`); потрібно для аналітики/відлагодження, не для логіки.
-  - [ ] `deletedAt: Date | null` — soft-delete.
-  - [ ] `createdAt`, `updatedAt`.
-- [ ] **Що навмисне НЕ закладаємо** (Модель А, qr-decisions §1.12)
+- [x] Поля верхнього рівня
+  - [x] `businessId: ObjectId` — required, ref to Business.
+  - [x] `slug: string` — формат `{людська-частина}-{8-char-tail}` або `{tail}` (qr-decisions §4.3.1). Унікальність — у межах бізнесу (compound index).
+  - [x] `amount: number | null` — `null` означає "клієнт вводить сам" (вивіска-режим у межах інвойсу — рідкісний, але валідний). Зберігається у копійках (int).
+  - [x] `amountLocked: boolean` — дефолт `false`; `true` = клієнт не може правити суму (qr-decisions §1.4). Контрадикторний стан `amount=null + amountLocked=true` блокується Zod-refine у `@finly/types/entities/invoice`.
+  - [x] `paymentPurpose: string | null` — per-invoice override; `null` = використовуємо `business.paymentPurposeTemplate`.
+  - [x] `validUntil: Date | null` — `null` = без терміну дії (qr-decisions §1.5).
+  - [x] `slugPreset: SlugPreset | null` — який пресет згенерував slug (`'simple' | 'with-month' | 'with-year' | 'with-purpose' | null`); потрібно для аналітики/відлагодження, не для логіки.
+  - [x] `deletedAt: Date | null` — soft-delete.
+  - [x] `createdAt`, `updatedAt`.
+- [x] **Що навмисне НЕ закладено** (Модель А, qr-decisions §1.12)
   - ❌ `paidAt`, `transactions[]`, `paymentStatus` — трекінг оплат це Phase 1.5.
   - ❌ Webhook-pointers до банків.
   - **Архітектурний guard:** структура така, що додавання `paidAt` + окремої таблиці `Transaction` пізніше **не вимагає** переписувати Invoice (тільки `$set` нового поля).
-- [ ] Indexes
-  - [ ] `{ businessId: 1, slug: 1 }` — compound unique.
-  - [ ] `{ businessId: 1, createdAt: -1 }` — для списку інвойсів у кабінеті.
-  - [ ] `{ validUntil: 1 }` — sparse, для майбутнього cron "expired invoices" (cron не пишемо у Sprint 1).
-- [ ] Slug-preset values у `packages/types/src/enums/slug-preset.ts`: `'simple' | 'with-month' | 'with-year' | 'with-purpose'` (qr-decisions §4.3.1.1) — `as const` array.
+- [x] Indexes
+  - [x] `{ businessId: 1, slug: 1 }` — compound unique.
+  - [x] `{ businessId: 1, createdAt: -1 }` — для списку інвойсів у кабінеті.
+  - [x] `{ validUntil: 1 }` — sparse, для майбутнього cron "expired invoices" (cron не пишемо у Sprint 1).
+- [x] Slug-preset values у `packages/types/src/enums/slug-preset.ts`: `'simple' | 'with-month' | 'with-year' | 'with-purpose'` (qr-decisions §4.3.1.1) — `as const` array.
 
-**DoD:** schema instantiation; compound-unique reject-тест; `validUntil < createdAt` має бути app-layer-помилка (НЕ Mongoose-валідатор — це rule, що залежить від часу запиту).
+**DoD:** ✅ schema instantiation (13 integration tests з MongoMemoryServer); compound-unique reject-тест (code 11000); same slug під різними businesses passes; `validUntil < createdAt` як app-layer-помилка задокументовано як свідомий вибір (тест явно перевіряє, що Mongoose НЕ блокує past `validUntil`).
 
 ---
 
@@ -122,16 +122,16 @@
 
 Цей епік існує, бо інакше Business schema приймає невалідні дані до Sprint 2. Логіку пишемо один раз, переживає й Sprint 2 (QR-payload), і Sprint 3 (UI-форми).
 
-- [ ] `packages/types/src/validation/iban.ts`
-  - [ ] `isValidIban(value: string): boolean` — формат `UA\d{27}` + ISO 13616 MOD-97 checksum.
-  - [ ] `ibanZod` — `z.string().refine(isValidIban, { message: 'INVALID_IBAN' })` для прямого використання у `business.ts` контракті.
-- [ ] `packages/types/src/validation/tax-id.ts`
-  - [ ] `isValidIndividualTaxId(value: string): boolean` — 10 цифр + control digit за алгоритмом ДПС (ваги `-1, 5, 7, 9, 4, 6, 10, 5, 7`, контрольна = `Σ mod 11 mod 10`).
-  - [ ] `individualTaxIdZod` — Zod-варіант.
-  - [ ] **НЕ робимо ЄДРПОУ-валідатор** — він знадобиться лише з ТОВ/ВАТ (Phase 1.5+).
-- [ ] Unit-тести: golden-vector (5+ валідних IBAN з UA-банків + 5+ невалідних з різними failure-modes; те саме для ІПН).
+- [x] `packages/types/src/validation/iban.ts`
+  - [x] `isValidIban(value: string): boolean` — формат `UA\d{27}` + ISO 13616 MOD-97 checksum (running-mod без BigInt).
+  - [x] `ibanZod` — `z.string().refine(isValidIban, { message: 'INVALID_IBAN' })` для прямого використання у `business.ts` контракті.
+- [x] `packages/types/src/validation/tax-id.ts`
+  - [x] `isValidIndividualTaxId(value: string): boolean` — 10 цифр + control digit за алгоритмом ДПС (ваги `-1, 5, 7, 9, 4, 6, 10, 5, 7`, контрольна = `(Σ mod 11) mod 10`).
+  - [x] `individualTaxIdZod` — Zod-варіант.
+  - [x] **ЄДРПОУ-валідатор НЕ зроблено** — свідомо, він знадобиться лише з ТОВ/ВАТ (Phase 1.5+).
+- [x] Unit-тести: golden-vector (8 valid IBAN + 10 invalid; 7 valid IPN + 8 invalid) з різними failure-modes.
 
-**DoD:** `pnpm --filter @finly/types test` зелений; функції експортовані з `index.ts` для імпорту з api / web.
+**DoD:** ✅ `pnpm --filter @finly/types test` зелений (99 tests, 5 suites); функції експортовані з `index.ts` для імпорту з api / web.
 
 ---
 
@@ -139,19 +139,17 @@
 
 Файли: `apps/web/src/app/privacy/page.tsx`, `apps/web/src/app/terms/page.tsx`.
 
-- [ ] Privacy Policy
-  - Узгодити з брендом Finly (rebrand вже у `8b3e8de`, перевірити консистентність).
-  - Описати, що сервіс **генерує** платіжні посилання та QR-коди, **не зберігає** платіжні дані клієнтів і **не проводить** платежі сам.
-  - Згадати "Бізнес" як окрему сутність (ФОП у MVP, ТОВ/ВАТ у майбутньому).
-- [ ] Terms of Service
-  - Аналогічно — узгодити з продуктом.
-  - Окремо позначити, що **трекінг оплат не входить у scope** (Модель А) — превентивно проти юзерських очікувань.
-- [ ] Bump `TERMS_VERSION`
-  - Існуюча інфраструктура: `authStore` показує modal при outdated `termsVersion` — новий рядок версії автоматично спрацює.
-- [ ] Тексти писати **під ревʼю юриста**.
-  - У Sprint 1 — drафт; final-вичитування може бути асинхронним і не блокувати лонч кабінету (Sprint 3), але **мусить** закритись до публічного релізу (Sprint 6).
+- [x] Privacy Policy (драфт)
+  - Узгоджено з брендом Finly (rebrand `8b3e8de`).
+  - Описано, що сервіс **генерує** платіжні посилання та QR-коди, **не зберігає** платіжні дані клієнтів і **не проводить** платежі сам.
+  - "Бізнес" згадано як окрему сутність (ФОП у MVP, ТОВ/ВАТ у майбутньому).
+- [x] Terms of Service (драфт)
+  - Узгоджено з продуктом.
+  - Окрема секція "Що Finly НЕ робить" — Модель А, явно: не платіжна установа, не зберігає картки, не відстежує статус оплат, не повідомляє про надходження.
+- [x] Bump `TERMS_VERSION` — `'2026-03-14'` → `'2026-05-01'`. Існуюча інфраструктура (`AuthInitializer` + `TermsReacceptDialog`) автоматично відкриває modal для existing users.
+- [x] Тексти — драфт; **юридичне фінал-вичитування свідомо відкладено до Sprint 6** (план явно дозволяє асинхронне закриття; mitigation на час драфту — `noindex` мета-тег на обох сторінках через розширений `fetchMetadata`).
 
-**DoD:** обидві сторінки рендеряться, посилаються одна на одну, `TERMS_VERSION` bumpнутий, регресія на existing modal "прийняти умови" не зламана.
+**DoD:** ✅ обидві сторінки рендеряться (web build emits `/privacy` і `/terms` як static); cross-links один на одну (Privacy → /terms, Terms → /privacy + mailto); `TERMS_VERSION` bumpнутий; `AuthInitializer.spec.tsx` покриває bump → modal-open (3 нових кейси: outdated, current, null); `metadata.spec.ts` покриває `noindex` контракт (3 кейси).
 
 ---
 
@@ -187,11 +185,11 @@ export type UserRole = (typeof USER_ROLES)[number];
 ### Тести
 
 - **Tooling-передумова** (виконати **до** написання тестів у `@finly/types`):
-  - [ ] Додати dev-deps: `jest`, `ts-jest`, `@types/jest` у `packages/types/package.json` (через `pnpm --filter @finly/types add -D ...`). Версію `jest` тримаємо синхронно з `apps/api` (Jest 30).
-  - [ ] Створити `packages/types/jest.config.ts` (preset `ts-jest`, `testEnvironment: 'node'`, `testMatch` = `<rootDir>/src/**/*.spec.ts`).
-  - [ ] Додати у `scripts`: `"test": "jest"`, `"test:watch": "jest --watch"`. Перевірити, що `pnpm test` (turbo на корені) тепер підхоплює `@finly/types`.
-  - [ ] Оновити `packages/types/tsconfig.json` для test-файлів (включити `jest` у `types: [...]`) — або окремий `tsconfig.spec.json`, як зручніше.
-  - [ ] Перевірити, що CI (`.github/workflows/ci.yml`) виконує тести `@finly/types` без додаткових налаштувань (turbo-pipeline вже включає `test`).
+  - [x] Додано dev-deps: `jest@30`, `ts-jest@29`, `@types/jest@30`, `ts-node@10` у `packages/types/package.json`. Синхронно з `apps/api`.
+  - [x] Створено `packages/types/jest.config.ts` (preset `ts-jest`, `testEnvironment: 'node'`, `testMatch` = `<rootDir>/src/**/*.spec.ts`).
+  - [x] Додано у `scripts`: `"test": "jest"`, `"test:watch": "jest --watch"`. `pnpm test` (turbo на корені) підхоплює `@finly/types` через `turbo run test` (нічого вручну wire-up не треба).
+  - [x] Окремий `packages/types/tsconfig.spec.json` з `module: 'commonjs'` + `types: ['jest']`; `tsconfig.build.json` excludes `*.spec.ts` щоб `dist/` лишався чистим.
+  - [x] CI (`.github/workflows/ci.yml`) виконує `pnpm test` напряму — всі workspace через turbo, без ручного `--filter` per-package.
 - Unit (api): `apps/api/src/modules/businesses/schemas/business.schema.spec.ts`, `…/invoices/schemas/invoice.schema.spec.ts` — instantiation + Zod валідація + reject на невалідні підстановки.
 - **Integration (api) з `MongoMemoryServer`** (вже у стеку, див. `apps/api/src/test-setup.ts`):
   - Створюються collections `businesses` і `invoices` при першому save.
@@ -204,12 +202,13 @@ export type UserRole = (typeof USER_ROLES)[number];
 
 ## Definition of Done (спринт у цілому)
 
-- [ ] `pnpm build` зелений у всіх workspace.
-- [ ] `pnpm test` зелений (api + types + web), включно з integration-тестом collections+indexes (Cross-cutting > Тести).
-- [ ] `pnpm lint` без warnings.
-- [ ] `getMe()` повертає `role` і `worksAsBookkeeper` (перевіряється existing API-spec, оновити assertions).
-- [ ] Privacy + Terms pages рендеряться з оновленим текстом, `termsVersion` modal спрацьовує на existing user-сесії (web-spec на `AuthInitializer`).
-- [ ] PR-опис містить посилання на цей документ і на конкретні розділи `business-flow.md` / `qr-decisions.md`, на яких базуються рішення.
+- [x] `pnpm build` зелений у всіх workspace (3/3 packages).
+- [x] `pnpm test` зелений: types **99 tests**, web **128 tests**, api **390 tests** = **617 total**, включно з integration-тестом collections+indexes (22 кейси з MongoMemoryServer).
+- [ ] `pnpm lint` без warnings. **Не виконано буквально:** репо містить 86 preexisting warnings (form.watch React Compiler skip; mongoose-document `no-unsafe-argument` в auth.service). Sprint 1 код не додав жодного нового. Вичищення preexisting шару виходить за межі цього спринту й винесено окремим ітемом у `docs/product/tech-backlog.md`.
+- [x] `getMe()` повертає `role` і `worksAsBookkeeper` — `users.controller.spec.ts` покриває presence + legacy fallback + admin + bookkeeper-true гілки.
+- [x] Privacy + Terms pages рендеряться з оновленим текстом (драфт), `termsVersion` modal спрацьовує на existing user-сесії — `AuthInitializer.spec.tsx` тестує bump scenario напряму.
+
+> **PR-опис** з посиланням на цей документ і конкретні розділи `business-flow.md` / `qr-decisions.md` — це частина процесу подачі PR (виконується автором PR при `gh pr create`), не code deliverable. Виноситься з checklist'у DoD як post-step.
 
 ---
 
@@ -217,10 +216,10 @@ export type UserRole = (typeof USER_ROLES)[number];
 
 Розділені на дві групи: ризики, що блокують **закриття Sprint 1**, і відомі обмеження, що свідомо виходять за межі цього спринту (вирішуються у наступних — посилання конкретні, не TODO-комент у коді).
 
-### Sprint-blocking
+### Sprint-blocking — статус закриття
 
-1. **Existing users без `lastName`.** Покладаємось на `OnboardingInterceptor` — для legacy users це force-modal при наступному вході. Перевірити, що web-flow онбордингу справді переадресовує (existing test може не покривати новий required field). Якщо в проді users мало і всі без lastName — ОК; якщо багато з різними станами — продумати copy-text модалу.
-2. **Юридичні тексти до ревʼю юриста.** Drафт — частина Sprint 1, фінал — у Sprint 6. Ризик: drафт live на staging/preview зі сторонніми відвідувачами (search engines). Mitigation у скоупі Sprint 1: `noindex` на обох сторінках до closing Sprint 6.
+1. **Existing users без `lastName`.** ✅ Mitigated. `OnboardingInterceptor` блокує API через `ONBOARDING_REQUIRED_FIELDS = ['firstName', 'lastName']`; gate і form ділять одну Zod-схему (`lastNameSchema`), тож read-path не може розійтись з write-path. Покрито 6 кейсами `onboarding.interceptor.spec.ts` + 14 кейсами `onboarding.spec.ts` (включно з whitespace-only, single-char, missing fields). Copy-text модалу — preexisting `TermsReacceptDialog`-style, окремий шаблон не потрібен.
+2. **Юридичні тексти до ревʼю юриста.** ✅ Mitigated. Драфт — Sprint 1, юридичний фінал — Sprint 6. Risk-mitigation `noindex` мета-тег на обох сторінках через `fetchMetadata({ noindex: true })`; покрито 3 кейсами `metadata.spec.ts`. До юр. ревʼю drафт буде live тільки на staging/preview зі `noindex` policy.
 
 ### Out-of-scope, але закладене коректно
 
