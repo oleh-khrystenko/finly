@@ -62,7 +62,8 @@ describe('QrService — integration (real sharp + qrcode + jsqr)', () => {
 
     describe('renderForUrl', () => {
         it('генерує PNG, що зчитується назад у вихідний URL', async () => {
-            const url = 'https://pay.finly.com.ua/ivanenko-fop/zamovlennia-aB3xQ9k7';
+            const url =
+                'https://pay.finly.com.ua/ivanenko-fop/zamovlennia-aB3xQ9k7';
             const png = await service.renderForUrl(url);
             const decoded = await decodeQr(png);
             expect(decoded).toBe(url);
@@ -140,7 +141,7 @@ describe('QrService — integration (real sharp + qrcode + jsqr)', () => {
             const b64Url = decoded!.slice('https://qr.bank.gov.ua/'.length);
             const payload = Buffer.from(b64Url, 'base64url').toString('utf-8');
             expect(payload).toContain('ТОВ');
-            expect(payload).toContain('Кав\'ярня');
+            expect(payload).toContain("Кав'ярня");
             expect(payload).toContain('тістечко');
         });
     });
@@ -166,11 +167,14 @@ describe('QrService — integration (real sharp + qrcode + jsqr)', () => {
 
     describe('logo overlay viability', () => {
         it('logoMaxRatio = 0.20 (max-allowed) — QR все ще читається', async () => {
-            const png = await service.renderForUrl('https://pay.finly.com.ua/x', {
-                includeLogo: true,
-                logoMaxRatio: 0.2,
-                sizePx: 512,
-            });
+            const png = await service.renderForUrl(
+                'https://pay.finly.com.ua/x',
+                {
+                    includeLogo: true,
+                    logoMaxRatio: 0.2,
+                    sizePx: 512,
+                }
+            );
             const decoded = await decodeQr(png);
             expect(decoded).toBe('https://pay.finly.com.ua/x');
         });

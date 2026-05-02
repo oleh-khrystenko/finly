@@ -1,10 +1,7 @@
 import { Test } from '@nestjs/testing';
 
 import { QrRenderError } from '../errors';
-import {
-    QR_LOGO_MAX_RATIO,
-    QrLogoCompositor,
-} from './qr-logo.compositor';
+import { QR_LOGO_MAX_RATIO, QrLogoCompositor } from './qr-logo.compositor';
 
 /**
  * Unit-тести `QrLogoCompositor` — лише input-guards (synchronous checks ДО
@@ -52,7 +49,7 @@ describe('QrLogoCompositor — guards', () => {
         ).rejects.toMatchObject({ code: 'QR_LOGO_TOO_LARGE' });
     });
 
-    it('відхиляє від\'ємний logoMaxRatio', async () => {
+    it("відхиляє від'ємний logoMaxRatio", async () => {
         await expect(
             compositor.compose(Buffer.from(''), '/no-op.png', {
                 qrSizePx: 512,

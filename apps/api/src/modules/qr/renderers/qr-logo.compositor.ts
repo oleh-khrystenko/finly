@@ -90,7 +90,9 @@ export class QrLogoCompositor {
         } catch (cause) {
             throw new QrRenderError(
                 'QR_RENDER_FAILED',
-                cause instanceof Error ? cause.message : 'sharp composite failed'
+                cause instanceof Error
+                    ? cause.message
+                    : 'sharp composite failed'
             );
         }
     }

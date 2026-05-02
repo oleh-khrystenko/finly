@@ -1,9 +1,6 @@
 import { Test } from '@nestjs/testing';
 
-import {
-    PayloadValidationError,
-    type PayloadInput,
-} from '@finly/types';
+import { PayloadValidationError, type PayloadInput } from '@finly/types';
 
 import { QrService } from './qr.service';
 import { QrImageRenderer } from './renderers/qr-image.renderer';
@@ -54,7 +51,9 @@ describe('QrService — orchestration (mocked renderers)', () => {
         });
 
         it('за дефолтом накладає лого через logoCompositor', async () => {
-            const result = await service.renderForUrl('https://pay.finly.com.ua/x');
+            const result = await service.renderForUrl(
+                'https://pay.finly.com.ua/x'
+            );
             expect(logoCompositor.compose).toHaveBeenCalled();
             expect(result.toString()).toBe('fake-qr+logo');
         });

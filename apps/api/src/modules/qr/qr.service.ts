@@ -105,9 +105,7 @@ export class QrService {
         options?: QrRenderOptions
     ): Promise<Buffer> {
         const payload =
-            version === '002'
-                ? build002Payload(input)
-                : build003Payload(input);
+            version === '002' ? build002Payload(input) : build003Payload(input);
         const base64Url = encodePayloadAsBase64Url(payload);
         const link = buildNbuPayloadLink(version, base64Url, {
             host: ENV.NBU_PAYLOAD_LINK_HOST,

@@ -45,7 +45,9 @@ export class QrImageRenderer {
         } catch (cause) {
             throw new QrRenderError(
                 'QR_RENDER_FAILED',
-                cause instanceof Error ? cause.message : 'qrcode.toBuffer failed'
+                cause instanceof Error
+                    ? cause.message
+                    : 'qrcode.toBuffer failed'
             );
         }
     }
