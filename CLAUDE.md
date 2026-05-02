@@ -236,6 +236,7 @@ Scaffold без ендпоінтів.
 - Auth tuning: `AUTH_PASSWORD_MIN_LENGTH`, `AUTH_LOCKOUT_THRESHOLDS`, `AUTH_LOGIN_ATTEMPTS_TTL_MIN`, `AUTH_MAGIC_LINK_TTL_MIN`, `AUTH_MAGIC_LINK_RATE_LIMIT`, `AUTH_MAGIC_LINK_RATE_WINDOW_MIN`, `AUTH_MAGIC_LINK_DEDUP_SEC`, `ACCOUNT_DELETION_GRACE_DAYS`
 - AI: `ANTHROPIC_API_KEY`, `AI_CHAT_MAX_TOKENS`, `AI_CHAT_IP_LIMIT`
 - Storage (R2): `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_URL` (hostname частина мусить збігатись з `NEXT_PUBLIC_STORAGE_HOSTNAME` на web — див. Known Complexities)
+- QR (NBU): `NBU_PAYLOAD_LINK_HOST` — host для format-003 payload-link (`qr.bank.gov.ua` або `bank.gov.ua/qr`; format 002 host фіксований нормативом і живе як константа в `packages/types/src/qr/`). Деталі — `docs/product/qr-spec/README.md`.
 
 **Web — ALL required (crash if missing)**
 - `NEXT_PUBLIC_BASE_URL`, `NEXT_PUBLIC_API_URL`
