@@ -65,15 +65,34 @@ export type AssertResult =
     | { ok: false; reason: 'CHARS' | 'BYTES'; actual: number; limit: number };
 
 /**
+ * Кількість байтів у UTF-8 representation рядка. Isomorphic — `TextEncoder`
+ * доступний у Node ≥18 і всіх сучасних браузерах, без `Buffer`.
+ *
+ * Виноситься як окрема функція, бо консумується і `assertWithinUtf8Limits`
+ * (внутрішня перевірка builder'а), і Zod refines на entity-схемах
+ * (`Business.name`, `Invoice.paymentPurpose` — Sprint 2 §2.2). Симетрія
+ * read/write path: одна функція, одне джерело правди для UTF-8 byte counting.
+ */
+export function utf8ByteLength(value: string): number {
+    return new TextEncoder().encode(value).length;
+}
+
+/**
+ * Boolean-варіант byte-only перевірки для Zod refines на entity-рівні.
+ * Приклад використання у Business/Invoice schema:
+ *   `.refine(v => isWithinByteLimit(v, effectiveLimit('purpose').bytes), ...)`
+ */
+export function isWithinByteLimit(value: string, byteLimit: number): boolean {
+    return utf8ByteLength(value) <= byteLimit;
+}
+
+/**
  * Перевіряє рядок проти `chars` і `bytes` лімітів окремо.
  *
  * Чому окремі коди для chars і bytes — для розрізнення UX-помилок:
  *   - "Назва компанії…" 145 chars / 290 B — overflow chars (UX: "коротша назва").
  *   - "ТОВ Кав'ярня" 140 chars / 285 B — overflow bytes (UX: "латиницею або
  *     коротша назва — кирилиця займає більше місця").
- *
- * Реалізація isomorphic: `TextEncoder` доступний у Node ≥18 і всіх сучасних
- * браузерах, без залежності від `Buffer`.
  */
 export function assertWithinUtf8Limits(
     value: string,
@@ -87,7 +106,7 @@ export function assertWithinUtf8Limits(
             limit: limit.chars,
         };
     }
-    const byteLength = new TextEncoder().encode(value).length;
+    const byteLength = utf8ByteLength(value);
     if (byteLength > limit.bytes) {
         return {
             ok: false,

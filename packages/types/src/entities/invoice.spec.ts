@@ -1,4 +1,7 @@
+import { effectiveLimit } from '../qr/limits';
 import { InvoiceSchema } from './invoice';
+
+const PURPOSE_LIMIT = effectiveLimit('purpose');
 
 const VALID_INVOICE = {
     id: '507f1f77bcf86cd799439021',
@@ -149,5 +152,66 @@ describe('InvoiceSchema', () => {
             amountLocked: false,
         });
         expect(result.success).toBe(true);
+    });
+
+    // -------------------------------------------------------------------------
+    // Sprint 2 §2.2 — derive-from-spec length-обмеження paymentPurpose.
+    // -------------------------------------------------------------------------
+
+    describe('paymentPurpose — char/byte limits derived from NBU spec', () => {
+        it('snapshot нормативу: purpose MIN(002, 003) = 420C / 840B', () => {
+            expect(PURPOSE_LIMIT).toEqual({ chars: 420, bytes: 840 });
+        });
+
+        it('accepts paymentPurpose точно на межі MIN chars (420 ASCII)', () => {
+            const result = InvoiceSchema.safeParse({
+                ...VALID_INVOICE,
+                paymentPurpose: 'P'.repeat(420),
+            });
+            expect(result.success).toBe(true);
+        });
+
+        it('accepts paymentPurpose MIN-1 chars (419 ASCII)', () => {
+            const result = InvoiceSchema.safeParse({
+                ...VALID_INVOICE,
+                paymentPurpose: 'P'.repeat(419),
+            });
+            expect(result.success).toBe(true);
+        });
+
+        it('rejects paymentPurpose MIN+1 chars → INVALID_PURPOSE_CHAR_LENGTH', () => {
+            const result = InvoiceSchema.safeParse({
+                ...VALID_INVOICE,
+                paymentPurpose: 'P'.repeat(421),
+            });
+            expect(result.success).toBe(false);
+            if (!result.success) {
+                expect(result.error.issues[0]?.message).toBe(
+                    'INVALID_PURPOSE_CHAR_LENGTH'
+                );
+            }
+        });
+
+        it('rejects paymentPurpose з MIN chars але > MIN bytes → INVALID_PURPOSE_BYTE_LENGTH', () => {
+            const cyrillicHeavy = 'P'.repeat(100) + '’'.repeat(320);
+            const result = InvoiceSchema.safeParse({
+                ...VALID_INVOICE,
+                paymentPurpose: cyrillicHeavy,
+            });
+            expect(result.success).toBe(false);
+            if (!result.success) {
+                expect(result.error.issues[0]?.message).toBe(
+                    'INVALID_PURPOSE_BYTE_LENGTH'
+                );
+            }
+        });
+
+        it('accepts paymentPurpose=null незалежно від limit (інвойс наслідує template)', () => {
+            const result = InvoiceSchema.safeParse({
+                ...VALID_INVOICE,
+                paymentPurpose: null,
+            });
+            expect(result.success).toBe(true);
+        });
     });
 });
