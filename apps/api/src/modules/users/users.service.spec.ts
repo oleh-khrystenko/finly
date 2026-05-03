@@ -524,6 +524,50 @@ describe('UsersService', () => {
             expect(updateArg).not.toHaveProperty('profile.lastName');
             expect(updateArg).not.toHaveProperty('profile.avatar');
         });
+
+        // Sprint 3 §3.4 — bookkeeper toggle (рішення E5).
+
+        it('мутує worksAsBookkeeper на корені user-документа (не у profile)', async () => {
+            mockModel.findByIdAndUpdate.mockResolvedValue(
+                mockUserDoc({ worksAsBookkeeper: true })
+            );
+
+            await service.updateProfile('507f1f77bcf86cd799439011', {
+                worksAsBookkeeper: true,
+            });
+
+            const updateArg = mockModel.findByIdAndUpdate.mock.calls[0][1];
+            expect(updateArg).toEqual({ worksAsBookkeeper: true });
+            expect(updateArg).not.toHaveProperty('profile.worksAsBookkeeper');
+        });
+
+        it('приймає worksAsBookkeeper=false (вимкнення режиму)', async () => {
+            mockModel.findByIdAndUpdate.mockResolvedValue(
+                mockUserDoc({ worksAsBookkeeper: false })
+            );
+
+            await service.updateProfile('507f1f77bcf86cd799439011', {
+                worksAsBookkeeper: false,
+            });
+
+            const updateArg = mockModel.findByIdAndUpdate.mock.calls[0][1];
+            expect(updateArg).toEqual({ worksAsBookkeeper: false });
+        });
+
+        it('combined update: profile-поле + worksAsBookkeeper в одному виклику', async () => {
+            mockModel.findByIdAndUpdate.mockResolvedValue(mockUserDoc());
+
+            await service.updateProfile('507f1f77bcf86cd799439011', {
+                firstName: 'Олег',
+                worksAsBookkeeper: true,
+            });
+
+            const updateArg = mockModel.findByIdAndUpdate.mock.calls[0][1];
+            expect(updateArg).toEqual({
+                'profile.firstName': 'Олег',
+                worksAsBookkeeper: true,
+            });
+        });
     });
 
     describe('commitReservation', () => {

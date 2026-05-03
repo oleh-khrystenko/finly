@@ -257,6 +257,7 @@ export class UsersService {
             firstName?: string;
             lastName?: string;
             avatar?: string;
+            worksAsBookkeeper?: boolean;
         }
     ): Promise<UserDocument | null> {
         const update: Record<string, unknown> = {};
@@ -265,6 +266,14 @@ export class UsersService {
         if (data.lastName !== undefined)
             update['profile.lastName'] = data.lastName;
         if (data.avatar !== undefined) update['profile.avatar'] = data.avatar;
+        // Sprint 3 §3.4 — bookkeeper toggle (рішення E5). Поле живе на
+        // корені user-документа (не у `profile`), бо це capability акаунту,
+        // не онбординг-атрибут — toggle перемикається багато разів за
+        // життям акаунту, а profile-поля сетяться один раз при онбордингу.
+        // Sprint 3 розкриває toggle усім (без Paid-перевірки); gating —
+        // Sprint 6 (frontend модалка "Доступно на Paid").
+        if (data.worksAsBookkeeper !== undefined)
+            update.worksAsBookkeeper = data.worksAsBookkeeper;
         return this.userModel.findByIdAndUpdate(userId, update, { new: true });
     }
 

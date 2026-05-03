@@ -270,6 +270,75 @@ describe('Businesses E2E', () => {
         )}`;
     }
 
+    // ─── Sprint 3 §3.4 — bookkeeper toggle endpoint (PATCH /users/me) ───
+
+    describe('PATCH /users/me { worksAsBookkeeper }', () => {
+        it('перемикає worksAsBookkeeper=true і повертає актуальне значення у response', async () => {
+            const user = await createUser();
+            const res = await supertest(app.getHttpServer())
+                .patch('/api/users/me')
+                .set('Authorization', bearerFor(user))
+                .send({ worksAsBookkeeper: true })
+                .expect(200);
+
+            const body = res.body as {
+                data: { worksAsBookkeeper: boolean };
+            };
+            expect(body.data.worksAsBookkeeper).toBe(true);
+        });
+
+        it('перемикає worksAsBookkeeper=false (вимкнення режиму)', async () => {
+            const user = await createUser({
+                worksAsBookkeeper: true,
+            } as Partial<UserDocument>);
+            const res = await supertest(app.getHttpServer())
+                .patch('/api/users/me')
+                .set('Authorization', bearerFor(user))
+                .send({ worksAsBookkeeper: false })
+                .expect(200);
+
+            const body = res.body as {
+                data: { worksAsBookkeeper: boolean };
+            };
+            expect(body.data.worksAsBookkeeper).toBe(false);
+        });
+
+        it('persists у БД (наступний getMe бачить новий стан)', async () => {
+            const user = await createUser();
+            await supertest(app.getHttpServer())
+                .patch('/api/users/me')
+                .set('Authorization', bearerFor(user))
+                .send({ worksAsBookkeeper: true })
+                .expect(200);
+
+            const persisted = await userModel.findById(user._id);
+            expect(persisted?.worksAsBookkeeper).toBe(true);
+        });
+
+        it('reject non-boolean (string "true") — 400 VALIDATION_ERROR', async () => {
+            const user = await createUser();
+            await supertest(app.getHttpServer())
+                .patch('/api/users/me')
+                .set('Authorization', bearerFor(user))
+                .send({ worksAsBookkeeper: 'true' })
+                .expect(400);
+        });
+
+        it('Sprint 3 — без Paid-валідації (toggle доступний усім)', async () => {
+            // Free-користувач (без активної підписки) може ввімкнути режим.
+            // Sprint 6 додасть frontend-модалку gate; service-layer Sprint 3
+            // — без перевірки.
+            const user = await createUser();
+            expect(user.billing?.hasActiveSubscription).toBeFalsy();
+
+            await supertest(app.getHttpServer())
+                .patch('/api/users/me')
+                .set('Authorization', bearerFor(user))
+                .send({ worksAsBookkeeper: true })
+                .expect(200);
+        });
+    });
+
     // ─── Cabinet: POST /businesses/me ───
 
     describe('POST /businesses/me', () => {
@@ -379,11 +448,14 @@ describe('Businesses E2E', () => {
                 .set('Authorization', bearerFor(user))
                 .send(VALID_CREATE_PAYLOAD);
 
-            // Перемикаємо toggle
-            await userModel.updateOne(
-                { _id: user._id },
-                { worksAsBookkeeper: true }
-            );
+            // Перемикаємо toggle через real endpoint (Sprint 3 §3.4) —
+            // covers повний flow: PATCH /users/me → updateProfile →
+            // findOneAndUpdate → next request бачить новий стан.
+            await supertest(app.getHttpServer())
+                .patch('/api/users/me')
+                .set('Authorization', bearerFor(user))
+                .send({ worksAsBookkeeper: true })
+                .expect(200);
             const refreshed = await userModel.findById(user._id);
             const res = await supertest(app.getHttpServer())
                 .get('/api/businesses/me')
