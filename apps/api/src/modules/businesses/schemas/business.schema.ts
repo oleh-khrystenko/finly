@@ -3,8 +3,10 @@ import { HydratedDocument, Types } from 'mongoose';
 import {
     BUSINESS_TYPES,
     MVP_BANKS,
+    TAXATION_SYSTEMS,
     type BankCode,
     type BusinessType,
+    type TaxationSystem,
 } from '@finly/types';
 
 export type BusinessDocument = HydratedDocument<Business>;
@@ -47,18 +49,53 @@ export class Business {
     managers!: Types.ObjectId[];
 
     /**
-     * Глобально-унікальний slug у форматі kebab-case-lowercase. Generation +
-     * reserved-list check (`qr`, `api`, `static`, …) — slug-генератор у
-     * Sprint 3. Тут — структурна вимога БД: NOT NULL + unique index.
+     * Display-форма slug-а у регістрі, як його зафіксував ФОП (Sprint 3
+     * рішення E1: case-preserved). Жодного `lowercase: true` modifier — saver
+     * у `BusinessesService` явно нормалізує `slugLower` окремо. Уніфікація
+     * `slugLower` робить case-insensitive uniqueness; цей `slug` — суто для
+     * рендеру (URL у QR, сторінка кабінету, canonical-redirect target).
+     *
+     * Reserved-list check (`qr`, `api`, `host-pay`, …) і unique-перевірка —
+     * на app-layer (slug-генератор + unique-index на `slugLower`).
+     */
+    @Prop({ required: true, trim: true })
+    slug!: string;
+
+    /**
+     * Lowercase-нормалізована форма `slug`. Single source of truth для
+     * case-insensitive uniqueness і lookup-у на public-сторінці. Mongoose
+     * unique-index створюється саме тут (нижче, через `BusinessSchema.index`).
+     *
+     * Інваріант `slugLower === slug.toLowerCase()` enforce-иться у
+     * `BusinessesService.create / update` (Sprint 3 §3.2). Mongoose
+     * pre-save-хук **навмисно не ставимо** — service-layer normalization
+     * явніша і тестується ізольовано (sprint plan §3.1).
      */
     @Prop({ required: true, lowercase: true, trim: true })
-    slug!: string;
+    slugLower!: string;
 
     @Prop({ required: true, trim: true })
     name!: string;
 
     @Prop({ type: BusinessRequisites, required: true })
     requisites!: BusinessRequisites;
+
+    /**
+     * Система оподаткування ФОП (Sprint 3 рішення C1). Coupled-валідація з
+     * `isVatPayer` (ПДВ дозволено лише на `simplified-3` / `general`) живе у
+     * Zod-refine `BusinessSchema` + write-DTO; Mongoose тут забезпечує лише
+     * структурний enum-guard.
+     */
+    @Prop({ required: true, type: String, enum: TAXATION_SYSTEMS })
+    taxationSystem!: TaxationSystem;
+
+    /**
+     * Платник ПДВ (Sprint 3 C1). Default `false` — більшість ФОП на спрощеній
+     * системі без ПДВ. Coupled-rule з `taxationSystem` enforce-иться на
+     * write-paths (Zod), не на DB-layer.
+     */
+    @Prop({ type: Boolean, default: false })
+    isVatPayer!: boolean;
 
     @Prop({ required: true, trim: true })
     paymentPurposeTemplate!: string;
@@ -70,9 +107,18 @@ export class Business {
     acceptedBanks!: BankCode[];
 
     /**
-     * Soft-delete. Hard-delete + cron — Phase 1.5+; зараз лише поле, без
-     * фонової логіки. Це позицує дані-модель готовою до hard-delete без
-     * міграції.
+     * Чи показувати публічну сторінку у Google (Sprint 3 рішення E3). Default
+     * `false` — безпечний дефолт; ФОП явно opt-in-ить через toggle у кабінеті.
+     * Sprint 3 toggle доступний усім; Sprint 6 додасть Paid-gating.
+     */
+    @Prop({ type: Boolean, default: false })
+    seoIndexEnabled!: boolean;
+
+    /**
+     * Soft-delete. Sprint 3 рішення C2 робить hard-delete + 5s frontend-Undo;
+     * це поле залишене **навмисно невикористаним** на майбутнє — нульовий
+     * coст у схемі, дає опцію передумати без міграції. Якщо у Phase 1.5+
+     * вирішимо повернути soft-delete + restore — код consumer-ів не міняється.
      */
     @Prop({ type: Date, default: null })
     deletedAt!: Date | null;
@@ -84,6 +130,10 @@ export class Business {
 
 export const BusinessSchema = SchemaFactory.createForClass(Business);
 
-BusinessSchema.index({ slug: 1 }, { unique: true });
+// Unique-index — на `slugLower`, не на `slug` (Sprint 3 рішення E1:
+// case-insensitive uniqueness). `slug` лишається без index — пошук завжди
+// йде через `slugLower`; canonical-redirect на public-сторінці порівнює
+// case-preserved `slug` уже після lookup-у.
+BusinessSchema.index({ slugLower: 1 }, { unique: true });
 BusinessSchema.index({ ownerId: 1 }, { sparse: true });
 BusinessSchema.index({ managers: 1 });

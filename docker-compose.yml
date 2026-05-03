@@ -51,6 +51,25 @@ services:
         networks:
             - internal
 
+    # One-shot service для DB-міграцій. Активується через
+    # `docker compose --profile migrations run --rm api-migrations` у CI
+    # (deploy.yml) перед `docker compose up -d`. Поза profile `migrations`
+    # service не стартує разом з API/Web — тому регулярний `up` не тригерить
+    # re-run. Env набір — той самий, що в `api`, але вирізаний до того, що
+    # реально треба міграціям (Mongo only). Ділить network з `api`/`redis`,
+    # бо MongoDB Atlas-URI йде назовні; redis dependency не потрібен.
+    api-migrations:
+        profiles: [migrations]
+        build:
+            context: .
+            dockerfile: ./apps/api/Dockerfile
+            target: migrations
+        environment:
+            - NODE_ENV=${NODE_ENV}
+            - MONGODB_URI=${MONGODB_URI}
+        networks:
+            - internal
+
     web:
         build:
             context: .
