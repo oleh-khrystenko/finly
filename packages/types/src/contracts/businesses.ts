@@ -16,17 +16,21 @@ import {
  * public-фетчу. Single source of truth для API DTO (`createZodDto`) і
  * frontend RHF-resolver-ів.
  *
- * **Що НЕ кладемо у write-схеми:**
+ * **Що жодна з write-схем (Create/Update) не приймає** — поля, що генеруються
+ * БД або сервісом, або керуються окремими flow:
  *  - `id`, `createdAt`, `updatedAt` — генеруються БД.
  *  - `slug`, `slugLower` — slug-генератор сервера (Sprint 3 рішення B3:
  *    Free-tier — random 8 chars). Sprint 6 додасть окремий vanity-edit
  *    endpoint, **не** через розширення Update-схеми.
- *  - `type` — immutable після створення (Sprint 4+ при появі ТОВ можуть
- *    додатись правила міграції; зараз тільки `'fop'`).
  *  - `ownerId`, `managers` — резолвить service з `userId + worksAsBookkeeper`,
  *    клієнт не передає.
  *  - `deletedAt` — Sprint 3 робить hard-delete (рішення C2); soft-delete не
  *    керується через API.
+ *
+ * **`type` приймається тільки на створенні** (Sprint 3 README §132): бізнес
+ * фіксує юр-форму при `POST /businesses/me`, далі вона immutable. Update-DTO
+ * `type` навмисно виключає (Sprint 4+ при появі ТОВ можуть додатись правила
+ * міграції — окремий method, не звичайний PATCH).
  *
  * **Coupled-rule `taxationSystem × isVatPayer`** (рішення C1) дублюється тут і
  * в entity-схемі: API-side Zod це safety-net на випадок drift-у frontend-схеми
