@@ -6,11 +6,11 @@ import {
     build003Payload,
     buildNbuPayloadLink,
     encodePayloadAsBase64Url,
+    type AllowedNbuPayloadLinkHost003,
     type PayloadInput,
     type PayloadVersion,
 } from '@finly/types';
 
-import { ENV } from '../../config/env';
 import {
     QrImageRenderer,
     type QrErrorCorrectionLevel,
@@ -23,8 +23,8 @@ import { QrLogoCompositor } from './renderers/qr-logo.compositor';
  * Дефолти узгоджені з нормативом 003 і sprint plan §2.0:
  *   sizePx: 512 — оптимальний розмір для друку візиток та екрана.
  *   errorCorrection: 'Q' — норматив 003 (Додаток 4 §IV.10.4 ст. 28).
- *   includeLogo: true — Finly-лого в центрі (норматив вимагає знак гривні
- *     для 002/003 — Додаток 1 §III.13 ст. 5).
+ *   includeLogo: true — норматив-asset зі знаком гривні в центрі (Додаток 1
+ *     §III.13 ст. 5). Custom-logo бізнесу — Sprint 6.
  *   logoMaxRatio: 0.2 — safe upper-bound під Q-correction (~25%).
  */
 export interface QrRenderOptions {
@@ -32,6 +32,15 @@ export interface QrRenderOptions {
     errorCorrection?: QrErrorCorrectionLevel;
     includeLogo?: boolean;
     logoMaxRatio?: number;
+}
+
+/**
+ * Опції рендеру для format 003. Host — required: норматив дозволяє два host-и
+ * (`NBU_HOST_PRIMARY` / `NBU_HOST_LEGACY`), Sprint 3 рішення A2 робить вибір
+ * UI-рівневим (дві кнопки на публічній сторінці), без env-перемикача.
+ */
+export interface QrRenderOptions003 extends QrRenderOptions {
+    host: AllowedNbuPayloadLinkHost003;
 }
 
 const DEFAULT_RENDER_OPTIONS = {
@@ -52,8 +61,12 @@ const DEFAULT_RENDER_OPTIONS = {
  *
  *   - `renderForNbuPayload(input, version, opts)` — для **"Інший банк"**
  *     fallback і per-bank deep-links (Sprint 5): build NBU-payload → encode
- *     Base64URL → wrap у `https://qr.bank.gov.ua/<b64>` → render image. Цей QR
+ *     Base64URL → wrap у `https://<host>/<b64>` → render image. Цей QR
  *     ловиться банк-додатком і відкривається з реквізитами одразу.
+ *
+ *     Сигнатура — overload: для версії `'003'` `opts.host` обовʼязковий
+ *     (TypeScript блокує виклик без host); для `'002'` host фіксований
+ *     нормативом (`URL_PREFIX_002`) і параметр ігнорується.
  *
  * **Чому два різні методи**, а не один з прапором: payload generation для
  * NBU-формату має складний контракт (validate input → build → encode → host
@@ -64,12 +77,18 @@ const DEFAULT_RENDER_OPTIONS = {
 @Injectable()
 export class QrService {
     /**
-     * Шлях до Finly-лого. У production NestJS компілює до `dist/`, asset
-     * копіюється туди ж через nest-cli `assets` config. `__dirname` тут =
-     * `dist/modules/qr` у production або `src/modules/qr` у dev — обидва
-     * відносні шляхи працюють однаково.
+     * Шлях до нормативного asset-у — білий круг зі знаком гривні (Додаток 1
+     * §III.13 ст. 5 постанови НБУ № 97). Sprint 3 рішення C5: Finly-брендинг
+     * живе у верстці сторінки, не в QR; центральний asset — норматив, не лого.
+     * `__dirname` тут = `dist/modules/qr` у production або `src/modules/qr` у
+     * dev — обидва відносні шляхи працюють однаково (asset копіюється у dist
+     * через nest-cli `assets` config).
      */
-    private readonly logoPath = join(__dirname, 'assets', 'finly-logo-qr.png');
+    private readonly logoPath = join(
+        __dirname,
+        'assets',
+        'hryvnia-symbol.png'
+    );
 
     constructor(
         private readonly imageRenderer: QrImageRenderer,
@@ -78,9 +97,6 @@ export class QrService {
 
     /**
      * QR для публічної сторінки бізнесу/інвойсу (`pay.finly.com.ua/{slug}`).
-     *
-     * Sprint 3 буде передавати готовий URL зі slug-генератора. Sprint 2 не
-     * генерує сам URL — лише пакує його у QR-картинку.
      */
     async renderForUrl(
         url: string,
@@ -101,15 +117,35 @@ export class QrService {
      */
     async renderForNbuPayload(
         input: PayloadInput,
-        version: PayloadVersion,
+        version: '002',
         options?: QrRenderOptions
+    ): Promise<Buffer>;
+    async renderForNbuPayload(
+        input: PayloadInput,
+        version: '003',
+        options: QrRenderOptions003
+    ): Promise<Buffer>;
+    async renderForNbuPayload(
+        input: PayloadInput,
+        version: PayloadVersion,
+        options?: QrRenderOptions003 | QrRenderOptions
     ): Promise<Buffer> {
         const payload =
             version === '002' ? build002Payload(input) : build003Payload(input);
         const base64Url = encodePayloadAsBase64Url(payload);
-        const link = buildNbuPayloadLink(version, base64Url, {
-            host: ENV.NBU_PAYLOAD_LINK_HOST,
-        });
+        // Host пробрасуємо як undefined-safe lookup, щоб required-validation
+        // лишалась у `buildNbuPayloadLink` (доменна помилка
+        // `PAYLOAD_HOST_REQUIRED` з `PayloadValidationError`). Cast без
+        // optional-chain тут дав би `TypeError: Cannot read properties of
+        // undefined` для callsite, що обійшов TypeScript-overload (`as any` /
+        // generic version-через-параметр) — нечитабельний 500 замість
+        // структурованої 4xx з machine-code.
+        const link =
+            version === '003'
+                ? buildNbuPayloadLink(version, base64Url, {
+                      host: (options as QrRenderOptions003 | undefined)?.host,
+                  })
+                : buildNbuPayloadLink(version, base64Url);
         return this.renderText(link, options);
     }
 

@@ -4,7 +4,7 @@ import jsQR from 'jsqr';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 import sharp = require('sharp');
 
-import { type PayloadInput } from '@finly/types';
+import { NBU_HOST_PRIMARY, type PayloadInput } from '@finly/types';
 
 import { QrService } from './qr.service';
 import { QrImageRenderer } from './renderers/qr-image.renderer';
@@ -89,14 +89,18 @@ describe('QrService — integration (real sharp + qrcode + jsqr)', () => {
 
     describe('renderForNbuPayload (003) — full round-trip', () => {
         it('build → encode → render → decode → стартує з https://qr.bank.gov.ua/', async () => {
-            const png = await service.renderForNbuPayload(VALID_INPUT, '003');
+            const png = await service.renderForNbuPayload(VALID_INPUT, '003', {
+                host: NBU_HOST_PRIMARY,
+            });
             const decoded = await decodeQr(png);
             expect(decoded).not.toBeNull();
             expect(decoded).toMatch(/^https:\/\/qr\.bank\.gov\.ua\//);
         });
 
         it('декодований Base64URL payload містить нормативні поля у правильному порядку', async () => {
-            const png = await service.renderForNbuPayload(VALID_INPUT, '003');
+            const png = await service.renderForNbuPayload(VALID_INPUT, '003', {
+                host: NBU_HOST_PRIMARY,
+            });
             const decoded = await decodeQr(png);
             expect(decoded).not.toBeNull();
 
@@ -133,7 +137,11 @@ describe('QrService — integration (real sharp + qrcode + jsqr)', () => {
                     purpose: 'Оплата за замовлення №147 — кава, тістечко',
                 },
                 '003',
-                { includeLogo: true, logoMaxRatio: 0.2 }
+                {
+                    host: NBU_HOST_PRIMARY,
+                    includeLogo: true,
+                    logoMaxRatio: 0.2,
+                }
             );
             const decoded = await decodeQr(png);
             expect(decoded).not.toBeNull();

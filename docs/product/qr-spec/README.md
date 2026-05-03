@@ -208,43 +208,35 @@ Sprint 2 §2.2 каже: Zod-обмеження `Business.name` і `Business.pay
 
 | Версія | Дозволений host | Як зберігається у Finly |
 |---|---|---|
-| 002 | `bank.gov.ua/qr/` (з двох нормативно-дозволених — обираємо легасі-сумісний; `qr.bank.gov.ua` для 002 ніколи не використовується, щоб не плутати парсери, що очікують саме legacy-prefix) | **Hardcoded константа** у `packages/types/src/qr/payload-002.ts` (буде у §2.1) |
-| 003 | `qr.bank.gov.ua/` (default) **або** `bank.gov.ua/qr/` (fallback з QR-6) | **Env `NBU_PAYLOAD_LINK_HOST`** — required, без дефолту в коді (fail-fast) |
+| 002 | `bank.gov.ua/qr/` (з двох нормативно-дозволених — обираємо легасі-сумісний; `qr.bank.gov.ua` для 002 ніколи не використовується, щоб не плутати парсери, що очікують саме legacy-prefix) | **Hardcoded константа** `URL_PREFIX_002` у `packages/types/src/qr/url-prefix.ts` |
+| 003 | `qr.bank.gov.ua` (`NBU_HOST_PRIMARY`) **і** `bank.gov.ua/qr` (`NBU_HOST_LEGACY`) — **обидва одночасно** | **Дві named-константи** у `packages/types/src/qr/url-prefix.ts`; жодного env, жодного дефолту в коді |
 
-**Чому 002 не керується env.** Норматив фіксує фактично один реалістичний варіант для 002 (legacy host). Якщо коли-небудь припиниться підтримка 002 в банках — сам формат буде вилучений з `PAYLOAD_VERSIONS`, не змінений host. Тому "дозвіл" обирати host для 002 — це фантомна гнучкість.
+**Чому 002 hardcoded.** Норматив фіксує фактично один реалістичний варіант для 002 (legacy host). Якщо коли-небудь припиниться підтримка 002 в банках — сам формат буде вилучений з `PAYLOAD_VERSIONS`, не змінений host. "Дозвіл" обирати host для 002 — фантомна гнучкість.
 
-**Чому 003 керується env.** Норматив дає реальний вибір між двома host-варіантами для 003, і вибір диктується UAT QR-6 (поведінка реальних банк-додатків). Env `NBU_PAYLOAD_LINK_HOST` дозволяє переключити host **redeploy-ом конфігурації, без зміни коду** — fail-fast policy `docs/conventions/fail-fast.md` забезпечує, що неправильний (не з допустимих двох) host крашне старт API.
+**Чому 003 — обидва host-и одночасно (Sprint 3 рішення A2).** Норматив дає реальний вибір між двома host-варіантами для 003, і апріорі невідомо, який з них реальніше працює у всіх 11 банк-додатках. Замість того, щоб блокувати запуск UAT-метрикою (QR-6 у попередній моделі) і обирати один host — публічна сторінка показує **дві кнопки** «Інший банк» (на `NBU_HOST_PRIMARY`) і «Інший банк (запасний варіант)» (на `NBU_HOST_LEGACY`), плюс **дві QR-картинки** на ті самі адреси. Клієнт сам пробує — якщо одна не спрацювала, тапає другу. Реальні дані по натисканнях за 2+ тижні після запуску (post-launch metric) дозволяють вирішити, чи прибрати запасну кнопку — див. QR-6 у [`docs/manual-checks/README.md`](../../manual-checks/README.md).
 
-**За що відповідає валідація.** Whitelist двох допустимих значень — у `packages/types/src/qr/url-prefix.ts` (`ALLOWED_NBU_PAYLOAD_LINK_HOSTS_003`). Перевірка відбувається на двох рівнях:
+**За що відповідає валідація.** Whitelist двох допустимих значень — `ALLOWED_NBU_PAYLOAD_LINK_HOSTS_003` у `packages/types/src/qr/url-prefix.ts`. Перевірка відбувається у `buildNbuPayloadLink` — захист від inline-літералів у callsite, що передасть довільний рядок замість однієї з двох констант. Caller (`QrService.renderForNbuPayload`) приймає host required-параметром (TypeScript-overload блокує виклик без host для версії '003'); env-layer **знято** разом зі змінною `NBU_PAYLOAD_LINK_HOST` — обидва host-и compile-time константи, fail-fast інваріант на старті API більше не потрібен.
 
-1. **Env loader (`apps/api/src/config/env.ts`)** — після `getEnvVar('NBU_PAYLOAD_LINK_HOST')` викликається `isAllowedNbuPayloadLinkHost003`; невалідне значення → `throw` при старті процесу. Це **fail-fast**: API не стартує з конфігурацією, що порушує норматив. Покриває кейс «адмін підставив `pay.finly.com.ua` у env або зробив typo».
-2. **Builder 003 (буде у §2.1)** — приймає `host` параметром і також звіряє з whitelist. Покриває кейс «викликаючий код передав inline-літерал замість `ENV.NBU_PAYLOAD_LINK_HOST`». Дублювання навмисне — захист на двох layer-ах коштує дешево, payload-генерація — критичний контракт із зовнішнім світом.
+### Host вирішення (post-launch metric)
 
-### Host вирішення (post QR-6)
+**Статус:** post-launch — виконується **через 2+ тижні після запуску публічної сторінки**, не блокує launch.
 
-**Статус:** ⬜ очікує QR-6 manual check (виконати перед публічним launch-ом).
+Sprint 3 рішення A2 (`docs/sprints/03-cabinet-public/planning-questions.md`) знімає QR-6 з блокаторів запуску. Замість матриці «11 банків × 2 ОС × 2 host-и» до launch-у — реальна аналітика на public-сторінці після launch-у:
 
-**Правило прийняття env-значення (для format 003):**
+- скільки разів натиснули «Інший банк» (primary host),
+- скільки разів натиснули «Інший банк (запасний варіант)» (legacy host),
+- з кожної когорти — скільки завершилось реальною оплатою.
 
-| Сценарій QR-6 | `NBU_PAYLOAD_LINK_HOST` |
+**Правило прийняття рішення:**
+
+| Сценарій (post-launch, 2+ тижні даних) | Дія |
 |---|---|
-| Всі 11 банків × обидві ОС зчитують `qr.bank.gov.ua` | `qr.bank.gov.ua` (нормативно правильний) |
-| Хоча б один банк × ОС не зчитує `qr.bank.gov.ua`, але всі 11 × обидві ОС зчитують `bank.gov.ua/qr` | `bank.gov.ua/qr` (відхилення від нормативу 003, прагматичний фолбек) |
-| Хоча б один банк × ОС не зчитує **обидва** хости | **БЛОКЕР launch-у** — окремий research у Sprint 5 (per-bank deep-links) |
+| Primary дає 99%+ натискань і таку ж частку оплат | Прибрати legacy-кнопку (зайвий вибір без користі) |
+| Legacy дає помітну частку (5%+) натискань або оплат | Залишити обидві — legacy рятує клієнтів, чий банк не приймає primary |
+| Натискань мало (1-2 за два тижні) | Чекаємо ще місяць — рано вирішувати |
+| Натискань багато, оплат мало | Зламано не host — потрібна окрема діагностика |
 
-Format 002 host — `bank.gov.ua/qr/` завжди (hardcoded constant, не env-керований).
-
-**Поле для заповнення після QR-6 (виконавець ставить дату + матрицю):**
-
-```
-Date: [—]
-Performer: [—]
-Matrix (11 banks × {iOS, Android} × {qr.bank.gov.ua, bank.gov.ua/qr}):
-[paste matrix here]
-Result: [scenario 1 / 2 / 3]
-Final NBU_PAYLOAD_LINK_HOST: [qr.bank.gov.ua або bank.gov.ua/qr]
-Comments: [---]
-```
+Format 002 host — `bank.gov.ua/qr/` завжди (hardcoded constant, поза цим рішенням).
 
 ---
 
@@ -364,19 +356,20 @@ URL-prefix константи вже існують у `packages/types/src/qr/ur
 // 002: hardcoded по нормативу (§I таблиця 1, ст. 15) — fixed 23 B prefix.
 export const URL_PREFIX_002 = 'https://bank.gov.ua/qr/' as const;
 
-// 003: env-керований whitelist (default qr.bank.gov.ua, fallback bank.gov.ua/qr).
+// 003: дві named-константи (Sprint 3 рішення A2) — обидва host-и одночасно
+// доступні на public-сторінці через дві кнопки. Жодного env, жодного дефолту.
+export const NBU_HOST_PRIMARY = 'qr.bank.gov.ua' as const;
+export const NBU_HOST_LEGACY = 'bank.gov.ua/qr' as const;
+
 export const ALLOWED_NBU_PAYLOAD_LINK_HOSTS_003 = [
-  'qr.bank.gov.ua',
-  'bank.gov.ua/qr',
+  NBU_HOST_PRIMARY,
+  NBU_HOST_LEGACY,
 ] as const;
 
-// Whitelist валідується на двох рівнях (див. секцію «Host у нормативі»):
-//   1. apps/api/src/config/env.ts — fail-fast при старті API.
-//   2. buildNbuPayloadLink (з'явиться у §2.1) — захист від inline-літералів
-//      замість ENV.NBU_PAYLOAD_LINK_HOST у викликаючому коді.
-//
-// На API-боці:
-//   buildNbuPayloadLink('003', base64url, { host: ENV.NBU_PAYLOAD_LINK_HOST })
+// Whitelist валідує buildNbuPayloadLink — захист від inline-літералів у
+// callsite. На API-боці:
+//   buildNbuPayloadLink('003', base64url, { host: NBU_HOST_PRIMARY })
+//   buildNbuPayloadLink('003', base64url, { host: NBU_HOST_LEGACY })
 ```
 
 ---
@@ -386,3 +379,4 @@ export const ALLOWED_NBU_PAYLOAD_LINK_HOSTS_003 = [
 | Дата | Зміна |
 |---|---|
 | 2026-05-02 | Створення артефакту (sprint 2 §2.0). PDF постанови № 97 завантажено з `bank.gov.ua/admin_uploads/law/19082025_97.pdf`. Таблиці полів обох форматів і правила host-вибору зафіксовано з нормативу. |
+| 2026-05-03 | Sprint 3 ревізія A2 + G5 — модель «один host через env» знято. Введено дві named-константи (`NBU_HOST_PRIMARY` / `NBU_HOST_LEGACY`), public-сторінка показує обидва одночасно через дві кнопки і два QR. QR-6 з gate перетворено на post-launch metric. Env `NBU_PAYLOAD_LINK_HOST` видалено. |
