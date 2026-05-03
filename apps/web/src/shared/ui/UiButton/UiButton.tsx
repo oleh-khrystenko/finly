@@ -137,6 +137,12 @@ const UiButton = forwardRef<
             : variant === 'icon-compact'
               ? iconCompactSizeStyles[size]
               : sizeStyles[size],
+        // Mobile touch-target baseline (44×44 px) для standalone icon-кнопок.
+        // Required by docs/conventions/responsive.md §2; інкапсулюємо у примітиві,
+        // щоб правило не залежало від ручного className чи size="lg" у callers.
+        // icon-compact свідомо не покривається — він призначений для dense
+        // desktop UI (toolbars, table-rows).
+        variant === 'icon' && 'min-h-11 min-w-11',
         variantStyles[variant],
         className
     );

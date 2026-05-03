@@ -15,6 +15,7 @@
 | UI Primitives | [ui-primitives.md](ui-primitives.md) | Заборона нативних HTML-елементів, єдиний набір Ui-компонентів |
 | Design Tokens | [design-tokens.md](design-tokens.md) | Заборона хардкоджених кольорів/шрифтів, використання дизайн-токенів |
 | Overlays | [overlays.md](overlays.md) | Модалки, sheets, confirm dialogs — примітиви, Zustand store, layout mount |
+| Responsive & Mobile-First | [responsive.md](responsive.md) | Усі сторінки адаптивні (mobile + tablet + desktop), mobile-first як залізобетонне правило |
 
 ## Як додати нове правило
 

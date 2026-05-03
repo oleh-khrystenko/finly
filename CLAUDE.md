@@ -300,7 +300,7 @@ Full index: [docs/conventions/README.md](docs/conventions/README.md)
 ## Rules & Conventions
 
 - Source of truth для repo-wide правил: `docs/conventions/README.md`
-- Читай перед роботою з відповідними зонами: `tone.md`, `fail-fast.md`, `modular-boundaries.md`, `ui-primitives.md`, `design-tokens.md`, `overlays.md`
+- Читай перед роботою з відповідними зонами: `tone.md`, `fail-fast.md`, `modular-boundaries.md`, `ui-primitives.md`, `design-tokens.md`, `overlays.md`, `responsive.md`
 - **Manual checks (UAT-чекліст):** `docs/manual-checks/README.md` — єдиний реєстр перевірок, що неможливо автоматизувати (зчитування QR живими банк-додатками, рендер на маленьких екранах, друк на папері тощо). Файл ведеться **навмисно простою мовою без термінів** — додаючи туди нові пункти, дотримуйся цього стилю. Тестова логіка спринта мусить додавати сюди новий пункт, якщо вона включає сценарій, який unit-тести в принципі не можуть закрити.
 
 ## Known Complexities
