@@ -13,10 +13,14 @@ const VALID_BUSINESS = {
     ownerId: '507f1f77bcf86cd799439012',
     managers: [],
     slug: 'ivanenko-fop',
+    slugLower: 'ivanenko-fop',
     name: 'Іваненко',
     requisites: { iban: VALID_IBAN, taxId: VALID_TAX_ID },
+    taxationSystem: 'simplified-3',
+    isVatPayer: false,
     paymentPurposeTemplate: 'Оплата за послуги',
     acceptedBanks: ['privatbank', 'monobank'],
+    seoIndexEnabled: false,
     deletedAt: null,
     createdAt: '2026-05-01T10:00:00.000Z',
     updatedAt: '2026-05-01T10:00:00.000Z',
@@ -86,12 +90,60 @@ describe('BusinessSchema', () => {
     it.each([
         '-leading-dash',
         'trailing-dash-',
-        'UPPERCASE',
         'has space',
         'has--double-dash',
         'ab',
+        'with_underscore',
+        'with.dot',
     ])('rejects malformed slug %s', (slug) => {
-        const result = BusinessSchema.safeParse({ ...VALID_BUSINESS, slug });
+        const result = BusinessSchema.safeParse({
+            ...VALID_BUSINESS,
+            slug,
+            // slugLower має бути lowercase-формою — щоб `SLUG_LOWER_MISMATCH`
+            // не маскував regex-помилку як основну причину reject-у.
+            slugLower: slug.toLowerCase(),
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it.each([
+        ['IvanEnko', 'ivanenko'],
+        ['IVAN-2024', 'ivan-2024'],
+        ['CamelCase-Test', 'camelcase-test'],
+    ])(
+        'accepts case-preserved slug %s with matching slugLower %s (Sprint 3 E1)',
+        (slug, slugLower) => {
+            const result = BusinessSchema.safeParse({
+                ...VALID_BUSINESS,
+                slug,
+                slugLower,
+            });
+            expect(result.success).toBe(true);
+        }
+    );
+
+    it('rejects business with slugLower ≠ slug.toLowerCase() (drift guard)', () => {
+        const result = BusinessSchema.safeParse({
+            ...VALID_BUSINESS,
+            slug: 'IvanEnko',
+            slugLower: 'someone-else',
+        });
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            expect(
+                result.error.issues.some(
+                    (i) => i.message === 'SLUG_LOWER_MISMATCH'
+                )
+            ).toBe(true);
+        }
+    });
+
+    it('rejects slugLower with uppercase letters (must be lowercase-only)', () => {
+        const result = BusinessSchema.safeParse({
+            ...VALID_BUSINESS,
+            slug: 'IvanEnko',
+            slugLower: 'IvanEnko',
+        });
         expect(result.success).toBe(false);
     });
 
@@ -196,6 +248,87 @@ describe('BusinessSchema', () => {
                 name: 'А'.repeat(140),
             });
             expect(result.success).toBe(true);
+        });
+    });
+
+    // -------------------------------------------------------------------------
+    // Sprint 3 §3.1 — coupled-rule taxationSystem × isVatPayer (рішення C1).
+    // ПДВ legitимний лише на спрощеній-3 / загальній.
+    // -------------------------------------------------------------------------
+
+    describe('taxationSystem × isVatPayer coupled rule (C1)', () => {
+        it.each(['simplified-3', 'general'] as const)(
+            'accepts isVatPayer=true with taxationSystem=%s',
+            (taxationSystem) => {
+                const result = BusinessSchema.safeParse({
+                    ...VALID_BUSINESS,
+                    taxationSystem,
+                    isVatPayer: true,
+                });
+                expect(result.success).toBe(true);
+            }
+        );
+
+        it.each([
+            'simplified-1',
+            'simplified-2',
+            'simplified-3',
+            'general',
+        ] as const)(
+            'accepts isVatPayer=false with будь-якою taxationSystem=%s',
+            (taxationSystem) => {
+                const result = BusinessSchema.safeParse({
+                    ...VALID_BUSINESS,
+                    taxationSystem,
+                    isVatPayer: false,
+                });
+                expect(result.success).toBe(true);
+            }
+        );
+
+        it.each(['simplified-1', 'simplified-2'] as const)(
+            'rejects isVatPayer=true with taxationSystem=%s → INVALID_VAT_FOR_TAXATION_SYSTEM',
+            (taxationSystem) => {
+                const result = BusinessSchema.safeParse({
+                    ...VALID_BUSINESS,
+                    taxationSystem,
+                    isVatPayer: true,
+                });
+                expect(result.success).toBe(false);
+                if (!result.success) {
+                    expect(
+                        result.error.issues.some(
+                            (i) =>
+                                i.message === 'INVALID_VAT_FOR_TAXATION_SYSTEM'
+                        )
+                    ).toBe(true);
+                }
+            }
+        );
+
+        it('rejects unknown taxationSystem value', () => {
+            const result = BusinessSchema.safeParse({
+                ...VALID_BUSINESS,
+                taxationSystem: 'simplified-99',
+            });
+            expect(result.success).toBe(false);
+        });
+    });
+
+    describe('seoIndexEnabled (Sprint 3 E3)', () => {
+        it('accepts seoIndexEnabled=true', () => {
+            const result = BusinessSchema.safeParse({
+                ...VALID_BUSINESS,
+                seoIndexEnabled: true,
+            });
+            expect(result.success).toBe(true);
+        });
+
+        it('rejects missing seoIndexEnabled (required в entity-shape)', () => {
+            const { seoIndexEnabled: _omit, ...without } = VALID_BUSINESS;
+            void _omit;
+            const result = BusinessSchema.safeParse(without);
+            expect(result.success).toBe(false);
         });
     });
 

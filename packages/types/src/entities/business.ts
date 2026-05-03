@@ -2,6 +2,10 @@ import { z } from 'zod';
 
 import { MVP_BANKS } from '../constants/banks';
 import { BUSINESS_TYPES } from '../enums/business-type';
+import {
+    TAXATION_SYSTEMS,
+    isVatAllowedTaxationSystem,
+} from '../enums/taxation-system';
 import { effectiveLimit, isWithinByteLimit } from '../qr/limits';
 import { objectIdSchema } from '../validation/common';
 import { ibanZod } from '../validation/iban';
@@ -12,20 +16,24 @@ import { individualTaxIdZod } from '../validation/tax-id';
  * (`pay.finly.com.ua/{slug}`). Успадковується інвойсами.
  *
  * **Що Zod-схема НЕ перевіряє** (свідомо, бо це write-side / runtime-time):
- * - Унікальність `slug` глобально — Mongoose unique index у Block 3.
- * - Резервовані slug-и (`qr`, `api`, …) — slug-генератор у Sprint 3.
+ * - Унікальність `slugLower` глобально — Mongoose unique index.
+ * - Резервовані slug-и (`qr`, `api`, `host-pay`, …) — slug-генератор.
  * - Free-tier обмеження на `acceptedBanks` — app-layer у Sprint 6.
  *
  * **Length-обмеження `name` і `paymentPurposeTemplate` derived-from-spec**
  * через `effectiveLimit(...)` = MIN по `PAYLOAD_VERSIONS` (Sprint 2 §2.2).
  * Інваріант: будь-який валідно збережений Business може згенерувати валідний
- * QR для будь-якої з підтримуваних версій. Інакше отримуємо антипатерн
- * "save succeeds, render later fails" — клієнт не може заплатити, ФОП не
- * розуміє чому, помилка вилазить далеко від місця її введення.
+ * QR для будь-якої з підтримуваних версій.
  *
- * **Інваріант `ownerId === null ⇒ managers.length ≥ 1`** перевіряється у самій
- * entity-схемі: ownerless-бізнес без керівників — невалідний стан БД (нема як
- * до нього достукатись), Mongoose такого комбінаторного правила не виразить.
+ * **Coupled-інваріанти (refine-only):**
+ * 1. `ownerId === null ⇒ managers.length ≥ 1` — ownerless-бізнес без керівників
+ *    — невалідний стан БД (нема як до нього достукатись).
+ * 2. `isVatPayer === true ⇒ taxationSystem ∈ VAT_ALLOWED_TAXATION_SYSTEMS`
+ *    (Sprint 3 рішення C1) — ПДВ legitимно платять лише на спрощеній-3 чи
+ *    загальній. На spрощених-1/-2 платник ПДВ — нелегальний стан.
+ *
+ * Жоден з цих refine-ів Mongoose comb-валідатором не виразить — тримаємо у
+ * Zod як single source of truth.
  */
 
 const NAME_LIMIT = effectiveLimit('receiverName');
@@ -33,16 +41,40 @@ const PURPOSE_LIMIT = effectiveLimit('purpose');
 
 export const businessTypeSchema = z.enum(BUSINESS_TYPES);
 export const bankCodeSchema = z.enum(MVP_BANKS);
+export const taxationSystemSchema = z.enum(TAXATION_SYSTEMS);
 
 /**
- * Slug формату DNS-style: lowercase, kebab-case, без дефіса на краях, без
- * послідовних дефісів. Reserved-список і unique-перевірка — поза цією схемою.
+ * Slug формату DNS-style з case-preserved display (Sprint 3 рішення E1).
+ *
+ * Лише букви/цифри і дефіси-розділювачі; обидва регістри дозволені (`IvanEnko`
+ * валідний). Без дефіса на краях, без послідовних дефісів. Min 3, max 63.
+ *
+ * **Case-insensitive uniqueness/lookup живе на `slugLower`**, не тут — entity
+ * містить **обидва поля**, інваріант `slugLower === slug.toLowerCase()`
+ * перевіряється refine-ом нижче (захист від БД-документа з drift-ом).
+ *
+ * Reserved-список і unique-перевірка — поза цією схемою (slug-генератор).
  */
 export const businessSlugSchema = z
     .string()
     .min(3)
     .max(63)
-    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, { message: 'INVALID_SLUG_FORMAT' });
+    .regex(/^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/, {
+        message: 'INVALID_SLUG_FORMAT',
+    });
+
+/**
+ * Lowercase-нормалізована форма `slug`. Mongoose unique-index живе саме на цьому
+ * полі — забезпечує case-insensitive uniqueness (`IvanEnko` блокує `ivanenko`,
+ * `IVANENKO`). Public-lookup нормалізує URL до lowercase і шукає по `slugLower`.
+ */
+export const businessSlugLowerSchema = z
+    .string()
+    .min(3)
+    .max(63)
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, {
+        message: 'INVALID_SLUG_LOWER_FORMAT',
+    });
 
 export const BusinessRequisitesSchema = z.object({
     iban: ibanZod,
@@ -74,10 +106,14 @@ export const BusinessSchema = z
         ownerId: objectIdSchema.nullable(),
         managers: z.array(objectIdSchema),
         slug: businessSlugSchema,
+        slugLower: businessSlugLowerSchema,
         name: businessNameSchema,
         requisites: BusinessRequisitesSchema,
+        taxationSystem: taxationSystemSchema,
+        isVatPayer: z.boolean(),
         paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
         acceptedBanks: z.array(bankCodeSchema),
+        seoIndexEnabled: z.boolean(),
         deletedAt: z.coerce.date().nullable(),
         createdAt: z.coerce.date(),
         updatedAt: z.coerce.date(),
@@ -85,7 +121,18 @@ export const BusinessSchema = z
     .refine((b) => b.ownerId !== null || b.managers.length >= 1, {
         message: 'OWNERLESS_BUSINESS_REQUIRES_MANAGER',
         path: ['managers'],
-    });
+    })
+    .refine((b) => b.slugLower === b.slug.toLowerCase(), {
+        message: 'SLUG_LOWER_MISMATCH',
+        path: ['slugLower'],
+    })
+    .refine(
+        (b) => !b.isVatPayer || isVatAllowedTaxationSystem(b.taxationSystem),
+        {
+            message: 'INVALID_VAT_FOR_TAXATION_SYSTEM',
+            path: ['isVatPayer'],
+        }
+    );
 
 export type Business = z.infer<typeof BusinessSchema>;
 export type BusinessRequisites = z.infer<typeof BusinessRequisitesSchema>;
