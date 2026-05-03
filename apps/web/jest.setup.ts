@@ -12,3 +12,16 @@ if (typeof globalThis.TextEncoder === 'undefined') {
 if (typeof globalThis.TextDecoder === 'undefined') {
     globalThis.TextDecoder = TextDecoder as typeof globalThis.TextDecoder;
 }
+
+// jsdom не реалізує ResizeObserver; Headless UI 2.x Listbox/Combobox/Menu
+// використовують його для positioning через @floating-ui — без stub
+// fireEvent на ListboxOption кидає `ReferenceError: ResizeObserver is not
+// defined`. Stub-noop достатній для тестів — реальний layout у jsdom не
+// рахується, ми перевіряємо тільки event handlers + state transitions.
+if (typeof globalThis.ResizeObserver === 'undefined') {
+    globalThis.ResizeObserver = class ResizeObserverStub {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+    };
+}
