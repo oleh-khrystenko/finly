@@ -1,8 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
-import { Briefcase, Plus } from 'lucide-react';
+import { ArrowRight, Briefcase, Plus } from 'lucide-react';
 import { AxiosError } from 'axios';
 import {
     BUSINESS_TYPE_LABEL,
@@ -184,26 +183,36 @@ function BusinessCard({
 }) {
     const typeLabel = BUSINESS_TYPE_LABEL[business.type];
     return (
-        <Link
-            href={`/business/${business.slug}`}
-            className="border-border bg-card hover:bg-accent flex flex-col gap-3 rounded-xl border p-5 transition-colors"
-        >
-            <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                    <p className="text-foreground truncate text-base font-semibold">
-                        {business.name}
-                    </p>
-                    <p className="text-muted-foreground text-xs">{typeLabel}</p>
-                </div>
-                {isBookkeeper && (
-                    <span className="bg-muted text-muted-foreground rounded-full px-2.5 py-0.5 text-xs font-medium">
+        <UiSectionCard
+            title={business.name}
+            headerRight={
+                isBookkeeper ? (
+                    <span className="bg-muted text-muted-foreground shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium">
                         Клієнтський
                     </span>
-                )}
+                ) : undefined
+            }
+            className="flex flex-col gap-4 p-5 md:p-6"
+        >
+            <div className="space-y-1">
+                <p className="text-muted-foreground text-xs">{typeLabel}</p>
+                <p className="text-muted-foreground truncate text-xs">
+                    {payHost}/
+                    <span className="text-foreground font-mono">
+                        {business.slug}
+                    </span>
+                </p>
             </div>
-            <p className="text-muted-foreground truncate text-xs">
-                {payHost}/<span className="font-mono">{business.slug}</span>
-            </p>
-        </Link>
+            <UiButton
+                as="link"
+                href={`/business/${business.slug}`}
+                variant="outline"
+                size="sm"
+                IconRight={<ArrowRight />}
+                className="w-full justify-center"
+            >
+                Відкрити
+            </UiButton>
+        </UiSectionCard>
     );
 }
