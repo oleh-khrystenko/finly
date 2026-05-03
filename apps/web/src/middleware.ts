@@ -1,13 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const PROTECTED_PATHS = ['/dashboard', '/ai-chat', '/profile', '/pay', '/billing'];
+// Sprint 3 §3.5 — `/dashboard` видалена (E2: → `/business`); `/pay`
+// видалений як рудимент (E4: піддомен `pay.finly.com.ua` — окрема історія
+// host-aware routing-у §3.9, не protected path).
+const PROTECTED_PATHS = ['/business', '/ai-chat', '/profile', '/billing'];
 const AUTH_PATHS = ['/auth/signin'];
 const COOKIE_NAME = 'bid_refresh';
 const DELETED_COOKIE = 'bid_account_deleted';
 
 export default function middleware(request: NextRequest) {
-    const { pathname } = request.nextUrl;
+    const { pathname, search } = request.nextUrl;
     const hasRefreshCookie = request.cookies.has(COOKIE_NAME);
+
+    // Sprint 3 §3.5 — legacy `/dashboard` deep-link redirect → `/business`.
+    // Не блокатор Sprint 3 (TPM-зауваження приймає 404 для bookmarked links,
+    // бо deploy-ів post-Sprint-1 не було), але safer-default: збережемо
+    // bookmarks, що могли потрапити у пошту/чат до full-grep cleanup-у.
+    if (pathname === '/dashboard' || pathname.startsWith('/dashboard/')) {
+        const url = new URL(
+            pathname.replace(/^\/dashboard/, '/business') + search,
+            request.url,
+        );
+        return NextResponse.redirect(url, 308);
+    }
 
     const isProtected = PROTECTED_PATHS.some(
         (p) => pathname === p || pathname.startsWith(`${p}/`)
@@ -35,7 +50,7 @@ export default function middleware(request: NextRequest) {
     );
 
     if (isAuthPath && hasRefreshCookie && !isAccountDeleted) {
-        return NextResponse.redirect(new URL('/dashboard', request.url));
+        return NextResponse.redirect(new URL('/business', request.url));
     }
 
     return NextResponse.next();

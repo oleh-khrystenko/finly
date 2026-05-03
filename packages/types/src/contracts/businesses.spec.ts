@@ -184,17 +184,21 @@ describe('PublicBusinessSchema', () => {
         slug: 'IvanEnko',
         acceptedBanks: ['privatbank'],
         seoIndexEnabled: true,
+        nbuLinks: {
+            primary: 'https://qr.bank.gov.ua/abc123',
+            legacy: 'https://bank.gov.ua/qr/abc123',
+        },
     };
 
-    it('parses усі 5 whitelist-полів', () => {
+    it('parses усі whitelist-поля включно з nbuLinks (рішення A2)', () => {
         const result = PublicBusinessSchema.safeParse(VALID_PUBLIC);
         expect(result.success).toBe(true);
     });
 
-    it('виносить рівно 5 ключів у parsed-output (whitelist інваріант — рішення C4)', () => {
+    it('виносить рівно 6 ключів у parsed-output (whitelist інваріант — рішення C4)', () => {
         // Гарантія, що у public JSON клієнт ніколи не побачить реквізити /
-        // ownership / timestamps. Якщо хтось додасть поле у PublicBusinessSchema
-        // без рев'ю — цей тест впаде і змусить зафіксувати рішення.
+        // ownership / timestamps напряму. nbuLinks — це той самий leak-vector
+        // як QR PNG (payload у Base64URL), тож додання allowed; інше — strip.
         const result = PublicBusinessSchema.safeParse({
             ...VALID_PUBLIC,
             // Симулюємо backend, що випадково додав leak-поля у view-shape:
@@ -208,6 +212,7 @@ describe('PublicBusinessSchema', () => {
             expect(Object.keys(result.data).sort()).toEqual([
                 'acceptedBanks',
                 'name',
+                'nbuLinks',
                 'seoIndexEnabled',
                 'slug',
                 'type',

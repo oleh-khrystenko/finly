@@ -24,6 +24,14 @@ export const ENV = {
         process.env.NEXT_PUBLIC_API_URL,
         'NEXT_PUBLIC_API_URL'
     ),
+    // Sprint 3 §3.9 — public payment-page origin (`pay.finly.com.ua` prod
+    // / `pay.finly.local:3000` dev). Cabinet UI використовує цей host для
+    // copy-link і `<a href={...}>` "Відкрити в новій вкладці"; QR-картинка
+    // на public-сторінку кодує саме цей URL (api side, ENV.PAY_PUBLIC_URL).
+    NEXT_PUBLIC_PAY_PUBLIC_URL: assertEnv(
+        process.env.NEXT_PUBLIC_PAY_PUBLIC_URL,
+        'NEXT_PUBLIC_PAY_PUBLIC_URL'
+    ),
     // Hostname of the R2 public CDN. Used by next/image `remotePatterns`.
     // MUST equal the hostname of `R2_PUBLIC_URL` on the API — otherwise
     // next/image blocks uploaded photos at runtime.

@@ -149,6 +149,26 @@ export class QrService {
         return this.renderText(link, options);
     }
 
+    /**
+     * Будує NBU payload-link URL без рендеру PNG. Використовується public
+     * controller-ом для CTA-кнопок "Інший банк" на public-сторінці бізнесу
+     * (Sprint 3 рішення A2: ОС ловить тап через app-link і відкриває банк
+     * з заповненими реквізитами). Той самий pipeline що `renderForNbuPayload`,
+     * без `imageRenderer.render` overhead-у — endpoint віддає JSON, не PNG.
+     *
+     * Версія фіксована `'003'` (рекомендована нормативом для tap-flow);
+     * `host` — required параметр з whitelist (`NBU_HOST_PRIMARY` /
+     * `NBU_HOST_LEGACY`).
+     */
+    buildNbuPayloadLinkForInput(
+        input: PayloadInput,
+        host: AllowedNbuPayloadLinkHost003
+    ): string {
+        const payload = build003Payload(input);
+        const base64Url = encodePayloadAsBase64Url(payload);
+        return buildNbuPayloadLink('003', base64Url, { host });
+    }
+
     private async renderText(
         text: string,
         options?: QrRenderOptions

@@ -45,10 +45,20 @@ import { buildPayloadInputFromBusiness } from './payload-mapper';
  * би catastrophic — CDN віддавав би чужому ФОП респонс іншого. Тому QR
  * endpoints живуть саме тут, не в cabinet (детальніше — sprint plan §3.3).
  *
- * **Whitelist 5 полів у JSON-response.** `PublicBusinessSchema` (Sprint 3 рішення
- * C4 + E3) парсить document перед видачею; усе, що не у whitelist (IBAN,
- * taxId, taxationSystem, isVatPayer, ownerId, managers, timestamps), strip-нуто.
- * Реквізити доступні клієнту тільки через QR (single source of truth для leak).
+ * **Whitelist 6 полів у JSON-response.** `PublicBusinessSchema` (Sprint 3
+ * рішення C4 + E3 + A2) парсить document перед видачею; усе, що не у
+ * whitelist (IBAN, taxId напряму, taxationSystem, isVatPayer, ownerId,
+ * managers, timestamps), strip-нуто. Visible: `type`, `name`, `slug`,
+ * `acceptedBanks`, `seoIndexEnabled`, `nbuLinks`.
+ *
+ * **Реквізити leak-vector.** IBAN/ІПН не віддаються JSON-ом напряму, але
+ * `nbuLinks.primary/legacy` містять Base64URL-encoded payload, в якому
+ * реквізити присутні (це **той самий vector**, що QR PNG endpoint —
+ * payload-link і QR кодують ті самі дані). Whitelist інваріант не "дані
+ * не доступні клієнту", а "дані доступні **тільки через формати, що
+ * читаються банком як платіжна команда**" (NBU payload-link → app-link →
+ * банк-додаток; QR PNG → банк-сканер). JSON-shape не дає raw IBAN/ІПН для
+ * довільного автоматизованого збору без декодування Base64URL за NBU specs.
  */
 @Controller('businesses/public')
 export class PublicBusinessesController {
@@ -73,6 +83,7 @@ export class PublicBusinessesController {
                 message: 'Business not found',
             });
         }
+        const payloadInput = buildPayloadInputFromBusiness(business);
         // PublicBusinessSchema.parse — це whitelist-фільтр: усе, що не у
         // схемі, відкидається. Якщо колись Mongoose-doc отримає leak-поле —
         // це місце відрубає його перед серіалізацією.
@@ -82,6 +93,16 @@ export class PublicBusinessesController {
             slug: business.slug,
             acceptedBanks: business.acceptedBanks,
             seoIndexEnabled: business.seoIndexEnabled,
+            nbuLinks: {
+                primary: this.qrService.buildNbuPayloadLinkForInput(
+                    payloadInput,
+                    NBU_HOST_PRIMARY,
+                ),
+                legacy: this.qrService.buildNbuPayloadLinkForInput(
+                    payloadInput,
+                    NBU_HOST_LEGACY,
+                ),
+            },
         });
         return { data: view };
     }

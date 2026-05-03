@@ -123,12 +123,17 @@ export type UpdateBusinessRequest = z.infer<typeof UpdateBusinessSchema>;
 
 /**
  * `PublicBusinessSchema` — view-схема для public endpoint
- * (`GET /businesses/public/:slug`). Sprint 3 рішення C4 + E3:
- *   - **5 whitelist-полів**: `type`, `name`, `slug`, `acceptedBanks`,
- *     `seoIndexEnabled`. Реквізити (IBAN, ІПН) **не** віддаються JSON-ом —
- *     доступні клієнту тільки через QR. Single source of truth для leak-сурфейсу.
- *   - `seoIndexEnabled` потрапляє у view, бо public Server Component читає
- *     його напряму для рендеру `<meta name="robots">`.
+ * (`GET /businesses/public/:slug`). Sprint 3 рішення C4 + E3 + A2:
+ *   - Visible-поля: `type`, `name`, `slug`, `acceptedBanks`,
+ *     `seoIndexEnabled`. Реквізити (IBAN, ІПН) **не** віддаються JSON-ом
+ *     напряму — leak-сурфейс лишається через NBU payload-link (той самий
+ *     vector як QR PNG; payload містить реквізити у Base64URL).
+ *   - `seoIndexEnabled` для рендеру `<meta name="robots">` у Server Component.
+ *   - `nbuLinks` — pre-built NBU payload-link URLs для двох host-варіантів
+ *     (Sprint 3 рішення A2: дві активні CTA "Інший банк"). Frontend рендерить
+ *     `<a href={nbuLinks.primary}>` → ОС ловить через app-link і відкриває
+ *     банк-додаток з реквізитами. Без цих URLs кнопки не функціональні.
+ *     Server-side побудова: `QrService.buildNbuPayloadLinkForInput(input, host)`.
  */
 export const PublicBusinessSchema = z.object({
     type: businessTypeSchema,
@@ -136,6 +141,10 @@ export const PublicBusinessSchema = z.object({
     slug: businessSlugSchema,
     acceptedBanks: z.array(bankCodeSchema),
     seoIndexEnabled: z.boolean(),
+    nbuLinks: z.object({
+        primary: z.string().url(),
+        legacy: z.string().url(),
+    }),
 });
 
 export type PublicBusinessView = z.infer<typeof PublicBusinessSchema>;

@@ -671,7 +671,7 @@ describe('Businesses E2E', () => {
     // ─── Public ───
 
     describe('GET /businesses/public/:slug', () => {
-        it('повертає рівно 5 whitelist-полів (без реквізитів)', async () => {
+        it('повертає whitelist полів + nbuLinks; реквізити не leak-нуті у JSON', async () => {
             const user = await createUser();
             const created = await supertest(app.getHttpServer())
                 .post('/api/businesses/me')
@@ -683,19 +683,31 @@ describe('Businesses E2E', () => {
                 .get(`/api/businesses/public/${slug}`)
                 .expect(200);
 
-            const body = res.body as { data: Record<string, unknown> };
+            const body = res.body as {
+                data: Record<string, unknown> & {
+                    nbuLinks: { primary: string; legacy: string };
+                };
+            };
             expect(Object.keys(body.data).sort()).toEqual([
                 'acceptedBanks',
                 'name',
+                'nbuLinks',
                 'seoIndexEnabled',
                 'slug',
                 'type',
             ]);
-            // Реквізити НЕ leak-нуто
+            // Реквізити НЕ leak-нуто прямо у JSON
             expect(body.data).not.toHaveProperty('requisites');
             expect(body.data).not.toHaveProperty('taxationSystem');
             expect(body.data).not.toHaveProperty('isVatPayer');
             expect(body.data).not.toHaveProperty('ownerId');
+            // nbuLinks ведуть на правильні host-и (рішення A2)
+            expect(body.data.nbuLinks.primary).toMatch(
+                /^https:\/\/qr\.bank\.gov\.ua\//,
+            );
+            expect(body.data.nbuLinks.legacy).toMatch(
+                /^https:\/\/bank\.gov\.ua\/qr\//,
+            );
         });
 
         it('case-insensitive lookup на public', async () => {

@@ -79,6 +79,7 @@ services:
             - NEXT_PUBLIC_API_URL=http://localhost:${API_PORT}/api
             - NEXT_PUBLIC_PAYMENTS_SUBSCRIPTION_ENABLED=${NEXT_PUBLIC_PAYMENTS_SUBSCRIPTION_ENABLED}
             - NEXT_PUBLIC_PAYMENTS_ONE_OFF_ENABLED=${NEXT_PUBLIC_PAYMENTS_ONE_OFF_ENABLED}
+            - NEXT_PUBLIC_PAY_PUBLIC_URL=http://pay.finly.local:${WEB_PORT}
             - WATCHPACK_POLLING=true
             - CHOKIDAR_USEPOLLING=true
         ports:
