@@ -16,7 +16,7 @@ import {
 } from '@/shared/api/payments';
 import { useAuthStore } from '@/entities/user';
 import { formatLocalDate, INTL_LOCALE } from '@/shared/lib';
-import { useBillingResetDialogStore } from '@/features/billing';
+import { useBillingResetDialogStore, SubscriptionStatus } from '@/features/billing';
 import { formatPrice, type PaymentsCatalog } from '@finly/types';
 import UiButton from '@/shared/ui/UiButton';
 import UiLink from '@/shared/ui/UiLink';
@@ -160,6 +160,11 @@ export default function BillingPage() {
                     обробляються через Stripe.
                 </p>
             </div>
+
+            {/* ── Subscription Summary (Sprint 3 §3.5: перенесено з dashboard) ── */}
+            {PAYMENTS_SUBSCRIPTION_ENABLED && (
+                <SubscriptionStatus catalog={catalog} />
+            )}
 
             {/* ── Catalog Loading ── */}
             {catalogLoading && (
