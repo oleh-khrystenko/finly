@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { SLUG_PRESETS } from '../enums/slug-preset';
+import { effectiveLimit, isWithinByteLimit } from '../qr/limits';
 import { objectIdSchema } from '../validation/common';
 
 /**
@@ -13,6 +14,11 @@ import { objectIdSchema } from '../validation/common';
  * - Зв'язок `slugPreset === null` ⇔ slug-генератор не використовувався —
  *   аналітичне поле, без data-integrity invariant.
  *
+ * **Length-обмеження `paymentPurpose` derived-from-spec** через `effectiveLimit`
+ * (Sprint 2 §2.2). Той самий MIN-по-версіях інваріант, що в `Business.name` /
+ * `Business.paymentPurposeTemplate`: інвойс, валідний для save, гарантовано
+ * рендеритиме валідний QR для будь-якої з `PAYLOAD_VERSIONS`.
+ *
  * **Грошові суми зберігаються у копійках** (`integer`, не `float`). Pesos →
  * копійки на API boundary; UI формує `15.00 ₴` з копійок при рендері. Це
  * знімає floating-point bugs при додаванні / порівнянні і відповідає
@@ -23,6 +29,8 @@ import { objectIdSchema } from '../validation/common';
  * семантично неможливий ("заборонити правити те, чого нема") і блокується
  * Zod-refinement'ом на рівні entity.
  */
+
+const PURPOSE_LIMIT = effectiveLimit('purpose');
 
 export const slugPresetSchema = z.enum(SLUG_PRESETS);
 
@@ -42,6 +50,15 @@ export const invoiceSlugSchema = z
         message: 'INVALID_SLUG_FORMAT',
     });
 
+export const invoicePaymentPurposeSchema = z
+    .string()
+    .trim()
+    .min(1)
+    .max(PURPOSE_LIMIT.chars, { message: 'INVALID_PURPOSE_CHAR_LENGTH' })
+    .refine((v) => isWithinByteLimit(v, PURPOSE_LIMIT.bytes), {
+        message: 'INVALID_PURPOSE_BYTE_LENGTH',
+    });
+
 export const InvoiceSchema = z
     .object({
         id: objectIdSchema,
@@ -49,7 +66,7 @@ export const InvoiceSchema = z
         slug: invoiceSlugSchema,
         amount: z.number().int().nonnegative().nullable(),
         amountLocked: z.boolean(),
-        paymentPurpose: z.string().trim().min(1).max(420).nullable(),
+        paymentPurpose: invoicePaymentPurposeSchema.nullable(),
         validUntil: z.coerce.date().nullable(),
         slugPreset: slugPresetSchema.nullable(),
         deletedAt: z.coerce.date().nullable(),

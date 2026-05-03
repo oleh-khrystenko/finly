@@ -33,3 +33,4 @@ process.env.R2_ACCESS_KEY_ID ??= 'test-access-key-id';
 process.env.R2_SECRET_ACCESS_KEY ??= 'test-secret-access-key';
 process.env.R2_BUCKET_NAME ??= 'test-media-bucket';
 process.env.R2_PUBLIC_URL ??= 'https://media.test.local';
+process.env.NBU_PAYLOAD_LINK_HOST ??= 'qr.bank.gov.ua';

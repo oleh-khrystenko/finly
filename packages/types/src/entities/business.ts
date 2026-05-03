@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { MVP_BANKS } from '../constants/banks';
 import { BUSINESS_TYPES } from '../enums/business-type';
+import { effectiveLimit, isWithinByteLimit } from '../qr/limits';
 import { objectIdSchema } from '../validation/common';
 import { ibanZod } from '../validation/iban';
 import { individualTaxIdZod } from '../validation/tax-id';
@@ -13,14 +14,22 @@ import { individualTaxIdZod } from '../validation/tax-id';
  * **Що Zod-схема НЕ перевіряє** (свідомо, бо це write-side / runtime-time):
  * - Унікальність `slug` глобально — Mongoose unique index у Block 3.
  * - Резервовані slug-и (`qr`, `api`, …) — slug-генератор у Sprint 3.
- * - Per-version (002/003) обмеження довжини `name` / `paymentPurposeTemplate` —
- *   payload-builder у Sprint 2 поверх існуючих `min/max`.
  * - Free-tier обмеження на `acceptedBanks` — app-layer у Sprint 6.
+ *
+ * **Length-обмеження `name` і `paymentPurposeTemplate` derived-from-spec**
+ * через `effectiveLimit(...)` = MIN по `PAYLOAD_VERSIONS` (Sprint 2 §2.2).
+ * Інваріант: будь-який валідно збережений Business може згенерувати валідний
+ * QR для будь-якої з підтримуваних версій. Інакше отримуємо антипатерн
+ * "save succeeds, render later fails" — клієнт не може заплатити, ФОП не
+ * розуміє чому, помилка вилазить далеко від місця її введення.
  *
  * **Інваріант `ownerId === null ⇒ managers.length ≥ 1`** перевіряється у самій
  * entity-схемі: ownerless-бізнес без керівників — невалідний стан БД (нема як
  * до нього достукатись), Mongoose такого комбінаторного правила не виразить.
  */
+
+const NAME_LIMIT = effectiveLimit('receiverName');
+const PURPOSE_LIMIT = effectiveLimit('purpose');
 
 export const businessTypeSchema = z.enum(BUSINESS_TYPES);
 export const bankCodeSchema = z.enum(MVP_BANKS);
@@ -40,6 +49,24 @@ export const BusinessRequisitesSchema = z.object({
     taxId: individualTaxIdZod,
 });
 
+export const businessNameSchema = z
+    .string()
+    .trim()
+    .min(1)
+    .max(NAME_LIMIT.chars, { message: 'INVALID_NAME_CHAR_LENGTH' })
+    .refine((v) => isWithinByteLimit(v, NAME_LIMIT.bytes), {
+        message: 'INVALID_NAME_BYTE_LENGTH',
+    });
+
+export const businessPaymentPurposeTemplateSchema = z
+    .string()
+    .trim()
+    .min(1)
+    .max(PURPOSE_LIMIT.chars, { message: 'INVALID_PURPOSE_CHAR_LENGTH' })
+    .refine((v) => isWithinByteLimit(v, PURPOSE_LIMIT.bytes), {
+        message: 'INVALID_PURPOSE_BYTE_LENGTH',
+    });
+
 export const BusinessSchema = z
     .object({
         id: objectIdSchema,
@@ -47,9 +74,9 @@ export const BusinessSchema = z
         ownerId: objectIdSchema.nullable(),
         managers: z.array(objectIdSchema),
         slug: businessSlugSchema,
-        name: z.string().trim().min(1).max(140),
+        name: businessNameSchema,
         requisites: BusinessRequisitesSchema,
-        paymentPurposeTemplate: z.string().trim().min(1).max(420),
+        paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
         acceptedBanks: z.array(bankCodeSchema),
         deletedAt: z.coerce.date().nullable(),
         createdAt: z.coerce.date(),

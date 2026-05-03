@@ -8,6 +8,11 @@
 import { config } from 'dotenv';
 import { resolve } from 'path';
 
+import {
+    ALLOWED_NBU_PAYLOAD_LINK_HOSTS_003,
+    isAllowedNbuPayloadLinkHost003,
+} from '@finly/types';
+
 // Load .env from monorepo root before reading process.env.
 // Use __dirname (relative to this file) instead of process.cwd() which varies by runner.
 // In Docker, env vars are set via `environment:` — dotenv silently skips if file not found.
@@ -87,6 +92,17 @@ export const ENV = {
     R2_SECRET_ACCESS_KEY: getEnvVar('R2_SECRET_ACCESS_KEY'),
     R2_BUCKET_NAME: getEnvVar('R2_BUCKET_NAME'),
     R2_PUBLIC_URL: getEnvVar('R2_PUBLIC_URL'),
+
+    // QR payload host для format 003. Норматив (постанова НБУ № 97 від
+    // 19.08.2025, Додаток 4 §I таблиця 1) дозволяє два значення:
+    //   - "qr.bank.gov.ua" — основний, рекомендований для 003 (default).
+    //   - "bank.gov.ua/qr" — fallback, якщо QR-6 manual check покаже, що
+    //     частина банк-додатків не оновила app-link конфіги під qr.bank.gov.ua.
+    // "Персоніфікований" host (домен НПП) недоступний — Finly не НПП.
+    // Format 002 host фіксований нормативом окремо ("bank.gov.ua/qr/", Додаток
+    // 3 §I таблиця 1) і живе як константа у packages/types/src/qr/, не env.
+    // Деталі: docs/product/qr-spec/README.md "Host у нормативі".
+    NBU_PAYLOAD_LINK_HOST: getEnvVar('NBU_PAYLOAD_LINK_HOST'),
 };
 
 // Validate payment toggles
@@ -94,6 +110,16 @@ if (!ENV.PAYMENTS_SUBSCRIPTION_ENABLED && !ENV.PAYMENTS_ONE_OFF_ENABLED) {
     throw new Error(
         '❌ At least one payment type must be enabled. ' +
             'Set PAYMENTS_SUBSCRIPTION_ENABLED or PAYMENTS_ONE_OFF_ENABLED to "true".'
+    );
+}
+
+// Validate NBU payload link host against the spec-allowed whitelist.
+// See docs/product/qr-spec/README.md "Host у нормативі".
+if (!isAllowedNbuPayloadLinkHost003(ENV.NBU_PAYLOAD_LINK_HOST)) {
+    throw new Error(
+        `❌ NBU_PAYLOAD_LINK_HOST must be one of: ${ALLOWED_NBU_PAYLOAD_LINK_HOSTS_003.join(', ')}. ` +
+            `Got: "${ENV.NBU_PAYLOAD_LINK_HOST}". ` +
+            `See docs/product/qr-spec/README.md "Host у нормативі".`
     );
 }
 

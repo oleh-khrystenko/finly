@@ -237,7 +237,7 @@ Full index: [docs/conventions/README.md](docs/conventions/README.md)
 ## Rules & Conventions
 
 - Source of truth for repo-wide rules: `docs/conventions/README.md`
-- Перед змінами у user-facing copy, env/config, language sync, modular boundaries, overlays або shared UI перечитуй відповідні rules: `tone.md`, `fail-fast.md`, `i18n.md`, `modular-boundaries.md`, `overlays.md`, `ui-primitives.md`, `design-tokens.md`
+- Перед змінами у user-facing copy, env/config, language sync, modular boundaries, overlays або shared UI перечитуй відповідні rules: `tone.md`, `fail-fast.md`, `i18n.md`, `modular-boundaries.md`, `overlays.md`, `ui-primitives.md`, `design-tokens.md`, `responsive.md`
 - Boundary rules реально enforce-яться в `apps/web/eslint.config.mjs` і `apps/api/eslint.config.mjs`: немає глобального `src/stores/`, `shared/` не імпортує вищі FSD layers
 - Runtime data layer зараз повністю на Mongoose schemas під `apps/api/src/modules/**/schemas`; `prisma/schema.prisma` у репозиторії відсутній
 
