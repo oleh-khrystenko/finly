@@ -43,6 +43,21 @@ export const RESPONSE_CODE = {
     BUSINESS_NOT_FOUND: 'BUSINESS_NOT_FOUND',
     BUSINESS_ACCESS_DENIED: 'BUSINESS_ACCESS_DENIED',
     SLUG_GENERATION_FAILED: 'SLUG_GENERATION_FAILED',
+    /**
+     * Sprint 3 §3.2 cross-field VAT × taxationSystem check (рішення C1).
+     * Service-layer кидає цей код, коли клієнт PATCH-ить тільки одне з пари
+     * `(taxationSystem, isVatPayer)` так, що результуюча комбінація стає
+     * невалідною (наприклад, isVatPayer=true з existing simplified-1).
+     *
+     * Sprint 3 рішення E6 (inline-edit per field у кабінеті) — frontend
+     * передає лише змінене поле; cross-field validation у Zod write-DTO
+     * skip-иться, коли пара не повна. Service читає БД, валідує комбо,
+     * кидає цей машинний код. Frontend через mapApiCode → inline-помилка
+     * під полем "Платник ПДВ".
+     *
+     * Recoverable client-side: ФОП обирає валідну пару і повторно save-ить.
+     */
+    INVALID_VAT_FOR_TAXATION_SYSTEM: 'INVALID_VAT_FOR_TAXATION_SYSTEM',
 
     // --- errors ---
     UNAUTHORIZED: 'UNAUTHORIZED',
@@ -83,6 +98,7 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.BUSINESS_NOT_FOUND]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.BUSINESS_ACCESS_DENIED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.SLUG_GENERATION_FAILED]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.INVALID_VAT_FOR_TAXATION_SYSTEM]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.ONBOARDING_INCOMPLETE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.UNAUTHORIZED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.VALIDATION_ERROR]: RESPONSE_TYPE.ERROR,

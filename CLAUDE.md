@@ -229,7 +229,7 @@ Scaffold без ендпоінтів.
 - Політика: `docs/conventions/fail-fast.md`
 
 **API — ALL required (crash if missing, no defaults)**
-- `NODE_ENV`, `PORT`, `WEB_URL`
+- `NODE_ENV`, `PORT`, `WEB_URL` (cabinet origin), `PAY_PUBLIC_URL` (public payment-page origin — host для QR на публічну вивіску бізнесу)
 - `MONGODB_URI`, `REDIS_URL`
 - `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL`

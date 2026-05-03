@@ -28,7 +28,21 @@ const oneOffEnabled = getEnvVar('PAYMENTS_ONE_OFF_ENABLED') === 'true';
 export const ENV = {
     NODE_ENV: getEnvVar('NODE_ENV'),
     PORT: getEnvVar('PORT'),
+    /**
+     * Cabinet origin (`finly.com.ua` prod, `localhost:3000` dev). Використовується
+     * для CORS, OAuth callback, magic-link redirect, Stripe success/cancel URL,
+     * email-template посилань на кабінет — усі шляхи, що ведуть авторизованого
+     * ФОП назад у його кабінет.
+     */
     WEB_URL: getEnvVar('WEB_URL'),
+    /**
+     * Public payment-page origin (`pay.finly.com.ua` prod, `pay.finly.local:3000`
+     * dev — налаштовується через `/etc/hosts`, див. Sprint 3 §3.9). Sprint 3
+     * рішення A1: cabinet і public живуть на різних host-ах для cookie/auth
+     * ізоляції. QR-картинка `/businesses/public/:slug/qr/business.png` кодує
+     * URL клієнта (не ФОП-а) → це **public host**, не WEB_URL.
+     */
+    PAY_PUBLIC_URL: getEnvVar('PAY_PUBLIC_URL'),
 
     MONGODB_URI: getEnvVar('MONGODB_URI'),
     JWT_ACCESS_SECRET: getEnvVar('JWT_ACCESS_SECRET'),

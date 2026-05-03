@@ -72,6 +72,14 @@ const ERRORS: Record<string, MessageDict> = {
         avatar_upload_invalid:
             'Цей файл не може бути використаний як фото. Спробуйте інше зображення',
     },
+    businesses: {
+        business_not_found: 'Бізнес не знайдено',
+        business_access_denied: 'У вас немає доступу до цього бізнесу',
+        slug_generation_failed:
+            'Не вдалося згенерувати посилання. Спробуйте ще раз',
+        invalid_vat_for_taxation_system:
+            'Платник ПДВ дозволений лише на спрощеній-3 або загальній системі',
+    },
 };
 
 const UNKNOWN_FALLBACK = ERRORS.generic.unknown;
