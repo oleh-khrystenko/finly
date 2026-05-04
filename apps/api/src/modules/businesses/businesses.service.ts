@@ -6,10 +6,10 @@ import {
     Logger,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model, Types, type FilterQuery } from 'mongoose';
 import {
     RESPONSE_CODE,
-    isVatAllowedTaxationSystem,
+    VAT_ALLOWED_TAXATION_SYSTEMS,
     type CreateBusinessRequest,
     type UpdateBusinessRequest,
 } from '@finly/types';
@@ -41,12 +41,11 @@ import { SlugGeneratorService } from './slug-generator.service';
  *
  * **`update` — coupled VAT × taxationSystem cross-field check.**
  *   Sprint 3 §3.1 §3.2: write-DTO Zod skip-ить refine, якщо передано тільки
- *   одне з полів пари. Service вирішує крайові кейси: при partial-update,
- *   що містить `isVatPayer=true` без `taxationSystem` (frontend inline-edit
- *   тільки VAT-чекбоксу), читаємо існуючий `taxationSystem` з документа і
- *   валідуємо пару. Те саме для `taxationSystem` без `isVatPayer`. Якщо
- *   результуюча пара невалідна — `ValidationError` з тим самим кодом, що й
- *   write-DTO refine (`INVALID_VAT_FOR_TAXATION_SYSTEM`).
+ *   одне з полів пари. Service атомарно перевіряє пару у `findOneAndUpdate`
+ *   через `$expr`-filter — incoming-літерал замінює `'$<fieldname>'`-reference
+ *   на існуюче поле документа, тож happy path — single round-trip. Якщо
+ *   filter блокує update (повертає null), fallback `exists()`-запит
+ *   розрізняє 404 (документу немає) vs 400 (`INVALID_VAT_FOR_TAXATION_SYSTEM`).
  */
 @Injectable()
 export class BusinessesService {
@@ -127,28 +126,49 @@ export class BusinessesService {
         slug: string,
         dto: UpdateBusinessRequest
     ): Promise<BusinessDocument> {
-        // Service-layer cross-field VAT × taxationSystem check для partial-update.
-        // Якщо передано лише одне з пари — читаємо existing, валідуємо комбо.
-        if (dto.isVatPayer !== undefined || dto.taxationSystem !== undefined) {
-            const existing = await this.businessModel
-                .findOne({ slugLower: slug.toLowerCase() })
-                .exec();
-            if (!existing) {
-                throw new NotFoundException({
-                    code: RESPONSE_CODE.BUSINESS_NOT_FOUND,
-                    message: 'Business not found during update',
-                });
-            }
-            const nextTaxation = dto.taxationSystem ?? existing.taxationSystem;
+        // Atomic update + coupled VAT × taxationSystem check у `$expr`-filter
+        // — single round-trip у happy path. `$expr` обчислює пару
+        // (incoming-or-existing isVatPayer, incoming-or-existing taxationSystem)
+        // і блокує update, якщо пара (true, ∉ VAT_ALLOWED_TAXATION_SYSTEMS).
+        // Mongo aggregation expression: literal-значення з dto замінює
+        // `'$<fieldname>'`-reference на існуюче поле документа.
+        const slugLower = slug.toLowerCase();
+        const hasCoupledFields =
+            dto.isVatPayer !== undefined || dto.taxationSystem !== undefined;
+
+        const filter: FilterQuery<BusinessDocument> = { slugLower };
+        if (hasCoupledFields) {
             const nextVat =
-                dto.isVatPayer !== undefined
-                    ? dto.isVatPayer
-                    : existing.isVatPayer;
-            if (nextVat && !isVatAllowedTaxationSystem(nextTaxation)) {
-                // Re-use коду з Zod-refine. AllExceptionsFilter маппить
-                // BadRequestException → 400; explicit code у response
-                // carry-ить точну причину для frontend (mapApiCode →
-                // inline-помилка під полем "Платник ПДВ").
+                dto.isVatPayer !== undefined ? dto.isVatPayer : '$isVatPayer';
+            const nextTax = dto.taxationSystem ?? '$taxationSystem';
+            // Coupled invariant: `NOT (nextVat=true AND nextTax ∉ allowed)`.
+            // De Morgan → `nextVat ≠ true OR nextTax ∈ allowed` — без `$not`/
+            // `$and` nesting, що в aggregation expression потребує масивної
+            // форми `{$not:[<expr>]}` і легко спричиняє runtime-помилки.
+            filter.$expr = {
+                $or: [
+                    { $ne: [nextVat, true] },
+                    { $in: [nextTax, VAT_ALLOWED_TAXATION_SYSTEMS] },
+                ],
+            };
+        }
+
+        const updated = await this.businessModel
+            .findOneAndUpdate(
+                filter,
+                { $set: dto },
+                { new: true, runValidators: true }
+            )
+            .exec();
+        if (updated) return updated;
+
+        // Null = filter не пропустив update. Якщо coupled-fields у dto,
+        // розрізняємо 400 (coupled violation) vs 404 (документу немає)
+        // одним додатковим `exists()`-запитом — тільки на error-path,
+        // happy-path лишається 1-roundtrip.
+        if (hasCoupledFields) {
+            const exists = await this.businessModel.exists({ slugLower });
+            if (exists) {
                 throw new BadRequestException({
                     code: RESPONSE_CODE.INVALID_VAT_FOR_TAXATION_SYSTEM,
                     message:
@@ -156,21 +176,10 @@ export class BusinessesService {
                 });
             }
         }
-
-        const updated = await this.businessModel
-            .findOneAndUpdate(
-                { slugLower: slug.toLowerCase() },
-                { $set: dto },
-                { new: true, runValidators: true }
-            )
-            .exec();
-        if (!updated) {
-            throw new NotFoundException({
-                code: RESPONSE_CODE.BUSINESS_NOT_FOUND,
-                message: 'Business disappeared between guard and update',
-            });
-        }
-        return updated;
+        throw new NotFoundException({
+            code: RESPONSE_CODE.BUSINESS_NOT_FOUND,
+            message: 'Business disappeared between guard and update',
+        });
     }
 
     /**

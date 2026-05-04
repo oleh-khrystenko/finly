@@ -36,6 +36,14 @@ import {
 } from '@/features/business-edit';
 import { PublicBusinessView } from '@/features/business-public';
 
+// Discriminated union для prefetch-у public view. `slug` як discriminator
+// дозволяє відрізнити "поточна версія" від stale-state, що приходить з
+// fetch-у попереднього бізнесу при швидкому переході між кабінетами.
+type PublicViewState =
+    | { kind: 'idle' }
+    | { kind: 'loaded'; slug: string; view: PublicBusinessViewData }
+    | { kind: 'failed'; slug: string };
+
 export default function BusinessSlugPage() {
     const router = useRouter();
     const params = useParams<{ slug: string }>();
@@ -44,6 +52,9 @@ export default function BusinessSlugPage() {
     const [business, setBusiness] = useState<Business | null>(null);
     const [error, setError] = useState<{ code: string } | null>(null);
     const [previewMode, setPreviewMode] = useState(false);
+    const [publicView, setPublicView] = useState<PublicViewState>({
+        kind: 'idle',
+    });
 
     // State-mutation тільки в .then/.catch async-callback-ах — синхронний
     // reset перед fetch порушує react-hooks/set-state-in-effect (React 19).
@@ -75,6 +86,29 @@ export default function BusinessSlugPage() {
             cancelled = true;
         };
     }, [params.slug]);
+
+    // Prefetch public view одразу після того, як cabinet `business` завантажений
+    // — не чекаємо тапу `previewMode`-toggle. Re-fetch при кожному `business`
+    // change (наприклад, після PATCH через `handlePatch`), щоб preview reflect-ив
+    // свіжий name/acceptedBanks. State включає `slug` як discriminator: якщо
+    // швидко перейти на інший бізнес, старий fetch завершиться з невідповідним
+    // slug і panel розпізнає його як stale (показує spinner поки не прийде
+    // правильна версія).
+    useEffect(() => {
+        if (!business) return;
+        const slug = business.slug;
+        let cancelled = false;
+        getPublicBusinessView(slug)
+            .then((view) => {
+                if (!cancelled) setPublicView({ kind: 'loaded', slug, view });
+            })
+            .catch(() => {
+                if (!cancelled) setPublicView({ kind: 'failed', slug });
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [business]);
 
     const handlePatch = useCallback(
         async (patch: UpdateBusinessRequest) => {
@@ -180,7 +214,10 @@ export default function BusinessSlugPage() {
 
             {/* Body: preview vs edit. */}
             {previewMode ? (
-                <BusinessPreviewPanel business={business} />
+                <BusinessPreviewPanel
+                    state={publicView}
+                    expectedSlug={business.slug}
+                />
             ) : (
                 <div className="space-y-4">
                     <BasicSection business={business} onSave={handlePatch} />
@@ -224,40 +261,23 @@ export default function BusinessSlugPage() {
     );
 }
 
-// Sprint 3 §3.8 §B2 — preview-toggle fetch-ить public view (з nbuLinks для
-// функціональних CTA). Окремий fetch, бо cabinet endpoint навмисно не
-// повертає nbuLinks (whitelist розділяє auth-зону і public-зону).
-//
-// Винесено в окремий компонент із власним state замість inline-effect-а у
-// parent: mount/unmount керується `previewMode`-toggle-ом, тож state має
-// чистий lifecycle і всі setState — у async-callback-ах (lint-rule
-// react-hooks/set-state-in-effect стосується тільки synchronous setState
-// у effect body, що було в попередній inline-версії).
-type PreviewState =
-    | { kind: 'loading' }
-    | { kind: 'loaded'; view: PublicBusinessViewData }
-    | { kind: 'failed' };
-
-function BusinessPreviewPanel({ business }: { business: Business }) {
-    const [state, setState] = useState<PreviewState>({ kind: 'loading' });
-
-    useEffect(() => {
-        let cancelled = false;
-        getPublicBusinessView(business.slug)
-            .then((v) => {
-                if (!cancelled) setState({ kind: 'loaded', view: v });
-            })
-            .catch(() => {
-                if (!cancelled) setState({ kind: 'failed' });
-            });
-        return () => {
-            cancelled = true;
-        };
-    }, [business.slug]);
-
+// Sprint 3 §3.8 §B2 — pure presentational. Public view prefetch-иться у
+// parent одразу як cabinet `business` завантажений (не чекаючи `previewMode`-
+// toggle), тож натиск toggle часто показує дані instant. `state.slug` ===
+// `expectedSlug` перевірка ловить stale-state, що приходить з попереднього
+// бізнесу при швидкому переході — поки prefetch для нового slug не дійде,
+// показуємо spinner замість stale-даних попередньої вивіски.
+function BusinessPreviewPanel({
+    state,
+    expectedSlug,
+}: {
+    state: PublicViewState;
+    expectedSlug: string;
+}) {
+    const isCurrent = state.kind !== 'idle' && state.slug === expectedSlug;
     return (
         <div className="border-border bg-background rounded-xl border">
-            {state.kind === 'loaded' ? (
+            {state.kind === 'loaded' && isCurrent ? (
                 <PublicBusinessView
                     type={state.view.type}
                     name={state.view.name}
@@ -265,15 +285,15 @@ function BusinessPreviewPanel({ business }: { business: Business }) {
                     acceptedBanks={state.view.acceptedBanks}
                     nbuLinks={state.view.nbuLinks}
                 />
-            ) : state.kind === 'loading' ? (
-                <div className="flex justify-center py-16">
-                    <UiSpinner size="md" />
-                </div>
-            ) : (
+            ) : state.kind === 'failed' && isCurrent ? (
                 <p className="text-muted-foreground p-8 text-center text-sm">
                     Не вдалося завантажити перегляд. Натисніть «Відкрити в новій
                     вкладці» для перевірки.
                 </p>
+            ) : (
+                <div className="flex justify-center py-16">
+                    <UiSpinner size="md" />
+                </div>
             )}
         </div>
     );

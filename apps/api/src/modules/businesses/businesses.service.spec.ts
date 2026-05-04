@@ -6,6 +6,7 @@ import {
     NotFoundException,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
+import { VAT_ALLOWED_TAXATION_SYSTEMS } from '@finly/types';
 import type {
     CreateBusinessRequest,
     UpdateBusinessRequest,
@@ -22,6 +23,7 @@ describe('BusinessesService', () => {
         find: jest.Mock;
         findOne: jest.Mock;
         findOneAndUpdate: jest.Mock;
+        exists: jest.Mock;
         deleteOne: jest.Mock;
     }>;
     let slugGenerator: jest.Mocked<{ generateRandomSlug: jest.Mock }>;
@@ -47,6 +49,7 @@ describe('BusinessesService', () => {
             find: jest.fn(),
             findOne: jest.fn(),
             findOneAndUpdate: jest.fn(),
+            exists: jest.fn(),
             deleteOne: jest.fn(),
         };
         slugGenerator = {
@@ -185,47 +188,123 @@ describe('BusinessesService', () => {
     });
 
     describe('update', () => {
-        const setupExisting = (existing: Record<string, unknown>) => {
-            businessModel.findOne.mockReturnValue({
-                exec: jest.fn().mockResolvedValue(existing),
-            });
+        const mockUpdateReturn = (doc: Record<string, unknown> | null) => {
             businessModel.findOneAndUpdate.mockReturnValue({
-                exec: jest.fn().mockResolvedValue({ ...existing, ...{} }),
+                exec: jest.fn().mockResolvedValue(doc),
             });
         };
+        const mockExistsReturn = (exists: boolean) => {
+            businessModel.exists.mockResolvedValue(
+                exists ? { _id: new Types.ObjectId() } : null
+            );
+        };
 
-        it('пропускає coupled-check якщо ні taxationSystem ні isVatPayer не змінюються', async () => {
-            businessModel.findOneAndUpdate.mockReturnValue({
-                exec: jest.fn().mockResolvedValue({ name: 'New' }),
-            });
+        it('без coupled-полів — filter без $expr, findOne не викликається', async () => {
+            mockUpdateReturn({ name: 'New' });
             await service.update('IvanEnko', { name: 'New' });
+            const filter = businessModel.findOneAndUpdate.mock.calls[0]![0];
+            expect(filter).toEqual({ slugLower: 'ivanenko' });
+            expect(filter.$expr).toBeUndefined();
             expect(businessModel.findOne).not.toHaveBeenCalled();
+            expect(businessModel.exists).not.toHaveBeenCalled();
         });
 
-        it('coupled cross-field check: isVatPayer=true з existing simplified-1 → BadRequest', async () => {
-            setupExisting({
-                taxationSystem: 'simplified-1',
-                isVatPayer: false,
+        // $expr coupled-rule перевірки: точна форма aggregation expression.
+        // Закон Де Моргана `NOT (vat=true AND tax∉allowed)` ≡
+        // `vat≠true OR tax∈allowed`. Літерал з dto замінює field-reference;
+        // полеж відсутнє → `'$<fieldname>'` (Mongo резолвить за документом).
+        // Цей блок тестів спеціально перевіряє EQUAL-структуру, не toBeDefined,
+        // щоб зловити syntactic regress (наприклад, повернення до `$not`-форми
+        // з обʼєктним аргументом, що в aggregation runtime-помилка).
+
+        it('$expr (isVatPayer=true only): vat-літерал, tax — field-ref', async () => {
+            mockUpdateReturn({ isVatPayer: true });
+            await service.update('IvanEnko', { isVatPayer: true });
+            const filter = businessModel.findOneAndUpdate.mock.calls[0]![0];
+            expect(filter.slugLower).toBe('ivanenko');
+            expect(filter.$expr).toEqual({
+                $or: [
+                    { $ne: [true, true] },
+                    {
+                        $in: ['$taxationSystem', VAT_ALLOWED_TAXATION_SYSTEMS],
+                    },
+                ],
             });
+        });
+
+        it('$expr (isVatPayer=false only): vat-літерал false, tax — field-ref', async () => {
+            mockUpdateReturn({ isVatPayer: false });
+            await service.update('IvanEnko', { isVatPayer: false });
+            const filter = businessModel.findOneAndUpdate.mock.calls[0]![0];
+            expect(filter.$expr).toEqual({
+                $or: [
+                    { $ne: [false, true] },
+                    {
+                        $in: ['$taxationSystem', VAT_ALLOWED_TAXATION_SYSTEMS],
+                    },
+                ],
+            });
+        });
+
+        it('$expr (taxationSystem only): tax-літерал, vat — field-ref', async () => {
+            mockUpdateReturn({ taxationSystem: 'simplified-1' });
+            await service.update('IvanEnko', {
+                taxationSystem: 'simplified-1',
+            });
+            const filter = businessModel.findOneAndUpdate.mock.calls[0]![0];
+            expect(filter.$expr).toEqual({
+                $or: [
+                    { $ne: ['$isVatPayer', true] },
+                    {
+                        $in: ['simplified-1', VAT_ALLOWED_TAXATION_SYSTEMS],
+                    },
+                ],
+            });
+        });
+
+        it('$expr (both fields): обидва literals, без field-ref', async () => {
+            mockUpdateReturn({
+                isVatPayer: true,
+                taxationSystem: 'simplified-3',
+            });
+            await service.update('IvanEnko', {
+                isVatPayer: true,
+                taxationSystem: 'simplified-3',
+            } as UpdateBusinessRequest);
+            const filter = businessModel.findOneAndUpdate.mock.calls[0]![0];
+            expect(filter.$expr).toEqual({
+                $or: [
+                    { $ne: [true, true] },
+                    {
+                        $in: ['simplified-3', VAT_ALLOWED_TAXATION_SYSTEMS],
+                    },
+                ],
+            });
+        });
+
+        it('coupled violation: findOneAndUpdate→null + exists→true → BadRequest', async () => {
+            mockUpdateReturn(null);
+            mockExistsReturn(true);
             await expect(
                 service.update('IvanEnko', { isVatPayer: true })
             ).rejects.toBeInstanceOf(BadRequestException);
+            expect(businessModel.exists).toHaveBeenCalledWith({
+                slugLower: 'ivanenko',
+            });
         });
 
-        it('coupled cross-field check: taxationSystem=simplified-1 з existing isVatPayer=true → BadRequest', async () => {
-            setupExisting({
-                taxationSystem: 'simplified-3',
-                isVatPayer: true,
-            });
+        it('coupled violation на taxation: findOneAndUpdate→null + exists→true → BadRequest', async () => {
+            mockUpdateReturn(null);
+            mockExistsReturn(true);
             await expect(
                 service.update('IvanEnko', { taxationSystem: 'simplified-1' })
             ).rejects.toBeInstanceOf(BadRequestException);
         });
 
-        it('cross-field валідна пара: simplified-3 + isVatPayer=true → success', async () => {
-            setupExisting({
-                taxationSystem: 'simplified-2',
-                isVatPayer: false,
+        it('cross-field валідна пара — findOneAndUpdate повертає doc, exists() не викликається', async () => {
+            mockUpdateReturn({
+                taxationSystem: 'simplified-3',
+                isVatPayer: true,
             });
             await expect(
                 service.update('IvanEnko', {
@@ -233,21 +312,27 @@ describe('BusinessesService', () => {
                     isVatPayer: true,
                 } as UpdateBusinessRequest)
             ).resolves.toBeDefined();
+            expect(businessModel.exists).not.toHaveBeenCalled();
         });
 
-        it('кидає NotFound якщо документ зник між guard і update (paranoid)', async () => {
-            businessModel.findOneAndUpdate.mockReturnValue({
-                exec: jest.fn().mockResolvedValue(null),
-            });
+        it('NotFound (no coupled fields): findOneAndUpdate→null → NotFound без exists()', async () => {
+            mockUpdateReturn(null);
             await expect(
                 service.update('IvanEnko', { name: 'X' })
+            ).rejects.toBeInstanceOf(NotFoundException);
+            expect(businessModel.exists).not.toHaveBeenCalled();
+        });
+
+        it('NotFound (coupled fields): findOneAndUpdate→null + exists→false → NotFound', async () => {
+            mockUpdateReturn(null);
+            mockExistsReturn(false);
+            await expect(
+                service.update('IvanEnko', { isVatPayer: true })
             ).rejects.toBeInstanceOf(NotFoundException);
         });
 
         it('lookup для update — case-insensitive по slugLower', async () => {
-            businessModel.findOneAndUpdate.mockReturnValue({
-                exec: jest.fn().mockResolvedValue({ name: 'X' }),
-            });
+            mockUpdateReturn({ name: 'X' });
             await service.update('IvanEnko', { name: 'X' });
             const filter = businessModel.findOneAndUpdate.mock.calls[0]![0];
             expect(filter).toEqual({ slugLower: 'ivanenko' });
