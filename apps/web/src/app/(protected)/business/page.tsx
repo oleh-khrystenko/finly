@@ -3,10 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowRight, Briefcase, Plus } from 'lucide-react';
 import { AxiosError } from 'axios';
-import {
-    BUSINESS_TYPE_LABEL,
-    type Business,
-} from '@finly/types';
+import { BUSINESS_TYPE_LABEL, type Business } from '@finly/types';
 import { getApiMessage, listBusinesses } from '@/shared/api';
 import { ENV } from '@/shared/config/env';
 import { useAuthStore } from '@/entities/user';
@@ -46,38 +43,45 @@ export default function BusinessListPage() {
 
     const payHost = useMemo(
         () => stripScheme(ENV.NEXT_PUBLIC_PAY_PUBLIC_URL),
-        [],
+        []
     );
 
     const visibleItems = useMemo(
         () =>
             items ? items.filter((i) => !pendingDeleteSlugs.has(i.slug)) : null,
-        [items, pendingDeleteSlugs],
+        [items, pendingDeleteSlugs]
     );
 
+    // Re-fetch при перемиканні toggle — backend filter залежить від
+    // `worksAsBookkeeper` стану user-а. State-mutation тільки в async-callback-ах
+    // (.then/.catch) — синхронний reset перед fetch порушує react-hooks/
+    // set-state-in-effect (React 19) і без нього UX навіть кращий: items
+    // залишаються видимими під час фонового re-fetch (stale-while-revalidate),
+    // без flash спінера. Initial mount — `items === null` показує спінер до
+    // першої відповіді.
     useEffect(() => {
         let cancelled = false;
-        setItems(null);
-        setError(null);
         listBusinesses()
             .then((res) => {
-                if (!cancelled) setItems(res);
+                if (cancelled) return;
+                setItems(res);
+                setError(null);
             })
             .catch((err: unknown) => {
                 if (cancelled) return;
                 const code =
                     err instanceof AxiosError
-                        ? ((err.response?.data as
-                              | { error?: { code?: string } }
-                              | undefined)?.error?.code ?? 'unknown')
+                        ? ((
+                              err.response?.data as
+                                  | { error?: { code?: string } }
+                                  | undefined
+                          )?.error?.code ?? 'unknown')
                         : 'unknown';
                 setError(getApiMessage(code, 'businesses'));
             });
         return () => {
             cancelled = true;
         };
-        // Re-fetch при перемиканні toggle — backend filter залежить від
-        // `worksAsBookkeeper` стану user-а.
     }, [isBookkeeper]);
 
     if (items === null && !error) {

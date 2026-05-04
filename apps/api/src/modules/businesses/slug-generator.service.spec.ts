@@ -78,7 +78,9 @@ describe('SlugGeneratorService', () => {
             fail('expected SLUG_GENERATION_FAILED');
         } catch (err) {
             expect(err).toBeInstanceOf(InternalServerErrorException);
-            const response = (err as InternalServerErrorException).getResponse();
+            const response = (
+                err as InternalServerErrorException
+            ).getResponse();
             expect(response).toMatchObject({
                 code: 'SLUG_GENERATION_FAILED',
             });

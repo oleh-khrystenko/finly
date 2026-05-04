@@ -52,7 +52,11 @@ export class SlugGeneratorService {
     }
 
     async generateRandomSlug(): Promise<string> {
-        for (let attempt = 1; attempt <= SlugGeneratorService.MAX_ATTEMPTS; attempt++) {
+        for (
+            let attempt = 1;
+            attempt <= SlugGeneratorService.MAX_ATTEMPTS;
+            attempt++
+        ) {
             const candidate = this.generateRandomString();
             const candidateLower = candidate.toLowerCase();
 
@@ -103,10 +107,10 @@ export class SlugGeneratorService {
                 i < buffer.length && out.length < SlugGeneratorService.LENGTH;
                 i++
             ) {
-                const byte = buffer[i]!;
+                const byte = buffer[i];
                 if (byte < maxUsable) {
                     out.push(
-                        SlugGeneratorService.ALPHABET[byte % alphabetLength]!
+                        SlugGeneratorService.ALPHABET[byte % alphabetLength]
                     );
                 }
             }

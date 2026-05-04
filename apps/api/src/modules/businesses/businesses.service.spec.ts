@@ -6,7 +6,10 @@ import {
     NotFoundException,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
-import type { CreateBusinessRequest, UpdateBusinessRequest } from '@finly/types';
+import type {
+    CreateBusinessRequest,
+    UpdateBusinessRequest,
+} from '@finly/types';
 
 import { BusinessesService } from './businesses.service';
 import { Business } from './schemas/business.schema';
@@ -53,7 +56,10 @@ describe('BusinessesService', () => {
         const module = await Test.createTestingModule({
             providers: [
                 BusinessesService,
-                { provide: getModelToken(Business.name), useValue: businessModel },
+                {
+                    provide: getModelToken(Business.name),
+                    useValue: businessModel,
+                },
                 { provide: SlugGeneratorService, useValue: slugGenerator },
             ],
         }).compile();
@@ -128,7 +134,9 @@ describe('BusinessesService', () => {
             await service.getOwnedAndManaged(userId.toString(), false);
 
             const filter = businessModel.find.mock.calls[0]![0];
-            expect(filter).toMatchObject({ ownerId: expect.any(Types.ObjectId) });
+            expect(filter).toMatchObject({
+                ownerId: expect.any(Types.ObjectId),
+            });
             expect((filter.ownerId as Types.ObjectId).toString()).toBe(
                 userId.toString()
             );

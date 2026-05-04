@@ -5,7 +5,6 @@ import {
     Get,
     HttpCode,
     HttpStatus,
-    Param,
     Patch,
     Post,
     UseGuards,
@@ -70,9 +69,9 @@ export class BusinessesController {
 
     @Get(':slug')
     @UseGuards(BusinessAccessGuard)
-    getBySlug(
-        @CurrentBusiness() business: BusinessDocument
-    ): { data: BusinessDocument } {
+    getBySlug(@CurrentBusiness() business: BusinessDocument): {
+        data: BusinessDocument;
+    } {
         // Lookup уже зробив guard; controller просто обгортає у envelope.
         return { data: business };
     }

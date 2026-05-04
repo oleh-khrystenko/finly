@@ -44,54 +44,37 @@ export default function BusinessSlugPage() {
     const [business, setBusiness] = useState<Business | null>(null);
     const [error, setError] = useState<{ code: string } | null>(null);
     const [previewMode, setPreviewMode] = useState(false);
-    const [publicView, setPublicView] = useState<PublicBusinessViewData | null>(
-        null,
-    );
-    const [publicViewLoading, setPublicViewLoading] = useState(false);
 
-    const fetchBusiness = useCallback(async () => {
+    // State-mutation тільки в .then/.catch async-callback-ах — синхронний
+    // reset перед fetch порушує react-hooks/set-state-in-effect (React 19).
+    // Stale data залишається видимою під час фонового re-fetch при зміні slug
+    // (Linear-style); initial mount — `business === null` показує спінер до
+    // першої відповіді.
+    useEffect(() => {
         if (!params.slug) return;
-        setBusiness(null);
-        setError(null);
-        try {
-            const fetched = await getBusinessBySlug(params.slug);
-            setBusiness(fetched);
-        } catch (err) {
-            const code =
-                err instanceof AxiosError
-                    ? ((err.response?.data as { error?: { code?: string } } | undefined)
-                          ?.error?.code ?? 'unknown')
-                    : 'unknown';
-            setError({ code });
-        }
-    }, [params.slug]);
-
-    useEffect(() => {
-        void fetchBusiness();
-    }, [fetchBusiness]);
-
-    // Sprint 3 §3.8 §B2 — preview-toggle fetch-ить public view (з nbuLinks
-    // для функціональних CTA). Окремий fetch, бо cabinet endpoint навмисно
-    // не повертає nbuLinks (whitelist розділяє auth-зону і public-зону).
-    useEffect(() => {
-        if (!previewMode || !business) return;
         let cancelled = false;
-        setPublicViewLoading(true);
-        getPublicBusinessView(business.slug)
-            .then((v) => {
-                if (!cancelled) setPublicView(v);
+        getBusinessBySlug(params.slug)
+            .then((fetched) => {
+                if (cancelled) return;
+                setBusiness(fetched);
+                setError(null);
             })
-            .catch(() => {
-                /* silent — preview просто не покаже nbuLinks */
-            })
-            .finally(() => {
-                if (!cancelled) setPublicViewLoading(false);
+            .catch((err: unknown) => {
+                if (cancelled) return;
+                const code =
+                    err instanceof AxiosError
+                        ? ((
+                              err.response?.data as
+                                  | { error?: { code?: string } }
+                                  | undefined
+                          )?.error?.code ?? 'unknown')
+                        : 'unknown';
+                setError({ code });
             });
         return () => {
             cancelled = true;
         };
-    }, [previewMode, business]);
-
+    }, [params.slug]);
 
     const handlePatch = useCallback(
         async (patch: UpdateBusinessRequest) => {
@@ -103,16 +86,18 @@ export default function BusinessSlugPage() {
             } catch (err) {
                 const code =
                     err instanceof AxiosError
-                        ? ((err.response?.data as
-                              | { error?: { code?: string } }
-                              | undefined)?.error?.code ?? 'unknown')
+                        ? ((
+                              err.response?.data as
+                                  | { error?: { code?: string } }
+                                  | undefined
+                          )?.error?.code ?? 'unknown')
                         : 'unknown';
                 const msg = getApiMessage(code, 'businesses');
                 toast.error(msg);
                 throw new Error(msg);
             }
         },
-        [business],
+        [business]
     );
 
     const handleDelete = useCallback(() => {
@@ -195,26 +180,7 @@ export default function BusinessSlugPage() {
 
             {/* Body: preview vs edit. */}
             {previewMode ? (
-                <div className="border-border bg-background rounded-xl border">
-                    {publicView ? (
-                        <PublicBusinessView
-                            type={publicView.type}
-                            name={publicView.name}
-                            slug={publicView.slug}
-                            acceptedBanks={publicView.acceptedBanks}
-                            nbuLinks={publicView.nbuLinks}
-                        />
-                    ) : publicViewLoading ? (
-                        <div className="flex justify-center py-16">
-                            <UiSpinner size="md" />
-                        </div>
-                    ) : (
-                        <p className="text-muted-foreground p-8 text-center text-sm">
-                            Не вдалося завантажити перегляд. Натисніть
-                            «Відкрити в новій вкладці» для перевірки.
-                        </p>
-                    )}
-                </div>
+                <BusinessPreviewPanel business={business} />
             ) : (
                 <div className="space-y-4">
                     <BasicSection business={business} onSave={handlePatch} />
@@ -222,10 +188,7 @@ export default function BusinessSlugPage() {
                         business={business}
                         onSave={handlePatch}
                     />
-                    <TaxationSection
-                        business={business}
-                        onSave={handlePatch}
-                    />
+                    <TaxationSection business={business} onSave={handlePatch} />
                     <BanksSection business={business} onSave={handlePatch} />
                     <PublicSection
                         business={business}
@@ -258,6 +221,61 @@ export default function BusinessSlugPage() {
                 </div>
             )}
         </UiPageContainer>
+    );
+}
+
+// Sprint 3 §3.8 §B2 — preview-toggle fetch-ить public view (з nbuLinks для
+// функціональних CTA). Окремий fetch, бо cabinet endpoint навмисно не
+// повертає nbuLinks (whitelist розділяє auth-зону і public-зону).
+//
+// Винесено в окремий компонент із власним state замість inline-effect-а у
+// parent: mount/unmount керується `previewMode`-toggle-ом, тож state має
+// чистий lifecycle і всі setState — у async-callback-ах (lint-rule
+// react-hooks/set-state-in-effect стосується тільки synchronous setState
+// у effect body, що було в попередній inline-версії).
+type PreviewState =
+    | { kind: 'loading' }
+    | { kind: 'loaded'; view: PublicBusinessViewData }
+    | { kind: 'failed' };
+
+function BusinessPreviewPanel({ business }: { business: Business }) {
+    const [state, setState] = useState<PreviewState>({ kind: 'loading' });
+
+    useEffect(() => {
+        let cancelled = false;
+        getPublicBusinessView(business.slug)
+            .then((v) => {
+                if (!cancelled) setState({ kind: 'loaded', view: v });
+            })
+            .catch(() => {
+                if (!cancelled) setState({ kind: 'failed' });
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [business.slug]);
+
+    return (
+        <div className="border-border bg-background rounded-xl border">
+            {state.kind === 'loaded' ? (
+                <PublicBusinessView
+                    type={state.view.type}
+                    name={state.view.name}
+                    slug={state.view.slug}
+                    acceptedBanks={state.view.acceptedBanks}
+                    nbuLinks={state.view.nbuLinks}
+                />
+            ) : state.kind === 'loading' ? (
+                <div className="flex justify-center py-16">
+                    <UiSpinner size="md" />
+                </div>
+            ) : (
+                <p className="text-muted-foreground p-8 text-center text-sm">
+                    Не вдалося завантажити перегляд. Натисніть «Відкрити в новій
+                    вкладці» для перевірки.
+                </p>
+            )}
+        </div>
     );
 }
 

@@ -109,10 +109,7 @@ export class BusinessesService {
         const filter = isBookkeeperMode
             ? { ownerId: null, managers: userObjectId }
             : { ownerId: userObjectId };
-        return this.businessModel
-            .find(filter)
-            .sort({ createdAt: -1 })
-            .exec();
+        return this.businessModel.find(filter).sort({ createdAt: -1 }).exec();
     }
 
     /**
@@ -142,8 +139,7 @@ export class BusinessesService {
                     message: 'Business not found during update',
                 });
             }
-            const nextTaxation =
-                dto.taxationSystem ?? existing.taxationSystem;
+            const nextTaxation = dto.taxationSystem ?? existing.taxationSystem;
             const nextVat =
                 dto.isVatPayer !== undefined
                     ? dto.isVatPayer

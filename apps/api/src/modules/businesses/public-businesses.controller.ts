@@ -96,11 +96,11 @@ export class PublicBusinessesController {
             nbuLinks: {
                 primary: this.qrService.buildNbuPayloadLinkForInput(
                     payloadInput,
-                    NBU_HOST_PRIMARY,
+                    NBU_HOST_PRIMARY
                 ),
                 legacy: this.qrService.buildNbuPayloadLinkForInput(
                     payloadInput,
-                    NBU_HOST_LEGACY,
+                    NBU_HOST_LEGACY
                 ),
             },
         });

@@ -216,7 +216,9 @@ describe('Businesses E2E', () => {
             .overrideProvider(EmailService)
             .useValue({
                 sendMagicLink: jest.fn().mockResolvedValue(undefined),
-                sendDeletionConfirmation: jest.fn().mockResolvedValue(undefined),
+                sendDeletionConfirmation: jest
+                    .fn()
+                    .mockResolvedValue(undefined),
             })
             .compile();
 
@@ -359,7 +361,9 @@ describe('Businesses E2E', () => {
         });
 
         it('створює ownerless business для бухгалтера', async () => {
-            const user = await createUser({ worksAsBookkeeper: true } as Partial<UserDocument>);
+            const user = await createUser({
+                worksAsBookkeeper: true,
+            } as Partial<UserDocument>);
             const res = await supertest(app.getHttpServer())
                 .post('/api/businesses/me')
                 .set('Authorization', bearerFor(user))
@@ -581,25 +585,27 @@ describe('Businesses E2E', () => {
             expect(stillThere?.slug).toBe(slug);
         });
 
-        it.each(['type', 'ownerId', 'managers', 'slugLower', 'id', 'createdAt'])(
-            'reject спробу змінити %s через PATCH (.strict())',
-            async (key) => {
-                const user = await createUser();
-                const created = await supertest(app.getHttpServer())
-                    .post('/api/businesses/me')
-                    .set('Authorization', bearerFor(user))
-                    .send(VALID_CREATE_PAYLOAD);
-                const { slug } = (
-                    created.body as { data: { slug: string } }
-                ).data;
+        it.each([
+            'type',
+            'ownerId',
+            'managers',
+            'slugLower',
+            'id',
+            'createdAt',
+        ])('reject спробу змінити %s через PATCH (.strict())', async (key) => {
+            const user = await createUser();
+            const created = await supertest(app.getHttpServer())
+                .post('/api/businesses/me')
+                .set('Authorization', bearerFor(user))
+                .send(VALID_CREATE_PAYLOAD);
+            const { slug } = (created.body as { data: { slug: string } }).data;
 
-                await supertest(app.getHttpServer())
-                    .patch(`/api/businesses/me/${slug}`)
-                    .set('Authorization', bearerFor(user))
-                    .send({ [key]: 'evil' })
-                    .expect(400);
-            }
-        );
+            await supertest(app.getHttpServer())
+                .patch(`/api/businesses/me/${slug}`)
+                .set('Authorization', bearerFor(user))
+                .send({ [key]: 'evil' })
+                .expect(400);
+        });
 
         it('coupled cross-field VAT (PATCH тільки isVatPayer=true з existing simplified-1) — 400', async () => {
             const user = await createUser();
@@ -703,10 +709,10 @@ describe('Businesses E2E', () => {
             expect(body.data).not.toHaveProperty('ownerId');
             // nbuLinks ведуть на правильні host-и (рішення A2)
             expect(body.data.nbuLinks.primary).toMatch(
-                /^https:\/\/qr\.bank\.gov\.ua\//,
+                /^https:\/\/qr\.bank\.gov\.ua\//
             );
             expect(body.data.nbuLinks.legacy).toMatch(
-                /^https:\/\/bank\.gov\.ua\/qr\//,
+                /^https:\/\/bank\.gov\.ua\/qr\//
             );
         });
 

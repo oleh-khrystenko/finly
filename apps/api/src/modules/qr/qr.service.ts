@@ -84,11 +84,7 @@ export class QrService {
      * dev — обидва відносні шляхи працюють однаково (asset копіюється у dist
      * через nest-cli `assets` config).
      */
-    private readonly logoPath = join(
-        __dirname,
-        'assets',
-        'hryvnia-symbol.png'
-    );
+    private readonly logoPath = join(__dirname, 'assets', 'hryvnia-symbol.png');
 
     constructor(
         private readonly imageRenderer: QrImageRenderer,
