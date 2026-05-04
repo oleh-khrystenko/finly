@@ -35,7 +35,7 @@ export default function CallbackPage() {
                 // (sign-in page checkbox was checked before redirect)
                 await acceptTerms().catch(() => {});
 
-                router.replace(consumeRedirect('/dashboard'));
+                router.replace(consumeRedirect('/business'));
             } catch {
                 // getMe failed → user is soft-deleted (JwtActiveGuard blocks)
                 if (isAccountDeleted) {
@@ -60,7 +60,7 @@ export default function CallbackPage() {
             toast.success('Акаунт відновлено!');
             const user = await getMe();
             useAuthStore.getState().setUser(user);
-            router.replace(consumeRedirect('/dashboard'));
+            router.replace(consumeRedirect('/business'));
         } catch {
             setSubmitting(false);
             router.replace('/auth/signin');

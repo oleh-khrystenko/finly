@@ -1,5 +1,7 @@
 import {
     ALLOWED_NBU_PAYLOAD_LINK_HOSTS_003,
+    NBU_HOST_LEGACY,
+    NBU_HOST_PRIMARY,
     URL_PREFIX_002,
     isAllowedNbuPayloadLinkHost003,
 } from './url-prefix';
@@ -11,11 +13,21 @@ describe('NBU URL prefixes — постанова № 97 від 19.08.2025', () 
         });
     });
 
+    describe('NBU_HOST_PRIMARY / NBU_HOST_LEGACY', () => {
+        it('NBU_HOST_PRIMARY = "qr.bank.gov.ua" (рекомендований нормативом для 003)', () => {
+            expect(NBU_HOST_PRIMARY).toBe('qr.bank.gov.ua');
+        });
+
+        it('NBU_HOST_LEGACY = "bank.gov.ua/qr" (запасний варіант для двох-кнопкової UI)', () => {
+            expect(NBU_HOST_LEGACY).toBe('bank.gov.ua/qr');
+        });
+    });
+
     describe('ALLOWED_NBU_PAYLOAD_LINK_HOSTS_003', () => {
         it('містить лише два host-варіанти, дозволених нормативом для не-НПП', () => {
             expect(ALLOWED_NBU_PAYLOAD_LINK_HOSTS_003).toEqual([
-                'qr.bank.gov.ua',
-                'bank.gov.ua/qr',
+                NBU_HOST_PRIMARY,
+                NBU_HOST_LEGACY,
             ]);
         });
     });

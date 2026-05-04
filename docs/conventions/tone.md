@@ -23,47 +23,46 @@
 4. **Дієслово у минулому часі** для success-підтверджень: "Звіт створено", "Посилання надіслано"
 5. **Без знаку оклику** в success-повідомленнях
 6. **Однакова структура** для однотипних повідомлень (створення, видалення, оновлення)
-7. **i18n**: кожне повідомлення має бути в `messages/uk.json` та `messages/en.json`, ніколи hardcoded. Виняток: текст, що стосується лише одного locale (наприклад, примітка "документ доступний лише англійською" для UK) — hardcoded допустимий, бо переклад на інші мови семантично безглуздий
+7. **Single-locale (uk only) — без i18n каталогів**: продукт випускається українською без перемикача мов. Web-рядки — інлайн у JSX/компонентах (`<p>Збережено</p>`, не `<p>{t('saved')}</p>`); email-копія — у `apps/api/src/modules/email/translations.ts` (`EMAIL_TEXT` map); API-side error-codes мапляться у UA через `apps/web/src/shared/api/mapApiCode.ts`. **Жодного `messages/uk.json` чи `next-intl` setup** — Sprint 3 §3.10 фіксує цей контракт продукту. Якщо колись треба буде повернути локалізацію (`en`, наприклад) — це окрема велика міграція з ADR (i18n-router, локаль-prefix у URL, сервер-side `lang` headers, переклад email-template-ів), не одна правка прапорця.
 
 ## Examples (для поточного тону: classic-polite)
 
-| Контекст | Мова | Correct | Wrong |
-|----------|------|---------|-------|
-| Success (створення) | UK | Звіт успішно створено | Ура! Звіт створено! |
-| Success (створення) | EN | Report created successfully | Yay! Report created! |
-| Success (видалення) | UK | Запис видалено | Готово, видалили! |
-| Success (видалення) | EN | Record deleted | Done, deleted! |
-| Success (відправка) | UK | Посилання надіслано на вашу пошту | Лист полетів! |
-| Success (відправка) | EN | Link sent to your email | Email is on its way! |
-| Error (загальна) | UK | Не вдалося зберегти. Спробуйте пізніше | Ой, щось пішло не так |
-| Error (загальна) | EN | Failed to save. Please try again later | Oops, something went wrong |
-| Error (валідація) | UK | Введіть коректну email-адресу | Неправильний email!!! |
-| Error (валідація) | EN | Please enter a valid email address | Wrong email!!! |
-| Confirmation | UK | Ви впевнені, що хочете видалити цей звіт? | Точно видаляємо? |
-| Confirmation | EN | Are you sure you want to delete this report? | Delete it for real? |
-| Loading | UK | Завантаження... | Зачекай... |
-| Loading | EN | Loading... | Hold on... |
-| Empty state | UK | Звітів поки немає | Тут пусто :( |
-| Empty state | EN | No reports yet | Nothing here :( |
+Продукт single-locale (uk); приклади — лише UA.
 
-## Patterns для i18n ключів
+| Контекст | Correct | Wrong |
+|----------|---------|-------|
+| Success (створення) | Звіт успішно створено | Ура! Звіт створено! |
+| Success (видалення) | Запис видалено | Готово, видалили! |
+| Success (відправка) | Посилання надіслано на вашу пошту | Лист полетів! |
+| Error (загальна) | Не вдалося зберегти. Спробуйте пізніше | Ой, щось пішло не так |
+| Error (валідація) | Введіть коректну email-адресу | Неправильний email!!! |
+| Confirmation | Ви впевнені, що хочете видалити цей звіт? | Точно видаляємо? |
+| Loading | Завантаження... | Зачекай... |
+| Empty state | Звітів поки немає | Тут пусто :( |
 
-Повідомлення зберігаються в `messages/{locale}.json` за патерном:
+## Patterns для повідомлень
 
+Web-side error-mapping живе у `apps/web/src/shared/api/mapApiCode.ts`:
+машинні `RESPONSE_CODE` коди (snake_case) → UA-рядок. Згруповані за модулем
+(`auth`, `users`, `payments`, `businesses`, тощо).
+
+Приклад:
+```ts
+const ERRORS: Record<string, MessageDict> = {
+    businesses: {
+        business_not_found: 'Бізнес не знайдено',
+        business_access_denied: 'У вас немає доступу до цього бізнесу',
+    },
+};
 ```
-"notifications.{entity}.{action}": "Текст повідомлення"
-```
 
-Приклади:
-- `notifications.report.created` → "Звіт успішно створено"
-- `notifications.report.deleted` → "Звіт видалено"
-- `notifications.auth.magic_link_sent` → "Посилання надіслано на вашу пошту"
-- `errors.generic.save_failed` → "Не вдалося зберегти. Спробуйте пізніше"
-- `errors.validation.invalid_email` → "Введіть коректну email-адресу"
+Email-side рядки — `apps/api/src/modules/email/translations.ts`
+(`EMAIL_TEXT` map). Toast і inline-помилки — інлайн у JSX.
 
 ## Як змінити тон
 
 1. Зміни значення `TONE:` вище (наприклад, `casual-friendly`, `formal-corporate`)
 2. Онови таблицю прикладів відповідно до нового тону
-3. Онови `messages/uk.json` та `messages/en.json`
-4. Правила з секції "Rules" залишаються незмінними
+3. Онови `mapApiCode.ts` (`apps/web`) і `translations.ts` (`apps/api/email/`)
+4. Інлайн-рядки у JSX/email-template-ах — пройди grep-ом, оновлюй точково
+5. Правила з секції "Rules" залишаються незмінними

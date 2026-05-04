@@ -6,7 +6,7 @@ import {
     User,
     CreditCard,
     Menu,
-    LayoutDashboard,
+    Briefcase,
     Bot,
 } from 'lucide-react';
 import ChangeTheme from '@/features/change-theme';
@@ -14,6 +14,7 @@ import { Logo } from '@/entities/brand';
 import UiButton from '@/shared/ui/UiButton';
 import UiHeaderShell from '@/shared/ui/UiHeaderShell';
 import UiDropdownMenu from '@/shared/ui/UiDropdownMenu';
+import UiSwitch from '@/shared/ui/UiSwitch';
 import { UiAvatar } from '@/shared/ui/UiAvatar';
 import { useAuthStore } from '@/entities/user';
 import { getFullName } from '@finly/types';
@@ -53,13 +54,16 @@ const Header = () => {
     const showGlass = !hasNav || isScrolled;
     const [canAnimate, setCanAnimate] = useState(false);
 
-    const { visibleItems, handleSelect, initials } = useUserMenu({
-        dashboard: <LayoutDashboard />,
-        aiChat: <Bot />,
-        profile: <User />,
-        billing: <CreditCard />,
-        logout: <LogOut />,
-    });
+    const { visibleItems, handleSelect, bookkeeperToggle, initials } =
+        useUserMenu({
+            // Sprint 3 рішення E2: Dashboard → Бізнеси (`/business`).
+            // `Briefcase` як іконка бізнес-сегмента (заміна LayoutDashboard).
+            businesses: <Briefcase />,
+            aiChat: <Bot />,
+            profile: <User />,
+            billing: <CreditCard />,
+            logout: <LogOut />,
+        });
 
     useEffect(() => {
         const id = requestAnimationFrame(() => setCanAnimate(true));
@@ -147,29 +151,67 @@ const Header = () => {
                             onSelect={(value) => handleSelect(value)}
                             size="sm"
                             header={
-                                <div className="flex items-center gap-2.5">
-                                    <UiAvatar
-                                        size="sm"
-                                        src={user.profile.avatar}
-                                        alt={
-                                            getFullName(
-                                                user.profile.firstName,
-                                                user.profile.lastName,
-                                            ) ?? ''
-                                        }
-                                        fallback={initials}
-                                    />
-                                    <div className="flex flex-col">
-                                        <span className="text-foreground text-sm font-medium">
-                                            {getFullName(
-                                                user.profile.firstName,
-                                                user.profile.lastName,
-                                            )}
-                                        </span>
-                                        <span className="text-muted-foreground text-xs">
-                                            {user.email}
-                                        </span>
+                                <div className="flex flex-col gap-3">
+                                    <div className="flex items-center gap-2.5">
+                                        <UiAvatar
+                                            size="sm"
+                                            src={user.profile.avatar}
+                                            alt={
+                                                getFullName(
+                                                    user.profile.firstName,
+                                                    user.profile.lastName,
+                                                ) ?? ''
+                                            }
+                                            fallback={initials}
+                                        />
+                                        <div className="flex flex-col">
+                                            <span className="text-foreground text-sm font-medium">
+                                                {getFullName(
+                                                    user.profile.firstName,
+                                                    user.profile.lastName,
+                                                )}
+                                            </span>
+                                            <span className="text-muted-foreground text-xs">
+                                                {user.email}
+                                            </span>
+                                        </div>
                                     </div>
+                                    {/* Sprint 3 §3.5 §E5 — bookkeeper toggle.
+                                        Inline-опис без hover-tooltip
+                                        (responsive.md §6). `<label htmlFor>`
+                                        дає click-on-row → toggles UiSwitch
+                                        нативно (Headless UI Switch — це
+                                        самостійний interactive button з
+                                        власним role/a11y). Без обгортки у
+                                        зайвий <button> — інакше nested
+                                        interactive controls + invalid DOM. */}
+                                    {bookkeeperToggle && (
+                                        <label
+                                            htmlFor="header-bookkeeper-toggle"
+                                            className="border-border hover:bg-accent flex cursor-pointer items-start justify-between gap-3 rounded-md border p-2.5 transition-colors"
+                                        >
+                                            <div className="flex min-w-0 flex-col">
+                                                <span className="text-foreground text-sm font-medium">
+                                                    {bookkeeperToggle.label}
+                                                </span>
+                                                <span className="text-muted-foreground text-xs">
+                                                    {
+                                                        bookkeeperToggle.description
+                                                    }
+                                                </span>
+                                            </div>
+                                            <UiSwitch
+                                                id="header-bookkeeper-toggle"
+                                                size="sm"
+                                                checked={
+                                                    bookkeeperToggle.checked
+                                                }
+                                                onChange={() =>
+                                                    void bookkeeperToggle.onToggle()
+                                                }
+                                            />
+                                        </label>
+                                    )}
                                 </div>
                             }
                             trigger={

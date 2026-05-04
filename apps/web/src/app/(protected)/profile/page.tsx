@@ -27,7 +27,9 @@ function ProfileContent() {
 
     const handleProfileSaved = () => {
         if (mode === 'new') {
-            router.push('/dashboard');
+            // Sprint 3 §3.5 §E2 — onboarding closing redirect → /business
+            // (replaces /dashboard).
+            router.push('/business');
         }
     };
 

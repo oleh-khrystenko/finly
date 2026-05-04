@@ -28,6 +28,7 @@ services:
             - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
             - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
             - WEB_URL=http://localhost:${WEB_PORT}
+            - PAY_PUBLIC_URL=http://pay.finly.local:${WEB_PORT}
             - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
             - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
             - GOOGLE_CALLBACK_URL=${GOOGLE_CALLBACK_URL}
@@ -45,7 +46,6 @@ services:
             - AUTH_MAGIC_LINK_RATE_WINDOW_MIN=${AUTH_MAGIC_LINK_RATE_WINDOW_MIN}
             - AUTH_MAGIC_LINK_DEDUP_SEC=${AUTH_MAGIC_LINK_DEDUP_SEC}
             - ACCOUNT_DELETION_GRACE_DAYS=${ACCOUNT_DELETION_GRACE_DAYS}
-            - NBU_PAYLOAD_LINK_HOST=${NBU_PAYLOAD_LINK_HOST}
             - TSC_WATCHFILE=UsePolling
             - TSC_WATCHDIRECTORY=UsePolling
         ports:
@@ -79,6 +79,7 @@ services:
             - NEXT_PUBLIC_API_URL=http://localhost:${API_PORT}/api
             - NEXT_PUBLIC_PAYMENTS_SUBSCRIPTION_ENABLED=${NEXT_PUBLIC_PAYMENTS_SUBSCRIPTION_ENABLED}
             - NEXT_PUBLIC_PAYMENTS_ONE_OFF_ENABLED=${NEXT_PUBLIC_PAYMENTS_ONE_OFF_ENABLED}
+            - NEXT_PUBLIC_PAY_PUBLIC_URL=http://pay.finly.local:${WEB_PORT}
             - WATCHPACK_POLLING=true
             - CHOKIDAR_USEPOLLING=true
         ports:

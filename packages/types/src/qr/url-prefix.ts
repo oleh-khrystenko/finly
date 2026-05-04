@@ -22,13 +22,18 @@ export const URL_PREFIX_002 = 'https://bank.gov.ua/qr/' as const;
  * надавача платіжних послуг (банку) — але Finly не НПП, тому з допустимих
  * варіантів нам залишаються лише ці два.
  *
- * Default: `qr.bank.gov.ua` (рекомендований нормативом для 003).
- * Fallback: `bank.gov.ua/qr` (на випадок, якщо UAT QR-6 виявить банки, що не
- * оновили `apple-app-site-association`/`assetlinks.json` під qr.bank.gov.ua).
+ * Sprint 3 рішення A2 (`docs/sprints/03-cabinet-public/planning-questions.md`):
+ * Finly реалізовує **обидва** допустимі hosts через дві кнопки на публічній
+ * сторінці («Інший банк» — `NBU_HOST_PRIMARY`, «Інший банк (запасний варіант)» —
+ * `NBU_HOST_LEGACY`). Жодного env-перемикача, жодного дефолту в коді: caller
+ * `QrService.renderForNbuPayload` передає host явно з цих двох констант.
  */
+export const NBU_HOST_PRIMARY = 'qr.bank.gov.ua' as const;
+export const NBU_HOST_LEGACY = 'bank.gov.ua/qr' as const;
+
 export const ALLOWED_NBU_PAYLOAD_LINK_HOSTS_003 = [
-    'qr.bank.gov.ua',
-    'bank.gov.ua/qr',
+    NBU_HOST_PRIMARY,
+    NBU_HOST_LEGACY,
 ] as const;
 
 export type AllowedNbuPayloadLinkHost003 =

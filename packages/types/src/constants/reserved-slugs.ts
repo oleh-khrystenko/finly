@@ -53,6 +53,11 @@ const TECHNICAL = [
     'app',
     'assets',
     'public',
+    // Sprint 3 §3.1 — internal URL-segment під middleware-rewrite публічної
+    // зони (`app/host-pay/[slug]/page.tsx`). Якщо ФОП візьме slug `host-pay`,
+    // public-handler потрапить у рекурсивний rewrite. Reserved тут блокує
+    // створення такого slug-а на write-path.
+    'host-pay',
 ] as const;
 
 const SYSTEM = [

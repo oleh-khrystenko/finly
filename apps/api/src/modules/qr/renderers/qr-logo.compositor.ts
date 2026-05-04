@@ -31,13 +31,19 @@ export interface QrLogoComposeOptions {
 }
 
 /**
- * Накладає Finly-лого у центр QR-PNG через `sharp` composite-pipeline.
+ * Накладає центральний asset у центр QR-PNG через `sharp` composite-pipeline.
+ *
+ * **Sprint 3 рішення C5:** дефолтний asset — нормативний (білий круг зі знаком
+ * гривні, постанова НБУ № 97 §II.11–12 ст. 5), не довільне лого. Ця класифікація
+ * структурно живе у caller-і (`QrService.logoPath`); compositor параметризований
+ * через `logoPath: string` навмисно — Sprint 6 (custom-logo upload, Paid фіча)
+ * додасть file-resolver, що приймає R2 key, без зміни renderer-а. Назва класу
+ * (`Compositor`) залишається generic.
  *
  * Чому окремий клас від `QrImageRenderer`:
  *   - `qrcode` не вміє комбінувати з image overlay (тільки чистий QR).
  *   - `sharp` — native (libvips), важка залежність — ізолюємо composition logic.
- *   - У майбутньому Sprint 6 (custom-logo upload) → той самий `compose()` з
- *     іншим `logoPath`. Render+compose split дозволяє переюзати без рефактора.
+ *   - Render+compose split дозволяє переюзати під різні asset-и без рефактора.
  *
  * Лого ніколи не масштабується вгору (`without-enlargement` у resize):
  * якщо asset 1024×1024, а QR 512px і ratio 0.2 → лого 102×102 (downscale).

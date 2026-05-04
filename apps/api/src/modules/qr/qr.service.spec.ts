@@ -1,6 +1,11 @@
 import { Test } from '@nestjs/testing';
 
-import { PayloadValidationError, type PayloadInput } from '@finly/types';
+import {
+    NBU_HOST_LEGACY,
+    NBU_HOST_PRIMARY,
+    PayloadValidationError,
+    type PayloadInput,
+} from '@finly/types';
 
 import { QrService } from './qr.service';
 import { QrImageRenderer } from './renderers/qr-image.renderer';
@@ -88,18 +93,46 @@ describe('QrService — orchestration (mocked renderers)', () => {
             expect(renderedText).toMatch(/^https:\/\/bank\.gov\.ua\/qr\//);
         });
 
-        it('будує 003-payload і обгортає в qr.bank.gov.ua/...', async () => {
-            await service.renderForNbuPayload(VALID_INPUT, '003');
+        it('будує 003-payload з NBU_HOST_PRIMARY і обгортає в qr.bank.gov.ua/...', async () => {
+            await service.renderForNbuPayload(VALID_INPUT, '003', {
+                host: NBU_HOST_PRIMARY,
+            });
             const renderedText = imageRenderer.render.mock.calls[0]?.[0];
-            // env у test-setup.ts = qr.bank.gov.ua за дефолтом.
             expect(renderedText).toMatch(/^https:\/\/qr\.bank\.gov\.ua\//);
+        });
+
+        it('будує 003-payload з NBU_HOST_LEGACY і обгортає в bank.gov.ua/qr/...', async () => {
+            await service.renderForNbuPayload(VALID_INPUT, '003', {
+                host: NBU_HOST_LEGACY,
+            });
+            const renderedText = imageRenderer.render.mock.calls[0]?.[0];
+            expect(renderedText).toMatch(/^https:\/\/bank\.gov\.ua\/qr\//);
+        });
+
+        it('кидає PayloadValidationError(PAYLOAD_HOST_REQUIRED) для 003 без host (callsite, що обійшов TypeScript-overload)', async () => {
+            // Симулюємо callsite, що передав '003' без options через
+            // type-erasure (`any`-cast / dynamic version). Service не повинен
+            // падати з нечитабельним TypeError — required-host validation
+            // живе у `buildNbuPayloadLink` як доменна помилка. `unknown`
+            // intermediate cast — обхід TS-overload-guard'а у тесті, що саме
+            // moделює type-erasure у production callsite.
+            const erased = service.renderForNbuPayload as unknown as (
+                input: typeof VALID_INPUT,
+                version: '003'
+            ) => Promise<Buffer>;
+            await expect(erased(VALID_INPUT, '003')).rejects.toMatchObject({
+                name: 'PayloadValidationError',
+                code: 'PAYLOAD_HOST_REQUIRED',
+            });
+            expect(imageRenderer.render).not.toHaveBeenCalled();
         });
 
         it('пропагує PayloadValidationError для невалідного input (наприклад, IBAN)', async () => {
             await expect(
                 service.renderForNbuPayload(
                     { ...VALID_INPUT, iban: 'UA000000000000000000000000000' },
-                    '003'
+                    '003',
+                    { host: NBU_HOST_PRIMARY }
                 )
             ).rejects.toBeInstanceOf(PayloadValidationError);
             // Renderer не викликається при payload-помилці — early reject.
@@ -111,7 +144,8 @@ describe('QrService — orchestration (mocked renderers)', () => {
             await expect(
                 service.renderForNbuPayload(
                     { ...VALID_INPUT, receiverTaxId: '0000000001' },
-                    '003'
+                    '003',
+                    { host: NBU_HOST_PRIMARY }
                 )
             ).rejects.toBeInstanceOf(PayloadValidationError);
         });

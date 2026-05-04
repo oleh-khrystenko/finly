@@ -28,13 +28,10 @@ export interface BuildLinkOptions {
  *   - 003 (Додаток 4 §I таблиця 1, ст. 23): `https://<host>/<base64url>`.
  *     Host — змінна, до 50 B max.
  *
- * **Whitelist валідація на двох layer-ах:**
- *   1. `apps/api/src/config/env.ts` — fail-fast при старті API (адмін
- *      підставив pay.finly.com.ua або typo).
- *   2. Тут — захист від inline-літералів замість `ENV.NBU_PAYLOAD_LINK_HOST`
- *      у викликаючому коді (caller помилково передав довільний рядок).
- *   Дублювання навмисне — payload-генерація критичний контракт із зовнішнім
- *   світом, дешевше захиститись на двох рівнях.
+ * **Whitelist валідація.** Caller (`QrService.renderForNbuPayload`) зобовʼязаний
+ * передати host з `NBU_HOST_PRIMARY` / `NBU_HOST_LEGACY` (Sprint 3 рішення A2 —
+ * жодного env-перемикача / дефолту в коді). Цей builder додатково перевіряє host
+ * проти whitelist — захист від inline-літералів у callsite.
  */
 export function buildNbuPayloadLink(
     version: PayloadVersion,
@@ -64,7 +61,7 @@ export function buildNbuPayloadLink(
             'PAYLOAD_HOST_REQUIRED',
             'host',
             '003',
-            'Format 003 requires `host` option (e.g. ENV.NBU_PAYLOAD_LINK_HOST)'
+            'Format 003 requires `host` option (NBU_HOST_PRIMARY or NBU_HOST_LEGACY)'
         );
     }
     if (!isAllowedNbuPayloadLinkHost003(host)) {

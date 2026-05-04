@@ -228,7 +228,7 @@ function SigninContent() {
             } else {
                 const me = await getMe();
                 setUser(me);
-                router.push(consumeRedirect('/dashboard'));
+                router.push(consumeRedirect('/business'));
             }
         } catch (err) {
             const code =
@@ -287,7 +287,7 @@ function SigninContent() {
             toast.success('Акаунт відновлено!');
             const me = await getMe();
             setUser(me);
-            router.push(consumeRedirect('/dashboard'));
+            router.push(consumeRedirect('/business'));
         } catch (err) {
             setSubmitting(false);
             handleError(err);

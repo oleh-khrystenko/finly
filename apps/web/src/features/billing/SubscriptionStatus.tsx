@@ -1,8 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import type { PaymentsCatalog } from '@finly/types';
-import { getCatalog } from '@/shared/api/payments';
 import { useAuthStore } from '@/entities/user';
 import { formatLocalDate, INTL_LOCALE } from '@/shared/lib';
 import UiLink from '@/shared/ui/UiLink';
@@ -18,19 +16,29 @@ function formatPlanName(code: string | null | undefined): string {
     return PLAN_NAMES[code] ?? code;
 }
 
-export default function SubscriptionStatus() {
+interface Props {
+    /**
+     * Pre-fetched catalog з parent-page. Pure presentation — компонент
+     * НЕ робить власний `getCatalog()` (це б дублювало existing fetch у
+     * `/billing/page.tsx`). `null` під час loading; UI деградує до
+     * показу плану без `executions/period` рядка.
+     */
+    catalog: PaymentsCatalog | null;
+}
+
+/**
+ * Sprint 3 §3.5 — компактна summary-картка стану підписки. Перенесена з
+ * видаленого `dashboard/` у `features/billing/` (in-slice). Render-иться на
+ * `/billing/page.tsx` зверху як короткий статус — детальна керуюча UI
+ * (план-cards, "Керувати підпискою" button) живе нижче на тій же сторінці.
+ *
+ * Pure presentation — `billing` читається з `authStore` (single source у
+ * сесії), `catalog` приходить як prop (parent уже fetch-ить його для cards).
+ */
+export default function SubscriptionStatus({ catalog }: Props) {
     const billing = useAuthStore((s) => s.user?.billing ?? null);
 
     const hasActive = billing?.hasActiveSubscription === true;
-
-    const [catalog, setCatalog] = useState<PaymentsCatalog | null>(null);
-
-    useEffect(() => {
-        if (!hasActive) return;
-        getCatalog()
-            .then(setCatalog)
-            .catch(() => {});
-    }, [hasActive]);
 
     const activePlan =
         hasActive && catalog
