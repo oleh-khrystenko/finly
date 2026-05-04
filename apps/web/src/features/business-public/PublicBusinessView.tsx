@@ -6,6 +6,7 @@ import {
     type BankCode,
     type BusinessType,
 } from '@finly/types';
+import { BANK_DISPLAY } from '@/shared/icons';
 
 interface Props {
     type: BusinessType;
@@ -54,26 +55,29 @@ export default function PublicBusinessView({
                 {heading}
             </h1>
 
-            {/* 11 inactive bank tiles (B1). Generic stylized з ініціалом
-                у крузі (B5 fallback — Sprint plan дозволяє generic, бренд-
-                guidelines банків поза скоупом). Sprint 5 розблокує
+            {/* 11 inactive bank tiles (B1). Іконка з `BANK_DISPLAY` map
+                (`apps/web/src/shared/icons/banks/`). Grayscale + opacity-70
+                + cursor-not-allowed маркують inactive стан; Sprint 5 розблокує
                 per-bank deep-links без зміни цього layout. */}
             <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
-                {acceptedBanks.map((bank) => (
-                    <div
-                        key={bank}
-                        aria-disabled
-                        className="border-border bg-muted/30 text-muted-foreground flex h-20 cursor-not-allowed flex-col items-center justify-center gap-1.5 rounded-md border px-2 text-center opacity-70 grayscale"
-                        title="Незабаром"
-                    >
-                        <div className="bg-muted text-muted-foreground flex size-8 items-center justify-center rounded-full text-xs font-bold">
-                            {BANK_LABEL[bank].slice(0, 1).toUpperCase()}
+                {acceptedBanks.map((bank) => {
+                    const Icon = BANK_DISPLAY[bank];
+                    return (
+                        <div
+                            key={bank}
+                            aria-disabled
+                            className="border-border bg-muted/30 text-muted-foreground flex h-20 cursor-not-allowed flex-col items-center justify-center gap-1.5 rounded-md border px-2 text-center opacity-70 grayscale"
+                            title="Незабаром"
+                        >
+                            <div className="size-10">
+                                <Icon />
+                            </div>
+                            <span className="text-[10px] leading-tight">
+                                {BANK_LABEL[bank]}
+                            </span>
                         </div>
-                        <span className="text-[10px] leading-tight">
-                            {BANK_LABEL[bank]}
-                        </span>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
 
             {/* 2 active CTAs (A2 + E7). href = NBU payload-link URL.
