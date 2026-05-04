@@ -10,6 +10,7 @@ import { effectiveLimit, isWithinByteLimit } from '../qr/limits';
 import { objectIdSchema } from '../validation/common';
 import { ibanZod } from '../validation/iban';
 import { individualTaxIdZod } from '../validation/tax-id';
+import { slugPresetSchema } from './invoice';
 
 /**
  * Бізнес — постійна сутність з унікальною публічною сторінкою
@@ -114,6 +115,24 @@ export const BusinessSchema = z
         paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
         acceptedBanks: z.array(bankCodeSchema),
         seoIndexEnabled: z.boolean(),
+        /**
+         * Sprint 4 §4.1 — дефолтний slug-preset, що буде попередньо обраний у
+         * формі створення інвойсу для цього бізнесу. `null = "не визначено"`
+         * → форма стартує з global system fallback `simple` (Sprint 4 §4.5
+         * read-spilling default).
+         *
+         * **Default `null`, не `'simple'`**: бізнес без явного налаштування
+         * семантично "не вказав уподобання"; UI робить fallback окремо. Це
+         * дозволяє відрізнити "ФОП явно обрав simple" від "ФОП ще не торкався
+         * налаштування" — потрібно для майбутнього onboarding-prompt-у
+         * у Sprint 6 (Paid вільний вибір).
+         *
+         * **Existing-doc compatibility:** `.default(null)` на Zod-парсингу
+         * страхує від retroactive missing-field-on-load для документів,
+         * створених до Sprint 4 (Mongoose default спрацьовує лише при create,
+         * не на read existing-doc).
+         */
+        invoiceSlugPresetDefault: slugPresetSchema.nullable().default(null),
         deletedAt: z.coerce.date().nullable(),
         createdAt: z.coerce.date(),
         updatedAt: z.coerce.date(),

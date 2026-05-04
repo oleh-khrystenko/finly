@@ -607,6 +607,72 @@ describe('Businesses E2E', () => {
                 .expect(400);
         });
 
+        it('Sprint 4 §4.1 — PATCH invoiceSlugPresetDefault зберігає поле і getBySlug повертає його (e2e cycle)', async () => {
+            const user = await createUser();
+            const created = await supertest(app.getHttpServer())
+                .post('/api/businesses/me')
+                .set('Authorization', bearerFor(user))
+                .send(VALID_CREATE_PAYLOAD);
+            const { slug } = (created.body as { data: { slug: string } }).data;
+
+            // На create — поле = null (default)
+            const initial = await supertest(app.getHttpServer())
+                .get(`/api/businesses/me/${slug}`)
+                .set('Authorization', bearerFor(user))
+                .expect(200);
+            expect(
+                (initial.body as { data: { invoiceSlugPresetDefault: string | null } }).data
+                    .invoiceSlugPresetDefault
+            ).toBeNull();
+
+            // PATCH на 'with-month'
+            const patched = await supertest(app.getHttpServer())
+                .patch(`/api/businesses/me/${slug}`)
+                .set('Authorization', bearerFor(user))
+                .send({ invoiceSlugPresetDefault: 'with-month' })
+                .expect(200);
+            expect(
+                (patched.body as { data: { invoiceSlugPresetDefault: string } }).data
+                    .invoiceSlugPresetDefault
+            ).toBe('with-month');
+
+            // GET знову — поле persisted
+            const reread = await supertest(app.getHttpServer())
+                .get(`/api/businesses/me/${slug}`)
+                .set('Authorization', bearerFor(user))
+                .expect(200);
+            expect(
+                (reread.body as { data: { invoiceSlugPresetDefault: string } }).data
+                    .invoiceSlugPresetDefault
+            ).toBe('with-month');
+
+            // Reset на null — теж валідно (semantic "не визначено")
+            const resetRes = await supertest(app.getHttpServer())
+                .patch(`/api/businesses/me/${slug}`)
+                .set('Authorization', bearerFor(user))
+                .send({ invoiceSlugPresetDefault: null })
+                .expect(200);
+            expect(
+                (resetRes.body as { data: { invoiceSlugPresetDefault: string | null } })
+                    .data.invoiceSlugPresetDefault
+            ).toBeNull();
+        });
+
+        it('Sprint 4 §4.1 — rejects unknown slug-preset value (Zod enum)', async () => {
+            const user = await createUser();
+            const created = await supertest(app.getHttpServer())
+                .post('/api/businesses/me')
+                .set('Authorization', bearerFor(user))
+                .send(VALID_CREATE_PAYLOAD);
+            const { slug } = (created.body as { data: { slug: string } }).data;
+
+            await supertest(app.getHttpServer())
+                .patch(`/api/businesses/me/${slug}`)
+                .set('Authorization', bearerFor(user))
+                .send({ invoiceSlugPresetDefault: 'unknown-preset' })
+                .expect(400);
+        });
+
         it('coupled cross-field VAT (PATCH тільки isVatPayer=true з existing simplified-1) — 400', async () => {
             const user = await createUser();
             // Створюємо бізнес з simplified-1

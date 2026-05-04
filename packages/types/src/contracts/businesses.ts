@@ -10,6 +10,7 @@ import {
     businessTypeSchema,
     taxationSystemSchema,
 } from '../entities/business';
+import { slugPresetSchema } from '../entities/invoice';
 
 /**
  * Sprint 3 §3.1 — write-side контракти Business для cabinet endpoint-ів і
@@ -104,6 +105,15 @@ export const UpdateBusinessSchema = z
             message: 'ACCEPTED_BANKS_REQUIRED',
         }),
         seoIndexEnabled: z.boolean(),
+        /**
+         * Sprint 4 §4.1 — bizness-level дефолт slug-preset для нових інвойсів.
+         * Без цього розширення SP-1-рішення про business-level дефолт пресету
+         * (Q §2.3 #2 closure) — dead config. `null` = "не визначено", форма
+         * створення фолбеком використовує global system default `simple`
+         * (§4.5). Поле незалежне (без cross-field rules) — service-layer
+         * coupled-check не потрібен.
+         */
+        invoiceSlugPresetDefault: slugPresetSchema.nullable(),
     })
     .partial()
     .strict()

@@ -69,6 +69,19 @@ export const InvoiceSchema = z
         paymentPurpose: invoicePaymentPurposeSchema.nullable(),
         validUntil: z.coerce.date().nullable(),
         slugPreset: slugPresetSchema.nullable(),
+        /**
+         * Sprint 4 §4.1 — counter-namespace string для preset-режимів з
+         * лічильником ('simple' | YYYY | 'YYYY-MM'). `null` для inших
+         * режимів. Парний з `slugCounter` (обидва non-null або обидва null);
+         * compound-unique partial-index у Mongoose-схемі race-блокує
+         * counter-collision на write-path.
+         *
+         * **`.default(null)` страхує** від retroactive missing-field-on-load
+         * для документів, створених до Sprint 4 (Mongoose default спрацьовує
+         * лише при create, не на read existing-doc).
+         */
+        slugCounterScope: z.string().nullable().default(null),
+        slugCounter: z.number().int().positive().nullable().default(null),
         deletedAt: z.coerce.date().nullable(),
         createdAt: z.coerce.date(),
         updatedAt: z.coerce.date(),
@@ -76,6 +89,15 @@ export const InvoiceSchema = z
     .refine((i) => !(i.amount === null && i.amountLocked === true), {
         message: 'AMOUNT_LOCKED_REQUIRES_AMOUNT',
         path: ['amountLocked'],
-    });
+    })
+    .refine(
+        (i) =>
+            (i.slugCounterScope === null && i.slugCounter === null) ||
+            (i.slugCounterScope !== null && i.slugCounter !== null),
+        {
+            message: 'SLUG_COUNTER_SCOPE_PAIR_INVARIANT',
+            path: ['slugCounter'],
+        }
+    );
 
 export type Invoice = z.infer<typeof InvoiceSchema>;

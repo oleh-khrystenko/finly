@@ -79,6 +79,18 @@ const ERRORS: Record<string, MessageDict> = {
             'Не вдалося згенерувати посилання. Спробуйте ще раз',
         invalid_vat_for_taxation_system:
             'Платник ПДВ дозволений лише на спрощеній-3 або загальній системі',
+        // Sprint 4 §4.2 SP-5 — cascade-delete без replica-set. Нейтральне
+        // user-facing повідомлення: справжню причину (infra-misconfig) видно
+        // лише у server-логах, не leak-ається user-у.
+        cascade_delete_requires_replica_set:
+            'Не вдалося видалити бізнес. Зверніться в підтримку',
+    },
+    invoices: {
+        invoice_not_found: 'Рахунок не знайдено',
+        invoice_slug_generation_failed:
+            'Не вдалося згенерувати посилання. Спробуйте ще раз',
+        invoice_amount_locked_requires_amount:
+            'Заблокувати редагування суми можна лише при заданій сумі',
     },
 };
 

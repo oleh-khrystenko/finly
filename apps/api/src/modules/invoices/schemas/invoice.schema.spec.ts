@@ -39,6 +39,8 @@ describe('Invoice schema (Mongoose integration)', () => {
 
         expect(doc._id).toBeDefined();
         expect(doc.deletedAt).toBeNull();
+        expect(doc.slugCounterScope).toBeNull(); // Sprint 4 §4.1
+        expect(doc.slugCounter).toBeNull(); // Sprint 4 §4.1
         expect(doc.createdAt).toBeInstanceOf(Date);
         expect(doc.updatedAt).toBeInstanceOf(Date);
     });
@@ -68,7 +70,7 @@ describe('Invoice schema (Mongoose integration)', () => {
         }
     );
 
-    it('creates expected indexes ((businessId,slug) unique, (businessId,createdAt), validUntil sparse)', async () => {
+    it('creates expected indexes ((businessId,slug) unique, (businessId,createdAt), validUntil sparse, partial counter-unique)', async () => {
         const indexes = await InvoiceModel.collection.indexes();
 
         const compoundUnique = indexes.find(
@@ -84,6 +86,95 @@ describe('Invoice schema (Mongoose integration)', () => {
         const validUntilIdx = indexes.find((i) => i.key.validUntil === 1);
         expect(validUntilIdx).toBeDefined();
         expect(validUntilIdx?.sparse).toBe(true);
+
+        // Sprint 4 §4.1 — partial-unique counter-namespace index (race-block).
+        const counterIdx = indexes.find(
+            (i) =>
+                i.key.businessId === 1 &&
+                i.key.slugCounterScope === 1 &&
+                i.key.slugCounter === 1
+        );
+        expect(counterIdx?.unique).toBe(true);
+        expect(counterIdx?.partialFilterExpression).toEqual({
+            slugCounterScope: { $type: 'string' },
+            slugCounter: { $type: 'int' },
+        });
+    });
+
+    it('Sprint 4 §4.1 — counter-unique compound блокує race-collision (один scope + один counter)', async () => {
+        const businessId = new Types.ObjectId();
+        await InvoiceModel.create(
+            buildFixture({
+                businessId,
+                slug: 'inv-001-aaaaaaaa',
+                slugPreset: 'simple',
+                slugCounterScope: 'simple',
+                slugCounter: 1,
+            })
+        );
+
+        // Той самий counter-namespace + counter, інший tail → 11000.
+        await expect(
+            InvoiceModel.create(
+                buildFixture({
+                    businessId,
+                    slug: 'inv-001-bbbbbbbb',
+                    slugPreset: 'simple',
+                    slugCounterScope: 'simple',
+                    slugCounter: 1,
+                })
+            )
+        ).rejects.toMatchObject({ code: 11000 });
+    });
+
+    it('Sprint 4 §4.1 — partial filter виключає null counter-fields (non-counter modes)', async () => {
+        // explicit/random/with-purpose: counter-fields=null. Не у index-і,
+        // тож multi-insert не блокується.
+        const businessId = new Types.ObjectId();
+        await InvoiceModel.create(
+            buildFixture({
+                businessId,
+                slug: 'aaaaaaaa',
+                slugCounterScope: null,
+                slugCounter: null,
+            })
+        );
+        await expect(
+            InvoiceModel.create(
+                buildFixture({
+                    businessId,
+                    slug: 'bbbbbbbb',
+                    slugCounterScope: null,
+                    slugCounter: null,
+                })
+            )
+        ).resolves.toBeDefined();
+    });
+
+    it('Sprint 4 §4.1 — counter-unique розкриває різні scope (with-month: 2026-05 vs 2026-06)', async () => {
+        // Same `slugCounter=1` у двох різних місяцях — НЕ collision (різні
+        // scope-strings 2026-05/2026-06).
+        const businessId = new Types.ObjectId();
+        await InvoiceModel.create(
+            buildFixture({
+                businessId,
+                slug: '2026-05-001-aaaaaaaa',
+                slugPreset: 'with-month',
+                slugCounterScope: '2026-05',
+                slugCounter: 1,
+            })
+        );
+        await expect(
+            InvoiceModel.create(
+                buildFixture({
+                    businessId,
+                    slug: '2026-06-001-bbbbbbbb',
+                    slugPreset: 'with-month',
+                    slugCounterScope: '2026-06',
+                    slugCounter: 1,
+                })
+            )
+        ).resolves.toBeDefined();
     });
 
     it('rejects duplicate (businessId, slug) compound with code 11000', async () => {

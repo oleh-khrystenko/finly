@@ -3,9 +3,11 @@ import { HydratedDocument, Types } from 'mongoose';
 import {
     BUSINESS_TYPES,
     MVP_BANKS,
+    SLUG_PRESETS,
     TAXATION_SYSTEMS,
     type BankCode,
     type BusinessType,
+    type SlugPreset,
     type TaxationSystem,
 } from '@finly/types';
 
@@ -113,6 +115,20 @@ export class Business {
      */
     @Prop({ type: Boolean, default: false })
     seoIndexEnabled!: boolean;
+
+    /**
+     * Sprint 4 §4.1 — bizness-level дефолт slug-preset для нових інвойсів.
+     * `null = "не визначено"` → форма створення фолбеком використовує global
+     * system default `simple` (§4.5). Migration не потрібна: `default: null`
+     * на нові documents + Mongoose-load existing-docs дає `undefined` для
+     * відсутнього поля, що Zod entity-схема трактує через `.default(null)`.
+     *
+     * **Чому не дефолт `'simple'` тут**: семантично відрізняти "ФОП явно обрав
+     * simple" від "ФОП ще не торкався налаштування" — потрібно для майбутнього
+     * onboarding-prompt-у у Sprint 6.
+     */
+    @Prop({ type: String, enum: SLUG_PRESETS, default: null })
+    invoiceSlugPresetDefault!: SlugPreset | null;
 
     /**
      * Soft-delete. Sprint 3 рішення C2 робить hard-delete + 5s frontend-Undo;

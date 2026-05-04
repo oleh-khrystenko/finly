@@ -67,6 +67,61 @@ describe('InvoiceSchema', () => {
         expect(result.success).toBe(false);
     });
 
+    it('Sprint 4 §4.1 — applies default null для slugCounterScope/slugCounter (existing-doc compat)', () => {
+        // Документ з БД, створений до Sprint 4, не має нових fields. Zod
+        // entity з `.default(null)` парсить як null, а не падає.
+        const result = InvoiceSchema.safeParse(VALID_INVOICE);
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.slugCounterScope).toBeNull();
+            expect(result.data.slugCounter).toBeNull();
+        }
+    });
+
+    it('Sprint 4 §4.1 — accepts paired counter-fields (counter-preset case)', () => {
+        const result = InvoiceSchema.safeParse({
+            ...VALID_INVOICE,
+            slugPreset: 'simple',
+            slugCounterScope: 'simple',
+            slugCounter: 1,
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('Sprint 4 §4.1 — rejects half-paired counter (only scope)', () => {
+        const result = InvoiceSchema.safeParse({
+            ...VALID_INVOICE,
+            slugCounterScope: 'simple',
+            slugCounter: null,
+        });
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            expect(
+                result.error.issues.some(
+                    (i) => i.message === 'SLUG_COUNTER_SCOPE_PAIR_INVARIANT'
+                )
+            ).toBe(true);
+        }
+    });
+
+    it('Sprint 4 §4.1 — rejects half-paired counter (only counter)', () => {
+        const result = InvoiceSchema.safeParse({
+            ...VALID_INVOICE,
+            slugCounterScope: null,
+            slugCounter: 5,
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('Sprint 4 §4.1 — rejects non-positive slugCounter (1, 2, 3, ...)', () => {
+        const result = InvoiceSchema.safeParse({
+            ...VALID_INVOICE,
+            slugCounterScope: 'simple',
+            slugCounter: 0,
+        });
+        expect(result.success).toBe(false);
+    });
+
     it('rejects negative amount', () => {
         const result = InvoiceSchema.safeParse({
             ...VALID_INVOICE,
