@@ -50,6 +50,14 @@ services:
             - TSC_WATCHDIRECTORY=UsePolling
         ports:
             - '${API_PORT}:${API_PORT}'
+        # Sprint 4 §4.0 — `host.docker.internal` alias для Linux у Режимі C
+        # (API у dev compose, Mongo на host-machine з replica-set). На macOS/
+        # Windows alias built-in у Docker Desktop і `host-gateway` — безпечний
+        # noop. Без цього alias `MONGODB_URI=mongodb://host.docker.internal:...`
+        # не резолвиться з api-контейнера на Linux і cascade-delete-флоу падає
+        # з MongoServerSelectionError. Production-deploy ігнорує цей блок.
+        extra_hosts:
+            - 'host.docker.internal:host-gateway'
         volumes:
             - ./:/app
             - pnpm-store:/pnpm-store

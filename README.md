@@ -40,7 +40,7 @@ finly/
 │   └── types/                # @finly/types — Zod-схеми, типи, контракти
 ├── docs/                     # Conventions
 ├── docker-compose.yml        # Production (api + web)
-├── docker-compose.dev.yml    # Development (mongo + redis + api + web)
+├── docker-compose.dev.yml    # Development (redis + api + web; Mongo — external)
 ├── turbo.json                # Build pipeline
 └── pnpm-workspace.yaml       # Workspaces: apps/*, packages/*
 ```
@@ -77,6 +77,10 @@ finly/
 ### Вимоги
 
 - **Docker** + **Docker Compose**
+- **MongoDB replica-set** — обов'язково (cascade-delete у Sprint 4 використовує
+  `session.withTransaction`; standalone mongod не підтримує транзакції).
+  Налаштування — секція [Mongo replica-set для local dev](#mongo-replica-set-для-local-dev)
+  нижче.
 
 ### 1. Створи файл `.env` у корені
 
@@ -86,8 +90,11 @@ NODE_ENV=development
 WEB_PORT=3000
 API_PORT=4000
 
-# MongoDB
-MONGODB_URI=mongodb://mongo:27017
+# MongoDB — MUST бути replica-set (cascade-delete у Sprint 4 використовує
+# `session.withTransaction`). `docker-compose.dev.yml` Mongo не запускає —
+# обери один з трьох варіантів у секції "Mongo replica-set для local dev"
+# нижче. Найпростіший — Atlas dev cluster:
+MONGODB_URI=mongodb+srv://<user>:<pass>@<cluster>.mongodb.net/finly?appName=finly
 
 # JWT
 JWT_ACCESS_SECRET=your-access-secret
@@ -127,12 +134,12 @@ NEXT_PUBLIC_API_URL=http://localhost:4000/api
 docker compose -f docker-compose.dev.yml up --build
 ```
 
-| Сервіс   | URL / Порт             |
-| -------- | ---------------------- |
-| Frontend | http://localhost:3000   |
-| Backend  | http://localhost:4000   |
-| MongoDB  | localhost:27017         |
-| Redis    | localhost:6379          |
+| Сервіс   | URL / Порт                                  |
+| -------- | ------------------------------------------- |
+| Frontend | http://localhost:3000                        |
+| Backend  | http://localhost:4000                        |
+| MongoDB  | external (Atlas / Docker / local mongod)     |
+| Redis    | localhost:6379                               |
 
 Зупинити:
 
@@ -165,6 +172,112 @@ docker compose up --build -d
 | `pnpm --filter api test:cov`              | API coverage                |
 | `pnpm --filter web test`                  | Web unit тести              |
 | `pnpm --filter @finly/types build`    | Build shared types          |
+
+---
+
+## Mongo replica-set для local dev
+
+Sprint 4 cascade-delete виконується у `session.withTransaction` — Mongo дозволяє транзакції тільки на replica-set. **`docker-compose.dev.yml` Mongo не запускає** (production-parity з Atlas; кожен developer обирає один із трьох варіантів нижче).
+
+### Два workflow-режими запуску API
+
+Перш ніж обирати варіант — визнач, як запускаєш API:
+
+- **Режим H** — `pnpm --filter api dev` на host-machine без Docker. API бачить host-network безпосередньо.
+- **Режим C** — `docker compose -f docker-compose.dev.yml up`. API ізольований у compose-network: `localhost` всередині контейнера = сам контейнер, **не** host-machine.
+
+Connection-string у `.env` залежить від режиму. Copy-paste `mongodb://localhost:...` з варіанту (б)/(в) у Режим C дасть `MongoServerSelectionError`.
+
+### Варіанти
+
+#### (а) Atlas dev cluster — рекомендований
+
+Replica-set за замовчуванням, public DNS-host у URI (`mongodb+srv://...`) — однаково резолвиться з host-machine і з compose-контейнера. **Єдиний варіант, що працює одразу для обох Режимів H і C** без host-networking-tax.
+
+```env
+MONGODB_URI=mongodb+srv://<user>:<pass>@<cluster>.mongodb.net/finly?appName=finly
+```
+
+#### (б) Standalone Docker container на host-machine з replica-set
+
+```bash
+docker run -d --name finly-mongo-dev -p 27017:27017 \
+    --add-host host.docker.internal:host-gateway \
+    mongo:7 --replSet rs0 --bind_ip_all
+
+# Чекаємо, поки контейнер відповість на ping (idempotent loop):
+until docker exec finly-mongo-dev mongosh --quiet --eval 'db.runCommand({ping:1}).ok' >/dev/null 2>&1; do sleep 1; done
+
+# Init replica-set — обери ОДИН з двох варіантів залежно від workflow-режиму.
+# AlreadyInitialized безпечно ігнорувати на повторі.
+
+# --- Режим H (API на host) ---
+docker exec finly-mongo-dev mongosh --quiet --eval \
+    'rs.initiate({_id:"rs0", members:[{_id:0, host:"localhost:27017"}]})'
+
+# --- Режим C (API у compose) ---
+docker exec finly-mongo-dev mongosh --quiet --eval \
+    'rs.initiate({_id:"rs0", members:[{_id:0, host:"host.docker.internal:27017"}]})'
+```
+
+`MONGODB_URI` у `.env`:
+
+```env
+# Режим H:
+MONGODB_URI=mongodb://localhost:27017/finly_dev?replicaSet=rs0
+# Режим C:
+MONGODB_URI=mongodb://host.docker.internal:27017/finly_dev?replicaSet=rs0
+```
+
+**Linux-specific.** `host.docker.internal` НЕ резолвиться ні в API-контейнері, ні в Mongo-контейнері без явного `host-gateway` alias-у. Тому:
+- `--add-host host.docker.internal:host-gateway` у `docker run` для Mongo (вище) — щоб heartbeat replica-set self-discovery не деградував.
+- `extra_hosts: ["host.docker.internal:host-gateway"]` у `api`-блоці `docker-compose.dev.yml` — уже додано Sprint 4 §4.0.
+
+На macOS/Windows обидва alias-и built-in у Docker Desktop — згадані команди безпечні no-op-и.
+
+**`directConnection`-параметр НЕ додавай.** Node driver default `directConnection=false` активує SDAM і replica-set discovery через `replicaSet=rs0` query-param — це саме те, що потрібно для transactions. `directConnection=true` bypass-ить SDAM, і `withTransaction` падає з `IllegalOperation`.
+
+#### (в) Local mongod на host-machine з replica-set — тільки для Режим H
+
+```bash
+mongod --replSet rs0 --bind_ip 127.0.0.1
+mongosh --eval 'rs.initiate({_id:"rs0", members:[{_id:0, host:"localhost:27017"}]})'
+```
+
+```env
+MONGODB_URI=mongodb://localhost:27017/finly_dev?replicaSet=rs0
+```
+
+**Не рекомендується для Режим C на Linux** — local mongod heartbeat не зможе резолвити `host.docker.internal` без manual `/etc/hosts` edit. Якщо потрібен Режим C без Atlas — використовуй (б), не (в).
+
+### Перевірка, що replica-set ОК
+
+Перевірка робиться у два кроки: спершу — health самого replica-set-у (виконується завжди з Mongo-контейнера або host-mongosh; **не з api-контейнера** — `node:20-alpine` mongosh не містить), потім — reach з api-контейнера на Mongo-host через TCP (тільки для Режим C на Linux, де alias-резолвинг буває крихким).
+
+**Крок 1 — replica-set health.**
+
+```bash
+# Варіант (б) Docker Mongo — з самого Mongo-контейнера, mongosh там присутній:
+docker exec finly-mongo-dev mongosh --quiet \
+    --eval "rs.status().ok"   # → 1
+
+# Варіанти (а) Atlas / (в) local mongod — з host-machine (потрібен mongosh локально):
+mongosh "$MONGODB_URI" --eval "rs.status().ok"   # → 1
+```
+
+**Крок 2 — reach з api-контейнера (тільки Режим C).** api-контейнер на `node:20-alpine` без `mongosh`, тому перевіряємо TCP-доступність до Mongo-хоста через вбудований Node:
+
+```bash
+docker compose -f docker-compose.dev.yml exec api node -e \
+    "require('net').connect(27017,'host.docker.internal').on('connect',()=>{console.log('ok');process.exit(0)}).on('error',e=>{console.error(e.message);process.exit(1)})"
+# → ok
+```
+
+Якщо `rs.status().ok` повертає `0` або Крок 2 timeout-ить — на Linux перевір, чи `--add-host` був у docker-run для Mongo (для самого heartbeat) і чи `extra_hosts` присутні у `api`-блоці compose (для reach з api → Mongo); на macOS/Windows — рестартни Docker Desktop (`host.docker.internal` іноді stale після сну).
+
+### Що буде, якщо replica-set не налаштований
+
+API стартує нормально (connection-string не валідується на topology). Cascade-delete бізнесу падає з 500 `CASCADE_DELETE_REQUIRES_REPLICA_SET`; user бачить нейтральне "Не вдалося видалити бізнес. Зверніться в підтримку"; справжню причину видно лише у server-логах. Інші CRUD-операції працюють.
 
 ---
 
