@@ -5,12 +5,12 @@ import { ConfigModule } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { MongooseModule, getModelToken } from '@nestjs/mongoose';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
-import { MongoMemoryServer } from 'mongodb-memory-server';
 import * as supertest from 'supertest';
 import { App } from 'supertest/types';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { Model, Types } from 'mongoose';
 
+import { createReplSetMongo } from '../src/test-utils/mongo';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 import { REDIS_CLIENT } from '../src/common/modules/redis.module';
 import { RedisCounterService } from '../src/common/services/redis-counter.service';
@@ -36,7 +36,7 @@ jest.mock('../src/config/env', () => ({
         PORT: '4000',
         WEB_URL: 'https://finly.com.ua',
         PAY_PUBLIC_URL: 'https://pay.finly.com.ua',
-        MONGODB_URI: 'overridden-by-MongoMemoryServer',
+        MONGODB_URI: 'overridden-by-MongoMemoryReplSet',
         REDIS_URL: 'redis://mock',
         JWT_ACCESS_SECRET: 'e2e-access-secret-must-be-long-enough',
         JWT_REFRESH_SECRET: 'e2e-refresh-secret-must-be-long-enough',
@@ -180,13 +180,16 @@ const VALID_CREATE_PAYLOAD = {
 
 describe('Businesses E2E', () => {
     let app: INestApplication<App>;
-    let mongoServer: MongoMemoryServer;
+    // Sprint 4 §4.2 — ReplSet (не standalone), бо `BusinessesService.delete`
+    // тепер cascade-delete-ає інвойси через `withTransaction` (§SP-5).
+    // Standalone mongod кидає `CASCADE_DELETE_REQUIRES_REPLICA_SET` на delete-flow.
+    let mongo: Awaited<ReturnType<typeof createReplSetMongo>>;
     let userModel: Model<UserDocument>;
     let businessModel: Model<BusinessDocument>;
     let jwtService: JwtService;
 
     beforeAll(async () => {
-        mongoServer = await MongoMemoryServer.create();
+        mongo = await createReplSetMongo();
 
         // Module-graph mirror's `app.module.ts` — повний набір AuthModule +
         // EmailModule + UsersModule + StorageModule розгортає циркулярні
@@ -202,7 +205,7 @@ describe('Businesses E2E', () => {
                 ThrottlerModule.forRoot({
                     throttlers: [{ ttl: 60000, limit: 600 }],
                 }),
-                MongooseModule.forRoot(mongoServer.getUri()),
+                MongooseModule.forRoot(mongo.uri),
                 TestRedisModule,
                 AuthModule,
                 EmailModule,
@@ -239,7 +242,7 @@ describe('Businesses E2E', () => {
 
     afterAll(async () => {
         await app.close();
-        await mongoServer.stop();
+        await mongo.stop();
     });
 
     beforeEach(async () => {
@@ -621,8 +624,11 @@ describe('Businesses E2E', () => {
                 .set('Authorization', bearerFor(user))
                 .expect(200);
             expect(
-                (initial.body as { data: { invoiceSlugPresetDefault: string | null } }).data
-                    .invoiceSlugPresetDefault
+                (
+                    initial.body as {
+                        data: { invoiceSlugPresetDefault: string | null };
+                    }
+                ).data.invoiceSlugPresetDefault
             ).toBeNull();
 
             // PATCH на 'with-month'
@@ -632,8 +638,8 @@ describe('Businesses E2E', () => {
                 .send({ invoiceSlugPresetDefault: 'with-month' })
                 .expect(200);
             expect(
-                (patched.body as { data: { invoiceSlugPresetDefault: string } }).data
-                    .invoiceSlugPresetDefault
+                (patched.body as { data: { invoiceSlugPresetDefault: string } })
+                    .data.invoiceSlugPresetDefault
             ).toBe('with-month');
 
             // GET знову — поле persisted
@@ -642,8 +648,8 @@ describe('Businesses E2E', () => {
                 .set('Authorization', bearerFor(user))
                 .expect(200);
             expect(
-                (reread.body as { data: { invoiceSlugPresetDefault: string } }).data
-                    .invoiceSlugPresetDefault
+                (reread.body as { data: { invoiceSlugPresetDefault: string } })
+                    .data.invoiceSlugPresetDefault
             ).toBe('with-month');
 
             // Reset на null — теж валідно (semantic "не визначено")
@@ -653,8 +659,11 @@ describe('Businesses E2E', () => {
                 .send({ invoiceSlugPresetDefault: null })
                 .expect(200);
             expect(
-                (resetRes.body as { data: { invoiceSlugPresetDefault: string | null } })
-                    .data.invoiceSlugPresetDefault
+                (
+                    resetRes.body as {
+                        data: { invoiceSlugPresetDefault: string | null };
+                    }
+                ).data.invoiceSlugPresetDefault
             ).toBeNull();
         });
 

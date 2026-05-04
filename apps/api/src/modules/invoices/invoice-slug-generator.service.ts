@@ -185,10 +185,7 @@ export class InvoiceSlugGeneratorService {
         switch (preset) {
             case 'simple': {
                 const scope = 'simple';
-                const next = await this.nextCounterByScope(
-                    businessId,
-                    scope
-                );
+                const next = await this.nextCounterByScope(businessId, scope);
                 return {
                     slug: `inv-${String(next).padStart(3, '0')}-${tail}`,
                     slugPreset: 'simple',
@@ -205,10 +202,7 @@ export class InvoiceSlugGeneratorService {
                 const yyyy = year;
                 const mm = String(month).padStart(2, '0');
                 const scope = `${yyyy}-${mm}`;
-                const next = await this.nextCounterByScope(
-                    businessId,
-                    scope
-                );
+                const next = await this.nextCounterByScope(businessId, scope);
                 return {
                     slug: `${scope}-${String(next).padStart(3, '0')}-${tail}`,
                     slugPreset: 'with-month',
@@ -222,10 +216,7 @@ export class InvoiceSlugGeneratorService {
                 // не `2026-`.
                 const { year } = getKyivYearMonth(this.now());
                 const scope = String(year);
-                const next = await this.nextCounterByScope(
-                    businessId,
-                    scope
-                );
+                const next = await this.nextCounterByScope(businessId, scope);
                 return {
                     slug: `${scope}-${String(next).padStart(3, '0')}-${tail}`,
                     slugPreset: 'with-year',
@@ -283,10 +274,7 @@ export class InvoiceSlugGeneratorService {
         slugCounterScope: string
     ): Promise<number> {
         const docs = await this.invoiceModel
-            .find(
-                { businessId, slugCounterScope },
-                { slugCounter: 1, _id: 0 }
-            )
+            .find({ businessId, slugCounterScope }, { slugCounter: 1, _id: 0 })
             .lean()
             .exec();
         let max = 0;

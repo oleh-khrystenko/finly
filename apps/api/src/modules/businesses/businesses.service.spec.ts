@@ -1,5 +1,5 @@
 import { Test } from '@nestjs/testing';
-import { getModelToken } from '@nestjs/mongoose';
+import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import {
     BadRequestException,
     InternalServerErrorException,
@@ -12,7 +12,9 @@ import type {
     UpdateBusinessRequest,
 } from '@finly/types';
 
+import { Invoice } from '../invoices/schemas/invoice.schema';
 import { BusinessesService } from './businesses.service';
+import type { BusinessDocument } from './schemas/business.schema';
 import { Business } from './schemas/business.schema';
 import { SlugGeneratorService } from './slug-generator.service';
 
@@ -26,6 +28,15 @@ describe('BusinessesService', () => {
         exists: jest.Mock;
         deleteOne: jest.Mock;
     }>;
+    let invoiceModel: jest.Mocked<{
+        countDocuments: jest.Mock;
+        deleteMany: jest.Mock;
+    }>;
+    let session: jest.Mocked<{
+        withTransaction: jest.Mock;
+        endSession: jest.Mock;
+    }>;
+    let connection: jest.Mocked<{ startSession: jest.Mock }>;
     let slugGenerator: jest.Mocked<{ generateRandomSlug: jest.Mock }>;
 
     const userId = new Types.ObjectId();
@@ -52,6 +63,22 @@ describe('BusinessesService', () => {
             exists: jest.fn(),
             deleteOne: jest.fn(),
         };
+        invoiceModel = {
+            countDocuments: jest.fn().mockResolvedValue(0),
+            deleteMany: jest.fn().mockResolvedValue({ deletedCount: 0 }),
+        };
+        // Default session: `withTransaction(cb)` запускає cb напряму (success),
+        // повертає cb's resolved value. Тести cascade-delete можуть переоприділити
+        // session.withTransaction для simulate failure / replica-set absence.
+        session = {
+            withTransaction: jest.fn(async (cb: () => Promise<unknown>) => {
+                return cb();
+            }),
+            endSession: jest.fn().mockResolvedValue(undefined),
+        };
+        connection = {
+            startSession: jest.fn().mockResolvedValue(session),
+        };
         slugGenerator = {
             generateRandomSlug: jest.fn().mockResolvedValue('IvanEnko'),
         };
@@ -62,6 +89,14 @@ describe('BusinessesService', () => {
                 {
                     provide: getModelToken(Business.name),
                     useValue: businessModel,
+                },
+                {
+                    provide: getModelToken(Invoice.name),
+                    useValue: invoiceModel,
+                },
+                {
+                    provide: getConnectionToken(),
+                    useValue: connection,
                 },
                 { provide: SlugGeneratorService, useValue: slugGenerator },
             ],
@@ -339,23 +374,93 @@ describe('BusinessesService', () => {
         });
     });
 
-    describe('delete', () => {
-        it('hard-delete по slugLower (case-insensitive)', async () => {
+    describe('delete (cascade — Sprint 4 §SP-5)', () => {
+        const businessId = new Types.ObjectId();
+        const businessFixture = {
+            _id: businessId,
+            slug: 'IvanEnko',
+            slugLower: 'ivanenko',
+        } as unknown as BusinessDocument;
+
+        const mockDeleteOne = (deletedCount: number) => {
             businessModel.deleteOne.mockReturnValue({
-                exec: jest.fn().mockResolvedValue({ deletedCount: 1 }),
+                exec: jest.fn().mockResolvedValue({ deletedCount }),
             });
-            await service.delete('IvanEnko');
-            const filter = businessModel.deleteOne.mock.calls[0]![0];
-            expect(filter).toEqual({ slugLower: 'ivanenko' });
+        };
+
+        it('повертає affectedInvoices (counter перед transaction)', async () => {
+            invoiceModel.countDocuments.mockResolvedValue(3);
+            mockDeleteOne(1);
+
+            const result = await service.delete(businessFixture);
+            expect(result).toEqual({ affectedInvoices: 3 });
+            expect(invoiceModel.countDocuments).toHaveBeenCalledWith({
+                businessId,
+            });
         });
 
-        it('кидає NotFound якщо нічого не видалено', async () => {
-            businessModel.deleteOne.mockReturnValue({
-                exec: jest.fn().mockResolvedValue({ deletedCount: 0 }),
-            });
-            await expect(service.delete('foo')).rejects.toBeInstanceOf(
-                NotFoundException
+        it('викликає withTransaction із deleteMany invoices + deleteOne business', async () => {
+            invoiceModel.countDocuments.mockResolvedValue(0);
+            mockDeleteOne(1);
+
+            await service.delete(businessFixture);
+
+            expect(connection.startSession).toHaveBeenCalledTimes(1);
+            expect(session.withTransaction).toHaveBeenCalledTimes(1);
+            // Виклики всередині cb — invoices.deleteMany + business.deleteOne
+            // (порядок свідомо не валідуємо — atomic-or-nothing інваріант
+            // однаково гарантований Mongo transaction-ом).
+            expect(invoiceModel.deleteMany).toHaveBeenCalledWith(
+                { businessId },
+                { session }
             );
+            expect(businessModel.deleteOne).toHaveBeenCalledWith(
+                { _id: businessId },
+                { session }
+            );
+            expect(session.endSession).toHaveBeenCalledTimes(1);
+        });
+
+        it('idempotent: business вже зник між guard і delete (deletedCount=0) — не throw', async () => {
+            invoiceModel.countDocuments.mockResolvedValue(0);
+            mockDeleteOne(0); // race з паралельним delete-ом
+
+            await expect(service.delete(businessFixture)).resolves.toEqual({
+                affectedInvoices: 0,
+            });
+            expect(session.endSession).toHaveBeenCalledTimes(1);
+        });
+
+        it('replica-set absence: ловить "Transaction... replica set" → CASCADE_DELETE_REQUIRES_REPLICA_SET', async () => {
+            invoiceModel.countDocuments.mockResolvedValue(0);
+            const replSetErr = new Error(
+                'Transaction numbers are only allowed on a replica set member or mongos'
+            );
+            session.withTransaction.mockRejectedValue(replSetErr);
+
+            await expect(
+                service.delete(businessFixture)
+            ).rejects.toBeInstanceOf(InternalServerErrorException);
+            // session.endSession завжди викликається у finally
+            expect(session.endSession).toHaveBeenCalledTimes(1);
+        });
+
+        it('non-transactional error pass-through без обгортання', async () => {
+            invoiceModel.countDocuments.mockResolvedValue(0);
+            const dbErr = new Error('Mongo timeout');
+            session.withTransaction.mockRejectedValue(dbErr);
+
+            await expect(service.delete(businessFixture)).rejects.toThrow(
+                'Mongo timeout'
+            );
+        });
+
+        it('endSession завжди викликається (finally), навіть на throw', async () => {
+            invoiceModel.countDocuments.mockResolvedValue(0);
+            session.withTransaction.mockRejectedValue(new Error('any error'));
+
+            await expect(service.delete(businessFixture)).rejects.toThrow();
+            expect(session.endSession).toHaveBeenCalledTimes(1);
         });
     });
 });

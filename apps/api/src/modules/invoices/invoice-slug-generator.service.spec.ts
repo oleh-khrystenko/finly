@@ -315,10 +315,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
             // deadlock-у, і без `Date.now()`-моку, який V8 `new Date()` без
             // аргументів ігнорує.
             const nowSpy = jest
-                .spyOn(
-                    service as unknown as { now: () => Date },
-                    'now'
-                )
+                .spyOn(service as unknown as { now: () => Date }, 'now')
                 .mockReturnValue(new Date('2026-05-31T21:30:00.000Z'));
             try {
                 const r = await service.generateInvoiceSlug({
@@ -343,9 +340,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                 businessPaymentPurposeTemplate: 'Оплата',
             });
             const { year } = getKyivYearMonth(new Date());
-            expect(r.slug).toMatch(
-                new RegExp(`^${year}-001-[A-Za-z0-9]{8}$`)
-            );
+            expect(r.slug).toMatch(new RegExp(`^${year}-001-[A-Za-z0-9]{8}$`));
             expect(r.slugPreset).toBe('with-year');
         });
 
@@ -356,10 +351,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
             // Той самий `service.now()`-spy патерн (див. boundary-тест у
             // `with-month`-блоку).
             const nowSpy = jest
-                .spyOn(
-                    service as unknown as { now: () => Date },
-                    'now'
-                )
+                .spyOn(service as unknown as { now: () => Date }, 'now')
                 .mockReturnValue(new Date('2026-12-31T22:30:00.000Z'));
             try {
                 const r = await service.generateInvoiceSlug({

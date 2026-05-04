@@ -12,6 +12,7 @@ import {
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
+import { InvoicesService } from '../invoices/invoices.service';
 import type { UserDocument } from '../users/schemas/user.schema';
 import { BusinessAccessGuard, CurrentBusiness } from './business-access.guard';
 import { BusinessesService } from './businesses.service';
@@ -40,7 +41,10 @@ import type { BusinessDocument } from './schemas/business.schema';
 @Controller('businesses/me')
 @UseGuards(JwtActiveGuard)
 export class BusinessesController {
-    constructor(private readonly businessesService: BusinessesService) {}
+    constructor(
+        private readonly businessesService: BusinessesService,
+        private readonly invoicesService: InvoicesService
+    ) {}
 
     @Get()
     async list(
@@ -69,11 +73,27 @@ export class BusinessesController {
 
     @Get(':slug')
     @UseGuards(BusinessAccessGuard)
-    getBySlug(@CurrentBusiness() business: BusinessDocument): {
-        data: BusinessDocument;
-    } {
-        // Lookup уже зробив guard; controller просто обгортає у envelope.
-        return { data: business };
+    async getBySlug(
+        @CurrentBusiness() business: BusinessDocument
+    ): Promise<{ data: BusinessDocument & { invoicesCount: number } }> {
+        // Sprint 4 §4.2 — додаємо `invoicesCount` до response, щоб cabinet UI
+        // показував counter активних інвойсів (Sprint 4 §4.4 secondary CTA на
+        // `/business`-листі) і delete-confirm warning (Sprint 4 §SP-5: ФОП
+        // знає цифру **до** натискання "Видалити", не після). Cheap aggregate
+        // через `(businessId, createdAt)`-index prefix-match.
+        const invoicesCount = await this.invoicesService.countByBusinessId(
+            business._id
+        );
+        // Spread `.toJSON()` зберігає всі Mongoose-virtual fields і
+        // serialization, додаючи поле зверху без порушення Mongoose-shape.
+        return {
+            data: {
+                ...business.toJSON(),
+                invoicesCount,
+            } as BusinessDocument & {
+                invoicesCount: number;
+            },
+        };
     }
 
     @Patch(':slug')
@@ -91,8 +111,12 @@ export class BusinessesController {
     @HttpCode(HttpStatus.OK)
     async delete(
         @CurrentBusiness() business: BusinessDocument
-    ): Promise<{ data: null }> {
-        await this.businessesService.delete(business.slug);
-        return { data: null };
+    ): Promise<{ data: { affectedInvoices: number } }> {
+        // Sprint 4 §SP-5 — повертаємо counter cascade-видалених інвойсів,
+        // щоб frontend показав warning у success-toast ("Видалено бізнес і
+        // {N} рахунків"). Atomic-or-nothing через `withTransaction` —
+        // деталі у `BusinessesService.delete`.
+        const result = await this.businessesService.delete(business);
+        return { data: result };
     }
 }

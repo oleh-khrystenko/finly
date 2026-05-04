@@ -5,8 +5,8 @@ import {
     NotFoundException,
     Logger,
 } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types, type FilterQuery } from 'mongoose';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { Connection, Model, Types, type FilterQuery } from 'mongoose';
 import {
     RESPONSE_CODE,
     VAT_ALLOWED_TAXATION_SYSTEMS,
@@ -14,6 +14,10 @@ import {
     type UpdateBusinessRequest,
 } from '@finly/types';
 
+import {
+    Invoice,
+    type InvoiceDocument,
+} from '../invoices/schemas/invoice.schema';
 import { Business, BusinessDocument } from './schemas/business.schema';
 import { SlugGeneratorService } from './slug-generator.service';
 
@@ -54,6 +58,10 @@ export class BusinessesService {
     constructor(
         @InjectModel(Business.name)
         private readonly businessModel: Model<BusinessDocument>,
+        @InjectModel(Invoice.name)
+        private readonly invoiceModel: Model<InvoiceDocument>,
+        @InjectConnection()
+        private readonly connection: Connection,
         private readonly slugGenerator: SlugGeneratorService
     ) {}
 
@@ -183,24 +191,82 @@ export class BusinessesService {
     }
 
     /**
-     * Sprint 3 рішення C2: hard-delete одразу. Slug звільняється — наступний
-     * `create` може його зайняти. Frontend-Undo (5s toast) живе на web-стороні
-     * як optimistic UI; цей method виконується тільки якщо timer пройшов
-     * без cancel-у. Sprint 4 додасть warning у delete-confirm "є активні
-     * рахунки" через `Invoice.exists({ businessId })` — поза скоупом цього
-     * service.
+     * Sprint 3 рішення C2 + Sprint 4 SP-5: hard-delete з cascade-видаленням
+     * усіх інвойсів бізнесу **atomic-or-nothing через `withTransaction`**.
+     *
+     * **Інваріант atomic-or-nothing.** Mongo transaction гарантує, що або
+     * (а) видалено і бізнес, і всі його інвойси, або (б) нічого не видалено.
+     * Orphan-state (інвойси без батьківського бізнесу) свідомо неможливий.
+     *
+     * **Mongo replica-set requirement.** `withTransaction` працює лише на
+     * replica-set; на standalone mongod кидає `MongoServerError` з message
+     * "Transaction numbers are only allowed on a replica set". Sprint 4 §4.0
+     * перевів production-Mongo (Atlas) і test-suite (`MongoMemoryReplSet`)
+     * на replica-set; dev — три documented шляхи у root README. На
+     * misconfigured infra ми ловимо помилку і кидаємо
+     * `CASCADE_DELETE_REQUIRES_REPLICA_SET` 500 — жодного `delete` не
+     * виконано, ніяких orphan-invoices не дозволяємо.
+     *
+     * **Pre-count поза транзакцією.** План §4.0 §SP-5: count для
+     * affectedInvoices у response — інформативний, не критичний для atomic-
+     * інваріанту. Якщо invoice створено між count і deleteMany — count
+     * у toast буде stale на 1, але atomic-or-nothing все одно гарантує
+     * відсутність orphan-state-у.
+     *
+     * **Idempotent delete.** Якщо business зник між guard і delete (race з
+     * паралельним delete-ом) — `deleteOne` тихо повертає 0 deletedCount,
+     * ми все одно повертаємо `affectedInvoices` (можливо 0). Frontend бачить
+     * success-toast, що correct semantically: бізнесу нема — мета досягнута.
      */
-    async delete(slug: string): Promise<void> {
-        const result = await this.businessModel
-            .deleteOne({ slugLower: slug.toLowerCase() })
-            .exec();
-        if (result.deletedCount === 0) {
-            // Race з паралельним delete-ом або документ зник між guard-ом і
-            // викликом. Ідемпотентний 404.
-            throw new NotFoundException({
-                code: RESPONSE_CODE.BUSINESS_NOT_FOUND,
-                message: 'Business not found during delete',
+    async delete(
+        business: BusinessDocument
+    ): Promise<{ affectedInvoices: number }> {
+        const businessId = business._id;
+        const affectedInvoices = await this.invoiceModel.countDocuments({
+            businessId,
+        });
+
+        const session = await this.connection.startSession();
+        try {
+            await session.withTransaction(async () => {
+                await this.invoiceModel.deleteMany({ businessId }, { session });
+                await this.businessModel.deleteOne(
+                    { _id: businessId },
+                    { session }
+                );
             });
+        } catch (err) {
+            if (isTransactionsUnsupportedError(err)) {
+                this.logger.error(
+                    `Cascade delete failed: replica-set required. Business ${businessId.toString()}. Original error: ${
+                        err instanceof Error ? err.message : String(err)
+                    }`
+                );
+                throw new InternalServerErrorException({
+                    code: RESPONSE_CODE.CASCADE_DELETE_REQUIRES_REPLICA_SET,
+                    message:
+                        'Cascade delete requires Mongo replica-set; check MONGODB_URI',
+                });
+            }
+            throw err;
+        } finally {
+            await session.endSession();
         }
+
+        return { affectedInvoices };
     }
+}
+
+/**
+ * Sprint 4 §SP-5 — детектор `withTransaction`-incompatibility error-у з Mongo
+ * driver-у. Standalone mongod кидає message що містить
+ * "Transaction numbers are only allowed on a replica set member or mongos"
+ * (codeName: `IllegalOperation`, code: 20). Перевірка на message — robust
+ * проти версій Mongo (codes можуть дрейфнути).
+ */
+function isTransactionsUnsupportedError(err: unknown): boolean {
+    if (!(err instanceof Error)) return false;
+    return /transaction.*replica set|replica set.*transaction/i.test(
+        err.message
+    );
 }
