@@ -53,7 +53,13 @@
 
 - [x] **C3.** ✅ 2026-05-03 — **розширюємо до повноцінного категоризованого списку**. Файл `packages/types/src/constants/reserved-slugs.ts` оновлений з 5 категоріями: TECHNICAL (12), SYSTEM (35), GOVERNMENT (17), BRANDS (111), PUBLIC_FIGURES (26). Загалом 201 зарезервоване ім'я. Розширюється точково по запиту/інциденту, без міграцій. **Окрема задача (не блокер):** нецензурщина як окремий файл з leetspeak-варіантами + open-source список. **Конверсійна логіка:** при колізії з reserved — повідомлення "зверніться до підтримки" → канал sales-конверсії для правовласників бренду.
 
-- [x] **C4.** ✅ 2026-05-03 — **whitelist полів публічного endpoint**: `type`, `name`, `slug`, `acceptedBanks`. Все інше (IBAN, taxId, taxationSystem, isVatPayer, paymentPurposeTemplate, ownerId, managers, createdAt) **не віддається** в JSON. Реквізити доступні клієнту тільки через QR (відкривається банк-додатком). Найбезпечніший шлях: відсутність дублюючих каналів витоку.
+- [x] **C4.** ✅ 2026-05-03 — **whitelist полів публічного endpoint**: початково 4 поля (`type`, `name`, `slug`, `acceptedBanks`). **Розширено** під час Sprint 3 двома рішеннями:
+  - **E3 (2026-05-03):** додано `seoIndexEnabled` (boolean) — потрібен public Server Component-у для рендеру `<meta name="robots">` через `generateMetadata`.
+  - **A2 §3.0 (2026-05-04):** додано `nbuLinks: { primary, legacy }` — два готових NBU payload-link-и формату 003 на дві allowed-host адреси (`qr.bank.gov.ua` і `bank.gov.ua/qr`). Замість того щоб лінкати CTA-кнопки на PNG-endpoint (що дає клієнту картинку, а не платіжний intent), public-сторінка отримує текстові app-links і використовує їх напряму як `href`.
+
+  **Фінальний whitelist (6 полів):** `type`, `name`, `slug`, `acceptedBanks`, `seoIndexEnabled`, `nbuLinks: { primary, legacy }`. Все інше (IBAN, taxId, taxationSystem, isVatPayer, paymentPurposeTemplate, ownerId, managers, createdAt, updatedAt, deletedAt) **не повертається** прямими JSON-полями.
+
+  **Інваріант leak-сурфейсу (оновлений A2):** реквізити (IBAN, ІПН) присутні у `nbuLinks` як Base64URL-encoded NBU payload — але це **той самий vector**, що і QR PNG endpoint `/qr/nbu.png` (payload-link і QR кодують однакові дані з однаковим `<base64-url>` у тілі). Whitelist єдність: дані доступні **тільки** через формати, які читаються банком як платіжна команда (QR-картинка + payload-link для app-link CTA), не raw JSON для довільного scraping-у. `nbuLinks` не розширює attack-surface — він просто дає той самий vector у text-form для CTA `href`.
 
 - [x] **C5.** ✅ 2026-05-03 — **знак гривні в центрі обох QR** (нормативно правильно для payment-QR + візуальна узгодженість для URL-QR). **Лого Finly — як окремий UI-елемент під QR** (у верстці сторінки, не всередині картинки).
 
@@ -89,7 +95,7 @@
   - Зберігаємо в БД **два поля**: `slug` (як написав ФОП — `IvanEnko`) і `slugLower` (нормалізований lowercase — `ivanenko`).
   - **Unique index — на `slugLower`**, не на `slug`. `VasyLenKO` блокує реєстрацію `vasylenko` і `VASYLENKO`.
   - **Lookup public-сторінки** — query по `slugLower` (вхід нормалізується перед запитом).
-  - **301 редірект**: якщо URL case ≠ збережений case → редірект на канонічну форму (як ФОП зберіг).
+  - **308 Permanent Redirect** (Next.js `permanentRedirect` → HTTP 308; зберігає метод і тіло, на відміну від історичного 301): якщо URL case ≠ збережений case → редірект на канонічну форму (як ФОП зберіг).
   - **Reserved-перевірка** — теж на lowercase (наявний список вже весь lowercase, без правок).
   - **Free random retry** — при колізії на lowercase (рідко, але можливо) перегенеровуємо.
   - **QR-картинка** генерується з канонічним URL (з регістром, як ФОП зберіг) — клієнт одразу потрапляє на правильну адресу без редіректу.
@@ -269,11 +275,11 @@
 | 2026-05-03 | C1 — тип оподаткування | Два поля: `taxationSystem` (enum 4-х значень) + `isVatPayer` (boolean) | Юр-семантично точно; галочка ПДВ дозволена тільки на спрощеній-3 / загальній |
 | 2026-05-03 | C2 — видалення бізнесу | Hard-delete одразу: confirm + попередження про активні рахунки + Undo 5s toast. Slug звільняється одразу | Soft-delete для бізнесу = overengineering на MVP; реальні сценарії покриті простими UX-захистами |
 | 2026-05-03 | C3 — reserved slugs | Розширений категоризований список (~200 імен): технічні + системні + державні + ~110 брендів + ~24 публічні особи. Нецензурщина — окремий файл (не блокер) | Захист майбутніх продажів VIP-конверсії + UX страховка від конфліктів |
-| 2026-05-03 | C4 — публічні поля | Whitelist: type, name, slug, acceptedBanks. Реквізити лише в QR | Відсутність дублюючих каналів витоку — найбезпечніший шлях |
+| 2026-05-03 | C4 — публічні поля | Whitelist (фінально 6 полів після E3 + A2): type, name, slug, acceptedBanks, seoIndexEnabled, `nbuLinks: { primary, legacy }`. Реквізити присутні через `nbuLinks` (Base64URL NBU payload) — той самий vector, що і QR PNG endpoint, не додатковий канал | Відсутність дублюючих каналів витоку — найбезпечніший шлях; дані доступні тільки через формати, які банк читає як платіжну команду |
 | 2026-05-03 | C5 — лого в QR | Знак гривні в центрі обох QR (нормативно), Finly-лого під картинкою як UI-елемент. Хвіст Sprint 2: замінити `finly-logo-qr.png` → `hryvnia-symbol.png` + переформулювати QR-4 | Норматив compliance + офіційний вигляд; Finly-брендинг переноситься в верстку |
 | 2026-05-03 | C6 — ліміт бізнесів | Не закладаємо нічого. Sprint 6 робить як звичайну валідацію | Між Sprint 3 і Sprint 6 деплою на прод немає — legacy-користувачів не існуватиме |
 | 2026-05-03 | C8 — форма створення бізнесу | Покроково 4 кроки + step-навігатор з підсвічуванням поточного, з можливістю клікнути назад | Стандартний onboarding-патерн; зменшує "страшність" 8-польової форми; навігатор дає відчуття контролю |
-| 2026-05-03 | E1 — регістр slug-ів | Case-preserved display + case-insensitive uniqueness/lookup. Поля `slug` + `slugLower`, 301 редірект на канонічну форму | Twitter/Instagram-патерн; ФОП-бренд зберігає вигляд, клієнт не страждає від помилки регістру; brand-squatting у різному регістрі неможливий |
+| 2026-05-03 | E1 — регістр slug-ів | Case-preserved display + case-insensitive uniqueness/lookup. Поля `slug` + `slugLower`, 308 Permanent Redirect (Next.js `permanentRedirect`) на канонічну форму | Twitter/Instagram-патерн; ФОП-бренд зберігає вигляд, клієнт не страждає від помилки регістру; brand-squatting у різному регістрі неможливий |
 | 2026-05-03 | E2 — навігація кабінету | Перейменовуємо `Dashboard` → `Бізнеси`; URL `/business`, `/business/{slug}` | Не тримати фейкову назву; реальний Dashboard додамо коли буде наповнення |
 | 2026-05-03 | E3 — SEO індексація | `noindex` за замовчуванням + ФОП-toggle (Sprint 3 — без Paid-gating, Sprint 6 додасть) | Безпечний дефолт + power-user opt-in; інструмент є — людина вирішує |
 | 2026-05-03 | E4 — legacy `/pay` route | Видалити з middleware | Мертвий рудимент; піддомен `pay.finly.com.ua` — окрема історія |

@@ -2,7 +2,7 @@
 
 > **Product vision (finly.com.ua):** SaaS для українських ФОП та їх бухгалтерів — генерація платіжних QR-кодів і посилань за стандартом НБУ, щоб клієнти сканували й оплачували без ручного введення реквізитів. У планах — зберігання документів із AI-тегуванням для швидкого пошуку.
 >
-> **Поточний стан репозиторію:** QR/НБУ-флоу та document storage ще не реалізовані. Зараз це monorepo-monolith на Next.js 16 + NestJS 11 з тех-фундаментом — auth/session lifecycle, billing (Stripe), executions ledger, AI chat (Anthropic), avatar storage (R2). Shared Zod/TypeScript контракти використовуються обома застосунками. Доменна модель і ендпоінти нижче описують саме цей фундамент.
+> **Поточний стан репозиторію:** monorepo-monolith на Next.js 16 + NestJS 11. Реалізовано: тех-фундамент (auth/session lifecycle, billing Stripe, executions ledger, AI chat Anthropic, avatar storage R2), pure NBU payload-builder (формати 002/003), QR image-render pipeline, Business domain + cabinet CRUD, public payment-сторінка `pay.finly.com.ua/{slug}` через host-aware routing з real NBU app-link CTA. Заплановано (Sprint 4+): інвойси під бізнесом, per-bank deep-links, Free/Paid гейти, document storage з AI-tagging. Shared Zod/TypeScript контракти використовуються обома застосунками.
 
 ## Tech Stack
 
@@ -31,15 +31,17 @@ apps/
 │   ├── main.ts, app.module.ts
 │   ├── config/          # fail-fast env loader
 │   ├── common/          # decorators, filters, guards, interceptors, modules (Redis)
-│   └── modules/         # auth, email, users, payments, ai, reports, storage
+│   ├── modules/         # auth, email, users, payments, ai, reports, storage, businesses, qr, invoices
+│   └── ../scripts/migrations/   # one-shot DB migrations + spec (npm: migration:slug-lower)
 ├── web/src/
-│   ├── app/             # pages: root, auth, (protected), privacy, terms (single-locale, uk only)
+│   ├── app/             # pages: root, auth, (protected), host-pay/[slug], privacy, terms (single-locale, uk only)
+│   │   └── (protected)/business, business/[slug], business/new   # cabinet (§3.5–3.8)
 │   ├── entities/        # user (authStore), navigation (headerNavStore), brand (Logo)
-│   ├── features/        # auth, billing, profile, change-theme — own their dialog/state stores in-slice
+│   ├── features/        # auth, billing, profile, change-theme, business-edit, business-wizard, business-public — own their dialog/state stores in-slice
 │   ├── widgets/         # header (mobileMenuSheetStore)
-│   └── shared/          # api, ui, config, styles, icons, seo, lib (authEvents bus), fonts, types
+│   └── shared/          # api, ui, config (env, publicHosts), styles, icons, seo, lib, fonts, types
 packages/
-└── types/src/           # contracts, entities, enums, constants, validation, utils
+└── types/src/           # contracts, entities, enums, constants, validation, utils, qr
 docs/
 └── conventions/         # source-of-truth правила
 ```
@@ -73,9 +75,19 @@ docs/
 - Unique `(provider, providerCustomerId)` — черга невдалих видалень Stripe customers
 - Retry з лічильником `attempts` (max 5), cron `PaymentsCleanupService`
 
+### Business
+Файл: `apps/api/src/modules/businesses/schemas/business.schema.ts` | Zod: `packages/types/src/entities/business.ts`
+- `type` (enum: `'fop'`; ТОВ/ВАТ — Phase 1.5+), `name`, `requisites: { iban, taxId }`, `paymentPurposeTemplate`, `acceptedBanks: BankCode[]`
+- **`taxationSystem`** (enum `simplified-1/2/3 | general`) + **`isVatPayer`** (bool, default false) — coupled-rule (Sprint 3 §C1): `isVatPayer === true ⇒ taxationSystem ∈ {simplified-3, general}`. Refine у Zod entity + write-DTO + service-layer cross-field check для partial PATCH (читає БД при необхідності).
+- **`slug`** (case-preserved display, regex `[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*`) + **`slugLower`** (lowercase normalised). Unique-index на `slugLower` (case-insensitive uniqueness, Sprint 3 §E1). Reserved-list check (`packages/types/src/constants/reserved-slugs.ts`, 5 категорій ~200 імен включно з `host-pay`) — slug-генератор `apps/api/src/modules/businesses/slug-generator.service.ts` (8-char A-Za-z0-9, max 10 retries, crypto.randomBytes).
+- **`seoIndexEnabled`** (bool, default false) — toggle публікації у пошуковики (Sprint 3 §E3); public Server Component читає для `<meta name="robots">`.
+- **`ownerId`** (`ObjectId | null`) + **`managers: ObjectId[]`** — null-owner режим бухгалтера (рішення E5); інваріант `ownerId === null ⇒ managers.length ≥ 1` у Zod refine.
+- `deletedAt: Date | null` — навмисно невикористане (Sprint 3 §C2 робить hard-delete; поле залишене на майбутнє без міграції).
+- Sparse indexes: `ownerId`, `managers`; unique: `slugLower`.
+
 ## Module Dependency Map
 
-- `AppModule` → `AuthModule`, `EmailModule`, `UsersModule`, `PaymentsModule`, `ReportsModule`, `StorageModule`, `AiModule`
+- `AppModule` → `AuthModule`, `EmailModule`, `UsersModule`, `PaymentsModule`, `ReportsModule`, `StorageModule`, `AiModule`, `QrModule`, `BusinessesModule`, `InvoicesModule`
 - `AppModule` global providers: `ThrottlerGuard` (APP_GUARD), `OnboardingInterceptor` (APP_INTERCEPTOR)
 - `AuthModule` ↔ `UsersModule` (`forwardRef`, circular)
 - `AuthModule` → `StorageModule` (for Google avatar re-upload у `handleGoogleAuth`)
@@ -85,6 +97,9 @@ docs/
 - `CatalogService` → own Stripe SDK instance + `REDIS_CLIENT` (no dependency on `IPaymentProvider`)
 - `AiModule` → `UsersModule` + `REDIS_CLIENT` + `AI_PROVIDER` injection token (AnthropicService)
 - `StorageModule` → `UsersModule` + `STORAGE_PROVIDER` injection token (CloudflareR2Service); exports `StorageService` (consumed by `AuthModule`)
+- `BusinessesModule` → `MongooseModule.forFeature(Business)` + `QrModule` + `UsersModule`; exports `BusinessesService` + `MongooseModule` (для Sprint 4 `InvoicesModule`)
+- `InvoicesModule` — Sprint 1 scaffold: тільки `MongooseModule.forFeature(Invoice)` + re-export. Без controller/service до Sprint 4 (там додається CRUD під бізнесом, slug-генератор reuse-ить `BusinessesModule.SlugGeneratorService` через DI, edit-картки переюзають `EditableField` з `features/business-edit`)
+- `QrModule` exports `QrService` (`buildNbuPayloadLinkForInput` + `renderForUrl` + `renderForNbuPayload`); консумується `BusinessesModule.PublicBusinessesController`
 - `CleanupService` (cron, every 6h) → `AuthService` + `UserModel`
 - `ReservationReconcileService` (cron, every 5min) → `UsersService` — generic expired reservation refund
 - `PaymentsCleanupService` (cron, 4 AM) → `PAYMENT_PROVIDER` + `OrphanedProviderCustomerModel`
@@ -217,6 +232,24 @@ Global prefix: `/api`. Rate limiting: `ThrottlerModule` (60 req/min global). Glo
 | POST | `/storage/avatar/commit` | `JwtActiveGuard` | Verify metadata (HeadObject) + update profile.avatar + delete old R2 file |
 | DELETE | `/storage/avatar` | `JwtActiveGuard` | Clear profile.avatar + delete R2 file |
 
+### BusinessesController (`apps/api/src/modules/businesses/businesses.controller.ts`)
+Cabinet zone — slug як primary route-param (не `:id`); resolved через `slugLower` unique-index.
+| Метод | Шлях | Guard | Опис |
+|-------|------|-------|------|
+| GET | `/businesses/me` | `JwtActiveGuard` | Список бізнесів (filter залежить від `worksAsBookkeeper` toggle) |
+| POST | `/businesses/me` | `JwtActiveGuard` | Створення (4-step wizard надсилає одним POST). Slug сервер генерує. Response містить canonical slug — frontend `router.replace('/business/{slug}')` |
+| GET | `/businesses/me/:slug` | `JwtActiveGuard` + `BusinessAccessGuard` | Повний об'єкт бізнесу для кабінету (case-insensitive lookup) |
+| PATCH | `/businesses/me/:slug` | `JwtActiveGuard` + `BusinessAccessGuard` | Часткове оновлення; `.strict()` блокує slug/type/ownership mutation. Coupled VAT × taxationSystem cross-field перевірка читає БД при partial-update |
+| DELETE | `/businesses/me/:slug` | `JwtActiveGuard` + `BusinessAccessGuard` | Hard-delete (slug звільняється одразу) |
+
+### PublicBusinessesController (`apps/api/src/modules/businesses/public-businesses.controller.ts`)
+Public zone (`pay.finly.com.ua`) — без auth, без cookie. `Cache-Control: public, max-age=3600, stale-while-revalidate=86400`.
+| Метод | Шлях | Guard | Опис |
+|-------|------|-------|------|
+| GET | `/businesses/public/:slug` | — + `@SkipOnboarding()` | 6 whitelist-полів (type, name, slug, acceptedBanks, seoIndexEnabled, **nbuLinks: {primary, legacy}**); реквізити не leak-нуто JSON-ом, але присутні у nbuLinks через Base64URL payload (той самий vector як QR PNG) |
+| GET | `/businesses/public/:slug/qr/business.png` | — | QR на public URL (`{PAY_PUBLIC_URL}/{slug}`); знак гривні в центрі |
+| GET | `/businesses/public/:slug/qr/nbu.png?host=primary\|legacy` | — | QR з NBU-payload-link (формат 003) на одну з двох норматив-allowed адрес |
+
 ### Reports
 Scaffold без ендпоінтів.
 
@@ -337,3 +370,8 @@ Full index: [docs/conventions/README.md](docs/conventions/README.md)
 - **QR Base64URL frame ≤ 475 B vs raw ≤ 507 B**: норматив декларує обидва ліміти, але вони математично перетинаються — 475 b64url chars ↔ ~356 raw bytes, тобто 475-ліміт фактично restrictive за 507. `buildNbuPayloadLink` асертить b64url-довжину **до** host-валідації (overflow важливіший за typo). Builder додатково assert'ить raw payload ≤ 507 — defense-in-depth.
 - **QR sharp import у ts-jest**: ts-jest має interop bug з `sharp` default-export (`(0, sharp_1.default) is not a function`). Production `nest build` (tsc) працює коректно. У `qr-logo.compositor.ts` і `qr.service.integration.spec.ts` використовується TS-style `import sharp = require('sharp')` — канонічна форма для callable CJS у TS. `storage.service.ts` залишає default-import, бо його тести мокають sharp повністю.
 - **QR asset shipping**: `apps/api/src/modules/qr/assets/hryvnia-symbol.png` (нормативний asset за §II.11–12 PDF постанови НБУ № 97 — білий круг зі знаком ₴) копіюється у `dist/modules/qr/assets/` через `nest-cli.json` `compilerOptions.assets` (glob `modules/qr/assets/**/*`). `QrService` резолвить шлях через `__dirname` — однаково працює і в dev (ts-node), і в prod (compiled `dist/`). Reproducibility-генератор asset-а — `apps/api/scripts/generate-hryvnia-asset.ts`. Custom-logo бізнесу замість гривні — Sprint 6 (Paid фіча); `QrLogoCompositor` параметризований через `logoPath: string` для легкого розширення.
+- **Slug case-preserved + uniqueness on lower (Sprint 3 §E1)**: Twitter/Instagram-style. Display-форма (`Business.slug`) — як зафіксував ФОП (`IvanEnko`); lookup і uniqueness на `slugLower` (Mongoose unique-index `{slugLower: 1}`). Reserved-перевірка на lowercase. **308 Permanent Redirect** на canonical case при URL mismatch (Next.js `permanentRedirect` у Server Component → `host-pay/[slug]/page.tsx`; `/dashboard` → `/business` legacy bookmark теж 308 у middleware). Manual UAT — `docs/manual-checks/README.md` PUB-5. Free random retry: 8-char `A-Za-z0-9`, max 10 attempts, потім `SLUG_GENERATION_FAILED`. Migration `2026-05-03-businesses-slug-lower.ts` дропає старий `{slug:1}_unique`, backfill-ить `slugLower=$toLower($slug)`, створює новий — idempotent, fail-safe на duplicate-key (case-vary legacy → manual rename).
+- **Hard-delete з frontend-only 5s Undo (Sprint 3 §C2 §F8)**: жоден API call поки 5 секунд не минули. **Timer ID живе у closure**, не у React ref — cabinet page розмонтовується через optimistic redirect (`router.replace('/business')`), а cleanup-effect із clearTimeout вбив би timer до спрацювання; sonner toast queue живе у root layout, не unmount-иться. Browser-unload (window kill) автоматично вб'є setTimeout — implicit cancel без explicit cleanup. `pendingDeletesStore` (Zustand) ховає slug з list UI синхронно при scheduling; на success **slug залишається** у store до browser-unload (інакше stale local `items[]` re-show-нув би видалений запис). Backend transient flag навмисно відкинутий — `setTimeout` у Node не переживає рестарт і не працює multi-instance.
+- **Bookkeeper-toggle тільки UI-фільтр (Sprint 3 §E5)**: ownership-bit на user-документі (`worksAsBookkeeper`). Перемикання не мутує жодного бізнесу — лише фільтрує `getOwnedAndManaged` query (bookkeeper ON → ownerless+managers; OFF → owned). Sprint 3 toggle доступний усім без Paid-gating; Sprint 6 додасть guard через frontend модалку "Доступно на Paid". Frontend optimistic update + rollback на error через `mapApiCode` toast.
+- **Public endpoint whitelist + nbuLinks vector (Sprint 3 §C4 + §A2)**: 6 полів — `type`, `name`, `slug`, `acceptedBanks`, `seoIndexEnabled`, `nbuLinks: {primary, legacy}`. Реквізити (IBAN, ІПН) **не** віддаються JSON-ом напряму, але присутні у `nbuLinks` через Base64URL-encoded NBU payload (той самий vector як QR PNG endpoint — payload-link і QR кодують ті самі дані). Whitelist інваріант: дані доступні **тільки через формати, що читаються банком як платіжна команда**, не raw для довільного scraping-у. `PublicBusinessSchema.parse()` strip-ає leak-fields на serialization step.
+- **host-aware routing на одному Next.js project (Sprint 3 §A1 + §3.9)**: cabinet (`finly.com.ua`) і public (`pay.finly.com.ua`) ділять той самий Next.js container. Middleware має 3 branches: A (public+root-slug → rewrite на internal `/host-pay/{slug}`); B (public+non-root → 404); C (cabinet+`/host-pay/` → 404, direct-URL-attack захист). Host comparison **case-insensitive** за RFC 7230 §2.7 (`isPublicHost` lowercases input) — strict-eq ламав би host-isolation на UPPER/mixed case. Reserved-slug check у Branch A — захист від рекурсивного rewrite на `/host-pay/host-pay`. Cookie isolation: `bid_refresh` ставиться на cabinet host без `Domain=` атрибуту → invisible на pay-host. Server Component `app/host-pay/[slug]/page.tsx` робить defense-in-depth host check через `headers()` — middleware-config drift не призводить до leak public сторінки на cabinet host. ISR `revalidate: 60` — баланс свіжості і навантаження на API (узгоджується з public endpoint `Cache-Control: max-age=3600`).

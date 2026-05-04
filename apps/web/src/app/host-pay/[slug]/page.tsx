@@ -18,11 +18,13 @@ import { isPublicHost } from '@/shared/config/publicHosts';
  * робить `notFound()` якщо middleware-config зломається (наприклад, hot-reload
  * у dev переписав middleware, а page ще не перерендерився).
  *
- * **Sprint plan §3.1 §E1 — case-preserved slug + canonical 301 redirect.**
+ * **Sprint plan §3.1 §E1 — case-preserved slug + canonical 308 redirect.**
  * Backend lookup case-insensitive (`slugLower`), повертає бізнес з
  * canonical-case `slug`. Якщо URL-input відрізняється від canonical —
- * `permanentRedirect` на правильну форму. QR-картинка завжди генерується
- * з canonical slug — скан не викликає redirect-hop.
+ * `permanentRedirect` на правильну форму (Next.js повертає HTTP 308
+ * Permanent Redirect — зберігає метод і тіло, на відміну від 301).
+ * QR-картинка завжди генерується з canonical slug — скан не викликає
+ * redirect-hop.
  *
  * **ISR `revalidate: 60`** (Sprint 3 §F4) — баланс між швидкістю оновлення
  * (зміни ФОП-а видно клієнтам до хвилини) і навантаженням на API.
@@ -73,9 +75,9 @@ export default async function HostPayPage({ params }: Props) {
     }
 
     // Canonical-case redirect (Sprint 3 §E1). `view.slug` — case-preserved,
-    // як зберіг ФОП. Якщо URL-input не співпадає посимвольно — 301 на
-    // канонічну форму. `permanentRedirect` тут безпечний (Server Component
-    // підтримує його), кеш браузера й search-engines оновлять index.
+    // як зберіг ФОП. Якщо URL-input не співпадає посимвольно — 308 на
+    // канонічну форму (Next.js `permanentRedirect` → HTTP 308). Кеш
+    // браузера й search-engines оновлять index без зміни методу.
     if (slug !== view.slug) {
         permanentRedirect(`/${view.slug}`);
     }
