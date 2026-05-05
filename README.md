@@ -128,7 +128,19 @@ NEXT_PUBLIC_API_URL=http://localhost:4000/api
 
 Повний список змінних: [apps/api/src/config/env.ts](apps/api/src/config/env.ts), [apps/web/src/shared/config/env.ts](apps/web/src/shared/config/env.ts).
 
-### 2. Запуск для розробки
+### 2. Додай запис у `/etc/hosts` для public-домену
+
+Public payment-page (`pay.finly.com.ua` у prod) у dev слухає `pay.finly.local:3000` — той самий Next.js container, що cabinet, але інший host-header (host-aware routing у `apps/web/src/middleware.ts`, whitelist у `apps/web/src/shared/config/publicHosts.ts`). Без локального DNS-запису браузер падає з `DNS_PROBE_FINISHED_NXDOMAIN` ще до того, як Next.js отримає запит.
+
+```bash
+echo '127.0.0.1 pay.finly.local' | sudo tee -a /etc/hosts
+```
+
+Після цього `http://pay.finly.local:3000/{slug}` резолвиться у localhost, middleware ідентифікує host як public і робить rewrite на internal `/host-pay/{slug}`.
+
+> **Prod.** Запис у `/etc/hosts` не потрібен — `pay.finly.com.ua` має мати DNS-A/CNAME-record на той самий сервер, що `finly.com.ua`, і reverse-proxy (nginx/Caddy) проксує обидва host-header-и на один Next.js container.
+
+### 3. Запуск для розробки
 
 ```bash
 docker compose -f docker-compose.dev.yml up --build
@@ -147,7 +159,7 @@ docker compose -f docker-compose.dev.yml up --build
 docker compose -f docker-compose.dev.yml down
 ```
 
-### 3. Запуск для production
+### 4. Запуск для production
 
 1. У `.env` вкажи реальний MongoDB Atlas URI та інші production credentials.
 2. Запусти:
