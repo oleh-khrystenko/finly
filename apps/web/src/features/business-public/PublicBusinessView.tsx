@@ -56,29 +56,34 @@ export default function PublicBusinessView({
                 {heading}
             </h1>
 
-            {/* 11 inactive bank tiles (B1). Іконка з `BANK_DISPLAY` map
-                (`apps/web/src/shared/icons/banks/`). Grayscale + opacity-70
-                + cursor-not-allowed маркують inactive стан; Sprint 5 розблокує
-                per-bank deep-links без зміни цього layout. */}
-            <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
-                {acceptedBanks.map((bank) => {
-                    const Icon = BANK_DISPLAY[bank];
-                    return (
-                        <div
-                            key={bank}
-                            aria-disabled
-                            className="border-border bg-muted/30 text-muted-foreground flex h-20 cursor-not-allowed flex-col items-center justify-center gap-1.5 rounded-md border px-2 text-center opacity-70 grayscale"
-                            title="Незабаром"
-                        >
-                            <div className="size-10">
-                                <Icon />
+            <div className="space-y-3">
+                <h2 className="text-foreground text-center text-base font-semibold">
+                    Оберіть банк, з якого бажаєте оплатити
+                </h2>
+                {/* 11 inactive bank tiles (B1). Іконка з `BANK_DISPLAY` map
+                    (`apps/web/src/shared/icons/banks/`). Grayscale + opacity-70
+                    + cursor-not-allowed маркують inactive стан; Sprint 5 розблокує
+                    per-bank deep-links без зміни цього layout. */}
+                <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+                    {acceptedBanks.map((bank) => {
+                        const Icon = BANK_DISPLAY[bank];
+                        return (
+                            <div
+                                key={bank}
+                                aria-disabled
+                                className="border-border bg-muted/30 text-muted-foreground flex h-20 cursor-not-allowed flex-col items-center justify-center gap-1.5 rounded-md border px-2 text-center opacity-70 grayscale"
+                                title="Незабаром"
+                            >
+                                <div className="size-10">
+                                    <Icon />
+                                </div>
+                                <span className="text-[10px] leading-tight">
+                                    {BANK_LABEL[bank]}
+                                </span>
                             </div>
-                            <span className="text-[10px] leading-tight">
-                                {BANK_LABEL[bank]}
-                            </span>
-                        </div>
-                    );
-                })}
+                        );
+                    })}
+                </div>
             </div>
 
             {/* 2 active CTAs (A2 + E7). href = NBU payload-link URL.
