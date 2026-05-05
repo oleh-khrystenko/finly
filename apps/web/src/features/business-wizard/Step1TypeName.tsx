@@ -50,7 +50,7 @@ export default function Step1TypeName() {
 
             <UiInput
                 label="Назва бізнесу"
-                placeholder="Іваненко"
+                placeholder="ФОП Іваненко Іван Іванович"
                 {...form.register('name')}
                 error={errors.name?.message}
             />
