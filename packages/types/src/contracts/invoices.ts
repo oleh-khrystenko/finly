@@ -179,15 +179,23 @@ export type UpdateInvoiceRequest = z.infer<typeof UpdateInvoiceSchema>;
  *    завжди `noindex`, hardcoded на frontend).
  *  - `nbuLinks` — pre-built NBU payload-link URLs (primary + legacy).
  *
+ * **`paymentPurpose: string` (NOT nullable у public-view)** — Sprint 4 §4.7:
+ * клієнт має бачити "Призначення: ..." у sub-info-блоці перед оплатою.
+ * Inheritance-rule (`invoice.paymentPurpose === null` → fallback на
+ * `business.paymentPurposeTemplate`) backend resolve-ить на serialize-step
+ * через `effectiveInvoicePurpose`. Frontend public-view не знає про
+ * inheritance — це impl-detail backend-у; client отримує ефективний рядок,
+ * що співпадає з `nbuLinks` payload-purpose. Cabinet preview-toggle
+ * рендерить через цю ж public-view-шему — тож ФОП теж бачить resolved-string.
+ *
  * **Реквізити (IBAN, ІПН) знову не у JSON-полях** — leak-vector тільки через
  * `nbuLinks` Base64URL payload (той самий інваріант що Sprint 3
- * `PublicBusinessSchema`: дані доступні тільки через формат, який банк
- * читає як платіжну команду).
+ * `PublicBusinessSchema`).
  */
 export const PublicInvoiceSchema = z.object({
     amount: invoiceAmountKopecksSchema,
     amountLocked: z.boolean(),
-    paymentPurpose: invoicePaymentPurposeSchema.nullable(),
+    paymentPurpose: invoicePaymentPurposeSchema,
     validUntil: z.coerce.date().nullable(),
     slug: invoiceSlugSchema,
     business: z.object({

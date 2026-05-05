@@ -9,6 +9,7 @@ import {
     Post,
     UseGuards,
 } from '@nestjs/common';
+import type { BusinessWithInvoicesCount } from '@finly/types';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
@@ -49,11 +50,16 @@ export class BusinessesController {
     @Get()
     async list(
         @CurrentUser() user: UserDocument
-    ): Promise<{ data: BusinessDocument[] }> {
-        const items = await this.businessesService.getOwnedAndManaged(
-            user._id.toString(),
-            user.worksAsBookkeeper
-        );
+    ): Promise<{ data: BusinessWithInvoicesCount[] }> {
+        // Sprint 4 §4.4 — single-aggregation pipeline через
+        // `getOwnedAndManagedWithInvoicesCount` (`$lookup` + nested `$count`).
+        // Один Mongo round-trip незалежно від кількості бізнесів — масштабується
+        // до бухгалтерів з 500+ клієнтами без linear-degradation.
+        const items =
+            await this.businessesService.getOwnedAndManagedWithInvoicesCount(
+                user._id.toString(),
+                user.worksAsBookkeeper
+            );
         return { data: items };
     }
 
@@ -75,7 +81,7 @@ export class BusinessesController {
     @UseGuards(BusinessAccessGuard)
     async getBySlug(
         @CurrentBusiness() business: BusinessDocument
-    ): Promise<{ data: BusinessDocument & { invoicesCount: number } }> {
+    ): Promise<{ data: BusinessWithInvoicesCount }> {
         // Sprint 4 §4.2 — додаємо `invoicesCount` до response, щоб cabinet UI
         // показував counter активних інвойсів (Sprint 4 §4.4 secondary CTA на
         // `/business`-листі) і delete-confirm warning (Sprint 4 §SP-5: ФОП
@@ -84,15 +90,16 @@ export class BusinessesController {
         const invoicesCount = await this.invoicesService.countByBusinessId(
             business._id
         );
-        // Spread `.toJSON()` зберігає всі Mongoose-virtual fields і
-        // serialization, додаючи поле зверху без порушення Mongoose-shape.
+        // `business.toJSON()` тригерить `applyJsonTransform` (`_id → id`,
+        // strip `__v`), повертає plain-object матчить `Business`-entity-shape.
+        // Type-cast через `as` — bridge від generic Mongoose `toJSON()`
+        // return-type (`Record<string, unknown>`) до strongly-typed contract.
+        const plain = business.toJSON() as unknown as Omit<
+            BusinessWithInvoicesCount,
+            'invoicesCount'
+        >;
         return {
-            data: {
-                ...business.toJSON(),
-                invoicesCount,
-            } as BusinessDocument & {
-                invoicesCount: number;
-            },
+            data: { ...plain, invoicesCount },
         };
     }
 

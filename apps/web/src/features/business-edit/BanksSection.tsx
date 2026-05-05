@@ -10,7 +10,7 @@ import {
 import UiCheckbox from '@/shared/ui/UiCheckbox';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiTextarea from '@/shared/ui/UiTextarea';
-import EditableField from './EditableField';
+import UiEditableField from '@/shared/ui/UiEditableField';
 
 interface Props {
     business: Business;
@@ -25,7 +25,7 @@ export default function BanksSection({ business, onSave }: Props) {
     return (
         <UiSectionCard title="Призначення і банки">
             <div className="space-y-4">
-                <EditableField<string>
+                <UiEditableField<string>
                     label="Призначення платежу"
                     value={business.paymentPurposeTemplate}
                     renderRead={(v) => v}
@@ -50,7 +50,7 @@ export default function BanksSection({ business, onSave }: Props) {
                         onSave({ paymentPurposeTemplate })
                     }
                 />
-                <EditableField<BankCode[]>
+                <UiEditableField<BankCode[]>
                     label="Банки, з яких приймати оплати"
                     value={business.acceptedBanks}
                     renderRead={(v) => (

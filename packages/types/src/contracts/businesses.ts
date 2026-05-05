@@ -9,6 +9,7 @@ import {
     businessSlugSchema,
     businessTypeSchema,
     taxationSystemSchema,
+    type Business,
 } from '../entities/business';
 import { slugPresetSchema } from '../entities/invoice';
 
@@ -145,6 +146,21 @@ export type UpdateBusinessRequest = z.infer<typeof UpdateBusinessSchema>;
  *     банк-додаток з реквізитами. Без цих URLs кнопки не функціональні.
  *     Server-side побудова: `QrService.buildNbuPayloadLinkForInput(input, host)`.
  */
+/**
+ * Sprint 4 §4.4 — list/getBySlug response shape для cabinet-зони.
+ * `Business` (entity-Zod) + cheap aggregate `invoicesCount: number`.
+ *
+ * **View-only поле**, не частина `Business`-entity (entity ≠ persistence-shape;
+ * entity описує invariants single-document-state). Окремий contract-тип
+ * робить shape явною для обох сторін: backend `BusinessesService.getOwnedAnd-
+ * ManagedWithInvoicesCount`/`BusinessesController.getBySlug` декларують
+ * повернення цього типу; frontend `shared/api/businesses` re-exports замість
+ * локального alias.
+ */
+export type BusinessWithInvoicesCount = Business & {
+    invoicesCount: number;
+};
+
 export const PublicBusinessSchema = z.object({
     type: businessTypeSchema,
     name: businessNameSchema,

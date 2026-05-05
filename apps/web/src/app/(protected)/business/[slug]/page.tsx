@@ -8,7 +8,6 @@ import { AxiosError } from 'axios';
 import { toast } from 'sonner';
 import {
     BUSINESS_TYPE_LABEL,
-    type Business,
     type PublicBusinessView as PublicBusinessViewData,
     type UpdateBusinessRequest,
 } from '@finly/types';
@@ -17,6 +16,7 @@ import {
     getBusinessBySlug,
     getPublicBusinessView,
     updateBusiness,
+    type BusinessWithInvoicesCount,
 } from '@/shared/api';
 import { ENV } from '@/shared/config/env';
 import UiButton from '@/shared/ui/UiButton';
@@ -35,6 +35,10 @@ import {
     useDeleteBusinessConfirmStore,
 } from '@/features/business-edit';
 import { PublicBusinessView } from '@/features/business-public';
+import {
+    InvoicesSection,
+    InvoicesSettingsSection,
+} from '@/features/invoices';
 
 // Discriminated union для prefetch-у public view. `slug` як discriminator
 // дозволяє відрізнити "поточна версія" від stale-state, що приходить з
@@ -49,7 +53,9 @@ export default function BusinessSlugPage() {
     const params = useParams<{ slug: string }>();
     const openDeleteConfirm = useDeleteBusinessConfirmStore((s) => s.open);
 
-    const [business, setBusiness] = useState<Business | null>(null);
+    const [business, setBusiness] = useState<BusinessWithInvoicesCount | null>(
+        null,
+    );
     const [error, setError] = useState<{ code: string } | null>(null);
     const [previewMode, setPreviewMode] = useState(false);
     const [publicView, setPublicView] = useState<PublicViewState>({
@@ -115,7 +121,13 @@ export default function BusinessSlugPage() {
             if (!business) return;
             try {
                 const updated = await updateBusiness(business.slug, patch);
-                setBusiness(updated);
+                // PATCH-endpoint повертає `Business` без `invoicesCount`
+                // (counter не змінюється від settings-edit). Зберігаємо старе
+                // значення, щоб delete-confirm-dialog не "втратив" cascade-warning.
+                setBusiness({
+                    ...updated,
+                    invoicesCount: business.invoicesCount,
+                });
                 toast.success('Зміни збережено');
             } catch (err) {
                 const code =
@@ -138,7 +150,11 @@ export default function BusinessSlugPage() {
         if (!business) return;
         const slug = business.slug;
         const name = business.name;
-        openDeleteConfirm(business, () => {
+        // Sprint 4 §SP-5 — передаємо `invoicesCount` у store, щоб
+        // confirm-dialog показав warning-рядок ("У бізнесу N активних
+        // рахунків — вони теж зникнуть") якщо counter > 0. Counter уже у
+        // `BusinessWithInvoicesCount`-shape з cabinet-fetch-у §4.4.
+        openDeleteConfirm(business, business.invoicesCount, () => {
             scheduleDeleteWithUndo({
                 slug,
                 name,
@@ -234,6 +250,20 @@ export default function BusinessSlugPage() {
                     />
                     <QrSection
                         business={business}
+                        payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
+                    />
+                    {/*
+                     * Sprint 4 §4.4 §SP-4 — порядок 7,8,9 з 9 секцій.
+                     * "Налаштування рахунків" перед "Рахунки" — patern
+                     * "settings before content" (як "Публічна сторінка"
+                     * перед "QR-картинка"). Danger zone завжди last.
+                     */}
+                    <InvoicesSettingsSection
+                        business={business}
+                        onSave={handlePatch}
+                    />
+                    <InvoicesSection
+                        businessSlug={business.slug}
                         payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
                     />
 

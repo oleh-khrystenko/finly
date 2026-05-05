@@ -564,6 +564,52 @@ describe('Businesses E2E', () => {
             expect(body.data.name).toBe('Нова назва');
         });
 
+        it('Sprint 4 §4.4 contract — list response має `id: string` per item + `invoicesCount`', async () => {
+            const user = await createUser();
+            await supertest(app.getHttpServer())
+                .post('/api/businesses/me')
+                .set('Authorization', bearerFor(user))
+                .send(VALID_CREATE_PAYLOAD)
+                .expect(201);
+
+            const res = await supertest(app.getHttpServer())
+                .get('/api/businesses/me')
+                .set('Authorization', bearerFor(user))
+                .expect(200);
+
+            const items = (res.body as { data: Array<Record<string, unknown>> })
+                .data;
+            expect(items.length).toBeGreaterThan(0);
+            for (const item of items) {
+                expect(typeof item.id).toBe('string');
+                expect(item.id).toMatch(/^[a-f0-9]{24}$/);
+                expect(item).not.toHaveProperty('_id');
+                expect(item).not.toHaveProperty('__v');
+                expect(typeof item.invoicesCount).toBe('number');
+            }
+        });
+
+        it('Sprint 4 §4.4 contract — getBySlug response має `id: string` + `invoicesCount`', async () => {
+            const user = await createUser();
+            const created = await supertest(app.getHttpServer())
+                .post('/api/businesses/me')
+                .set('Authorization', bearerFor(user))
+                .send(VALID_CREATE_PAYLOAD);
+            const { slug } = (created.body as { data: { slug: string } }).data;
+
+            const res = await supertest(app.getHttpServer())
+                .get(`/api/businesses/me/${slug}`)
+                .set('Authorization', bearerFor(user))
+                .expect(200);
+
+            const data = (res.body as { data: Record<string, unknown> }).data;
+            expect(typeof data.id).toBe('string');
+            expect(data.id).toMatch(/^[a-f0-9]{24}$/);
+            expect(data).not.toHaveProperty('_id');
+            expect(data).not.toHaveProperty('__v');
+            expect(typeof data.invoicesCount).toBe('number');
+        });
+
         it('reject спробу змінити slug через PATCH — 400 (slug-immutability via .strict())', async () => {
             const user = await createUser();
             const created = await supertest(app.getHttpServer())

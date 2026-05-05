@@ -25,6 +25,7 @@ import type { BusinessDocument } from '../businesses/schemas/business.schema';
 import { QrService } from '../qr/qr.service';
 import { InvoicesService } from './invoices.service';
 import { buildPayloadInputFromInvoice } from './payload-mapper';
+import { effectiveInvoicePurpose } from './purpose-resolver';
 import type { InvoiceDocument } from './schemas/invoice.schema';
 
 /**
@@ -95,7 +96,14 @@ export class PublicInvoicesController {
         const view = PublicInvoiceSchema.parse({
             amount: invoice.amount,
             amountLocked: invoice.amountLocked,
-            paymentPurpose: invoice.paymentPurpose,
+            // Sprint 4 §4.7 — resolve `paymentPurpose` через
+            // `effectiveInvoicePurpose` (inheritance-rule, той самий шлях що
+            // `payloadInput.purpose`). Single source of truth: UI sub-info
+            // блок і NBU payload показують однаковий текст.
+            paymentPurpose: effectiveInvoicePurpose(
+                invoice.paymentPurpose,
+                business.paymentPurposeTemplate
+            ),
             validUntil: invoice.validUntil,
             slug: invoice.slug,
             business: {

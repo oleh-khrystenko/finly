@@ -11,9 +11,11 @@ const UiSectionCard = ({
     headerRight,
     variant = 'default',
     className,
+    id,
     children,
 }: UiSectionCardProps) => (
     <section
+        id={id}
         className={composeClasses(
             'rounded-xl border bg-card p-6 md:p-8',
             borderStyles[variant],

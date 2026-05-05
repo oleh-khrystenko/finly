@@ -20,6 +20,12 @@ const BillingResetDialog = dynamic(
 const DeleteBusinessConfirmDialog = dynamic(
     () => import('@/features/business-edit/DeleteBusinessConfirmDialog'),
 );
+const DeleteInvoiceConfirmDialog = dynamic(
+    () => import('@/features/invoice-edit/DeleteInvoiceConfirmDialog'),
+);
+const SlugPresetWarningDialog = dynamic(
+    () => import('@/features/invoices/SlugPresetWarningDialog'),
+);
 const MobileMenuSheet = dynamic(
     () => import('@/widgets/header/MobileMenuSheet'),
 );
@@ -33,6 +39,8 @@ export function Overlays() {
             <TermsReacceptDialog />
             <BillingResetDialog />
             <DeleteBusinessConfirmDialog />
+            <DeleteInvoiceConfirmDialog />
+            <SlugPresetWarningDialog />
             <MobileMenuSheet />
         </>
     );

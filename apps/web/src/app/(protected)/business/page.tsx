@@ -1,13 +1,18 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, Briefcase, Plus } from 'lucide-react';
+import { ArrowRight, Briefcase, FileText, Plus } from 'lucide-react';
 import { AxiosError } from 'axios';
-import { BUSINESS_TYPE_LABEL, type Business } from '@finly/types';
-import { getApiMessage, listBusinesses } from '@/shared/api';
+import { BUSINESS_TYPE_LABEL } from '@finly/types';
+import {
+    getApiMessage,
+    listBusinesses,
+    type BusinessWithInvoicesCount,
+} from '@/shared/api';
 import { ENV } from '@/shared/config/env';
 import { useAuthStore } from '@/entities/user';
 import { usePendingDeletesStore } from '@/features/business-edit/pendingDeletesStore';
+import { pluralizeUa } from '@/shared/lib';
 import UiButton from '@/shared/ui/UiButton';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
 import UiPageHeading from '@/shared/ui/UiPageHeading';
@@ -33,7 +38,9 @@ export default function BusinessListPage() {
     const user = useAuthStore((s) => s.user);
     const isBookkeeper = user?.worksAsBookkeeper ?? false;
 
-    const [items, setItems] = useState<Business[] | null>(null);
+    const [items, setItems] = useState<BusinessWithInvoicesCount[] | null>(
+        null,
+    );
     const [error, setError] = useState<string | null>(null);
     // Optimistic delete-removal (Sprint 3 §3.8 §C2). pendingDeletes-store
     // ловить slugs, що в межах 5s-undo-вікна; UI ховає їх до того, як
@@ -181,11 +188,15 @@ function BusinessCard({
     isBookkeeper,
     payHost,
 }: {
-    business: Business;
+    business: BusinessWithInvoicesCount;
     isBookkeeper: boolean;
     payHost: string;
 }) {
     const typeLabel = BUSINESS_TYPE_LABEL[business.type];
+    const invoicesCount = business.invoicesCount;
+    // Sprint 4 §4.4 SP-4 — counter активних інвойсів + scroll-target на
+    // секцію "Рахунки". Hash `#invoices` — frontend-only anchor; cabinet
+    // page додає id="invoices" wrapper до секції (через UiSectionCard).
     return (
         <UiSectionCard
             title={business.name}
@@ -206,10 +217,25 @@ function BusinessCard({
                         {business.slug}
                     </span>
                 </p>
+                {invoicesCount > 0 && (
+                    <p className="text-muted-foreground inline-flex items-center gap-1 pt-1 text-xs">
+                        <FileText className="size-3.5" />
+                        {/*
+                         * Лейбл "{N} рахунків" — без слова "активних":
+                         * counter рахує **всі** invoice-документи бізнесу,
+                         * включно з expired. Інакше label вводив би в оману
+                         * (3 інвойси, з яких 2 прострочені — UI каже "3
+                         * активних"). Експеричні invoices теж лежать у
+                         * кабінеті, доступні для редагування/видалення,
+                         * тож їх логічно рахувати.
+                         */}
+                        {pluralizeUa(invoicesCount, 'рахунок', 'рахунки', 'рахунків')}
+                    </p>
+                )}
             </div>
             <UiButton
                 as="link"
-                href={`/business/${business.slug}`}
+                href={`/business/${business.slug}${invoicesCount > 0 ? '#invoices' : ''}`}
                 variant="outline"
                 size="sm"
                 IconRight={<ArrowRight />}

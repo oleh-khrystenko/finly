@@ -41,6 +41,11 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
         // HTTP-listener — нам потрібен лише DI-context для тестування service-у.
         service = moduleRef.get(InvoiceSlugGeneratorService);
         invoiceModel = moduleRef.get(getModelToken(Invoice.name));
+        // Sprint 4 §4.1 — explicit index sync, щоб partial-unique compound
+        // `(businessId, slugCounterScope, slugCounter)` точно існував до
+        // race-test-у. Mongoose autoIndex може race з першим `create`-ом
+        // на heavy-load test runner — `syncIndexes` await гарантує готовність.
+        await invoiceModel.syncIndexes();
     }, 30_000);
 
     afterAll(async () => {

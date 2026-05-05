@@ -11,6 +11,8 @@ import {
     type TaxationSystem,
 } from '@finly/types';
 
+import { applyJsonTransform } from '../../../common/mongoose/json-transform';
+
 export type BusinessDocument = HydratedDocument<Business>;
 
 /**
@@ -145,6 +147,11 @@ export class Business {
 }
 
 export const BusinessSchema = SchemaFactory.createForClass(Business);
+
+// Sprint 4 §4.4 fix — JSON-serialization `_id: ObjectId → id: string` + strip
+// `__v`. Без цього frontend `Business.id` (Zod-entity-shape) була б
+// undefined, що ламало React `key={b.id}` і dedup-логіки за `id`.
+applyJsonTransform(BusinessSchema);
 
 // Unique-index — на `slugLower`, не на `slug` (Sprint 3 рішення E1:
 // case-insensitive uniqueness). `slug` лишається без index — пошук завжди

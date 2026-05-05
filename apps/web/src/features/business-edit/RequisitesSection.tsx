@@ -8,7 +8,7 @@ import {
 } from '@finly/types';
 import UiInput from '@/shared/ui/UiInput';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
-import EditableField from './EditableField';
+import UiEditableField from '@/shared/ui/UiEditableField';
 
 interface Props {
     business: Business;
@@ -19,7 +19,7 @@ export default function RequisitesSection({ business, onSave }: Props) {
     return (
         <UiSectionCard title="Реквізити">
             <div className="space-y-4">
-                <EditableField<string>
+                <UiEditableField<string>
                     label="IBAN"
                     value={business.requisites.iban}
                     renderRead={(v) => (
@@ -45,7 +45,7 @@ export default function RequisitesSection({ business, onSave }: Props) {
                         })
                     }
                 />
-                <EditableField<string>
+                <UiEditableField<string>
                     label="Індивідуальний податковий номер"
                     value={business.requisites.taxId}
                     renderRead={(v) => (

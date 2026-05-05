@@ -2,7 +2,7 @@
 
 > Короткий tree-overview спринтів MVP. Кожен спринт планується далі окремим документом у цій папці.
 >
-> **Статус:** оновлено 2026-05-04. Sprint 1, 2 закриті; Sprint 3 — функціональний flow закритий, **залишається 1 deliverable + UAT-прогон**; Sprint 4–6 — заплановані.
+> **Статус:** оновлено 2026-05-05. Sprint 1, 2 закриті; Sprint 3 — функціональний flow закритий, **залишається 1 deliverable + UAT-прогон**; **Sprint 4 — функціональний flow закритий, залишається UAT-прогон INV-1..7**; Sprint 5–6 — заплановані.
 
 ---
 
@@ -47,12 +47,25 @@
 
 > Status summary: функціональний end-to-end flow ФОП → кабінет → wizard → cabinet з QR → публічна сторінка з real NBU app-link CTA працює. **Sprint вважається закритим після** (а) збору 11 SVG логотипів, (б) UAT-прогону manual checks.
 
-## 4. Інвойси
+## [4. Інвойси](04-invoices/README.md)
 
-- [ ] CRUD інвойсу під бізнесом
-  - [ ] 4 пресети slug-а + явний/дефолтний режими
-  - [ ] Lock суми / `valid_until` / призначення
-- [ ] Публічна сторінка `pay.finly.com.ua/{slug}/{invoice-slug}`
+**Реалізовано:**
+
+- [x] §4.0 Infra-prep: `MongoMemoryReplSet` test-helper, `extra_hosts` alias у `docker-compose.dev.yml`, README "Mongo replica-set для local dev" з 3 варіантами (Atlas / Docker `--replSet rs0` / local mongod)
+- [x] §4.1 Schema + slug-генератор: `Business.invoiceSlugPresetDefault`, `Invoice.{slugCounterScope, slugCounter}` + partial-unique compound, `InvoiceSlugGeneratorService` (4 пресети + counter monotonic per-(business, scope), Kyiv-tz boundary-fix), `humanSlugPartSchema` + `SlugInputSchema` discriminated union, `formatYymmddhhmmss` + `getKyivYearMonth` через `Intl.DateTimeFormat({ timeZone: 'Europe/Kyiv' })`
+- [x] §4.2 Backend CRUD (cabinet): `InvoicesService`, `InvoiceAccessGuard`, `InvoicesController` (5 endpoints), розширення `BusinessesController.{list, getBySlug, delete}` на `invoicesCount` + `affectedInvoices`, **cascade hard-delete через `withTransaction`** (atomic-or-nothing, 4 нові RESPONSE_CODE), `applyJsonTransform` для `_id → id` JSON shape
+- [x] §4.3 Backend public: `PublicInvoicesController` (3 endpoints, whitelist 7 полів через `PublicInvoiceSchema`, `paymentPurpose` always-resolved через `effectiveInvoicePurpose`), `payload-mapper.ts` (`buildPayloadInputFromInvoice` з amount/lockMask/validUntil)
+- [x] §4.4 Frontend cabinet: `InvoicesSection` (paginated list з `mergeUniqueById`-dedup) + `InvoicesSettingsSection` (5 опцій dropdown `invoiceSlugPresetDefault`) на сторінці бізнесу; counter "{N} рахунків" + scroll-target `#invoices` на `BusinessCard`; `useSlugPresetWarningStore` для `with-purpose` privacy-warning; `UiEditableField` переніс у `shared/ui/`
+- [x] §4.5 Frontend create: form-route з flat 6-option slug-dropdown, RHF + Zod-resolver, live-validation `humanSlugPartSchema`, лічильник символів `purpose`, coupled SP-6 amount-lock, default-preset з business-level налаштування
+- [x] §4.6 Frontend cabinet-invoice: `/business/[slug]/invoice/[invoiceSlug]` з 6 секціями-картками (Amount/Purpose/ValidUntil/Slug/QR/Danger), inline-edit через `UiEditableField`, preview-toggle (SP-2 prefetch-on-mount), 2-step delete (`useDeleteInvoiceConfirmStore` modal + `scheduleInvoiceDeleteWithUndo` 5s-undo)
+- [x] §4.7 Frontend public-сторінка: middleware **Branch A2** (2-сегментний path → rewrite на `/host-pay/{biz}/{inv}`), Server Component з canonical-redirect business-slug + `noindex` для всіх invoices, `InvoicePublicView` (heading з amount, sub-info, expired-banner sanity-block)
+- [x] §4.8 Cross-cutting docs: CLAUDE.md (Domain Model + Module Map + API Overview + Known Complexities), business-flow.md (Free invoices у §6), qr-decisions.md closure-маркери
+
+**Pending QA:**
+
+- [ ] **UAT-прогон INV-1..7** (`docs/manual-checks/README.md` § Інвойси): live-банк-тести з фіксованою/null-amount QR, expired-banner, cascade-delete, with-purpose-warning, simple-counter monotonic, листинг counter — потребують реального телефона з 3 банками + іншого пристрою для скана.
+
+> Status summary: backend (api unit 575 + e2e 81), frontend (web 302), middleware spec (33), build 3/3 — все зелене. Sprint вважається закритим після UAT-прогону INV-1..7.
 
 ## 5. Per-bank deep links (research-driven)
 

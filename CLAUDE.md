@@ -68,16 +68,18 @@ docs/
 Файл: `apps/api/src/modules/businesses/schemas/business.schema.ts` | Zod: `packages/types/src/entities/business.ts`
 - `type` (enum `'fop'`, ТОВ/ВАТ — Phase 1.5+), `name`, `requisites: { iban, taxId }`, `paymentPurposeTemplate`, `acceptedBanks: BankCode[]`
 - `taxationSystem` + `isVatPayer` — coupled rule: `isVatPayer === true ⇒ taxationSystem ∈ {simplified-3, general}`. Refine у Zod entity, write-DTO та service-layer cross-field check для partial PATCH (читає БД при потребі)
-- `slug` (case-preserved display) + `slugLower` (lowercase). Unique-index на `slugLower`. Reserved-list — `packages/types/src/constants/reserved-slugs.ts`. Slug-генератор у `slug-generator.service.ts` (8-char A-Za-z0-9, max 10 retries, `crypto.randomBytes`)
+- `slug` (case-preserved display) + `slugLower` (lowercase). Unique-index на `slugLower`. Reserved-list — `packages/types/src/constants/reserved-slugs.ts`. Slug-генератор у `slug-generator.service.ts` (8-char A-Za-z0-9, max 10 retries, `crypto.randomBytes`); shared free-fn `generateRandomTail()` reuse-ається у `InvoiceSlugGeneratorService`
 - `seoIndexEnabled: boolean` (default false) — toggle публікації у пошуковики
+- `invoiceSlugPresetDefault: SlugPreset | null` (Sprint 4 §4.1; default `null` = "не визначено", форма створення інвойсу fallback-ить на global system default `simple`)
 - `ownerId: ObjectId | null` + `managers: ObjectId[]` — null-owner режим бухгалтера; інваріант `ownerId === null ⇒ managers.length ≥ 1` у Zod refine
 - `deletedAt` навмисно невикористане (Sprint 3 §C2 = hard-delete; поле залишене на майбутнє)
 - Indexes: unique `slugLower`, sparse `ownerId`, `managers`
 
 ### Invoice
 Файл: `apps/api/src/modules/invoices/schemas/invoice.schema.ts` | Zod: `packages/types/src/entities/invoice.ts`
-- Sprint-1 scaffold: лише схема + per-business compound unique `{businessId, slug}`. Без controller/service до Sprint 4.
-- `amount: number | null` (копійки; null = "клієнт сам вводить суму"), `amountLocked`, `paymentPurpose: string | null` (null = inherit з business), `validUntil`, `slugPreset: SlugPreset | null`
+- `businessId` (required), `slug` (case-sensitive — Sprint 4 SP-8 asymmetry), `amount: number | null` (копійки; null = signage-mode "клієнт сам вводить"), `amountLocked` (coupled rule SP-6: `amount === null && amountLocked === true` блокується refine), `paymentPurpose: string | null` (null = inherit з `business.paymentPurposeTemplate` через `effectiveInvoicePurpose`), `validUntil: Date | null`, `slugPreset: SlugPreset | null` (analytics-поле — який пресет згенерував)
+- `slugCounterScope: string | null` + `slugCounter: number | null` (Sprint 4 §4.1) — paired counter-fields для preset-режимів з лічильником (`'simple'` | `YYYY` | `YYYY-MM`). `null` для explicit/random/with-purpose
+- Indexes: compound unique `(businessId, slug)`, compound `(businessId, createdAt -1)` для list-pagination, sparse `validUntil` (Phase 1.5+ expired-cleanup cron), **partial-unique compound** `(businessId, slugCounterScope, slugCounter)` з `partialFilterExpression: { slugCounterScope: $type 'string', slugCounter: $type 'int' }` — race-блок counter-collision у preset-режимах (Sprint 4 §4.1 risk #2 mitigation)
 
 ### ExecutionTransaction
 Файл: `apps/api/src/modules/users/schemas/execution-transaction.schema.ts`
@@ -105,9 +107,9 @@ docs/
 - `PaymentsModule` → `UsersModule`; провайдери: `PAYMENT_PROVIDER` (StripeService) + окремий `CatalogService` зі своїм Stripe SDK instance (no dep on `IPaymentProvider`)
 - `AiModule` → `UsersModule`; провайдер `AI_PROVIDER` (AnthropicService); guard `AiRateLimitGuard`
 - `StorageModule` → `UsersModule`; провайдер `STORAGE_PROVIDER` (CloudflareR2Service); exports `StorageService` (consumed by `AuthModule`)
-- `BusinessesModule` → `MongooseModule.forFeature(Business)` + `QrModule` + `UsersModule`; exports `BusinessesService` + `MongooseModule` (для майбутнього `InvoicesModule` Sprint 4)
-- `InvoicesModule` — лише `MongooseModule.forFeature(Invoice)` + re-export
-- `QrModule` exports `QrService` (`buildNbuPayloadLinkForInput`, `renderForUrl`, `renderForNbuPayload`); консумується `BusinessesModule.PublicBusinessesController`
+- `BusinessesModule` → `MongooseModule.forFeature([Business, Invoice])` + `QrModule` + `UsersModule`; providers: `BusinessesService` (cascade-delete) + `SlugGeneratorService` + `BusinessAccessGuard` + `InvoiceSlugGeneratorService` + `InvoicesService` (повторна реєстрація для `BusinessesController.getBySlug` invoicesCount без cyclic-DI). Exports `MongooseModule` + `BusinessesService`
+- `InvoicesModule` (Sprint 4) → `MongooseModule.forFeature(Invoice)` + `forwardRef(() => BusinessesModule)` + `QrModule`; controllers: `InvoicesController` (cabinet) + `PublicInvoicesController` (public); providers: `InvoiceSlugGeneratorService`, `InvoicesService`, `InvoiceAccessGuard`. Exports `MongooseModule`, `InvoiceSlugGeneratorService`, `InvoicesService`
+- `QrModule` exports `QrService` (`buildNbuPayloadLinkForInput`, `renderForUrl`, `renderForNbuPayload`); консумується `BusinessesModule.PublicBusinessesController` і `InvoicesModule.PublicInvoicesController`
 - Cron: `CleanupService` (6h), `ReservationReconcileService` (5min), `PaymentsCleanupService` (4 AM)
 - Web: `shared/api/client.ts` → axios interceptors → refresh dedupe → `authStore`; protected routes → `AuthGuard` → `shared/api/auth.ts`
 
@@ -244,11 +246,11 @@ Global prefix: `/api`. Rate limiting: `ThrottlerModule` (60 req/min global). Glo
 Cabinet zone — slug як primary route-param; resolved через `slugLower` unique-index.
 | Метод | Шлях | Guard | Опис |
 |-------|------|-------|------|
-| GET | `/businesses/me` | `JwtActiveGuard` | Список бізнесів (filter залежить від `worksAsBookkeeper` toggle) |
+| GET | `/businesses/me` | `JwtActiveGuard` | Список бізнесів через single-aggregation pipeline (`$lookup` + nested `$count`); response items містять `invoicesCount: number` (Sprint 4 §4.4) |
 | POST | `/businesses/me` | `JwtActiveGuard` | Створення (4-step wizard, один POST). Slug сервер генерує. Response містить canonical slug |
-| GET | `/businesses/me/:slug` | `JwtActiveGuard` + `BusinessAccessGuard` | Повний об'єкт |
-| PATCH | `/businesses/me/:slug` | `JwtActiveGuard` + `BusinessAccessGuard` | Часткове оновлення; `.strict()` блокує slug/type/ownership; coupled VAT × taxationSystem cross-field check |
-| DELETE | `/businesses/me/:slug` | `JwtActiveGuard` + `BusinessAccessGuard` | Hard-delete (slug одразу звільняється) |
+| GET | `/businesses/me/:slug` | `JwtActiveGuard` + `BusinessAccessGuard` | Повний об'єкт + `invoicesCount: number` (Sprint 4 §4.2 для cascade-delete-warning + listing counter) |
+| PATCH | `/businesses/me/:slug` | `JwtActiveGuard` + `BusinessAccessGuard` | Часткове оновлення; `.strict()` блокує slug/type/ownership; coupled VAT × taxationSystem cross-field check; **`invoiceSlugPresetDefault: SlugPreset \| null`** (Sprint 4 §4.1) |
+| DELETE | `/businesses/me/:slug` | `JwtActiveGuard` + `BusinessAccessGuard` | Cascade hard-delete (Sprint 4 §SP-5): atomic `withTransaction` видаляє business + всі його invoices. Response: `{ affectedInvoices: number }`. На non-replica-set Mongo → 500 `CASCADE_DELETE_REQUIRES_REPLICA_SET` |
 
 ### PublicBusinessesController (`apps/api/src/modules/businesses/public-businesses.controller.ts`)
 Public zone (`pay.finly.com.ua`) — без auth, без cookie. `Cache-Control: public, max-age=3600, stale-while-revalidate=86400`.
@@ -257,6 +259,24 @@ Public zone (`pay.finly.com.ua`) — без auth, без cookie. `Cache-Control:
 | GET | `/businesses/public/:slug` | `@SkipOnboarding()` | 6 whitelist-полів (`type`, `name`, `slug`, `acceptedBanks`, `seoIndexEnabled`, `nbuLinks: {primary, legacy}`) |
 | GET | `/businesses/public/:slug/qr/business.png` | `@SkipOnboarding()` | QR на public URL `{PAY_PUBLIC_URL}/{slug}`; знак гривні в центрі |
 | GET | `/businesses/public/:slug/qr/nbu.png?host=primary\|legacy` | `@SkipOnboarding()` | QR з NBU-payload-link (формат 003) на одну з двох allowed адрес |
+
+### InvoicesController (`apps/api/src/modules/invoices/invoices.controller.ts`)
+Cabinet zone — Sprint 4 §4.2. Префікс `/businesses/me/:slug/invoices`. Class-level guards: `JwtActiveGuard` + `BusinessAccessGuard`; route-level `InvoiceAccessGuard` для read/update/delete.
+| Метод | Шлях | Guards | Опис |
+|-------|------|--------|------|
+| GET | `/businesses/me/:slug/invoices?page=&limit=` | `JwtActive` + `BusinessAccess` | Paginated list з `sort: { createdAt: -1 }`. Response: `{ items, total, page, limit }` |
+| POST | `/businesses/me/:slug/invoices` | `JwtActive` + `BusinessAccess` | Create через `CreateInvoiceSchema` discriminated union `slugInput`. Backend генерує slug + tail; retry-on-11000 для race-collisions (до 3 спроб). Response: повний invoice з canonical slug |
+| GET | `/businesses/me/:slug/invoices/:invoiceSlug` | `JwtActive` + `BusinessAccess` + `InvoiceAccess` | Повний invoice (case-sensitive slug lookup, SP-8) |
+| PATCH | `/businesses/me/:slug/invoices/:invoiceSlug` | `JwtActive` + `BusinessAccess` + `InvoiceAccess` | Partial update; `.strict()` блокує slug/slugPreset/businessId; coupled `amount × amountLocked` cross-field check через `$expr`-filter |
+| DELETE | `/businesses/me/:slug/invoices/:invoiceSlug` | `JwtActive` + `BusinessAccess` + `InvoiceAccess` | Hard-delete (5s frontend-Undo на web-стороні) |
+
+### PublicInvoicesController (`apps/api/src/modules/invoices/public-invoices.controller.ts`)
+Public zone — Sprint 4 §4.3. Без auth, з `Cache-Control: public, max-age=3600, stale-while-revalidate=86400`.
+| Метод | Шлях | Guard | Опис |
+|-------|------|-------|------|
+| GET | `/businesses/public/:slug/invoices/:invoiceSlug` | `@SkipOnboarding()` | 7 whitelist-полів (invoice fields + nested business view + `nbuLinks`); `paymentPurpose` resolved через `effectiveInvoicePurpose` (always-string у view, не nullable) |
+| GET | `/businesses/public/:slug/invoices/:invoiceSlug/qr/business.png` | `@SkipOnboarding()` | QR на канонічну public-URL інвойсу |
+| GET | `/businesses/public/:slug/invoices/:invoiceSlug/qr/nbu.png?host=primary\|legacy` | `@SkipOnboarding()` | QR з NBU-payload-link (формат 003) — payload містить amount + lockMask + validUntil |
 
 ### ReportsController
 Scaffold без ендпоінтів.
@@ -384,4 +404,18 @@ Full index: [docs/conventions/README.md](docs/conventions/README.md)
 - **Hard-delete з frontend-only 5s Undo**: жоден API call поки 5s не минули. **Timer ID живе у closure**, не у React ref — cabinet page розмонтовується через optimistic redirect (`router.replace('/business')`); cleanup-effect із clearTimeout вбив би timer. Sonner toast queue живе у root layout. Browser-unload вб'є setTimeout автоматично. `pendingDeletesStore` (Zustand) ховає slug з list UI синхронно; на success slug залишається у store до browser-unload. Backend transient flag відкинутий — `setTimeout` у Node не переживає рестарт і не працює multi-instance.
 - **Bookkeeper-toggle тільки UI-фільтр**: ownership-bit на user (`worksAsBookkeeper`). Перемикання не мутує жодного бізнесу — фільтрує `getOwnedAndManaged` query (ON → ownerless+managers; OFF → owned). Sprint 3 toggle доступний усім; Sprint 6 додасть Paid-gating. Frontend optimistic update + rollback на error.
 - **Public endpoint whitelist + nbuLinks vector**: 6 полів — `type`, `name`, `slug`, `acceptedBanks`, `seoIndexEnabled`, `nbuLinks: {primary, legacy}`. Реквізити (IBAN, ІПН) **не** віддаються JSON-ом напряму, але присутні у `nbuLinks` через Base64URL-encoded payload (той самий vector як QR PNG). Whitelist інваріант: дані доступні **тільки через формати, що читаються банком як платіжна команда**. `PublicBusinessSchema.parse()` strip-ає leak-fields на serialization step.
-- **host-aware routing на одному Next.js project**: cabinet (`finly.com.ua`) і public (`pay.finly.com.ua`) ділять один контейнер. Middleware має 3 branches: A (public+root-slug → rewrite на internal `/host-pay/{slug}`); B (public+non-root → 404); C (cabinet+`/host-pay/` → 404, direct-URL-attack захист). Host comparison **case-insensitive** за RFC 7230 §2.7. Reserved-slug check у Branch A — захист від рекурсивного rewrite. Cookie isolation: `bid_refresh` без `Domain=` → invisible на pay-host. Server Component `app/host-pay/[slug]/page.tsx` робить defense-in-depth host check через `headers()`. ISR `revalidate: 60`.
+- **host-aware routing на одному Next.js project**: cabinet (`finly.com.ua`) і public (`pay.finly.com.ua`) ділять один контейнер. Middleware має 4 branches: A1 (public+root-slug → rewrite на internal `/host-pay/{slug}`); **A2 (public+2-сегментний path `/{biz}/{inv}` → rewrite на `/host-pay/{biz}/{inv}`, Sprint 4 §4.7)**; B (public+non-root, non-2-segment → 404); C (cabinet+`/host-pay/` → 404, direct-URL-attack захист). Host comparison **case-insensitive** за RFC 7230 §2.7. Reserved-slug check у Branch A1/A2 — захист від рекурсивного rewrite (тільки на business-slug; invoice-slug — будь-який). Cookie isolation: `bid_refresh` без `Domain=` → invisible на pay-host. Server Components `app/host-pay/[slug]/page.tsx` + `app/host-pay/[slug]/[invoiceSlug]/page.tsx` роблять defense-in-depth host check через `headers()`. ISR `revalidate: 60`.
+
+- **Invoice slug-case asymmetry vs business-slug** (Sprint 4 §SP-8): business-slug case-insensitive (vanity-target, Twitter-style); invoice-slug **case-sensitive** (99% system-generated; case-insensitive lookup нульовий UX-value). Compound-unique `(businessId, slug)` зберігається case-sensitive. Server Component на public-page робить canonical-redirect 308 тільки для business-slug; invoice-slug exact-match-or-404.
+
+- **Slug-preset counter monotonic per (business, scope)** (Sprint 4 §4.1): без окремого counter-document. `MAX(slugCounter)+1` aggregation у `nextCounterByScope` з filter `{ businessId, slugCounterScope }`. **Partial-unique compound** `(businessId, slugCounterScope, slugCounter)` race-блокує counter-collision на write-path: два паралельні `POST /invoices` з тим самим preset-counter → один проходить, другий падає на 11000 → `InvoicesService.create` retry (до 3 спроб). Без partial-unique-compound retry-on-11000 не спрацював би — `(businessId, slug)` compound-unique пропускав би race (різні tails → різні slug-strings). `slugCounterScope`: `'simple'` | `YYYY` | `'YYYY-MM'`. Counter-presets записують paired `(scope, counter)`; non-counter (explicit/random/with-purpose) — обидва null, виключені з partial-index через `partialFilterExpression`.
+
+- **Lock-mask FEFF/FFFF derived from `amountLocked`** (Sprint 4 §4.3 + SP-6): backend-only mapping у `payload-mapper.ts` (`buildPayloadInputFromInvoice`). `amountLocked=true → FFFF` (все locked), `amountLocked=false → FEFF` (поле 8 "Сума" editable). Frontend оперує boolean `amountLocked` — не знає про hex-mask. Інверсна UI-семантика switch-а "Дозволити правити суму" (ON ⇔ `amountLocked=false`) живе тільки у формах (`CreateInvoiceForm`, `AmountSection`).
+
+- **`validUntil` у Kyiv-tz, не UTC** (Sprint 4 §4.1 boundary fix): `formatYymmddhhmmss` + `getKyivYearMonth` через `Intl.DateTimeFormat({ timeZone: 'Europe/Kyiv' })` + `formatToParts`. Контракт NBU input явно інтерпретує payload-час як локальний український. UTC-варіант ламав би: 1 червня 00:30 Київ (= UTC 31 травня 21:30Z) отримував би immutable slug `2026-05-...` замість `2026-06-...` (з `with-month`-пресета); `validUntil` у payload відображав би на 2-3 години раніше. Залежність від ICU tzdata — `Europe/Kyiv` available у Node 20+ full-icu за замовчуванням; small-icu fallback не реалізовано (fail-fast invariant).
+
+- **Cascade hard-delete atomic-or-nothing** (Sprint 4 §SP-5): `BusinessesService.delete` cascade видаляє business + всі його invoices через `connection.startSession() → session.withTransaction()`. Mongo вимагає replica-set для transactions; standalone mongod кидає "Transaction numbers are only allowed on a replica set member or mongos" → service ловить, мапить на `CASCADE_DELETE_REQUIRES_REPLICA_SET` 500. Жодного fallback на 2 sequential deletes — orphan-invoices state свідомо неможливий. Production Atlas — replica-set за замовчуванням; dev — три варіанти (Atlas / Docker `--replSet rs0` / local mongod) у root `README.md`. Test-suite: `MongoMemoryReplSet` для cascade-tests і businesses-e2e (transactional-aware); `MongoMemoryServer` standalone для решти.
+
+- **Mongo `_id → id` JSON transform** (Sprint 4 §4.4 fix): глобальний helper `applyJsonTransform(schema)` у `apps/api/src/common/mongoose/json-transform.ts` додає `toJSON`/`toObject`-transform: `_id: ObjectId → id: string` через `.toString()`, strip `__v`. Застосовано на `BusinessSchema` + `InvoiceSchema`. Без цього frontend `Business.id` (Zod-entity-shape `id: string`) була б undefined, що ламало `key={item.id}` і dedup-логіки. Aggregation pipeline (`getOwnedAndManagedWithInvoicesCount`) не проходить через Mongoose-transform — `_id → id`-mapping робиться явно у `$addFields + $unset`-stage.
+
+- **Public invoice payload — `paymentPurpose` always-resolved** (Sprint 4 §4.7): backend `PublicInvoicesController.getPublic` викликає `effectiveInvoicePurpose(invoice.paymentPurpose, business.paymentPurposeTemplate)` перед serialization → `PublicInvoiceSchema.paymentPurpose: string` (NOT nullable). Inheritance-rule `null → business template` — impl-detail backend; client отримує ефективний рядок, що співпадає з NBU payload-purpose. Single source of truth: UI sub-info і банківська команда показують однаковий текст.

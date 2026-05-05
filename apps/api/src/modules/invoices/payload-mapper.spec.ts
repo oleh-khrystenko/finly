@@ -95,7 +95,9 @@ describe('buildPayloadInputFromInvoice (Sprint 4 §4.3)', () => {
 
         it('invoice.paymentPurpose === null → fallback на business.paymentPurposeTemplate', () => {
             const result = buildPayloadInputFromInvoice(
-                makeBusiness({ paymentPurposeTemplate: 'Послуги web-розробки' }),
+                makeBusiness({
+                    paymentPurposeTemplate: 'Послуги web-розробки',
+                }),
                 makeInvoice({ paymentPurpose: null })
             );
             expect(result.purpose).toBe('Послуги web-розробки');

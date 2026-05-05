@@ -1,20 +1,27 @@
 import { apiClient } from './client';
 import type {
     Business,
+    BusinessWithInvoicesCount,
     CreateBusinessRequest,
     PublicBusinessView,
     UpdateBusinessRequest,
 } from '@finly/types';
+export type { BusinessWithInvoicesCount } from '@finly/types';
 
 /**
- * Sprint 3 §3.6 §3.8 — cabinet API client для бізнесів. Усі методи на
- * `/businesses/me` під JwtActiveGuard; envelope `{ data: ... }`.
+ * Sprint 3 §3.6 §3.8 + Sprint 4 §4.4 — cabinet API client для бізнесів.
+ * Усі методи на `/businesses/me` під JwtActiveGuard; envelope `{ data: ... }`.
+ *
+ * **Sprint 4 §4.4: `BusinessWithInvoicesCount`** — view-extension type
+ * (`Business & { invoicesCount }`) визначений у `@finly/types/contracts/
+ * businesses` як shared contract. Backend (service + controller) і frontend
+ * декларують повернення цього типу — single source of truth.
  */
 
-export async function listBusinesses(): Promise<Business[]> {
-    const { data } = await apiClient.get<{ data: Business[] }>(
-        '/businesses/me',
-    );
+export async function listBusinesses(): Promise<BusinessWithInvoicesCount[]> {
+    const { data } = await apiClient.get<{
+        data: BusinessWithInvoicesCount[];
+    }>('/businesses/me');
     return data.data;
 }
 
@@ -28,8 +35,10 @@ export async function createBusiness(
     return data.data;
 }
 
-export async function getBusinessBySlug(slug: string): Promise<Business> {
-    const { data } = await apiClient.get<{ data: Business }>(
+export async function getBusinessBySlug(
+    slug: string,
+): Promise<BusinessWithInvoicesCount> {
+    const { data } = await apiClient.get<{ data: BusinessWithInvoicesCount }>(
         `/businesses/me/${encodeURIComponent(slug)}`,
     );
     return data.data;

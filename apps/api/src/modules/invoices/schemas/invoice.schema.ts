@@ -2,6 +2,8 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
 import { SLUG_PRESETS, type SlugPreset } from '@finly/types';
 
+import { applyJsonTransform } from '../../../common/mongoose/json-transform';
+
 export type InvoiceDocument = HydratedDocument<Invoice>;
 
 /**
@@ -96,6 +98,9 @@ export class Invoice {
 }
 
 export const InvoiceSchema = SchemaFactory.createForClass(Invoice);
+
+// Sprint 4 §4.4 fix — JSON-serialization `_id: ObjectId → id: string`.
+applyJsonTransform(InvoiceSchema);
 
 InvoiceSchema.index({ businessId: 1, slug: 1 }, { unique: true });
 InvoiceSchema.index({ businessId: 1, createdAt: -1 });

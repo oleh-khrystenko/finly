@@ -10,6 +10,7 @@ import { Connection, Model, Types, type FilterQuery } from 'mongoose';
 import {
     RESPONSE_CODE,
     VAT_ALLOWED_TAXATION_SYSTEMS,
+    type BusinessWithInvoicesCount,
     type CreateBusinessRequest,
     type UpdateBusinessRequest,
 } from '@finly/types';
@@ -117,6 +118,77 @@ export class BusinessesService {
             ? { ownerId: null, managers: userObjectId }
             : { ownerId: userObjectId };
         return this.businessModel.find(filter).sort({ createdAt: -1 }).exec();
+    }
+
+    /**
+     * Sprint 4 §4.4 — list з `invoicesCount` per item у **одному round-trip**
+     * (single aggregation pipeline, не N+1).
+     *
+     * **`$lookup` + nested `$count`-pipeline.** Default-варіант
+     * `from/localField/foreignField` повертає повні invoice-документи, після
+     * чого ми робили б `$size` — memory-hungry на businesses з 100+ інвойсів.
+     * Nested-pipeline з `$count`-stage повертає одне число замість масиву
+     * документів — індексний read через `(businessId, createdAt)` index без
+     * read-fan-out-у документів.
+     *
+     * **Повертає plain-objects (aggregate output), не Mongoose-документи.**
+     * Aggregate output не проходить через Mongoose `toJSON`-transform, тож
+     * `_id → id`-mapping робиться прямо у pipeline (`$addFields` +
+     * `$unset`) — output shape матчить `Business`-entity (`id: string`,
+     * без `_id`/`__v`). Return-type — `BusinessWithInvoicesCount`
+     * (`Business & { invoicesCount }`), а не `BusinessDocument & ...` —
+     * чесний контракт: caller не може покликати document-методи (`.save()`,
+     * `.toJSON()`) на plain-object-i.
+     */
+    async getOwnedAndManagedWithInvoicesCount(
+        userId: string,
+        isBookkeeperMode: boolean
+    ): Promise<BusinessWithInvoicesCount[]> {
+        const userObjectId = new Types.ObjectId(userId);
+        const matchFilter = isBookkeeperMode
+            ? { ownerId: null, managers: userObjectId }
+            : { ownerId: userObjectId };
+        const result = await this.businessModel
+            .aggregate([
+                { $match: matchFilter },
+                {
+                    $lookup: {
+                        from: 'invoices',
+                        let: { bid: '$_id' },
+                        pipeline: [
+                            {
+                                $match: {
+                                    $expr: {
+                                        $eq: ['$businessId', '$$bid'],
+                                    },
+                                },
+                            },
+                            { $count: 'count' },
+                        ],
+                        as: '__invoicesCount',
+                    },
+                },
+                {
+                    $addFields: {
+                        invoicesCount: {
+                            $ifNull: [
+                                {
+                                    $arrayElemAt: ['$__invoicesCount.count', 0],
+                                },
+                                0,
+                            ],
+                        },
+                        // Mongoose toJSON-transform не виконується для
+                        // aggregate-output. Робимо `_id → id`-mapping
+                        // explicitly у pipeline.
+                        id: { $toString: '$_id' },
+                    },
+                },
+                { $unset: ['__invoicesCount', '_id', '__v'] },
+                { $sort: { createdAt: -1 } },
+            ])
+            .exec();
+        return result as BusinessWithInvoicesCount[];
     }
 
     /**

@@ -372,6 +372,28 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                 .expect(400);
         });
 
+        it('Sprint 4 §4.4 contract — response shape має `id: string` (а не `_id`), без `__v`', async () => {
+            const user = await createUser();
+            const slug = await createBusinessFor(user);
+
+            const res = await supertest(app.getHttpServer())
+                .post(`/api/businesses/me/${slug}/invoices`)
+                .set('Authorization', bearerFor(user))
+                .send({
+                    amount: 100,
+                    amountLocked: false,
+                    paymentPurpose: null,
+                    validUntil: null,
+                    slugInput: { kind: 'random' },
+                })
+                .expect(201);
+            const data = (res.body as { data: Record<string, unknown> }).data;
+            expect(typeof data.id).toBe('string');
+            expect(data.id).toMatch(/^[a-f0-9]{24}$/);
+            expect(data).not.toHaveProperty('_id');
+            expect(data).not.toHaveProperty('__v');
+        });
+
         it('5 послідовних simple-інвойсів — counter monotonic 001..005', async () => {
             const user = await createUser();
             const slug = await createBusinessFor(user);
@@ -912,9 +934,7 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                 expect(business).not.toHaveProperty('isVatPayer');
                 expect(business).not.toHaveProperty('ownerId');
                 expect(business).not.toHaveProperty('managers');
-                expect(business).not.toHaveProperty(
-                    'paymentPurposeTemplate'
-                );
+                expect(business).not.toHaveProperty('paymentPurposeTemplate');
                 expect(business).not.toHaveProperty('seoIndexEnabled');
             });
 
@@ -939,12 +959,8 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                         };
                     }
                 ).data.nbuLinks;
-                expect(links.primary).toMatch(
-                    /^https:\/\/qr\.bank\.gov\.ua\//
-                );
-                expect(links.legacy).toMatch(
-                    /^https:\/\/bank\.gov\.ua\/qr\//
-                );
+                expect(links.primary).toMatch(/^https:\/\/qr\.bank\.gov\.ua\//);
+                expect(links.legacy).toMatch(/^https:\/\/bank\.gov\.ua\/qr\//);
             });
 
             it('Cache-Control header присутній', async () => {
@@ -1143,7 +1159,7 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                 // NBU URL: https://qr.bank.gov.ua/{base64url-encoded-payload}
                 const match = /\/([A-Za-z0-9_-]+)$/.exec(links.primary);
                 expect(match).not.toBeNull();
-                const base64Url = match![1]!;
+                const base64Url = match![1];
                 // Decode base64url → plain payload-string
                 const payload = Buffer.from(
                     base64Url.replace(/-/g, '+').replace(/_/g, '/'),
