@@ -67,7 +67,7 @@ Sprint 3 (`docs/sprints/03-cabinet-public/`) у блоці §3.0 (хвости S
 
 ### 2.0 Spec acquisition (БЛОКЕР №0)
 
-Без цього кроку builder 003 — fan-fic. `docs/example/generate.ts` ілюстративний, формат 002, синтетичні поля; за qr-decisions §1.1 source of truth — **постанова НБУ №97 від 19.08.2025 + специфікаційний PDF на bank.gov.ua**. Sprint не починається з імплементації — починається з документа.
+Без цього кроку builder 003 — fan-fic. За qr-decisions §1.1 source of truth — **постанова НБУ №97 від 19.08.2025 + специфікаційний PDF на bank.gov.ua**. Sprint не починається з імплементації — починається з документа.
 
 - 🔲 Завантажити PDF з bank.gov.ua у `docs/product/qr-spec/nbu-003-spec.pdf` (commit-able, бо публічний документ; лицензійні обмеження НБУ дозволяють reference).
 - 🔲 `docs/product/qr-spec/README.md` — нормалізована таблиця **Field × 002 × 003 × max-len-chars × max-len-bytes × encoding × notes**, з прив'язкою до конкретних сторінок PDF. Ціль — щоб TypeScript-константи у §2.1 мали посилання `// see qr-spec/README.md §FIELD_NAME` на одному джерелі правди.
