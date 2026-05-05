@@ -7,6 +7,7 @@ import {
     type BusinessType,
 } from '@finly/types';
 import { BANK_DISPLAY } from '@/shared/icons';
+import UiQrImage from '@/shared/ui/UiQrImage';
 
 interface Props {
     type: BusinessType;
@@ -103,26 +104,25 @@ export default function PublicBusinessView({
                 </p>
             </div>
 
-            {/* 2 QR images (E7). next/image не використовуємо — endpoint
-                same-origin /api/..., не CDN remotePatterns. */}
+            {/* 2 QR images (E7). next/image не використовуємо — re-encode
+                ламає precision raster QR + cross-origin remotePatterns
+                overhead без виграшу (HTTP-кеш на API уже є). */}
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                 <figure className="space-y-2 text-center">
-                    <img
+                    <UiQrImage
                         src={qrPrimary}
                         alt="QR на основну адресу"
-                        className="border-border mx-auto aspect-square w-full max-w-[240px] rounded-md border bg-white p-2"
-                        loading="lazy"
+                        className="border-border mx-auto w-full max-w-[240px] rounded-md border bg-white p-2"
                     />
                     <figcaption className="text-muted-foreground text-xs">
                         Або відскануйте з вашого банк-додатка
                     </figcaption>
                 </figure>
                 <figure className="space-y-2 text-center">
-                    <img
+                    <UiQrImage
                         src={qrLegacy}
                         alt="QR на запасну адресу"
-                        className="border-border mx-auto aspect-square w-full max-w-[240px] rounded-md border bg-white p-2"
-                        loading="lazy"
+                        className="border-border mx-auto w-full max-w-[240px] rounded-md border bg-white p-2"
                     />
                     <figcaption className="text-muted-foreground text-xs">
                         Запасний варіант — якщо перший QR не відкрився
