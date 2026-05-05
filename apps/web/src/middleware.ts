@@ -36,8 +36,8 @@ export default function middleware(request: NextRequest) {
     }
 
     if (isPublicHostReq) {
-        // Branch A — public host + root-рівнева path (`/{slug}`),
-        // slug ≠ reserved → rewrite на `/host-pay/{slug}`.
+        // Branch A1 — public host + root-рівнева path (`/{slug}`),
+        // slug ≠ reserved → rewrite на `/host-pay/{slug}` (Sprint 3 §3.9).
         const rootSlugMatch = /^\/([^/]+)$/.exec(pathname);
         if (rootSlugMatch) {
             const slug = rootSlugMatch[1]!;
@@ -52,10 +52,29 @@ export default function middleware(request: NextRequest) {
             );
         }
 
-        // Branch B — public host + non-root path. `/api/*` уже excluded
-        // matcher-ом (не доходить сюди). Все інше (`/business/foo`,
-        // `/auth/signin`, root `/`, multi-segment) → 404. Робить cabinet
-        // route-и non-addressable з pay-host.
+        // Branch A2 — public host + 2-сегментна path (`/{businessSlug}/{invoiceSlug}`)
+        // (Sprint 4 §4.7). Reserved-check тільки на business-slug; invoice-slug —
+        // будь-який валідний string (compound-unique-blocked у БД per-business).
+        const invoiceSlugMatch = /^\/([^/]+)\/([^/]+)$/.exec(pathname);
+        if (invoiceSlugMatch) {
+            const businessSlug = invoiceSlugMatch[1]!;
+            const invoiceSlug = invoiceSlugMatch[2]!;
+            const businessSlugLower = businessSlug.toLowerCase();
+            if (RESERVED_SLUGS_SET.has(businessSlugLower)) {
+                return new NextResponse(null, { status: 404 });
+            }
+            return NextResponse.rewrite(
+                new URL(
+                    `/host-pay/${businessSlug}/${invoiceSlug}${search}`,
+                    request.url,
+                ),
+            );
+        }
+
+        // Branch B — public host + non-root, non-2-segment path. `/api/*` уже
+        // excluded matcher-ом (не доходить сюди). Все інше (`/business/foo`,
+        // `/auth/signin`, root `/`, 3+-segment) → 404. Робить cabinet route-и
+        // non-addressable з pay-host.
         return new NextResponse(null, { status: 404 });
     }
 

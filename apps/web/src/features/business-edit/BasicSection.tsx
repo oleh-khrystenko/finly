@@ -7,7 +7,7 @@ import {
 } from '@finly/types';
 import UiInput from '@/shared/ui/UiInput';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
-import EditableField from './EditableField';
+import UiEditableField from '@/shared/ui/UiEditableField';
 
 interface Props {
     business: Business;
@@ -26,7 +26,7 @@ export default function BasicSection({ business, onSave }: Props) {
                         {BUSINESS_TYPE_LABEL[business.type]}
                     </p>
                 </div>
-                <EditableField<string>
+                <UiEditableField<string>
                     label="Назва"
                     value={business.name}
                     renderRead={(v) => v}

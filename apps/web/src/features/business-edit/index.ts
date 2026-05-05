@@ -4,7 +4,6 @@ export { default as TaxationSection } from './TaxationSection';
 export { default as BanksSection } from './BanksSection';
 export { default as PublicSection } from './PublicSection';
 export { default as QrSection } from './QrSection';
-export { default as EditableField } from './EditableField';
 export { default as DeleteBusinessConfirmDialog } from './DeleteBusinessConfirmDialog';
 export { useDeleteBusinessConfirmStore } from './deleteBusinessConfirmStore';
 export {

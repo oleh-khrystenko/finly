@@ -9,7 +9,9 @@ import {
     businessSlugSchema,
     businessTypeSchema,
     taxationSystemSchema,
+    type Business,
 } from '../entities/business';
+import { slugPresetSchema } from '../entities/invoice';
 
 /**
  * Sprint 3 §3.1 — write-side контракти Business для cabinet endpoint-ів і
@@ -104,6 +106,15 @@ export const UpdateBusinessSchema = z
             message: 'ACCEPTED_BANKS_REQUIRED',
         }),
         seoIndexEnabled: z.boolean(),
+        /**
+         * Sprint 4 §4.1 — bizness-level дефолт slug-preset для нових інвойсів.
+         * Без цього розширення SP-1-рішення про business-level дефолт пресету
+         * (Q §2.3 #2 closure) — dead config. `null` = "не визначено", форма
+         * створення фолбеком використовує global system default `simple`
+         * (§4.5). Поле незалежне (без cross-field rules) — service-layer
+         * coupled-check не потрібен.
+         */
+        invoiceSlugPresetDefault: slugPresetSchema.nullable(),
     })
     .partial()
     .strict()
@@ -135,6 +146,21 @@ export type UpdateBusinessRequest = z.infer<typeof UpdateBusinessSchema>;
  *     банк-додаток з реквізитами. Без цих URLs кнопки не функціональні.
  *     Server-side побудова: `QrService.buildNbuPayloadLinkForInput(input, host)`.
  */
+/**
+ * Sprint 4 §4.4 — list/getBySlug response shape для cabinet-зони.
+ * `Business` (entity-Zod) + cheap aggregate `invoicesCount: number`.
+ *
+ * **View-only поле**, не частина `Business`-entity (entity ≠ persistence-shape;
+ * entity описує invariants single-document-state). Окремий contract-тип
+ * робить shape явною для обох сторін: backend `BusinessesService.getOwnedAnd-
+ * ManagedWithInvoicesCount`/`BusinessesController.getBySlug` декларують
+ * повернення цього типу; frontend `shared/api/businesses` re-exports замість
+ * локального alias.
+ */
+export type BusinessWithInvoicesCount = Business & {
+    invoicesCount: number;
+};
+
 export const PublicBusinessSchema = z.object({
     type: businessTypeSchema,
     name: businessNameSchema,

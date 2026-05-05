@@ -1,39 +1,23 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { Check, Pencil, X } from 'lucide-react';
 import UiButton from '@/shared/ui/UiButton';
 import UiSpinner from '@/shared/ui/UiSpinner';
-
-interface RenderArgs<TValue> {
-    value: TValue;
-    setValue: (next: TValue) => void;
-    error?: string;
-}
-
-interface Props<TValue> {
-    label: string;
-    value: TValue;
-    /** Renderer для read-only вигляду (повертає string або ReactNode). */
-    renderRead: (value: TValue) => ReactNode;
-    /** Renderer редаговного контролу (input/select/textarea). */
-    renderEdit: (args: RenderArgs<TValue>) => ReactNode;
-    /**
-     * Async-save handler. Throws на помилку → EditableField лишається в
-     * editing-режимі, показує error. На success → читання-режим.
-     */
-    onSave: (next: TValue) => Promise<void>;
-    /** Optional client-side validation. Повертає error-message або null. */
-    validate?: (next: TValue) => string | null;
-    disabled?: boolean;
-}
+import type { UiEditableFieldProps } from './types';
 
 /**
- * Sprint 3 §3.8 §E6 — inline-edit per field (Stripe/Linear/Notion-style).
- * Read mode → "олівець" → edit mode з ✓/✗ кнопками. Reusable у Sprint 4
- * для invoice-форм без дублювання.
+ * Sprint 3 §3.8 §E6 → Sprint 4 §4.4 — inline-edit per field (Stripe/Linear/
+ * Notion-style). Read mode → "олівець" → edit mode з ✓/✗ кнопками.
+ *
+ * **Generic primitive у `shared/ui/`** — використовується кількома feature-
+ * слайсами (`business-edit` секції; `invoices/InvoicesSettingsSection`).
+ * За FSD-конвенцією primitives живуть у нижчому шарі без домен-знань.
+ *
+ * Props у `./types.ts` (за `docs/conventions/ui-primitives.md` §3:
+ * `{Name}.tsx` + `types.ts` + `index.ts`).
  */
-export default function EditableField<TValue>({
+export default function UiEditableField<TValue>({
     label,
     value,
     renderRead,
@@ -41,7 +25,7 @@ export default function EditableField<TValue>({
     onSave,
     validate,
     disabled,
-}: Props<TValue>) {
+}: UiEditableFieldProps<TValue>) {
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState<TValue>(value);
     const [error, setError] = useState<string | undefined>();
@@ -89,9 +73,13 @@ export default function EditableField<TValue>({
                         {renderRead(value)}
                     </div>
                     {!disabled && (
+                        // `variant="icon"` (а не `icon-compact`) — UiEditableField
+                        // використовується у бізнес-кабінеті та invoice settings,
+                        // що рендеряться на mobile-flow. `icon` гарантує
+                        // 44×44-baseline touch-target за `responsive.md` §2.
                         <UiButton
                             type="button"
-                            variant="icon-compact"
+                            variant="icon"
                             size="sm"
                             onClick={startEdit}
                             aria-label={`Редагувати: ${label}`}
@@ -129,4 +117,3 @@ export default function EditableField<TValue>({
         </div>
     );
 }
-

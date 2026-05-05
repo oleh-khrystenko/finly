@@ -59,6 +59,25 @@ export const RESPONSE_CODE = {
      */
     INVALID_VAT_FOR_TAXATION_SYSTEM: 'INVALID_VAT_FOR_TAXATION_SYSTEM',
 
+    // --- invoices error (Sprint 4 §4.2 §4.8) ---
+    /** Invoice не знайдено в межах business-у. `InvoiceAccessGuard` / `InvoicesService.getBySlug`. UA: "Рахунок не знайдено". */
+    INVOICE_NOT_FOUND: 'INVOICE_NOT_FOUND',
+    /** `InvoiceSlugGeneratorService` після MAX_ATTEMPTS retries (статистично недосяжно). UA: "Не вдалося згенерувати посилання. Спробуйте ще раз". */
+    INVOICE_SLUG_GENERATION_FAILED: 'INVOICE_SLUG_GENERATION_FAILED',
+    /** Coupled-rule на write-side: `amount=null + amountLocked=true`. Sprint 1 entity Zod дублює; service окремий код для UX-friendly inline error. UA: "Заблокувати редагування суми можна лише при заданій сумі". */
+    INVOICE_AMOUNT_LOCKED_REQUIRES_AMOUNT:
+        'INVOICE_AMOUNT_LOCKED_REQUIRES_AMOUNT',
+    /**
+     * Sprint 4 §4.0 + SP-5 — cascade-delete вимагає Mongo replica-set
+     * (`session.withTransaction`). Standalone mongod кидає
+     * `MongoServerError: Transaction numbers are only allowed on a replica set...`.
+     * Service ловить → 500 з цим кодом, без жодного fallback на 2 sequential
+     * deletes. Це failure-mode для misconfigured infra, не runtime-fallback.
+     * UA: нейтральне "Не вдалося видалити бізнес. Зверніться в підтримку" —
+     * справжню причину видно лише у server-логах.
+     */
+    CASCADE_DELETE_REQUIRES_REPLICA_SET: 'CASCADE_DELETE_REQUIRES_REPLICA_SET',
+
     // --- errors ---
     UNAUTHORIZED: 'UNAUTHORIZED',
     VALIDATION_ERROR: 'VALIDATION_ERROR',
@@ -99,6 +118,10 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.BUSINESS_ACCESS_DENIED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.SLUG_GENERATION_FAILED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVALID_VAT_FOR_TAXATION_SYSTEM]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.INVOICE_NOT_FOUND]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.INVOICE_SLUG_GENERATION_FAILED]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.INVOICE_AMOUNT_LOCKED_REQUIRES_AMOUNT]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.CASCADE_DELETE_REQUIRES_REPLICA_SET]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.ONBOARDING_INCOMPLETE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.UNAUTHORIZED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.VALIDATION_ERROR]: RESPONSE_TYPE.ERROR,

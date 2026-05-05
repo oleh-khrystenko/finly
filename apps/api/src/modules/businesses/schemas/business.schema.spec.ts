@@ -51,8 +51,27 @@ describe('Business schema (Mongoose integration)', () => {
         expect(doc.taxationSystem).toBe('simplified-3');
         expect(doc.isVatPayer).toBe(false); // default
         expect(doc.seoIndexEnabled).toBe(false); // default
+        expect(doc.invoiceSlugPresetDefault).toBeNull(); // Sprint 4 §4.1
         expect(doc.createdAt).toBeInstanceOf(Date);
         expect(doc.updatedAt).toBeInstanceOf(Date);
+    });
+
+    it('Sprint 4 §4.1 — invoiceSlugPresetDefault приймає валідні preset-значення', async () => {
+        const doc = await BusinessModel.create(
+            buildFixture({ invoiceSlugPresetDefault: 'with-month' })
+        );
+        expect(doc.invoiceSlugPresetDefault).toBe('with-month');
+    });
+
+    it('Sprint 4 §4.1 — rejects unknown invoiceSlugPresetDefault enum value', async () => {
+        await expect(
+            BusinessModel.create(
+                buildFixture({
+                    invoiceSlugPresetDefault:
+                        'unknown-preset' as unknown as 'simple',
+                })
+            )
+        ).rejects.toThrow(/unknown-preset.*enum/i);
     });
 
     it('persists ownerless business (ownerId=null with at least one manager)', async () => {

@@ -1,11 +1,11 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import EditableField from './EditableField';
+import UiEditableField from './UiEditableField';
 
-describe('EditableField', () => {
+describe('UiEditableField', () => {
     it('renders read-mode за замовчуванням з "олівцем"', () => {
         render(
-            <EditableField<string>
+            <UiEditableField<string>
                 label="Назва"
                 value="Іваненко"
                 renderRead={(v) => <span>{v}</span>}
@@ -26,7 +26,7 @@ describe('EditableField', () => {
 
     it('переходить у edit-mode при кліку на "олівець"', () => {
         render(
-            <EditableField<string>
+            <UiEditableField<string>
                 label="Назва"
                 value="Іваненко"
                 renderRead={(v) => <span>{v}</span>}
@@ -49,7 +49,7 @@ describe('EditableField', () => {
     it('Cancel revert-ить до read-mode без виклику onSave', () => {
         const onSave = jest.fn();
         render(
-            <EditableField<string>
+            <UiEditableField<string>
                 label="Назва"
                 value="Іваненко"
                 renderRead={(v) => <span>{v}</span>}
@@ -75,7 +75,7 @@ describe('EditableField', () => {
     it('Save: викликає onSave з draft значенням і повертає у read-mode', async () => {
         const onSave = jest.fn().mockResolvedValue(undefined);
         render(
-            <EditableField<string>
+            <UiEditableField<string>
                 label="Назва"
                 value="Іваненко"
                 renderRead={(v) => <span>{v}</span>}
@@ -98,14 +98,16 @@ describe('EditableField', () => {
             expect(onSave).toHaveBeenCalledWith('New Name'),
         );
         await waitFor(() =>
-            expect(screen.queryByTestId('edit-input')).not.toBeInTheDocument(),
+            expect(
+                screen.queryByTestId('edit-input'),
+            ).not.toBeInTheDocument(),
         );
     });
 
     it('validate fail — лишається у edit-mode, onSave не викликається', () => {
         const onSave = jest.fn();
         render(
-            <EditableField<string>
+            <UiEditableField<string>
                 label="Назва"
                 value="Іваненко"
                 renderRead={(v) => <span>{v}</span>}

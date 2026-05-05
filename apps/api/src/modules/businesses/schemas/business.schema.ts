@@ -3,11 +3,15 @@ import { HydratedDocument, Types } from 'mongoose';
 import {
     BUSINESS_TYPES,
     MVP_BANKS,
+    SLUG_PRESETS,
     TAXATION_SYSTEMS,
     type BankCode,
     type BusinessType,
+    type SlugPreset,
     type TaxationSystem,
 } from '@finly/types';
+
+import { applyJsonTransform } from '../../../common/mongoose/json-transform';
 
 export type BusinessDocument = HydratedDocument<Business>;
 
@@ -115,6 +119,20 @@ export class Business {
     seoIndexEnabled!: boolean;
 
     /**
+     * Sprint 4 §4.1 — bizness-level дефолт slug-preset для нових інвойсів.
+     * `null = "не визначено"` → форма створення фолбеком використовує global
+     * system default `simple` (§4.5). Migration не потрібна: `default: null`
+     * на нові documents + Mongoose-load existing-docs дає `undefined` для
+     * відсутнього поля, що Zod entity-схема трактує через `.default(null)`.
+     *
+     * **Чому не дефолт `'simple'` тут**: семантично відрізняти "ФОП явно обрав
+     * simple" від "ФОП ще не торкався налаштування" — потрібно для майбутнього
+     * onboarding-prompt-у у Sprint 6.
+     */
+    @Prop({ type: String, enum: SLUG_PRESETS, default: null })
+    invoiceSlugPresetDefault!: SlugPreset | null;
+
+    /**
      * Soft-delete. Sprint 3 рішення C2 робить hard-delete + 5s frontend-Undo;
      * це поле залишене **навмисно невикористаним** на майбутнє — нульовий
      * coст у схемі, дає опцію передумати без міграції. Якщо у Phase 1.5+
@@ -129,6 +147,11 @@ export class Business {
 }
 
 export const BusinessSchema = SchemaFactory.createForClass(Business);
+
+// Sprint 4 §4.4 fix — JSON-serialization `_id: ObjectId → id: string` + strip
+// `__v`. Без цього frontend `Business.id` (Zod-entity-shape) була б
+// undefined, що ламало React `key={b.id}` і dedup-логіки за `id`.
+applyJsonTransform(BusinessSchema);
 
 // Unique-index — на `slugLower`, не на `slug` (Sprint 3 рішення E1:
 // case-insensitive uniqueness). `slug` лишається без index — пошук завжди

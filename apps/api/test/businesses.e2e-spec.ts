@@ -5,12 +5,12 @@ import { ConfigModule } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { MongooseModule, getModelToken } from '@nestjs/mongoose';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
-import { MongoMemoryServer } from 'mongodb-memory-server';
 import * as supertest from 'supertest';
 import { App } from 'supertest/types';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { Model, Types } from 'mongoose';
 
+import { createReplSetMongo } from '../src/test-utils/mongo';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 import { REDIS_CLIENT } from '../src/common/modules/redis.module';
 import { RedisCounterService } from '../src/common/services/redis-counter.service';
@@ -36,7 +36,7 @@ jest.mock('../src/config/env', () => ({
         PORT: '4000',
         WEB_URL: 'https://finly.com.ua',
         PAY_PUBLIC_URL: 'https://pay.finly.com.ua',
-        MONGODB_URI: 'overridden-by-MongoMemoryServer',
+        MONGODB_URI: 'overridden-by-MongoMemoryReplSet',
         REDIS_URL: 'redis://mock',
         JWT_ACCESS_SECRET: 'e2e-access-secret-must-be-long-enough',
         JWT_REFRESH_SECRET: 'e2e-refresh-secret-must-be-long-enough',
@@ -180,13 +180,16 @@ const VALID_CREATE_PAYLOAD = {
 
 describe('Businesses E2E', () => {
     let app: INestApplication<App>;
-    let mongoServer: MongoMemoryServer;
+    // Sprint 4 §4.2 — ReplSet (не standalone), бо `BusinessesService.delete`
+    // тепер cascade-delete-ає інвойси через `withTransaction` (§SP-5).
+    // Standalone mongod кидає `CASCADE_DELETE_REQUIRES_REPLICA_SET` на delete-flow.
+    let mongo: Awaited<ReturnType<typeof createReplSetMongo>>;
     let userModel: Model<UserDocument>;
     let businessModel: Model<BusinessDocument>;
     let jwtService: JwtService;
 
     beforeAll(async () => {
-        mongoServer = await MongoMemoryServer.create();
+        mongo = await createReplSetMongo();
 
         // Module-graph mirror's `app.module.ts` — повний набір AuthModule +
         // EmailModule + UsersModule + StorageModule розгортає циркулярні
@@ -202,7 +205,7 @@ describe('Businesses E2E', () => {
                 ThrottlerModule.forRoot({
                     throttlers: [{ ttl: 60000, limit: 600 }],
                 }),
-                MongooseModule.forRoot(mongoServer.getUri()),
+                MongooseModule.forRoot(mongo.uri),
                 TestRedisModule,
                 AuthModule,
                 EmailModule,
@@ -239,7 +242,7 @@ describe('Businesses E2E', () => {
 
     afterAll(async () => {
         await app.close();
-        await mongoServer.stop();
+        await mongo.stop();
     });
 
     beforeEach(async () => {
@@ -561,6 +564,52 @@ describe('Businesses E2E', () => {
             expect(body.data.name).toBe('Нова назва');
         });
 
+        it('Sprint 4 §4.4 contract — list response має `id: string` per item + `invoicesCount`', async () => {
+            const user = await createUser();
+            await supertest(app.getHttpServer())
+                .post('/api/businesses/me')
+                .set('Authorization', bearerFor(user))
+                .send(VALID_CREATE_PAYLOAD)
+                .expect(201);
+
+            const res = await supertest(app.getHttpServer())
+                .get('/api/businesses/me')
+                .set('Authorization', bearerFor(user))
+                .expect(200);
+
+            const items = (res.body as { data: Array<Record<string, unknown>> })
+                .data;
+            expect(items.length).toBeGreaterThan(0);
+            for (const item of items) {
+                expect(typeof item.id).toBe('string');
+                expect(item.id).toMatch(/^[a-f0-9]{24}$/);
+                expect(item).not.toHaveProperty('_id');
+                expect(item).not.toHaveProperty('__v');
+                expect(typeof item.invoicesCount).toBe('number');
+            }
+        });
+
+        it('Sprint 4 §4.4 contract — getBySlug response має `id: string` + `invoicesCount`', async () => {
+            const user = await createUser();
+            const created = await supertest(app.getHttpServer())
+                .post('/api/businesses/me')
+                .set('Authorization', bearerFor(user))
+                .send(VALID_CREATE_PAYLOAD);
+            const { slug } = (created.body as { data: { slug: string } }).data;
+
+            const res = await supertest(app.getHttpServer())
+                .get(`/api/businesses/me/${slug}`)
+                .set('Authorization', bearerFor(user))
+                .expect(200);
+
+            const data = (res.body as { data: Record<string, unknown> }).data;
+            expect(typeof data.id).toBe('string');
+            expect(data.id).toMatch(/^[a-f0-9]{24}$/);
+            expect(data).not.toHaveProperty('_id');
+            expect(data).not.toHaveProperty('__v');
+            expect(typeof data.invoicesCount).toBe('number');
+        });
+
         it('reject спробу змінити slug через PATCH — 400 (slug-immutability via .strict())', async () => {
             const user = await createUser();
             const created = await supertest(app.getHttpServer())
@@ -604,6 +653,78 @@ describe('Businesses E2E', () => {
                 .patch(`/api/businesses/me/${slug}`)
                 .set('Authorization', bearerFor(user))
                 .send({ [key]: 'evil' })
+                .expect(400);
+        });
+
+        it('Sprint 4 §4.1 — PATCH invoiceSlugPresetDefault зберігає поле і getBySlug повертає його (e2e cycle)', async () => {
+            const user = await createUser();
+            const created = await supertest(app.getHttpServer())
+                .post('/api/businesses/me')
+                .set('Authorization', bearerFor(user))
+                .send(VALID_CREATE_PAYLOAD);
+            const { slug } = (created.body as { data: { slug: string } }).data;
+
+            // На create — поле = null (default)
+            const initial = await supertest(app.getHttpServer())
+                .get(`/api/businesses/me/${slug}`)
+                .set('Authorization', bearerFor(user))
+                .expect(200);
+            expect(
+                (
+                    initial.body as {
+                        data: { invoiceSlugPresetDefault: string | null };
+                    }
+                ).data.invoiceSlugPresetDefault
+            ).toBeNull();
+
+            // PATCH на 'with-month'
+            const patched = await supertest(app.getHttpServer())
+                .patch(`/api/businesses/me/${slug}`)
+                .set('Authorization', bearerFor(user))
+                .send({ invoiceSlugPresetDefault: 'with-month' })
+                .expect(200);
+            expect(
+                (patched.body as { data: { invoiceSlugPresetDefault: string } })
+                    .data.invoiceSlugPresetDefault
+            ).toBe('with-month');
+
+            // GET знову — поле persisted
+            const reread = await supertest(app.getHttpServer())
+                .get(`/api/businesses/me/${slug}`)
+                .set('Authorization', bearerFor(user))
+                .expect(200);
+            expect(
+                (reread.body as { data: { invoiceSlugPresetDefault: string } })
+                    .data.invoiceSlugPresetDefault
+            ).toBe('with-month');
+
+            // Reset на null — теж валідно (semantic "не визначено")
+            const resetRes = await supertest(app.getHttpServer())
+                .patch(`/api/businesses/me/${slug}`)
+                .set('Authorization', bearerFor(user))
+                .send({ invoiceSlugPresetDefault: null })
+                .expect(200);
+            expect(
+                (
+                    resetRes.body as {
+                        data: { invoiceSlugPresetDefault: string | null };
+                    }
+                ).data.invoiceSlugPresetDefault
+            ).toBeNull();
+        });
+
+        it('Sprint 4 §4.1 — rejects unknown slug-preset value (Zod enum)', async () => {
+            const user = await createUser();
+            const created = await supertest(app.getHttpServer())
+                .post('/api/businesses/me')
+                .set('Authorization', bearerFor(user))
+                .send(VALID_CREATE_PAYLOAD);
+            const { slug } = (created.body as { data: { slug: string } }).data;
+
+            await supertest(app.getHttpServer())
+                .patch(`/api/businesses/me/${slug}`)
+                .set('Authorization', bearerFor(user))
+                .send({ invoiceSlugPresetDefault: 'unknown-preset' })
                 .expect(400);
         });
 

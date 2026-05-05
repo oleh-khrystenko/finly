@@ -40,6 +40,7 @@ Ui-компоненти інкапсулюють:
 | `UiChipGroup` | Radio-style inline chip selector | -- (sizes: sm/md/lg); Headless UI RadioGroup |
 | `UiModal` | Centered modal / bottom sheet dialogs | controlled (open/onOpenChange); mobile bottom sheet, desktop centered; hideOverlay, hideCloseButton; Radix Dialog |
 | `UiHeaderShell` | Структурна обгортка header-зони (`<header>` + container h-16) | -- ; className override |
+| `UiEditableField` | Inline-edit per field (read mode → "олівець" → edit mode з ✓/✗ кнопками) | Generic над `TValue`; renderer-props (`renderRead`/`renderEdit`); async `onSave`; optional `validate`; `disabled` |
 
 ## Rules
 

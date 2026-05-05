@@ -89,3 +89,6 @@ packages/*/.tsbuildinfo
 # --- Repomix ---
 repomix-output.xml
 .repomixignore
+
+# --- Claude Code runtime state ---
+.claude/scheduled_tasks.lock
