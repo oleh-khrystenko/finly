@@ -13,6 +13,7 @@ import {
 } from '@finly/types';
 import { z } from 'zod';
 import { createBusiness, getApiMessage } from '@/shared/api';
+import { mapValidationCode } from '@/shared/lib';
 import UiTextarea from '@/shared/ui/UiTextarea';
 import UiCheckbox from '@/shared/ui/UiCheckbox';
 import UiButton from '@/shared/ui/UiButton';
@@ -57,7 +58,9 @@ export default function Step4PurposeBanks() {
 
     const onPurposeBlur = () => {
         if (!purposeParse.success) {
-            setPurposeError(purposeParse.error.issues[0]?.message);
+            setPurposeError(
+                mapValidationCode(purposeParse.error.issues[0]?.message),
+            );
         } else {
             setPurposeError(undefined);
         }

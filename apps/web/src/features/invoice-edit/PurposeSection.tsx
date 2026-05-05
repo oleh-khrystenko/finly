@@ -8,6 +8,7 @@ import {
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiTextarea from '@/shared/ui/UiTextarea';
 import UiEditableField from '@/shared/ui/UiEditableField';
+import { mapValidationCode } from '@/shared/lib';
 
 interface Props {
     invoice: Invoice;
@@ -58,8 +59,9 @@ export default function PurposeSection({ invoice, business, onSave }: Props) {
                     const r = invoicePaymentPurposeSchema.safeParse(v);
                     return r.success
                         ? null
-                        : (r.error.issues[0]?.message ??
-                              'Невалідний текст');
+                        : (mapValidationCode(
+                              r.error.issues[0]?.message,
+                          ) ?? null);
                 }}
                 onSave={(paymentPurpose) => onSave({ paymentPurpose })}
             />

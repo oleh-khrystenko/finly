@@ -58,8 +58,8 @@ export const taxationSystemSchema = z.enum(TAXATION_SYSTEMS);
  */
 export const businessSlugSchema = z
     .string()
-    .min(3)
-    .max(63)
+    .min(3, { message: 'INVALID_SLUG_TOO_SHORT' })
+    .max(63, { message: 'INVALID_SLUG_TOO_LONG' })
     .regex(/^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/, {
         message: 'INVALID_SLUG_FORMAT',
     });
@@ -71,8 +71,8 @@ export const businessSlugSchema = z
  */
 export const businessSlugLowerSchema = z
     .string()
-    .min(3)
-    .max(63)
+    .min(3, { message: 'INVALID_SLUG_LOWER_TOO_SHORT' })
+    .max(63, { message: 'INVALID_SLUG_LOWER_TOO_LONG' })
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, {
         message: 'INVALID_SLUG_LOWER_FORMAT',
     });
@@ -85,7 +85,7 @@ export const BusinessRequisitesSchema = z.object({
 export const businessNameSchema = z
     .string()
     .trim()
-    .min(1)
+    .min(1, { message: 'INVALID_NAME_REQUIRED' })
     .max(NAME_LIMIT.chars, { message: 'INVALID_NAME_CHAR_LENGTH' })
     .refine((v) => isWithinByteLimit(v, NAME_LIMIT.bytes), {
         message: 'INVALID_NAME_BYTE_LENGTH',
@@ -94,7 +94,7 @@ export const businessNameSchema = z
 export const businessPaymentPurposeTemplateSchema = z
     .string()
     .trim()
-    .min(1)
+    .min(1, { message: 'INVALID_PURPOSE_REQUIRED' })
     .max(PURPOSE_LIMIT.chars, { message: 'INVALID_PURPOSE_CHAR_LENGTH' })
     .refine((v) => isWithinByteLimit(v, PURPOSE_LIMIT.bytes), {
         message: 'INVALID_PURPOSE_BYTE_LENGTH',

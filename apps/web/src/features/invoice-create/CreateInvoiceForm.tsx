@@ -20,6 +20,7 @@ import {
     type SlugPreset,
 } from '@finly/types';
 import { createInvoice, getApiMessage } from '@/shared/api';
+import { getZodFieldError } from '@/shared/lib';
 import UiButton from '@/shared/ui/UiButton';
 import UiInput from '@/shared/ui/UiInput';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
@@ -167,26 +168,30 @@ function formValuesToCreateRequest(values: FormValues): CreateInvoiceRequest {
 const createInvoiceResolver: Resolver<FormValues> = async (values) => {
     const errors: FieldErrors<FormValues> = {};
 
-    // 1. Pre-validate humanPart (live-feedback).
+    // 1. Pre-validate humanPart (live-feedback). `error.message` зберігаємо як
+    //    SCREAMING_SNAKE-код — UI рендерить через `getZodFieldError(...)`
+    //    (`mapValidationCode`).
     if (values.slugOption === 'explicit') {
         const r = humanSlugPartSchema.safeParse(values.humanPart);
         if (!r.success) {
             errors.humanPart = {
                 type: 'manual',
                 message:
-                    r.error.issues[0]?.message ?? 'Невалідний формат',
+                    r.error.issues[0]?.message ??
+                    'INVALID_HUMAN_SLUG_PART_FORMAT',
             };
         }
     }
 
     // 2. validUntilMode='date' + empty validUntilDate → submit-blocking error.
+    //    Власний код у словнику `mapValidationCode` (`VALID_UNTIL_DATE_REQUIRED`).
     if (
         values.validUntilMode === 'date' &&
         values.validUntilDate.trim() === ''
     ) {
         errors.validUntilDate = {
             type: 'manual',
-            message: 'Оберіть дату',
+            message: 'VALID_UNTIL_DATE_REQUIRED',
         };
     }
 
@@ -373,7 +378,7 @@ export default function CreateInvoiceForm({ business }: Props) {
                                     // Конвертуємо у копійки (int).
                                     field.onChange(Math.round(parsed * 100));
                                 }}
-                                error={fieldState.error?.message}
+                                error={getZodFieldError(fieldState.error)}
                             />
                         )}
                     />
@@ -427,7 +432,7 @@ export default function CreateInvoiceForm({ business }: Props) {
                                     field.onChange(v === '' ? null : v);
                                 }}
                                 placeholder={`Якщо порожньо — використано: «${business.paymentPurposeTemplate}»`}
-                                error={fieldState.error?.message}
+                                error={getZodFieldError(fieldState.error)}
                                 autoGrow
                                 maxRows={4}
                             />
@@ -481,7 +486,7 @@ export default function CreateInvoiceForm({ business }: Props) {
                                     onChange={(e) =>
                                         field.onChange(e.target.value)
                                     }
-                                    error={fieldState.error?.message}
+                                    error={getZodFieldError(fieldState.error)}
                                 />
                             )}
                         />
@@ -520,7 +525,7 @@ export default function CreateInvoiceForm({ business }: Props) {
                                         }
                                         placeholder="наприклад: order-2026-may"
                                         maxLength={60}
-                                        error={fieldState.error?.message}
+                                        error={getZodFieldError(fieldState.error)}
                                     />
                                     <p className="text-muted-foreground text-xs">
                                         Сервер додасть унікальний хвіст

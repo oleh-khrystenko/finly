@@ -10,7 +10,7 @@ import UiButton from '@/shared/ui/UiButton';
 import UiInput from '@/shared/ui/UiInput';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
-import { getFieldError } from '@/shared/lib';
+import { getZodFieldError } from '@/shared/lib';
 import { updateProfile, getMe } from '@/shared/api';
 import { useAuthStore } from '@/entities/user';
 
@@ -36,26 +36,6 @@ interface ProfileFormProps {
     onSaved?: () => void;
 }
 
-const FIRST_NAME_MESSAGES = {
-    required: "Ім'я обов'язкове",
-    too_small: "Ім'я має містити щонайменше 2 символи",
-    too_big: 'Має містити не більше 50 символів',
-    invalid_string:
-        "Ім'я може містити лише літери, пробіли, дефіси та апострофи",
-    invalid_format:
-        "Ім'я може містити лише літери, пробіли, дефіси та апострофи",
-};
-
-const LAST_NAME_MESSAGES = {
-    required: "Прізвище обов'язкове",
-    too_small: 'Прізвище має містити щонайменше 2 символи',
-    too_big: 'Має містити не більше 50 символів',
-    invalid_string:
-        'Прізвище може містити лише літери, пробіли, дефіси та апострофи',
-    invalid_format:
-        'Прізвище може містити лише літери, пробіли, дефіси та апострофи',
-};
-
 const ProfileForm = ({
     user,
     editable,
@@ -75,10 +55,6 @@ const ProfileForm = ({
     });
 
     const { errors, isSubmitting, isDirty } = form.formState;
-    const [firstNameValue, lastNameValue] = form.watch([
-        'firstName',
-        'lastName',
-    ]);
 
     const onSubmit = async (data: ProfileFormValues) => {
         const firstName = data.firstName.trim();
@@ -136,11 +112,7 @@ const ProfileForm = ({
                         {...form.register('firstName')}
                         type="text"
                         placeholder="Ваше ім'я"
-                        error={getFieldError(
-                            errors.firstName,
-                            FIRST_NAME_MESSAGES,
-                            firstNameValue,
-                        )}
+                        error={getZodFieldError(errors.firstName)}
                         disabled={!editable}
                         size="lg"
                     />
@@ -155,11 +127,7 @@ const ProfileForm = ({
                         {...form.register('lastName')}
                         type="text"
                         placeholder="Ваше прізвище"
-                        error={getFieldError(
-                            errors.lastName,
-                            LAST_NAME_MESSAGES,
-                            lastNameValue,
-                        )}
+                        error={getZodFieldError(errors.lastName)}
                         disabled={!editable}
                         size="lg"
                     />

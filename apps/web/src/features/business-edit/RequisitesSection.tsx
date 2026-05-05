@@ -9,6 +9,7 @@ import {
 import UiInput from '@/shared/ui/UiInput';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiEditableField from '@/shared/ui/UiEditableField';
+import { mapValidationCode } from '@/shared/lib';
 
 interface Props {
     business: Business;
@@ -37,7 +38,9 @@ export default function RequisitesSection({ business, onSave }: Props) {
                         const r = ibanZod.safeParse(v);
                         return r.success
                             ? null
-                            : (r.error.issues[0]?.message ?? 'Невірний IBAN');
+                            : (mapValidationCode(
+                                  r.error.issues[0]?.message,
+                              ) ?? null);
                     }}
                     onSave={(iban) =>
                         onSave({
@@ -64,7 +67,9 @@ export default function RequisitesSection({ business, onSave }: Props) {
                         const r = individualTaxIdZod.safeParse(v);
                         return r.success
                             ? null
-                            : (r.error.issues[0]?.message ?? 'Невірний ІПН');
+                            : (mapValidationCode(
+                                  r.error.issues[0]?.message,
+                              ) ?? null);
                     }}
                     onSave={(taxId) =>
                         onSave({

@@ -74,7 +74,7 @@ describe('ProfileForm — lastName is required', () => {
         fireEvent.click(submit);
 
         await waitFor(() => {
-            expect(screen.getByText(/Прізвище обов/i)).toBeInTheDocument();
+            expect(screen.getByText(/Введіть прізвище/i)).toBeInTheDocument();
         });
         expect(mockUpdateProfile).not.toHaveBeenCalled();
     });

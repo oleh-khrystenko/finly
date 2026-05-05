@@ -44,8 +44,8 @@ export const slugPresetSchema = z.enum(SLUG_PRESETS);
  */
 export const invoiceSlugSchema = z
     .string()
-    .min(8)
-    .max(128)
+    .min(8, { message: 'INVALID_SLUG_TOO_SHORT' })
+    .max(128, { message: 'INVALID_SLUG_TOO_LONG' })
     .regex(/^(?:[a-z0-9]+(?:-[a-z0-9]+)*-)?[A-Za-z0-9]{8}$/, {
         message: 'INVALID_SLUG_FORMAT',
     });
@@ -53,7 +53,7 @@ export const invoiceSlugSchema = z
 export const invoicePaymentPurposeSchema = z
     .string()
     .trim()
-    .min(1)
+    .min(1, { message: 'INVALID_PURPOSE_REQUIRED' })
     .max(PURPOSE_LIMIT.chars, { message: 'INVALID_PURPOSE_CHAR_LENGTH' })
     .refine((v) => isWithinByteLimit(v, PURPOSE_LIMIT.bytes), {
         message: 'INVALID_PURPOSE_BYTE_LENGTH',

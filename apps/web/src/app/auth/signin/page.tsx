@@ -29,7 +29,7 @@ import {
 import {
     saveRedirect,
     consumeRedirect,
-    getFieldError,
+    getZodFieldError,
     INTL_LOCALE,
 } from '@/shared/lib';
 import { useAuthStore } from '@/entities/user';
@@ -392,10 +392,7 @@ function SigninContent() {
                     {...emailForm.register('email')}
                     type="email"
                     placeholder="your@email.com"
-                    error={getFieldError(emailForm.formState.errors.email, {
-                        required: 'Введіть вашу електронну адресу',
-                        invalid_string: 'Введіть коректну email-адресу',
-                    })}
+                    error={getZodFieldError(emailForm.formState.errors.email)}
                     required
                     IconLeft={<Mail />}
                     size="lg"

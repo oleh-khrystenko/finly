@@ -11,6 +11,7 @@ import UiCheckbox from '@/shared/ui/UiCheckbox';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiTextarea from '@/shared/ui/UiTextarea';
 import UiEditableField from '@/shared/ui/UiEditableField';
+import { mapValidationCode } from '@/shared/lib';
 
 interface Props {
     business: Business;
@@ -43,8 +44,9 @@ export default function BanksSection({ business, onSave }: Props) {
                             businessPaymentPurposeTemplateSchema.safeParse(v);
                         return r.success
                             ? null
-                            : (r.error.issues[0]?.message ??
-                                  'Невірне значення');
+                            : (mapValidationCode(
+                                  r.error.issues[0]?.message,
+                              ) ?? null);
                     }}
                     onSave={(paymentPurposeTemplate) =>
                         onSave({ paymentPurposeTemplate })

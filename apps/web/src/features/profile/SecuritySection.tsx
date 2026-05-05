@@ -14,6 +14,7 @@ import UiPasswordInput from '@/shared/ui/UiPasswordInput';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
 import { setPassword, getMe } from '@/shared/api';
+import { mapValidationCode } from '@/shared/lib';
 import { useAuthStore } from '@/entities/user';
 import ChangePasswordForm from './ChangePasswordForm';
 
@@ -64,7 +65,9 @@ const SecuritySection = ({ user, mode }: SecuritySectionProps) => {
         if (!result.success) {
             form.setError('password', {
                 type: 'validate',
-                message: 'Пароль повинен містити мінімум 8 символів',
+                message:
+                    result.error.issues[0]?.message ??
+                    'INVALID_PASSWORD_TOO_SHORT',
             });
             return;
         }
@@ -153,7 +156,7 @@ const SecuritySection = ({ user, mode }: SecuritySectionProps) => {
                             },
                         })}
                         placeholder="Мінімум 8 символів"
-                        error={errors.password?.message}
+                        error={mapValidationCode(errors.password?.message)}
                         required={!isPasswordOptional}
                         size="lg"
                         showLabel="Показати пароль"

@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { ibanZod, individualTaxIdZod } from '@finly/types';
 import UiInput from '@/shared/ui/UiInput';
 import UiButton from '@/shared/ui/UiButton';
+import { getZodFieldError } from '@/shared/lib';
 import { useBusinessWizardStore } from './businessWizardStore';
 
 const Schema = z.object({
@@ -45,7 +46,7 @@ export default function Step2Requisites() {
                 placeholder="UA213223130000026007233566001"
                 inputMode="text"
                 {...form.register('iban')}
-                error={errors.iban?.message}
+                error={getZodFieldError(errors.iban)}
             />
             <UiInput
                 label="Індивідуальний податковий номер"
@@ -53,7 +54,7 @@ export default function Step2Requisites() {
                 inputMode="numeric"
                 maxLength={10}
                 {...form.register('taxId')}
-                error={errors.taxId?.message}
+                error={getZodFieldError(errors.taxId)}
             />
 
             <div className="flex justify-between">

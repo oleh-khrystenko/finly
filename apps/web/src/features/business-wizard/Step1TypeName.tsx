@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { businessNameSchema, BUSINESS_TYPE_LABEL } from '@finly/types';
 import UiInput from '@/shared/ui/UiInput';
 import UiButton from '@/shared/ui/UiButton';
+import { getZodFieldError } from '@/shared/lib';
 import { useBusinessWizardStore } from './businessWizardStore';
 
 const Schema = z.object({ name: businessNameSchema });
@@ -52,7 +53,7 @@ export default function Step1TypeName() {
                 label="Назва бізнесу"
                 placeholder="ФОП Іваненко Іван Іванович"
                 {...form.register('name')}
-                error={errors.name?.message}
+                error={getZodFieldError(errors.name)}
             />
 
             <div className="flex justify-end">
