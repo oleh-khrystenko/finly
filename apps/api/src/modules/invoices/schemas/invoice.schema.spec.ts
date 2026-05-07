@@ -220,10 +220,11 @@ describe('Invoice schema (Mongoose integration)', () => {
         ).rejects.toThrow();
     });
 
-    it('does NOT enforce validUntil >= createdAt at Mongoose layer (app-layer rule)', async () => {
-        // План явно фіксує цей інваріант як app-layer (time-relative rule).
-        // Schema приймає past validUntil — write-side service у Sprint 4
-        // блокує невалідні комбінації.
+    it('does NOT enforce validUntil >= now at Mongoose layer (app-layer rule)', async () => {
+        // Sprint 4 review fix — інваріант `validUntil >= now` enforced у
+        // `InvoicesService.create`/`.update` (write-side), не у Mongoose-
+        // схемі: stale invoice з минулим validUntil має валідно існувати у
+        // БД (це expired-state, видимий через `isInvoiceExpired`).
         const past = new Date('2020-01-01');
         const doc = await InvoiceModel.create(
             buildFixture({ validUntil: past })

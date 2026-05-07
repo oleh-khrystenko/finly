@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Check, Pencil, X } from 'lucide-react';
 import UiButton from '@/shared/ui/UiButton';
 import UiSpinner from '@/shared/ui/UiSpinner';
+import { EditableFieldCancelledError } from './cancelled';
 import type { UiEditableFieldProps } from './types';
 
 /**
@@ -56,6 +57,14 @@ export default function UiEditableField<TValue>({
             setEditing(false);
             setError(undefined);
         } catch (err: unknown) {
+            // Sprint 4 review fix — sentinel-error для confirmation-flow:
+            // caller (наприклад privacy-warning перед `with-purpose`-пресетом)
+            // кидає `EditableFieldCancelledError` коли user скасовує підтвердження.
+            // Тут пропускаємо без inline-помилки і ЗАЛИШАЄМОСЯ у edit-mode з
+            // draft-значенням — user може спробувати знову або змінити вибір.
+            if (err instanceof EditableFieldCancelledError) {
+                return;
+            }
             const msg =
                 err instanceof Error ? err.message : 'Не вдалося зберегти';
             setError(msg);

@@ -3,12 +3,15 @@ import {
     InternalServerErrorException,
     NotFoundException,
 } from '@nestjs/common';
-import { getModelToken } from '@nestjs/mongoose';
+import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import { Types } from 'mongoose';
 import type { CreateInvoiceRequest, SlugInput } from '@finly/types';
 
-import type { BusinessDocument } from '../businesses/schemas/business.schema';
+import {
+    Business,
+    type BusinessDocument,
+} from '../businesses/schemas/business.schema';
 import { InvoiceSlugGeneratorService } from './invoice-slug-generator.service';
 import { InvoicesService } from './invoices.service';
 import { Invoice } from './schemas/invoice.schema';
@@ -24,7 +27,11 @@ describe('InvoicesService (Sprint 4 §4.2)', () => {
         deleteOne: jest.Mock;
         exists: jest.Mock;
     }>;
+    let businessModel: jest.Mocked<{ updateOne: jest.Mock }>;
     let slugGenerator: jest.Mocked<{ generateInvoiceSlug: jest.Mock }>;
+    let withTransactionMock: jest.Mock;
+    let endSessionMock: jest.Mock;
+    let startSessionMock: jest.Mock;
 
     const businessId = new Types.ObjectId();
     const business = {
@@ -40,6 +47,11 @@ describe('InvoicesService (Sprint 4 §4.2)', () => {
         slugInput: { kind: 'preset', preset: 'simple' } as SlugInput,
     };
 
+    /** Invoice model `create([...], { session })` повертає масив документів. */
+    const mockInsertSuccess = (doc: Record<string, unknown> = {}) => {
+        invoiceModel.create.mockResolvedValue([doc]);
+    };
+
     beforeEach(async () => {
         invoiceModel = {
             create: jest.fn(),
@@ -50,6 +62,14 @@ describe('InvoicesService (Sprint 4 §4.2)', () => {
             deleteOne: jest.fn(),
             exists: jest.fn(),
         };
+        // Sprint 4 review fix — `InvoicesService.create` тепер touch-ить
+        // business у транзакції. Default mock — matchedCount=1 (бізнес ще
+        // існує). Tests на cascade-race-у переоприділяють.
+        businessModel = {
+            updateOne: jest.fn().mockReturnValue({
+                exec: jest.fn().mockResolvedValue({ matchedCount: 1 }),
+            }),
+        };
         slugGenerator = {
             generateInvoiceSlug: jest.fn().mockResolvedValue({
                 slug: 'inv-001-aaaaaaaa',
@@ -58,6 +78,30 @@ describe('InvoicesService (Sprint 4 §4.2)', () => {
                 slugCounter: 1,
             }),
         };
+        // Realistic-ish session mock (Sprint 4 review fix).
+        //
+        // **Контракт `withTransaction(cb)` на реальному Mongo:**
+        //  - cb() запускається; при error без `TransientTransactionError`-label —
+        //    транзакція abort-иться сервером і error re-throws-ить до caller.
+        //  - DuplicateKeyError (11000) НЕ має transient-label → propagate
+        //    до caller. **Раніший mock пропускав writes після 11000** і
+        //    тому НЕ ловив реальну поведінку (попередній review fixed exactly
+        //    цей gap).
+        //
+        // Поточний mock дотримується real Mongo semantics: on first error
+        // у callback — re-throw з withTransaction. Outer-retry-loop у
+        // `InvoicesService.create` бачить цей error і відкриває **нову
+        // session** для нової спроби. `startSessionMock` повертає fresh
+        // mock-session кожного виклику.
+        endSessionMock = jest.fn();
+        withTransactionMock = jest.fn(async (cb: () => Promise<void>) => {
+            await cb(); // throw з cb propagate назовні — match real Mongo
+        });
+        startSessionMock = jest.fn().mockImplementation(async () => ({
+            withTransaction: withTransactionMock,
+            endSession: endSessionMock,
+        }));
+        const connection = { startSession: startSessionMock };
 
         const moduleRef = await Test.createTestingModule({
             providers: [
@@ -65,6 +109,14 @@ describe('InvoicesService (Sprint 4 §4.2)', () => {
                 {
                     provide: getModelToken(Invoice.name),
                     useValue: invoiceModel,
+                },
+                {
+                    provide: getModelToken(Business.name),
+                    useValue: businessModel,
+                },
+                {
+                    provide: getConnectionToken(),
+                    useValue: connection,
                 },
                 {
                     provide: InvoiceSlugGeneratorService,
@@ -77,7 +129,7 @@ describe('InvoicesService (Sprint 4 §4.2)', () => {
 
     describe('create', () => {
         it('передає business.paymentPurposeTemplate у generator (для inheritance)', async () => {
-            invoiceModel.create.mockResolvedValue({});
+            mockInsertSuccess();
             await service.create(business, {
                 ...baseDto,
                 paymentPurpose: null,
@@ -91,10 +143,12 @@ describe('InvoicesService (Sprint 4 §4.2)', () => {
         });
 
         it('persistить generator-output у документ (slug, slugPreset, slugCounterScope, slugCounter)', async () => {
-            invoiceModel.create.mockResolvedValue({});
+            mockInsertSuccess();
             await service.create(business, baseDto);
-            const arg = invoiceModel.create.mock.calls[0]![0];
-            expect(arg).toMatchObject({
+            // create викликається з array-формою + { session } — Mongoose-API
+            // для transactional inserts (Sprint 4 review fix).
+            const [docs, options] = invoiceModel.create.mock.calls[0]!;
+            expect(docs[0]).toMatchObject({
                 businessId,
                 slug: 'inv-001-aaaaaaaa',
                 slugPreset: 'simple',
@@ -103,22 +157,65 @@ describe('InvoicesService (Sprint 4 §4.2)', () => {
                 amount: 150000,
                 amountLocked: true,
             });
+            expect(options.session).toBeDefined();
         });
 
-        it('retry on 11000 (race-collision) — до 3 спроб', async () => {
-            // Race: перші 2 attempts колізують, третя проходить.
+        it('orphan-prevention: touch business у транзакції (review fix)', async () => {
+            // Doc-touch via $currentDate updatedAt — створює write-intent на
+            // бізнес-документ, що serialize-ить concurrent cascade-delete.
+            mockInsertSuccess();
+            await service.create(business, baseDto);
+            expect(businessModel.updateOne).toHaveBeenCalledWith(
+                { _id: businessId },
+                { $currentDate: { updatedAt: true } },
+                expect.objectContaining({ session: expect.anything() })
+            );
+            expect(startSessionMock).toHaveBeenCalledTimes(1);
+            expect(withTransactionMock).toHaveBeenCalledTimes(1);
+            expect(endSessionMock).toHaveBeenCalledTimes(1);
+        });
+
+        it('cascade-delete виграв race: business зник → 404 BUSINESS_NOT_FOUND, insert не викликається', async () => {
+            // matchedCount=0 ⇔ business зник між guard-read і create-touch
+            // (concurrent cascade-delete виграла гонку). Service кидає
+            // доменну 404 — без orphan insert-у. Outer-loop НЕ retry-ить
+            // NotFoundException (тільки 11000), тож session-machinery
+            // викликається рівно 1 раз.
+            businessModel.updateOne.mockReturnValue({
+                exec: jest.fn().mockResolvedValue({ matchedCount: 0 }),
+            });
+            await expect(
+                service.create(business, baseDto)
+            ).rejects.toBeInstanceOf(NotFoundException);
+            expect(invoiceModel.create).not.toHaveBeenCalled();
+            expect(startSessionMock).toHaveBeenCalledTimes(1);
+        });
+
+        it('retry on 11000 — fresh session/transaction per attempt (review re-fix)', async () => {
+            // Sprint 4 second-review fix: на DuplicateKeyError (11000) у
+            // Mongo транзакція abort-иться server-side; повторний write у
+            // тій самій сесії впав би з `TransactionAborted`, не з 11000.
+            // Тому retry виноситься у outer-loop: на 11000 withTransaction
+            // re-throws, ловимо у `create()` і відкриваємо НОВУ session.
+            // Slug-generator на retry читає commited counter-state і
+            // генерує N+1.
             const dupErr = Object.assign(new Error('E11000'), { code: 11000 });
             invoiceModel.create
-                .mockRejectedValueOnce(dupErr)
-                .mockRejectedValueOnce(dupErr)
-                .mockResolvedValueOnce({} as never);
+                .mockRejectedValueOnce(dupErr) // attempt 1 — abort, throw
+                .mockRejectedValueOnce(dupErr) // attempt 2 — abort, throw
+                .mockResolvedValueOnce([{}] as never); // attempt 3 — success
 
             await service.create(business, baseDto);
             expect(invoiceModel.create).toHaveBeenCalledTimes(3);
             expect(slugGenerator.generateInvoiceSlug).toHaveBeenCalledTimes(3);
+            // Кожен attempt — fresh session/transaction (real Mongo
+            // semantic: aborted TX не reusable для подальших writes).
+            expect(startSessionMock).toHaveBeenCalledTimes(3);
+            expect(withTransactionMock).toHaveBeenCalledTimes(3);
+            expect(endSessionMock).toHaveBeenCalledTimes(3);
         });
 
-        it('після 3 retry-collisions → INVOICE_SLUG_GENERATION_FAILED', async () => {
+        it('після 3 retry-collisions → INVOICE_SLUG_GENERATION_FAILED, 3 fresh sessions', async () => {
             const dupErr = Object.assign(new Error('E11000'), { code: 11000 });
             invoiceModel.create.mockRejectedValue(dupErr);
 
@@ -126,9 +223,10 @@ describe('InvoicesService (Sprint 4 §4.2)', () => {
                 service.create(business, baseDto)
             ).rejects.toBeInstanceOf(InternalServerErrorException);
             expect(invoiceModel.create).toHaveBeenCalledTimes(3);
+            expect(startSessionMock).toHaveBeenCalledTimes(3);
         });
 
-        it('non-duplicate Mongo error pass-through без обгортання', async () => {
+        it('non-duplicate Mongo error pass-through без retry-ю (1 session)', async () => {
             const otherErr = Object.assign(new Error('Mongo timeout'), {
                 code: 99,
             });
@@ -136,8 +234,43 @@ describe('InvoicesService (Sprint 4 §4.2)', () => {
             await expect(service.create(business, baseDto)).rejects.toThrow(
                 'Mongo timeout'
             );
-            // Не retry-ить non-duplicate errors
+            // Не retry-ить non-duplicate errors — лише 1 attempt, 1 session.
             expect(invoiceModel.create).toHaveBeenCalledTimes(1);
+            expect(startSessionMock).toHaveBeenCalledTimes(1);
+            expect(endSessionMock).toHaveBeenCalledTimes(1);
+        });
+
+        it('replica-set unsupported error → 500 CASCADE_DELETE_REQUIRES_REPLICA_SET', async () => {
+            // Standalone mongod кидає на withTransaction message containing
+            // "Transaction numbers are only allowed on a replica set member".
+            withTransactionMock.mockRejectedValueOnce(
+                new Error(
+                    'Transaction numbers are only allowed on a replica set member or mongos'
+                )
+            );
+            await expect(
+                service.create(business, baseDto)
+            ).rejects.toBeInstanceOf(InternalServerErrorException);
+            expect(endSessionMock).toHaveBeenCalled();
+        });
+
+        it('validUntil у минулому → 400 INVOICE_VALID_UNTIL_IN_PAST, transaction не стартує', async () => {
+            // Sprint 4 review fix — write-side enforcement `validUntil >= now`.
+            // Перевірка ДО стартового connection.startSession() — на 400-error
+            // не запускаємо session machinery.
+            const past = new Date(Date.now() - 60_000);
+            await expect(
+                service.create(business, { ...baseDto, validUntil: past })
+            ).rejects.toBeInstanceOf(BadRequestException);
+            expect(withTransactionMock).not.toHaveBeenCalled();
+            expect(invoiceModel.create).not.toHaveBeenCalled();
+        });
+
+        it('validUntil=null → дозволяється (без терміну дії)', async () => {
+            mockInsertSuccess();
+            await expect(
+                service.create(business, { ...baseDto, validUntil: null })
+            ).resolves.toBeDefined();
         });
     });
 
@@ -262,6 +395,30 @@ describe('InvoicesService (Sprint 4 §4.2)', () => {
             await expect(
                 service.update(businessId, 'gone', { amountLocked: true })
             ).rejects.toBeInstanceOf(NotFoundException);
+        });
+
+        it('validUntil у минулому на PATCH → 400 INVOICE_VALID_UNTIL_IN_PAST', async () => {
+            // Update теж enforce-ить write-side інваріант. Database не
+            // зачіпається (findOneAndUpdate не повинен викликатись).
+            const past = new Date(Date.now() - 60_000);
+            await expect(
+                service.update(businessId, 'inv-001', { validUntil: past })
+            ).rejects.toBeInstanceOf(BadRequestException);
+            expect(invoiceModel.findOneAndUpdate).not.toHaveBeenCalled();
+        });
+
+        it('validUntil=null на PATCH → пропускає, дозволяється', async () => {
+            mockUpdateReturn({ validUntil: null });
+            await expect(
+                service.update(businessId, 'inv-001', { validUntil: null })
+            ).resolves.toBeDefined();
+        });
+
+        it('PATCH без validUntil поля (undefined) → не валидує time-rule', async () => {
+            mockUpdateReturn({ paymentPurpose: 'X' });
+            await expect(
+                service.update(businessId, 'inv-001', { paymentPurpose: 'X' })
+            ).resolves.toBeDefined();
         });
     });
 

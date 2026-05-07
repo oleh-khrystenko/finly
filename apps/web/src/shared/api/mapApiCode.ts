@@ -97,6 +97,8 @@ const ERRORS: Record<string, MessageDict> = {
         // toast — код використовується тільки якщо клієнт прямо запитає
         // expired QR-image (e.g., cached link, scraping).
         invoice_expired: 'Термін рахунку минув',
+        invoice_valid_until_in_past:
+            'Термін дії не може бути у минулому',
     },
 };
 

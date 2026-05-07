@@ -75,6 +75,14 @@ export const RESPONSE_CODE = {
      */
     INVOICE_EXPIRED: 'INVOICE_EXPIRED',
     /**
+     * Sprint 4 review fix — write-side service блокує `validUntil < now` на
+     * create/update. Раніше комментарі схеми проголошували, що app-layer
+     * service блокує цей інваріант, але enforcement не існував. Тепер code
+     * приходить з 400 BadRequest на cabinet write. UA: "Термін дії не може
+     * бути у минулому".
+     */
+    INVOICE_VALID_UNTIL_IN_PAST: 'INVOICE_VALID_UNTIL_IN_PAST',
+    /**
      * Sprint 4 §4.0 + SP-5 — cascade-delete вимагає Mongo replica-set
      * (`session.withTransaction`). Standalone mongod кидає
      * `MongoServerError: Transaction numbers are only allowed on a replica set...`.
@@ -129,6 +137,7 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.INVOICE_SLUG_GENERATION_FAILED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVOICE_AMOUNT_LOCKED_REQUIRES_AMOUNT]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVOICE_EXPIRED]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.INVOICE_VALID_UNTIL_IN_PAST]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.CASCADE_DELETE_REQUIRES_REPLICA_SET]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.ONBOARDING_INCOMPLETE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.UNAUTHORIZED]: RESPONSE_TYPE.ERROR,

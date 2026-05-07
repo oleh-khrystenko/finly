@@ -15,6 +15,7 @@ import {
     type UpdateBusinessRequest,
 } from '@finly/types';
 
+import { isTransactionsUnsupportedError } from '../../common/mongoose/transactions-unsupported';
 import {
     Invoice,
     type InvoiceDocument,
@@ -268,7 +269,21 @@ export class BusinessesService {
      *
      * **Інваріант atomic-or-nothing.** Mongo transaction гарантує, що або
      * (а) видалено і бізнес, і всі його інвойси, або (б) нічого не видалено.
-     * Orphan-state (інвойси без батьківського бізнесу) свідомо неможливий.
+     *
+     * **Орфан-prevention з concurrent-create-ом** (Sprint 4 review fix).
+     * Раніше тут стверджувалось, що orphan-state "неможливий" — це було
+     * завищена гарантія: cascade-delete рaн всередині транзакції, але
+     * `InvoicesService.create` йшов поза транзакцією і не координувався з
+     * delete-ом. Сценарій: TX-Delete видаляє invoices та business; concurrent
+     * `create` уже пройшов guard-read (бізнес ще був), а insert вставляється
+     * після `deleteMany(invoices)` і до commit-у delete-у — orphan invoice.
+     *
+     * Фікс: `InvoicesService.create` тепер теж тримає транзакцію і **touches**
+     * business (`updateOne $currentDate: updatedAt`) у ній. Mongo write-write
+     * conflict serialize-ить два TX: або create-touch виграє і delete-у
+     * retry'неться (deleteMany побачить новий invoice і видалить його), або
+     * delete-у виграє і create-touch на retry побачить matchedCount=0 →
+     * 404 BUSINESS_NOT_FOUND, без orphan-insert-у.
      *
      * **Mongo replica-set requirement.** `withTransaction` працює лише на
      * replica-set; на standalone mongod кидає `MongoServerError` з message
@@ -327,18 +342,4 @@ export class BusinessesService {
 
         return { affectedInvoices };
     }
-}
-
-/**
- * Sprint 4 §SP-5 — детектор `withTransaction`-incompatibility error-у з Mongo
- * driver-у. Standalone mongod кидає message що містить
- * "Transaction numbers are only allowed on a replica set member or mongos"
- * (codeName: `IllegalOperation`, code: 20). Перевірка на message — robust
- * проти версій Mongo (codes можуть дрейфнути).
- */
-function isTransactionsUnsupportedError(err: unknown): boolean {
-    if (!(err instanceof Error)) return false;
-    return /transaction.*replica set|replica set.*transaction/i.test(
-        err.message
-    );
 }

@@ -9,8 +9,12 @@ import { objectIdSchema } from '../validation/common';
  *
  * **Що Zod-схема НЕ перевіряє** (свідомо):
  * - Унікальність `(businessId, slug)` — compound unique index у Block 3.
- * - `validUntil < createdAt` — це time-relative rule, який залежить від моменту
- *   запиту і живе на app-layer (write-side service).
+ * - `validUntil >= now` (Sprint 4 review fix) — time-relative rule живе у
+ *   `InvoicesService.create`/`.update`, бо Zod-refine отримав би "now" на
+ *   момент Read існуючого invoice-а: stale документ із минулим `validUntil`
+ *   валідно існує у БД (це expired-стан, видимий через
+ *   `getInvoiceStatus`/server-side `isInvoiceExpired`). Тому write-side
+ *   enforcement, не schema-level.
  * - Зв'язок `slugPreset === null` ⇔ slug-генератор не використовувався —
  *   аналітичне поле, без data-integrity invariant.
  *
