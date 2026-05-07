@@ -589,6 +589,67 @@ describe('Businesses E2E', () => {
             }
         });
 
+        /**
+         * Sprint 4 review fix — legacy documents без `invoiceSlugPresetDefault`-
+         * поля (створені до May 6) повинні в aggregate-output отримати
+         * `null`, а не undefined. Mongoose `default: null` не спрацьовує
+         * на read existing docs; aggregation pipeline bypass-ить Mongoose
+         * повністю — без `$ifNull` контракт `BusinessWithInvoicesCount`
+         * (`SlugPreset | null`) ламається на legacy state.
+         */
+        it('list normalizes missing invoiceSlugPresetDefault до null (review fix)', async () => {
+            const user = await createUser();
+            // Створюємо бізнес напряму через `Model.collection.insertOne` —
+            // це обходить Mongoose schema defaults і дає той самий shape, що
+            // мав би legacy документ (поле `invoiceSlugPresetDefault` зовсім
+            // відсутнє у БД).
+            await businessModel.collection.insertOne({
+                type: 'fop',
+                ownerId: user._id,
+                managers: [],
+                slug: 'LegacyDoc',
+                slugLower: 'legacydoc',
+                name: 'Legacy ФОП',
+                requisites: {
+                    iban: 'UA213223130000026007233566001',
+                    taxId: '3490307813',
+                },
+                taxationSystem: 'simplified-3',
+                isVatPayer: false,
+                paymentPurposeTemplate: 'Послуги',
+                acceptedBanks: ['privat', 'mono'],
+                seoIndexEnabled: false,
+                deletedAt: null,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                // `invoiceSlugPresetDefault` навмисно відсутній.
+            });
+
+            const res = await supertest(app.getHttpServer())
+                .get('/api/businesses/me')
+                .set('Authorization', bearerFor(user))
+                .expect(200);
+
+            const items = (
+                res.body as {
+                    data: Array<{
+                        slug: string;
+                        invoiceSlugPresetDefault: unknown;
+                    }>;
+                }
+            ).data;
+            const legacy = items.find((i) => i.slug === 'LegacyDoc');
+            expect(legacy).toBeDefined();
+            // Контракт BusinessWithInvoicesCount — null, а не undefined.
+            expect(legacy!.invoiceSlugPresetDefault).toBeNull();
+            expect(
+                Object.prototype.hasOwnProperty.call(
+                    legacy!,
+                    'invoiceSlugPresetDefault'
+                )
+            ).toBe(true);
+        });
+
         it('Sprint 4 §4.4 contract — getBySlug response має `id: string` + `invoicesCount`', async () => {
             const user = await createUser();
             const created = await supertest(app.getHttpServer())

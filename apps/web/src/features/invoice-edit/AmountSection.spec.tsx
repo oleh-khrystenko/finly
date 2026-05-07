@@ -67,6 +67,55 @@ describe('AmountSection (Sprint 4 §4.6 — coupled SP-6)', () => {
         );
     });
 
+    /**
+     * Sprint 4 review fix — `handlePatch` re-throw-ає після toast-у, тож
+     * inline `void onSave(...)` залишав unhandled promise rejection. Тут
+     * перевіряємо, що toggle-handler ловить rejection локально (немає
+     * unhandled rejection події) і повертає switch у interactive-state-у.
+     */
+    it('toggle save reject → no unhandled rejection, switch знову інтерактивний', async () => {
+        const onSave = jest
+            .fn()
+            .mockRejectedValueOnce(new Error('Network error'));
+        const unhandled = jest.fn();
+        process.on('unhandledRejection', unhandled);
+        try {
+            render(<AmountSection invoice={baseInvoice} onSave={onSave} />);
+            fireEvent.click(screen.getByRole('switch'));
+            await waitFor(() =>
+                expect(onSave).toHaveBeenCalledWith({ amountLocked: false }),
+            );
+            // setSaving(false) у `finally`-блоці застосовується через React-
+            // batched-update — `waitFor` дочекається прохід event-loop-у і
+            // re-render switch-а в enabled-стан. Якщо catch не зловив reject,
+            // unhandled rejection event прорвало б до `process.on`-listener-а
+            // ще до цього waitFor (Node фіксує rejection на наступному tick-у).
+            await waitFor(() =>
+                expect(screen.getByRole('switch')).not.toBeDisabled(),
+            );
+            expect(unhandled).not.toHaveBeenCalled();
+        } finally {
+            process.off('unhandledRejection', unhandled);
+        }
+    });
+
+    it('toggle під час save → switch disabled (anti-spam)', async () => {
+        let resolveOnSave: (() => void) | undefined;
+        const onSave = jest.fn(
+            () =>
+                new Promise<void>((resolve) => {
+                    resolveOnSave = resolve;
+                }),
+        );
+        render(<AmountSection invoice={baseInvoice} onSave={onSave} />);
+        const lockSwitch = screen.getByRole('switch');
+        fireEvent.click(lockSwitch);
+        await waitFor(() => expect(lockSwitch).toBeDisabled());
+        // Resolve, щоб не залишати pending-стан після тесту.
+        resolveOnSave?.();
+        await waitFor(() => expect(lockSwitch).not.toBeDisabled());
+    });
+
     it('amount-edit save → onSave({amount: kopecks})', async () => {
         const onSave = jest.fn().mockResolvedValue(undefined);
         render(<AmountSection invoice={baseInvoice} onSave={onSave} />);

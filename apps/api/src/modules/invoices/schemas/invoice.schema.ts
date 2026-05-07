@@ -103,7 +103,24 @@ export const InvoiceSchema = SchemaFactory.createForClass(Invoice);
 applyJsonTransform(InvoiceSchema);
 
 InvoiceSchema.index({ businessId: 1, slug: 1 }, { unique: true });
-InvoiceSchema.index({ businessId: 1, createdAt: -1 });
+/**
+ * List-pagination index. **`_id: -1` як tail для tie-break-у** —
+ * `(createdAt, _id)` total order гарантує detермінований offset-paging для
+ * `InvoicesService.getByBusinessId` (`sort: { createdAt: -1, _id: -1 }`).
+ * Без `_id`-tail Mongo тримав би тіе-групи у in-memory-tie-break після
+ * scan-у — на масштабі 100+ tie-group дoc-ів робить sort-fan-out поза
+ * index-scan-режимом. Prefix-match `(businessId)` і `(businessId, createdAt)`
+ * залишається доступний для `countDocuments`/aggregate-`$lookup`-stage
+ * через index-prefix rule.
+ *
+ * **Operational note.** Prod-кластери, що пройшли деплой ДО цієї зміни,
+ * мають старий `{ businessId: 1, createdAt: -1 }` index як residual artifact.
+ * Mongoose `autoIndex` створює новий 3-field index, але старий не дропає.
+ * Cleanup — окремий ops-крок: `db.invoices.dropIndex('businessId_1_createdAt_-1')`
+ * або наступна migration; функціонально безпечно лишити обидва (planner
+ * обере новий 3-field).
+ */
+InvoiceSchema.index({ businessId: 1, createdAt: -1, _id: -1 });
 InvoiceSchema.index({ validUntil: 1 }, { sparse: true });
 
 /**

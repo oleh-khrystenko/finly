@@ -183,6 +183,20 @@ export class BusinessesService {
                         // aggregate-output. Робимо `_id → id`-mapping
                         // explicitly у pipeline.
                         id: { $toString: '$_id' },
+                        // Sprint 4 §4.1 — `invoiceSlugPresetDefault` додане
+                        // після первинної BusinessSchema (May 6). Mongoose
+                        // `default: null` спрацьовує лише на insert; legacy-
+                        // документи (створені до May 6) мають це поле
+                        // відсутнім у БД. `findOne`-path викликає Mongoose
+                        // doc-init, який attach-ить default; aggregation
+                        // bypass-ить Mongoose повністю → undefined leak до
+                        // frontend-у. `BusinessWithInvoicesCount` контракт
+                        // вимагає `SlugPreset | null` (NOT undefined) —
+                        // нормалізуємо тут, щоб aggregation і `getBySlug`
+                        // повертали той самий shape.
+                        invoiceSlugPresetDefault: {
+                            $ifNull: ['$invoiceSlugPresetDefault', null],
+                        },
                     },
                 },
                 { $unset: ['__invoicesCount', '_id', '__v'] },

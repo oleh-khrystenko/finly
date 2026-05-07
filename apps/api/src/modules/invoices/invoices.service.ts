@@ -6,12 +6,7 @@ import {
     NotFoundException,
 } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import {
-    Connection,
-    Model,
-    Types,
-    type FilterQuery,
-} from 'mongoose';
+import { Connection, Model, Types, type FilterQuery } from 'mongoose';
 import {
     RESPONSE_CODE,
     type CreateInvoiceRequest,
@@ -246,6 +241,24 @@ export class InvoicesService {
      * Paginated list для cabinet секції "Рахунки" (§4.4). Sort `createdAt
      * desc` — найновіші зверху, як у списку бізнесів Sprint 3.
      *
+     * **`_id: -1` як tie-breaker** (review fix). `createdAt`-only-sort був
+     * non-deterministic: два інвойси з ідентичним millisecond-timestamp
+     * (bulk-import, batch-create через тести, або race-create під одним
+     * пресетом) поверталися у не-визначеному порядку, що для offset-pagination
+     * викликало два регреси на frontend-i:
+     *
+     *   1. **Дублі**: page=1 і page=2 могли перетнути той самий tie-group по-
+     *      різному, повертаючи один і той самий інвойс на обох сторінках.
+     *      `mergeUniqueById` ховає дублі у UI, але це маскування симптому.
+     *   2. **Пропуски**: інвойс з tie-group міг "перестрибнути" через page-
+     *      boundary між послідовними fetch-ами і ніколи не з'явитись у UI —
+     *      даних немає як відновити (frontend-merge не може повернути те,
+     *      чого не отримав).
+     *
+     * `_id` за ObjectId-структурою монотонно росте у межах того самого
+     * timestamp-у (counter+random+pid), тож `(createdAt: -1, _id: -1)` дає
+     * total order без необхідності у cursor-pagination.
+     *
      * `total` повертається разом з items, щоб frontend "Завантажити ще"-trigger
      * знав, коли зупинятись (без зайвого round-trip-у).
      */
@@ -258,7 +271,7 @@ export class InvoicesService {
         const [items, total] = await Promise.all([
             this.invoiceModel
                 .find({ businessId })
-                .sort({ createdAt: -1 })
+                .sort({ createdAt: -1, _id: -1 })
                 .skip(skip)
                 .limit(limit)
                 .exec(),

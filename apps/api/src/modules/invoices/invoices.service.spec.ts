@@ -287,10 +287,16 @@ describe('InvoicesService (Sprint 4 §4.2)', () => {
             return chain;
         };
 
-        it('сортує createdAt desc + skip/limit', async () => {
+        it('сортує createdAt desc з _id tie-break + skip/limit', async () => {
             const chain = mockChain([], 0);
             await service.getByBusinessId(businessId, { page: 2, limit: 10 });
-            expect(chain.sort).toHaveBeenCalledWith({ createdAt: -1 });
+            // `_id: -1` — tie-breaker для offset-pagination determinism
+            // (review fix): tie-group по timestamp-у міг давати дублі/пропуски
+            // між page=N і page=N+1.
+            expect(chain.sort).toHaveBeenCalledWith({
+                createdAt: -1,
+                _id: -1,
+            });
             expect(chain.skip).toHaveBeenCalledWith(10); // (page-1)*limit
             expect(chain.limit).toHaveBeenCalledWith(10);
         });

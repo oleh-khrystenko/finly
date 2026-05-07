@@ -519,6 +519,66 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             expect(body.data.page).toBe(1);
             expect(body.data.limit).toBe(10);
         });
+
+        /**
+         * Sprint 4 review fix — пагінація з tie-breaker по `_id`. 6 інвойсів
+         * з ідентичним `createdAt` (insertMany з фіксованим Date) — без
+         * `_id`-tail сортування ламалося б non-determinist-ично і split на
+         * сторінки міг повторити чи пропустити елементи. Перевіряємо, що
+         * union(page1, page2, page3) === повний sorted-set без overlap-ів.
+         */
+        it('deterministic pagination на ідентичних timestamp (review fix)', async () => {
+            const user = await createUser();
+            const slug = await createBusinessFor(user);
+            const businessDoc = await businessModel.findOne({
+                slugLower: slug.toLowerCase(),
+            });
+            const businessId = businessDoc!._id;
+
+            // 6 invoices з тим самим timestamp. Йдемо через `Model.collection.
+            // insertMany` (raw MongoDB driver), що не застосовує Mongoose
+            // `timestamps: true` — це дозволяє явно зафіксувати ідентичні
+            // `createdAt` для імітації tie-group.
+            const fixed = new Date('2026-05-07T12:00:00.000Z');
+            const docs = Array.from({ length: 6 }, (_, i) => ({
+                businessId,
+                slug: `tie-${i}-aaaaaaaa`,
+                amount: 100 + i,
+                amountLocked: false,
+                paymentPurpose: null,
+                validUntil: null,
+                slugPreset: null,
+                slugCounterScope: null,
+                slugCounter: null,
+                deletedAt: null,
+                createdAt: fixed,
+                updatedAt: fixed,
+            }));
+            await invoiceModel.collection.insertMany(docs);
+
+            const collected = new Map<string, number>();
+            for (const page of [1, 2, 3]) {
+                const res = await supertest(app.getHttpServer())
+                    .get(
+                        `/api/businesses/me/${slug}/invoices?page=${page}&limit=2`
+                    )
+                    .set('Authorization', bearerFor(user))
+                    .expect(200);
+                const items = (
+                    res.body as {
+                        data: { items: Array<{ id: string; slug: string }> };
+                    }
+                ).data.items;
+                for (const inv of items) {
+                    collected.set(inv.id, (collected.get(inv.id) ?? 0) + 1);
+                }
+            }
+            // 6 унікальних інвойсів — кожен зустрівся рівно один раз.
+            expect(collected.size).toBe(6);
+            for (const count of collected.values()) {
+                expect(count).toBe(1);
+            }
+        });
     });
 
     // ─── GET single ───

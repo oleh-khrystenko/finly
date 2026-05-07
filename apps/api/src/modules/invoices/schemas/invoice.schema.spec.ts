@@ -70,7 +70,7 @@ describe('Invoice schema (Mongoose integration)', () => {
         }
     );
 
-    it('creates expected indexes ((businessId,slug) unique, (businessId,createdAt), validUntil sparse, partial counter-unique)', async () => {
+    it('creates expected indexes ((businessId,slug) unique, (businessId,createdAt,_id), validUntil sparse, partial counter-unique)', async () => {
         const indexes = await InvoiceModel.collection.indexes();
 
         const compoundUnique = indexes.find(
@@ -78,8 +78,13 @@ describe('Invoice schema (Mongoose integration)', () => {
         );
         expect(compoundUnique?.unique).toBe(true);
 
+        // List-pagination index — `(businessId, createdAt: -1, _id: -1)`.
+        // `_id: -1` як tie-breaker для offset-pagination determinism (review fix).
         const listIdx = indexes.find(
-            (i) => i.key.businessId === 1 && i.key.createdAt === -1
+            (i) =>
+                i.key.businessId === 1 &&
+                i.key.createdAt === -1 &&
+                i.key._id === -1
         );
         expect(listIdx).toBeDefined();
 

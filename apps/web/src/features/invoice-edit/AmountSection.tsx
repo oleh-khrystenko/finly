@@ -54,35 +54,74 @@ export default function AmountSection({ invoice, onSave }: Props) {
                         return onSave({ amount });
                     }}
                 />
-                <label
-                    htmlFor="invoice-amount-lock"
-                    className={`border-border flex items-start justify-between gap-3 rounded-md border p-3 ${
-                        invoice.amount === null
-                            ? 'cursor-not-allowed opacity-60'
-                            : 'cursor-pointer'
-                    }`}
-                >
-                    <div className="flex flex-1 flex-col gap-1">
-                        <span className="text-foreground text-sm font-medium">
-                            Дозволити клієнту правити суму
-                        </span>
-                        <span className="text-muted-foreground text-xs">
-                            {invoice.amount === null
-                                ? 'Заблокувати можна лише при заданій сумі'
-                                : 'Якщо вимкнено — клієнт сплатить точно зазначену суму'}
-                        </span>
-                    </div>
-                    <UiSwitch
-                        id="invoice-amount-lock"
-                        checked={!invoice.amountLocked}
-                        disabled={invoice.amount === null}
-                        onChange={(allowEdit) => {
-                            void onSave({ amountLocked: !allowEdit });
-                        }}
-                    />
-                </label>
+                <AmountLockSwitch invoice={invoice} onSave={onSave} />
             </div>
         </UiSectionCard>
+    );
+}
+
+/**
+ * Toggle "Дозволити клієнту правити суму" з власним save-lifecycle.
+ *
+ * **Чому окремий sub-component, а не inline-handler у `AmountSection`.**
+ * Switch ↔ network — це фактично save-state-машина: pending → success/error.
+ * Inline `void onSave(...)` ламав на двох рівнях: (1) rejection з parent
+ * `handlePatch` (toast.error → throw) ставав unhandled promise rejection,
+ * бо `void` не ловить throw; (2) без `saving`-флага swap-spam під час
+ * слабкої мережі генерував N-паралельних PATCH-ів — race на server-state
+ * з непередбачуваним фінальним `amountLocked`. Окремий компонент тримає
+ * local `saving` і try/catch — happy path і error path симетричні з тим,
+ * що робить `MoneyEditableField` (нижче). Toast про помилку лишається на
+ * parent-i (`handlePatch`) — це shared UX для всіх invoice-edit-секцій.
+ */
+function AmountLockSwitch({
+    invoice,
+    onSave,
+}: {
+    invoice: Invoice;
+    onSave: Props['onSave'];
+}) {
+    const [saving, setSaving] = useState(false);
+    const handleToggle = async (allowEdit: boolean) => {
+        setSaving(true);
+        try {
+            await onSave({ amountLocked: !allowEdit });
+        } catch {
+            // Parent `handlePatch` уже показав toast.error і re-throw-нув —
+            // ловимо тут, щоб не залишити unhandled rejection і повернути
+            // switch у interactive-стан. Локального error-UI не показуємо:
+            // toast — shared UX-канал invoice-cabinet, дублювати inline-
+            // плашку зайве.
+        } finally {
+            setSaving(false);
+        }
+    };
+    return (
+        <label
+            htmlFor="invoice-amount-lock"
+            className={`border-border flex items-start justify-between gap-3 rounded-md border p-3 ${
+                invoice.amount === null || saving
+                    ? 'cursor-not-allowed opacity-60'
+                    : 'cursor-pointer'
+            }`}
+        >
+            <div className="flex flex-1 flex-col gap-1">
+                <span className="text-foreground text-sm font-medium">
+                    Дозволити клієнту правити суму
+                </span>
+                <span className="text-muted-foreground text-xs">
+                    {invoice.amount === null
+                        ? 'Заблокувати можна лише при заданій сумі'
+                        : 'Якщо вимкнено — клієнт сплатить точно зазначену суму'}
+                </span>
+            </div>
+            <UiSwitch
+                id="invoice-amount-lock"
+                checked={!invoice.amountLocked}
+                disabled={invoice.amount === null || saving}
+                onChange={(allowEdit) => void handleToggle(allowEdit)}
+            />
+        </label>
     );
 }
 
