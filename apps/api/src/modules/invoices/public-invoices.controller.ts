@@ -2,6 +2,7 @@ import {
     BadRequestException,
     Controller,
     Get,
+    GoneException,
     Header,
     NotFoundException,
     Param,
@@ -23,6 +24,7 @@ import { ENV } from '../../config/env';
 import { BusinessesService } from '../businesses/businesses.service';
 import type { BusinessDocument } from '../businesses/schemas/business.schema';
 import { QrService } from '../qr/qr.service';
+import { isInvoiceExpired } from './expiry';
 import { InvoicesService } from './invoices.service';
 import { buildPayloadInputFromInvoice } from './payload-mapper';
 import { effectiveInvoicePurpose } from './purpose-resolver';
@@ -94,7 +96,31 @@ export class PublicInvoicesController {
             slug,
             invoiceSlug
         );
-        const payloadInput = buildPayloadInputFromInvoice(business, invoice);
+        const expired = isInvoiceExpired(invoice.validUntil);
+        // Sprint 4 review fix — server-side expiry block. Раніше expired-
+        // banner існував тільки на клієнті (client-side `getInvoiceStatus`),
+        // але `nbuLinks` все одно віддавалися у JSON. Зараз: коли
+        // `validUntil < now` — `nbuLinks: null`; client рендерить heading
+        // + "Прострочено"-banner без жодного payment-vector-у. QR endpoints
+        // у такому стані повертають 410 (defense-in-depth).
+        const nbuLinks = expired
+            ? null
+            : (() => {
+                  const payloadInput = buildPayloadInputFromInvoice(
+                      business,
+                      invoice
+                  );
+                  return {
+                      primary: this.qrService.buildNbuPayloadLinkForInput(
+                          payloadInput,
+                          NBU_HOST_PRIMARY
+                      ),
+                      legacy: this.qrService.buildNbuPayloadLinkForInput(
+                          payloadInput,
+                          NBU_HOST_LEGACY
+                      ),
+                  };
+              })();
         // PublicInvoiceSchema.parse — це whitelist-фільтр: усе, що не у
         // схемі, відкидається. Якщо колись Mongoose-doc отримає leak-поле
         // — це місце відрубає його перед серіалізацією.
@@ -117,16 +143,7 @@ export class PublicInvoicesController {
                 slug: business.slug,
                 acceptedBanks: business.acceptedBanks,
             },
-            nbuLinks: {
-                primary: this.qrService.buildNbuPayloadLinkForInput(
-                    payloadInput,
-                    NBU_HOST_PRIMARY
-                ),
-                legacy: this.qrService.buildNbuPayloadLinkForInput(
-                    payloadInput,
-                    NBU_HOST_LEGACY
-                ),
-            },
+            nbuLinks,
         });
         return { data: view };
     }
@@ -138,7 +155,6 @@ export class PublicInvoicesController {
      */
     @SkipOnboarding()
     @Get(':invoiceSlug/qr/business.png')
-    @Header('Content-Type', 'image/png')
     @Header('Cache-Control', 'no-store')
     async getBusinessQr(
         @Param('slug') slug: string,
@@ -149,9 +165,22 @@ export class PublicInvoicesController {
             slug,
             invoiceSlug
         );
+        if (isInvoiceExpired(invoice.validUntil)) {
+            // Defense-in-depth: client уже не показує QR-image коли nbuLinks=null,
+            // але прямий запит до endpoint (cached link, scraping) має відрубатися.
+            throw new GoneException({
+                code: RESPONSE_CODE.INVOICE_EXPIRED,
+                message: 'Invoice expired',
+            });
+        }
         // Канонічний URL — case-preserved business slug + invoice slug.
         const url = `${ENV.PAY_PUBLIC_URL.replace(/\/$/, '')}/${business.slug}/${invoice.slug}`;
         const png = await this.qrService.renderForUrl(url);
+        // Content-Type ставимо ВРУЧНУ після expiry-check — `@Header()`-декоратор
+        // pre-apply-ить header до запуску handler-а, тож при `GoneException`
+        // exception-filter пише JSON, а Content-Type залишається image/png і
+        // клієнт не парсить body. Manual setHeader тут — це на success-шляху.
+        res.setHeader('Content-Type', 'image/png');
         res.send(png);
     }
 
@@ -162,7 +191,6 @@ export class PublicInvoicesController {
      */
     @SkipOnboarding()
     @Get(':invoiceSlug/qr/nbu.png')
-    @Header('Content-Type', 'image/png')
     @Header('Cache-Control', 'no-store')
     async getNbuQr(
         @Param('slug') slug: string,
@@ -175,10 +203,18 @@ export class PublicInvoicesController {
             slug,
             invoiceSlug
         );
+        if (isInvoiceExpired(invoice.validUntil)) {
+            throw new GoneException({
+                code: RESPONSE_CODE.INVOICE_EXPIRED,
+                message: 'Invoice expired',
+            });
+        }
         const input = buildPayloadInputFromInvoice(business, invoice);
         const png = await this.qrService.renderForNbuPayload(input, '003', {
             host,
         });
+        // Content-Type — manual після expiry-check (див. коментар у `getBusinessQr`).
+        res.setHeader('Content-Type', 'image/png');
         res.send(png);
     }
 

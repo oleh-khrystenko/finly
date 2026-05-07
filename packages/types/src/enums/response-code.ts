@@ -68,6 +68,13 @@ export const RESPONSE_CODE = {
     INVOICE_AMOUNT_LOCKED_REQUIRES_AMOUNT:
         'INVOICE_AMOUNT_LOCKED_REQUIRES_AMOUNT',
     /**
+     * Sprint 4 review fix — invoice expired (`validUntil < now`). Public QR
+     * endpoints повертають 410 Gone з цим кодом. JSON-view продовжує працювати
+     * (heading + "Прострочено"-banner), але `nbuLinks: null` — payment-vector
+     * не віддається. UA: "Термін рахунку минув".
+     */
+    INVOICE_EXPIRED: 'INVOICE_EXPIRED',
+    /**
      * Sprint 4 §4.0 + SP-5 — cascade-delete вимагає Mongo replica-set
      * (`session.withTransaction`). Standalone mongod кидає
      * `MongoServerError: Transaction numbers are only allowed on a replica set...`.
@@ -121,6 +128,7 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.INVOICE_NOT_FOUND]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVOICE_SLUG_GENERATION_FAILED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVOICE_AMOUNT_LOCKED_REQUIRES_AMOUNT]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.INVOICE_EXPIRED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.CASCADE_DELETE_REQUIRES_REPLICA_SET]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.ONBOARDING_INCOMPLETE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.UNAUTHORIZED]: RESPONSE_TYPE.ERROR,

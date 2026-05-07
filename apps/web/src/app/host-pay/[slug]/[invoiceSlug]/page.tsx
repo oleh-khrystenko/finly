@@ -86,9 +86,11 @@ export default async function HostPayInvoicePage({ params }: Props) {
         permanentRedirect(`/${view.business.slug}/${invoiceSlug}`);
     }
 
-    // Expired-status sanity-block (validUntil < now) рендериться всередині
-    // `InvoicePublicView` — заміщає payment-flow на банер. Server Component
-    // тут не вирішує — пропускаємо view-state-decision у presentation layer.
+    // Expired-block — server-driven (review fix): API ставить
+    // `view.nbuLinks: null` коли `validUntil < now`, `InvoicePublicView`
+    // рендерить банер "Термін рахунку минув" замість payment-flow. Server
+    // Component тут просто прокидає payload — single source of truth для
+    // expiry живе на API.
 
     return (
         <InvoicePublicView

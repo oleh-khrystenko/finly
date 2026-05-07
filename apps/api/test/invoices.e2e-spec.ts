@@ -1023,6 +1023,112 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             });
         });
 
+        // Sprint 4 review fix — server-side expiry block. Раніше client сам
+        // ховав payment-CTA-и при `validUntil < now`, але `nbuLinks` все одно
+        // приходили у JSON-payload, а QR endpoints віддавали PNG. Тепер:
+        //  - JSON-view → `nbuLinks: null` коли expired.
+        //  - QR endpoints → 410 Gone з кодом `INVOICE_EXPIRED`.
+        describe('Expired invoice (validUntil < now) — server-side payment block', () => {
+            const PAST_VALID_UNTIL = '2024-01-01T00:00:00.000Z';
+
+            it('JSON view → nbuLinks=null', async () => {
+                const user = await createUser();
+                const businessSlug = await createBusinessFor(user);
+                const invoiceSlug = await seedInvoice({
+                    user,
+                    businessSlug,
+                    validUntil: PAST_VALID_UNTIL,
+                });
+
+                const res = await supertest(app.getHttpServer())
+                    .get(
+                        `/api/businesses/public/${businessSlug}/invoices/${invoiceSlug}`
+                    )
+                    .expect(200);
+
+                const data = (
+                    res.body as {
+                        data: {
+                            nbuLinks: unknown;
+                            amount: number;
+                            slug: string;
+                        };
+                    }
+                ).data;
+                // Whitelist invariant: рахунок все одно віддається (heading +
+                // banner на client), але payment-vector cut.
+                expect(data.amount).toBe(150000);
+                expect(data.slug).toBe(invoiceSlug);
+                expect(data.nbuLinks).toBeNull();
+            });
+
+            it('GET /qr/nbu.png?host=primary → 410 Gone, code=INVOICE_EXPIRED', async () => {
+                const user = await createUser();
+                const businessSlug = await createBusinessFor(user);
+                const invoiceSlug = await seedInvoice({
+                    user,
+                    businessSlug,
+                    validUntil: PAST_VALID_UNTIL,
+                });
+
+                const res = await supertest(app.getHttpServer())
+                    .get(
+                        `/api/businesses/public/${businessSlug}/invoices/${invoiceSlug}/qr/nbu.png?host=primary`
+                    )
+                    .expect(410);
+                expect(
+                    (res.body as { error: { code: string } }).error.code
+                ).toBe('INVOICE_EXPIRED');
+            });
+
+            it('GET /qr/business.png → 410 Gone, code=INVOICE_EXPIRED', async () => {
+                const user = await createUser();
+                const businessSlug = await createBusinessFor(user);
+                const invoiceSlug = await seedInvoice({
+                    user,
+                    businessSlug,
+                    validUntil: PAST_VALID_UNTIL,
+                });
+
+                const res = await supertest(app.getHttpServer())
+                    .get(
+                        `/api/businesses/public/${businessSlug}/invoices/${invoiceSlug}/qr/business.png`
+                    )
+                    .expect(410);
+                expect(
+                    (res.body as { error: { code: string } }).error.code
+                ).toBe('INVOICE_EXPIRED');
+            });
+
+            it('validUntil=null → НЕ expired (nbuLinks віддаються, QR 200)', async () => {
+                // Sanity-counterpart: інвойс без терміну дії продовжує
+                // працювати безкінечно.
+                const user = await createUser();
+                const businessSlug = await createBusinessFor(user);
+                const invoiceSlug = await seedInvoice({
+                    user,
+                    businessSlug,
+                    validUntil: null,
+                });
+
+                const jsonRes = await supertest(app.getHttpServer())
+                    .get(
+                        `/api/businesses/public/${businessSlug}/invoices/${invoiceSlug}`
+                    )
+                    .expect(200);
+                expect(
+                    (jsonRes.body as { data: { nbuLinks: unknown } }).data
+                        .nbuLinks
+                ).not.toBeNull();
+
+                await supertest(app.getHttpServer())
+                    .get(
+                        `/api/businesses/public/${businessSlug}/invoices/${invoiceSlug}/qr/nbu.png?host=primary`
+                    )
+                    .expect(200);
+            });
+        });
+
         describe('GET /qr/business.png — public-URL QR', () => {
             it('повертає valid PNG; Content-Type image/png', async () => {
                 const user = await createUser();

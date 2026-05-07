@@ -7,10 +7,7 @@ import {
 } from '@finly/types';
 import UiButton from '@/shared/ui/UiButton';
 import UiQrImage from '@/shared/ui/UiQrImage';
-import {
-    formatKopecksAsHryvnia,
-    getInvoiceStatus,
-} from '@/entities/invoice';
+import { formatKopecksAsHryvnia } from '@/entities/invoice';
 
 interface Props {
     /** Invoice fields (з `PublicInvoiceView`-whitelist). */
@@ -31,8 +28,13 @@ interface Props {
         slug: string;
         acceptedBanks: BankCode[];
     };
-    /** NBU payload-link URLs (з payload, що містить amount + lockMask + validUntil). */
-    nbuLinks: { primary: string; legacy: string };
+    /**
+     * NBU payload-link URLs. **`null` коли invoice expired** — server-side
+     * blocks payment-vector після `validUntil < now` (Sprint 4 review fix).
+     * Single source of truth: client не запитує QR-зображень коли nbuLinks=null
+     * (QR endpoints у такому стані повертають 410 Gone defense-in-depth).
+     */
+    nbuLinks: { primary: string; legacy: string } | null;
     /** API endpoint origin для QR-картинок (`/api` для same-origin proxy). */
     apiBase?: string;
 }
@@ -56,10 +58,13 @@ const DATE_LOCALE = 'uk-UA';
  *     якщо amount=null).
  *   - Sub-info блок: "Призначення: {purpose}" + "Дійсний до: {date}".
  *
- * **Expired-banner sanity-block** — якщо `validUntil < now`, заміщує весь
- * payment-flow (CTAs + QR) попередженням "Термін рахунку минув". Банк-додаток
- * сам не valid-ate validUntil robustly, тож user-side block — додатковий шар
- * захисту.
+ * **Expired-banner sanity-block** — якщо API повернув `nbuLinks: null`
+ * (server-side expiry block), заміщуємо весь payment-flow (CTAs + QR)
+ * попередженням "Термін рахунку минув". Раніше client-side `getInvoiceStatus`
+ * порівнював `validUntil` з now, але `nbuLinks` все одно прилітали у JSON —
+ * weak block (cached link, scraping). Тепер expiry-resolution живе на сервері:
+ * `nbuLinks === null` — single source of truth для UI. QR endpoints у такому
+ * стані повертають 410 Gone (defense-in-depth).
  */
 export default function InvoicePublicView({
     amount,
@@ -75,7 +80,6 @@ export default function InvoicePublicView({
     const heading = formattedAmount
         ? `Рахунок на ${formattedAmount}`
         : 'Рахунок на оплату';
-    const status = getInvoiceStatus(validUntil);
 
     const qrPrimary = `${apiBase}/businesses/public/${encodeURIComponent(business.slug)}/invoices/${encodeURIComponent(invoiceSlug)}/qr/nbu.png?host=primary`;
     const qrLegacy = `${apiBase}/businesses/public/${encodeURIComponent(business.slug)}/invoices/${encodeURIComponent(invoiceSlug)}/qr/nbu.png?host=legacy`;
@@ -132,7 +136,7 @@ export default function InvoicePublicView({
                 )}
             </dl>
 
-            {status === 'expired' ? (
+            {nbuLinks === null ? (
                 <div className="border-destructive/30 bg-destructive/5 rounded-lg border p-6 text-center">
                     <p className="text-destructive text-base font-semibold">
                         Термін рахунку минув

@@ -91,6 +91,12 @@ const ERRORS: Record<string, MessageDict> = {
             'Не вдалося згенерувати посилання. Спробуйте ще раз',
         invoice_amount_locked_requires_amount:
             'Заблокувати редагування суми можна лише при заданій сумі',
+        // Sprint 4 review fix — server-side 410 Gone на QR endpoints після
+        // `validUntil < now`. JSON-view продовжує працювати з `nbuLinks: null`,
+        // тож банер "Термін рахунку минув" рендериться без переходу на цей
+        // toast — код використовується тільки якщо клієнт прямо запитає
+        // expired QR-image (e.g., cached link, scraping).
+        invoice_expired: 'Термін рахунку минув',
     },
 };
 

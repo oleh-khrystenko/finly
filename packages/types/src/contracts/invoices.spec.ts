@@ -355,4 +355,14 @@ describe('PublicInvoiceSchema (whitelist invariant)', () => {
         });
         expect(r.success).toBe(false);
     });
+
+    it('accepts nbuLinks=null (server-side expiry block)', () => {
+        // Sprint 4 review fix: backend ставить `nbuLinks: null` коли
+        // `validUntil < now` — payment-vector не віддається після терміну.
+        const r = PublicInvoiceSchema.safeParse({
+            ...VALID_PUBLIC,
+            nbuLinks: null,
+        });
+        expect(r.success).toBe(true);
+    });
 });

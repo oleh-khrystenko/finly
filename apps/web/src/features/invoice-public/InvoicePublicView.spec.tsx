@@ -17,7 +17,7 @@ const baseProps = {
     nbuLinks: {
         primary: 'https://qr.bank.gov.ua/abc',
         legacy: 'https://bank.gov.ua/qr/abc',
-    },
+    } as { primary: string; legacy: string } | null,
 };
 
 describe('InvoicePublicView (Sprint 4 §4.7)', () => {
@@ -78,12 +78,13 @@ describe('InvoicePublicView (Sprint 4 §4.7)', () => {
         });
     });
 
-    describe('Expired-banner sanity-block (Plan: validUntil < now → заміщення payment-flow)', () => {
-        it('validUntil у минулому → "Термін рахунку минув"', () => {
-            const past = new Date('2024-01-01');
-            render(
-                <InvoicePublicView {...baseProps} validUntil={past} />,
-            );
+    describe('Expired-banner — server-driven через nbuLinks=null (review fix)', () => {
+        // Sprint 4 review fix: expiry-resolution живе на сервері — `nbuLinks: null`
+        // у public-view-payload є SINGLE source of truth для UI. Раніше client
+        // сам порівнював `validUntil < now` (weak block — cached link, scraping
+        // могли обійти, і API віддавав `nbuLinks` навіть для expired).
+        it('nbuLinks=null → "Термін рахунку минув" banner', () => {
+            render(<InvoicePublicView {...baseProps} nbuLinks={null} />);
             expect(
                 screen.getByText('Термін рахунку минув'),
             ).toBeInTheDocument();
@@ -92,11 +93,8 @@ describe('InvoicePublicView (Sprint 4 §4.7)', () => {
             ).toBeInTheDocument();
         });
 
-        it('expired → CTAs + QR ВІДСУТНІ', () => {
-            const past = new Date('2024-01-01');
-            render(
-                <InvoicePublicView {...baseProps} validUntil={past} />,
-            );
+        it('nbuLinks=null → CTAs + QR ВІДСУТНІ', () => {
+            render(<InvoicePublicView {...baseProps} nbuLinks={null} />);
             // Жодного NBU-CTA
             expect(
                 screen.queryByRole('link', { name: 'Відкрити в банку' }),
@@ -110,12 +108,25 @@ describe('InvoicePublicView (Sprint 4 §4.7)', () => {
             ).not.toBeInTheDocument();
         });
 
-        it('active → 2 CTAs + 2 QRs РЕНДЕРЯТЬСЯ (без dead bank-grid, review fix)', () => {
-            const future = new Date();
-            future.setFullYear(future.getFullYear() + 1);
+        it('nbuLinks=null + validUntil у минулому → дата у sub-info все одно показується', () => {
+            // Server-side block (`nbuLinks=null`) ще не означає, що client
+            // приховує `validUntil`-дату — користувач має бачити, до якого
+            // моменту рахунок був дійсний.
+            const past = new Date('2024-01-01');
             render(
-                <InvoicePublicView {...baseProps} validUntil={future} />,
+                <InvoicePublicView
+                    {...baseProps}
+                    nbuLinks={null}
+                    validUntil={past}
+                />,
             );
+            expect(
+                screen.getByText(past.toLocaleDateString('uk-UA')),
+            ).toBeInTheDocument();
+        });
+
+        it('active (nbuLinks={primary,legacy}) → 2 CTAs + 2 QRs РЕНДЕРЯТЬСЯ', () => {
+            render(<InvoicePublicView {...baseProps} />);
             // 2 CTAs:
             expect(
                 screen.getByRole('link', { name: 'Відкрити в банку' }),
@@ -132,7 +143,7 @@ describe('InvoicePublicView (Sprint 4 §4.7)', () => {
             ).toBeInTheDocument();
         });
 
-        it('validUntil=null → активний банер не показується (active-state)', () => {
+        it('validUntil=null + nbuLinks!=null → активний банер не показується', () => {
             render(<InvoicePublicView {...baseProps} />);
             expect(
                 screen.queryByText('Термін рахунку минув'),

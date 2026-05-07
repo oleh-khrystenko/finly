@@ -138,6 +138,14 @@ export default function InvoicesSection({
                       }
                     : prev,
             );
+            // Review fix — попередня помилка ("Завантажити ще" failed → toast),
+            // якщо вона стосувалася того самого бізнесу, при наступному
+            // успішному loadMore має зникнути. Без цього error-плашка
+            // лишалася над свіжим списком (initial-load очищала помилку,
+            // loadMore ні — асиметрія state-flow-у).
+            setError((prev) =>
+                prev && prev.paramSlug === captured ? null : prev,
+            );
         } catch (err: unknown) {
             setError({
                 paramSlug: captured,
