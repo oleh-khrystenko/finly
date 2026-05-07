@@ -7,7 +7,7 @@ import {
     loadPublicInvoiceView,
 } from '@/features/invoice-public';
 import { isPublicHost } from '@/shared/config/publicHosts';
-import { formatKopecksAsHryvnia } from '@/features/invoices/formatKopecks';
+import { formatKopecksAsHryvnia } from '@/entities/invoice';
 
 /**
  * Sprint 4 §4.7 — публічна сторінка інвойсу

@@ -22,7 +22,7 @@ jest.mock('next/navigation', () => ({
     useRouter: () => ({ replace: mockReplace }),
 }));
 
-jest.mock('@/features/invoices', () => ({
+jest.mock('@/entities/invoice', () => ({
     useSlugPresetWarningStore: (
         selector: (state: {
             open: typeof mockOpenWarning;
@@ -284,31 +284,38 @@ describe('CreateInvoiceForm — humanPart live-validation', () => {
  * Sprint 4 §4.5 DoD: Coupled `amount=null + amountLocked` UI lock (SP-6).
  */
 describe('CreateInvoiceForm — coupled amount × amountLocked (SP-6)', () => {
-    it('amount=null → switch disabled', () => {
+    it('amount=null → switch disabled, аria-checked=true (allowEdit-display force-ON у signage)', () => {
         render(<CreateInvoiceForm business={baseBusiness} />);
-        const lockSwitch = document.getElementById('amount-lock-switch');
+        const lockSwitch = document.getElementById('amount-lock-switch')!;
         expect(lockSwitch).toBeDisabled();
+        // SP-6 — у signage UI завжди показує allow-edit ON (бо без суми
+        // клієнт de-facto завжди вводить її сам). Submit-normalizer теж
+        // перетворить wire-shape на amountLocked=false для signage.
+        expect(lockSwitch).toHaveAttribute('aria-checked', 'true');
     });
 
-    it('amount=number → switch enabled', async () => {
+    it('amount=number → switch enabled, default aria-checked=false (locked за SP-6)', async () => {
         render(<CreateInvoiceForm business={baseBusiness} />);
         const amountInput = screen.getByPlaceholderText('1500,50');
         await act(async () => {
             fireEvent.change(amountInput, { target: { value: '1500' } });
         });
-        const lockSwitch = document.getElementById('amount-lock-switch');
+        const lockSwitch = document.getElementById('amount-lock-switch')!;
         expect(lockSwitch).not.toBeDisabled();
+        // SP-6 default: amountLocked=true ⇒ allow-edit OFF ⇒ aria-checked=false.
+        // Це "швидкий шлях" фіксованої суми (як у класичному інвойсі).
+        expect(lockSwitch).toHaveAttribute('aria-checked', 'false');
     });
 
-    it('UA-кома приймається: 1500,50 → 150050 копійок', async () => {
+    it('UA-кома приймається: 1500,50 → switch enabled, default locked', async () => {
         render(<CreateInvoiceForm business={baseBusiness} />);
         const amountInput = screen.getByPlaceholderText('1500,50');
         await act(async () => {
             fireEvent.change(amountInput, { target: { value: '1500,50' } });
         });
-        // Switch ON ⇔ amount valid → enabled (parseUaMoney повертає копійки).
-        const lockSwitch = document.getElementById('amount-lock-switch');
+        const lockSwitch = document.getElementById('amount-lock-switch')!;
         expect(lockSwitch).not.toBeDisabled();
+        expect(lockSwitch).toHaveAttribute('aria-checked', 'false');
     });
 
     /**
@@ -318,72 +325,78 @@ describe('CreateInvoiceForm — coupled amount × amountLocked (SP-6)', () => {
      * Раніше `parsedAmount === null` мав подвійний сенс (signage АБО invalid),
      * тож useEffect SP-6 reset-ив amountLocked при будь-якому невалідному
      * вводі під час набору. Сценарій: ФОП ввів 1500 → toggle "Дозволити
-     * правити" OFF (amountLocked=true) → виправляє суму на 1500,50, але між
-     * цим transient input "1500,abc" парсився як invalid → reset amountLocked
-     * на false → submit іде з allow-edit, попри початковий намір ФОПа.
+     * правити" ON (amountLocked=false) → виправляє суму на 1500,50, але між
+     * цим transient input "1500,abc" парсився як invalid → reset state →
+     * submit ішов з не тим intent-ом, попри початковий намір ФОПа.
      */
     it('transient invalid input → amountLocked НЕ скидається', async () => {
         render(<CreateInvoiceForm business={baseBusiness} />);
         const amountInput = screen.getByPlaceholderText('1500,50');
         const lockSwitch = document.getElementById('amount-lock-switch')!;
 
-        // 1. Ввести валідну суму.
+        // 1. Ввести валідну суму. Default — locked (aria-checked=false).
         await act(async () => {
             fireEvent.change(amountInput, { target: { value: '1500' } });
         });
         expect(lockSwitch).not.toBeDisabled();
+        expect(lockSwitch).toHaveAttribute('aria-checked', 'false');
 
-        // 2. Toggle "Дозволити правити" → OFF (тобто amountLocked=true).
-        //    Switch має aria-checked='true' (allowEdit=true) за замовчуванням;
-        //    клік перемкне у allowEdit=false ⇒ amountLocked=true.
+        // 2. Toggle на "Дозволити правити" ON (allowEdit=true ⇒ amountLocked=false).
         await act(async () => {
             fireEvent.click(lockSwitch);
         });
-        expect(lockSwitch).toHaveAttribute('aria-checked', 'false');
+        expect(lockSwitch).toHaveAttribute('aria-checked', 'true');
 
         // 3. Введемо transient invalid input.
         await act(async () => {
             fireEvent.change(amountInput, { target: { value: '1500abc' } });
         });
 
-        // 4. Перевірка: amountLocked НЕ скинувся (switch все ще
-        //    aria-checked='false' ⇔ allowEdit=false ⇔ amountLocked=true).
-        //    Switch стає disabled (бо input invalid), але state зберігається.
+        // 4. Перевірка: stored intent НЕ скинувся. Switch стає disabled
+        //    (transient invalid), але aria-checked відображає stored=true.
         expect(lockSwitch).toBeDisabled();
-        expect(lockSwitch).toHaveAttribute('aria-checked', 'false');
+        expect(lockSwitch).toHaveAttribute('aria-checked', 'true');
 
-        // 5. Виправимо ввід — switch знову enabled і lock-state intact.
+        // 5. Виправимо ввід — switch знову enabled і intent intact.
         await act(async () => {
             fireEvent.change(amountInput, { target: { value: '1500,50' } });
         });
         expect(lockSwitch).not.toBeDisabled();
-        expect(lockSwitch).toHaveAttribute('aria-checked', 'false');
+        expect(lockSwitch).toHaveAttribute('aria-checked', 'true');
     });
 
     /**
-     * Sanity-counterpart: справжній signage-mode (parse-ok, empty input)
-     * ВСЕ ЩЕ скидає amountLocked. Це SP-6, не повинне зламатись.
+     * Sanity-counterpart: signage-mode (parse-ok, empty input) **візуально**
+     * показує allow-edit ON, але stored intent зберігається — повернення до
+     * валідної суми відновлює попередній user-toggle. Це SP-6 + win над
+     * raw `useEffect`-reset, що губив намір ФОПа.
      */
-    it('semantic signage (empty input) → amountLocked скидається', async () => {
+    it('semantic signage → візуально ON, stored intent зберігається', async () => {
         render(<CreateInvoiceForm business={baseBusiness} />);
         const amountInput = screen.getByPlaceholderText('1500,50');
         const lockSwitch = document.getElementById('amount-lock-switch')!;
 
+        // Ввели суму — default locked (aria-checked=false).
         await act(async () => {
             fireEvent.change(amountInput, { target: { value: '1500' } });
         });
-        await act(async () => {
-            fireEvent.click(lockSwitch);
-        });
         expect(lockSwitch).toHaveAttribute('aria-checked', 'false');
 
-        // Очистимо input — це справжній signage (parse-ok, kopecks=null).
+        // Очистили input — справжній signage. UI force-показує ON.
         await act(async () => {
             fireEvent.change(amountInput, { target: { value: '' } });
         });
         await waitFor(() => {
             expect(lockSwitch).toHaveAttribute('aria-checked', 'true');
         });
+        expect(lockSwitch).toBeDisabled();
+
+        // Повернення до has-amount → stored intent (locked) знову видимий.
+        await act(async () => {
+            fireEvent.change(amountInput, { target: { value: '2000' } });
+        });
+        expect(lockSwitch).not.toBeDisabled();
+        expect(lockSwitch).toHaveAttribute('aria-checked', 'false');
     });
 });
 

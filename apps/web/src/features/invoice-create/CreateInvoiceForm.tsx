@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
     useForm,
     Controller,
+    type FieldError,
     type FieldErrors,
     type Resolver,
 } from 'react-hook-form';
@@ -23,6 +24,7 @@ import { createInvoice, getApiMessage } from '@/shared/api';
 import {
     getZodFieldError,
     kyivEndOfDayInstant,
+    mapValidationCode,
     parseUaMoney,
 } from '@/shared/lib';
 import UiButton from '@/shared/ui/UiButton';
@@ -31,7 +33,7 @@ import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSelect from '@/shared/ui/UiSelect';
 import UiSwitch from '@/shared/ui/UiSwitch';
 import UiTextarea from '@/shared/ui/UiTextarea';
-import { useSlugPresetWarningStore } from '@/features/invoices';
+import { useSlugPresetWarningStore } from '@/entities/invoice';
 
 interface Props {
     business: Business;
@@ -57,8 +59,15 @@ interface Props {
  *
  * **Coupled `amount × amountLocked` (SP-6).** Switch "Дозволити клієнту
  * правити суму" — інверсна семантика від API-поля (ON ⇔ `amountLocked=false`).
- * Switch disabled коли `amount === null`; при зміні `amount=number → null`
- * — auto-reset `amountLocked=false` через `useEffect`-watch.
+ * Default OFF (≡ `amountLocked=true`) коли user задав суму — fix по плану
+ * §SP-6 "default `false` для switch-а, тобто amountLocked=true". Disabled
+ * коли `amount === null`; у signage-режимі стан switch-а derived **без
+ * мутації** form-state-у (`checked={isSignage ? true : !amountLocked}`),
+ * а submit-normalizer перед Zod-refine форсить `amountLocked=false` для
+ * signage. Це уникає race-у з useEffect-reset на transient invalid input
+ * (типу `1500abc`) і зберігає user's intent через signage-cycle: якщо
+ * ФОП один раз дозволив правити, то після порожнього input-а та повторного
+ * вводу суми lock-стан зберігається.
  *
  * **Live-validation `humanPart`** (mode `onChange`): humanSlugPartSchema
  * перевіряє формат при кожному typing-event, error binded до конкретного
@@ -165,9 +174,14 @@ function formValuesToCreateRequest(values: FormValues): CreateInvoiceRequest {
             `formValuesToCreateRequest invariant: amountInput "${values.amountInput}" expected pre-validated, got ${money.error}`,
         );
     }
+    // SP-6: signage-режим завжди надсилає amountLocked=false (Zod-refine
+    // блокує amount=null + amountLocked=true). Form state може зберігати
+    // user's intent (`true`), щоб при поверненні до has-amount mode lock
+    // не скидався — submit нормалізує лише для wire-format-у.
+    const isSignage = money.kopecks === null;
     return {
         amount: money.kopecks,
-        amountLocked: values.amountLocked,
+        amountLocked: isSignage ? false : values.amountLocked,
         paymentPurpose: values.paymentPurpose,
         validUntil:
             values.validUntilMode === 'date' && values.validUntilDate
@@ -243,7 +257,13 @@ const createInvoiceResolver: Resolver<FormValues> = async (values) => {
                         message: issue.message,
                     };
                 } else if (path === 'amountLocked') {
-                    errors.amountLocked = {
+                    // Coupled-rule (`AMOUNT_LOCKED_REQUIRES_AMOUNT`) Zod
+                    // ставить `path: ['amountLocked']`, але UiSwitch не має
+                    // error-slot-у. Bubble на `amountInput` — той самий
+                    // amount-блок візуально показує помилку поряд з
+                    // toggle-ом. SP-6 normalizer на submit мав би
+                    // запобігти цьому шляху, але defense-in-depth.
+                    errors.amountInput = {
                         type: 'zod',
                         message: issue.message,
                     };
@@ -266,6 +286,17 @@ const createInvoiceResolver: Resolver<FormValues> = async (values) => {
                         type: 'zod',
                         message: issue.message,
                     };
+                } else {
+                    // Unmatched-path → bubble на root-помилку. Без цього
+                    // нові schema-paths (наприклад refine на slugInput.preset)
+                    // тихо губилися б — submit заблокований без feedback-у.
+                    // Code mapping проходить через mapValidationCode у render-i.
+                    // RHF-quirk: `errors.root` має intersection-type, що не
+                    // приймає прямий `FieldError`-shape — explicit cast.
+                    errors.root = {
+                        type: 'zod',
+                        message: issue.message,
+                    } as FieldError;
                 }
             }
         }
@@ -291,7 +322,11 @@ export default function CreateInvoiceForm({ business }: Props) {
         resolver: createInvoiceResolver,
         defaultValues: {
             amountInput: '',
-            amountLocked: false,
+            // SP-6 §plan: default `true` (≡ switch OFF "Дозволити правити").
+            // Якщо user стартує у signage-режимі — submit-normalizer
+            // переведе у `false` для wire-format-у; UI рендерить derived
+            // state без мутації form-store (див. `lockSwitchChecked`).
+            amountLocked: true,
             // `null` (не `''`) для consistency з API-shape: empty input у
             // textarea = "ФОП не задав, наслідуємо з business" → API `null`.
             // `''`-default fail-ить Zod refine `invoicePaymentPurposeSchema.min(1)`
@@ -345,13 +380,14 @@ export default function CreateInvoiceForm({ business }: Props) {
     const isSignage = amountUiState.kind === 'valid-signage';
     const lockSwitchDisabled = amountUiState.kind !== 'valid-amount';
 
-    // SP-6 — auto-reset amountLocked → false ТІЛЬКИ при семантичному signage
-    // (parse успішний і empty input). Не на parse-fail (transient state).
-    useEffect(() => {
-        if (isSignage && amountLocked) {
-            setValue('amountLocked', false, { shouldDirty: true });
-        }
-    }, [isSignage, amountLocked, setValue]);
+    // SP-6 — UI-стан switch-а "Дозволити правити" derived з form-store-у:
+    // у signage-режимі завжди показуємо ON (allow-edit), не торкаючись
+    // store-значення. На transient invalid (typing) — рендеримо stored
+    // intent. Submit-normalizer (formValuesToCreateRequest) форсить
+    // wire-shape `amountLocked=false` для signage. Без useEffect-reset
+    // — це закриває race на transient input-ах (`1500abc`) і зберігає
+    // user-intent через signage-cycle.
+    const lockSwitchChecked = isSignage ? true : !amountLocked;
 
     /**
      * §4.5 — warning-modal на manual select `'preset:with-purpose'` (не на
@@ -475,7 +511,7 @@ export default function CreateInvoiceForm({ business }: Props) {
                         <UiSwitch
                             id="amount-lock-switch"
                             // Інверсна семантика: switch ON = "дозволити правити" = amountLocked=false.
-                            checked={!amountLocked}
+                            checked={lockSwitchChecked}
                             disabled={lockSwitchDisabled}
                             onChange={(allowEdit) =>
                                 setValue('amountLocked', !allowEdit, {
@@ -627,7 +663,10 @@ export default function CreateInvoiceForm({ business }: Props) {
 
             {formState.errors.root?.message && (
                 <p className="text-destructive text-sm">
-                    {formState.errors.root.message}
+                    {/* mapValidationCode гарантує UA-fallback — раніше тут
+                        потенційно міг рендеритися raw `INVALID_*`-код. */}
+                    {mapValidationCode(formState.errors.root.message) ??
+                        'Перевірте правильність значень'}
                 </p>
             )}
 

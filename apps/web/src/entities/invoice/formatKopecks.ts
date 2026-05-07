@@ -1,16 +1,15 @@
 /**
  * Sprint 4 §4.4 — конвертація `amount` (копійки, int) → відображення для UI.
  *
- * **Чому окремий util.** Cabinet-list (`InvoiceCard`), public-сторінка
- * (Sprint 4 §4.7) і invoice-кабінет (§4.6) усі рендерять той самий формат.
- * Дрейф ("1500 грн" vs "1500,00 ₴" vs "1 500.00 UAH") порушує UX-узгодженість.
+ * **Власник: `entities/invoice`** — pure formatter поверх invoice-моделі;
+ * shared і invoice-create / invoice-edit / invoice-public / cabinet pages
+ * однаково бачать ту саму "1 500,00 ₴"-репрезентацію. Розміщення в
+ * `features/invoices` помилково створювало feature→feature імпорти
+ * (FSD-violation).
  *
- * **`Intl.NumberFormat('uk-UA')`** — використовуємо locale-aware тисячні
- * розділювачі (NBSP) і десяткову кому — як прийнято в УКР-фінансовому UX
- * (бухгалтери очікують "1 500,00 ₴").
- *
- * **`null` → null** — caller вирішує fallback ("Без суми", placeholder).
- * Pure-функція без I/O — тестується ізольовано.
+ * **`Intl.NumberFormat('uk-UA')`** — locale-aware тисячні розділювачі (NBSP)
+ * і десяткова кома; бухгалтери очікують саме цей формат. `null` → null —
+ * caller вирішує fallback ("Без суми", placeholder). Pure-функція без I/O.
  */
 const HRYVNIA_FORMATTER = new Intl.NumberFormat('uk-UA', {
     style: 'decimal',

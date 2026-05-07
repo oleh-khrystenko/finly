@@ -14,7 +14,7 @@ import {
     parseUaMoney,
     type MoneyParseError,
 } from '@/shared/lib';
-import { formatKopecksAsHryvnia } from '@/features/invoices/formatKopecks';
+import { formatKopecksAsHryvnia } from '@/entities/invoice';
 
 interface Props {
     invoice: Invoice;

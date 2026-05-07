@@ -57,11 +57,16 @@ export default function PurposeSection({ invoice, business, onSave }: Props) {
                 validate={(v) => {
                     if (v === null) return null;
                     const r = invoicePaymentPurposeSchema.safeParse(v);
-                    return r.success
-                        ? null
-                        : (mapValidationCode(
-                              r.error.issues[0]?.message,
-                          ) ?? null);
+                    if (r.success) return null;
+                    // Якщо validate повертає null — UiEditableField пропускає
+                    // save. Тож на Zod-fail повертаємо ОБОВ'ЯЗКОВО non-null
+                    // UA-рядок (raw `INVALID_*` код ніколи не доходить до
+                    // користувача, default Zod-помилка без `.message()` теж
+                    // не пропустить save через `??`-fallback).
+                    return (
+                        mapValidationCode(r.error.issues[0]?.message) ??
+                        'Перевірте правильність значення'
+                    );
                 }}
                 onSave={(paymentPurpose) => onSave({ paymentPurpose })}
             />

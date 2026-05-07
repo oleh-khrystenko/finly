@@ -10,7 +10,7 @@ import UiQrImage from '@/shared/ui/UiQrImage';
 import {
     formatKopecksAsHryvnia,
     getInvoiceStatus,
-} from '@/features/invoices/formatKopecks';
+} from '@/entities/invoice';
 
 interface Props {
     /** Invoice fields (з `PublicInvoiceView`-whitelist). */
@@ -83,10 +83,17 @@ export default function InvoicePublicView({
     return (
         <div className="mx-auto max-w-xl space-y-6 px-4 py-8">
             <header className="space-y-2 text-center">
-                <h1 className="text-foreground text-2xl font-bold tracking-tight md:text-3xl">
+                {/*
+                 * `break-words` (overflow-wrap: break-word) — захист від
+                 * довгого user-controlled тексту (`business.name`,
+                 * `paymentPurpose`) на 320px-екрані: без break-rule довгий
+                 * рядок без пробілів дав би horizontal scroll і зламав
+                 * mobile-first layout (responsive policy §1).
+                 */}
+                <h1 className="text-foreground text-2xl font-bold tracking-tight break-words md:text-3xl">
                     {heading}
                 </h1>
-                <p className="text-muted-foreground text-sm">
+                <p className="text-muted-foreground break-words text-sm">
                     {BUSINESS_TYPE_LABEL[business.type]} {business.name}
                 </p>
             </header>
@@ -97,7 +104,7 @@ export default function InvoicePublicView({
                     <dt className="text-muted-foreground text-xs">
                         Призначення
                     </dt>
-                    <dd className="text-foreground mt-0.5">
+                    <dd className="text-foreground mt-0.5 break-words">
                         {paymentPurpose}
                     </dd>
                 </div>

@@ -4,7 +4,7 @@ import { type Business, type SlugPreset } from '@finly/types';
 import UiEditableField from '@/shared/ui/UiEditableField';
 import UiSelect from '@/shared/ui/UiSelect';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
-import { useSlugPresetWarningStore } from './slugPresetWarningStore';
+import { useSlugPresetWarningStore } from '@/entities/invoice';
 
 interface Props {
     business: Business;
@@ -17,10 +17,11 @@ interface Props {
  * Sprint 4 §4.4 — секція "Налаштування рахунків" на сторінці бізнесу.
  *
  * **Власник: `features/invoices` slice** — секція керує invoice-related
- * налаштуванням (хоча зберігається у Business-документі); тримати її поряд із
- * `slugPresetWarningStore` уникає cross-slice-import-у з business-edit.
- * `UiEditableField` — generic primitive у `shared/ui/`, доступний усім
- * feature-слайсам без feature→feature coupling-у.
+ * налаштуванням (хоча зберігається у Business-документі). `slug-preset-
+ * warning store` живе на нижчому FSD-шарі (`entities/invoice`), щоб
+ * `features/invoice-create` (форма) і ця feature consume-или однаково
+ * без cross-slice import-у. `UiEditableField` — generic primitive у
+ * `shared/ui/`, доступний усім feature-слайсам без feature→feature coupling-у.
  *
  * **Один dropdown — `invoiceSlugPresetDefault`.** 5 опцій (qr-decisions §4.3.1
  * + §4.5 SP-1):

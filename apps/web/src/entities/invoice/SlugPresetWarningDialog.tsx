@@ -6,6 +6,7 @@ import { useSlugPresetWarningStore } from './slugPresetWarningStore';
 /**
  * Sprint 4 §4.5 SP-1 + §4.4 — privacy-warning перед вибором `with-purpose`-
  * пресета (qr-decisions §4.3.1.1). Зареєстрований у `app/overlays.tsx`.
+ * Власник: `entities/invoice` (FSD-shared bus між create/settings features).
  *
  * **Контракт зі store.** `confirm()` викликається з `onConfirm`-handler;
  * `cancel()` — з `onOpenChange(false)` (Cancel-кнопка, ESC, click-outside).

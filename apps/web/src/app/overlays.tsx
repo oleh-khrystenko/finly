@@ -24,7 +24,7 @@ const DeleteInvoiceConfirmDialog = dynamic(
     () => import('@/features/invoice-edit/DeleteInvoiceConfirmDialog'),
 );
 const SlugPresetWarningDialog = dynamic(
-    () => import('@/features/invoices/SlugPresetWarningDialog'),
+    () => import('@/entities/invoice/SlugPresetWarningDialog'),
 );
 const MobileMenuSheet = dynamic(
     () => import('@/widgets/header/MobileMenuSheet'),

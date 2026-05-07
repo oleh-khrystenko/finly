@@ -34,7 +34,7 @@ import {
     useDeleteInvoiceConfirmStore,
 } from '@/features/invoice-edit';
 import { InvoicePublicView } from '@/features/invoice-public';
-import { formatKopecksAsHryvnia } from '@/features/invoices';
+import { formatKopecksAsHryvnia } from '@/entities/invoice';
 
 /**
  * Sprint 4 §4.6 — кабінет інвойсу `/business/{slug}/invoice/{invoiceSlug}`.

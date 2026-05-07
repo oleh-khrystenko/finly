@@ -6,7 +6,7 @@ import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSelect from '@/shared/ui/UiSelect';
 import UiEditableField from '@/shared/ui/UiEditableField';
 import { kyivEndOfDayInstant } from '@/shared/lib';
-import { getInvoiceStatus } from '@/features/invoices/formatKopecks';
+import { getInvoiceStatus } from '@/entities/invoice';
 
 interface Props {
     invoice: Invoice;

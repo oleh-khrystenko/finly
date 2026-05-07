@@ -9,7 +9,7 @@ import { composeClasses } from '@/shared/lib';
 import {
     formatKopecksAsHryvnia,
     getInvoiceStatus,
-} from './formatKopecks';
+} from '@/entities/invoice';
 
 interface Props {
     invoice: Invoice;
