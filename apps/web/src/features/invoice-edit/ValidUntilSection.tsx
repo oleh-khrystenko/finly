@@ -5,6 +5,7 @@ import UiInput from '@/shared/ui/UiInput';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSelect from '@/shared/ui/UiSelect';
 import UiEditableField from '@/shared/ui/UiEditableField';
+import { kyivEndOfDayInstant } from '@/shared/lib';
 import { getInvoiceStatus } from '@/features/invoices/formatKopecks';
 
 interface Props {
@@ -67,13 +68,16 @@ export default function ValidUntilSection({ invoice, onSave }: Props) {
                                     if (mode === 'none') {
                                         setValue(null);
                                     } else if (value === null) {
-                                        // Default — завтра 23:59:59 локально.
-                                        const tomorrow = new Date();
-                                        tomorrow.setDate(
-                                            tomorrow.getDate() + 1,
+                                        // Default — завтра 23:59:59 у Kyiv tz.
+                                        // Беремо "завтра" з точки зору самого
+                                        // Києва, не браузера (інакше у tz <
+                                        // UTC+2 завтра-Київ випадало б на
+                                        // післязавтра-браузер і навпаки).
+                                        setValue(
+                                            kyivEndOfDayInstant(
+                                                kyivTomorrowIsoDate(),
+                                            ),
                                         );
-                                        tomorrow.setHours(23, 59, 59, 0);
-                                        setValue(tomorrow);
                                     }
                                 }}
                             />
@@ -86,11 +90,10 @@ export default function ValidUntilSection({ invoice, onSave }: Props) {
                                             setValue(null);
                                             return;
                                         }
-                                        // SP-7 — фіксуємо 23:59:59 локально.
-                                        const next = new Date(
-                                            `${e.target.value}T23:59:59`,
+                                        // SP-7 — фіксуємо 23:59:59 у Kyiv tz.
+                                        setValue(
+                                            kyivEndOfDayInstant(e.target.value),
                                         );
-                                        setValue(next);
                                     }}
                                 />
                             )}
@@ -103,9 +106,30 @@ export default function ValidUntilSection({ invoice, onSave }: Props) {
     );
 }
 
+/**
+ * `Date` → `YYYY-MM-DD` у Europe/Kyiv tz. Раніше використовувалося
+ * `getFullYear`/`getMonth`/`getDate` — це browser-local значення, тож для
+ * `validUntil`, створеного у Kyiv-tz (літо UTC+3), браузер у UTC+0 показав би
+ * день раніше. `<input type="date">` потім edit-mode стартував би з неправильного
+ * дня. Через Intl-formatter тримаємо одну і ту саму "правду" для всіх клієнтів.
+ */
+const KYIV_DATE_FORMATTER = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Kyiv',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+});
+
 function toIsoDate(d: Date): string {
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
+    // `en-CA` дає вже `YYYY-MM-DD`.
+    return KYIV_DATE_FORMATTER.format(d);
+}
+
+function kyivTomorrowIsoDate(): string {
+    const todayKyiv = toIsoDate(new Date());
+    const [y, m, d] = todayKyiv.split('-').map(Number);
+    // `Date.UTC` + +1 day; потім назад у Kyiv-формат — DST-safe бо ми не
+    // міксуємо часові зони, тільки day-arithmetic у UTC.
+    const tomorrowUtc = new Date(Date.UTC(y, m - 1, d + 1));
+    return toIsoDate(tomorrowUtc);
 }

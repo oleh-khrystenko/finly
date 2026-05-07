@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FileText, Plus } from 'lucide-react';
 import { AxiosError } from 'axios';
 import { type Invoice } from '@finly/types';
@@ -8,6 +8,7 @@ import { getApiMessage, listInvoices } from '@/shared/api';
 import UiButton from '@/shared/ui/UiButton';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
+import { usePendingInvoiceDeletesStore } from '@/features/invoice-edit';
 import InvoiceCard from './InvoiceCard';
 
 interface Props {
@@ -59,6 +60,13 @@ export default function InvoicesSection({
     const [page, setPage] = useState<number>(1);
     const [loadingMore, setLoadingMore] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    // Sprint 4 §4.6 — той самий патерн, що Sprint 3 business-list:
+    // pendingInvoiceDeletesStore filter-ить items, що вже у 5s-undo вікні.
+    // Без цього: optimistic redirect з invoice-cabinet → fresh fetch → бачимо
+    // інвойс ще присутнім у списку до того, як backend DELETE реально
+    // спрацює. Subscribe-селектор повертає Set, useState re-render при change.
+    const pendingDeleteKeys = usePendingInvoiceDeletesStore((s) => s.keys);
 
     // Initial load.
     useEffect(() => {
@@ -117,14 +125,31 @@ export default function InvoicesSection({
         }
     }, [businessSlug, items, loadingMore, page]);
 
-    const hasMore = items !== null && items.length < total;
+    const visibleItems = useMemo(() => {
+        if (items === null) return null;
+        return items.filter(
+            (i) => !pendingDeleteKeys.has(`${businessSlug}/${i.slug}`),
+        );
+    }, [items, pendingDeleteKeys, businessSlug]);
+
+    // `total` приходить з backend — це source of truth по фактичному
+    // remaining-count. Frontend pending-deletes тимчасово ховають N items з UI;
+    // зменшуємо total відповідно, щоб "Завантажити ще ({total - items.length})"
+    // не показувало від'ємні / надто великі числа.
+    const hiddenInList =
+        items === null
+            ? 0
+            : items.length - (visibleItems?.length ?? 0);
+    const visibleTotal = Math.max(0, total - hiddenInList);
+    const hasMore =
+        visibleItems !== null && visibleItems.length < visibleTotal;
 
     return (
         <UiSectionCard
             id="invoices"
             title="Рахунки"
             headerRight={
-                items !== null && items.length > 0 ? (
+                visibleItems !== null && visibleItems.length > 0 ? (
                     <UiButton
                         as="link"
                         href={`/business/${businessSlug}/invoice/new`}
@@ -137,7 +162,7 @@ export default function InvoicesSection({
                 ) : undefined
             }
         >
-            {items === null && !error && (
+            {visibleItems === null && !error && (
                 <div className="flex justify-center py-8">
                     <UiSpinner size="md" />
                 </div>
@@ -147,14 +172,14 @@ export default function InvoicesSection({
                 <p className="text-destructive py-4 text-sm">{error}</p>
             )}
 
-            {items !== null && items.length === 0 && !error && (
+            {visibleItems !== null && visibleItems.length === 0 && !error && (
                 <EmptyState businessSlug={businessSlug} />
             )}
 
-            {items !== null && items.length > 0 && (
+            {visibleItems !== null && visibleItems.length > 0 && (
                 <div className="space-y-3">
                     <div className="grid gap-3 sm:grid-cols-2">
-                        {items.map((inv) => (
+                        {visibleItems.map((inv) => (
                             <InvoiceCard
                                 key={inv.id}
                                 invoice={inv}
@@ -175,7 +200,7 @@ export default function InvoicesSection({
                                 {loadingMore ? (
                                     <UiSpinner size="sm" />
                                 ) : (
-                                    `Завантажити ще (${total - items.length})`
+                                    `Завантажити ще (${visibleTotal - visibleItems.length})`
                                 )}
                             </UiButton>
                         </div>

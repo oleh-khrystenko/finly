@@ -1,4 +1,4 @@
-import type { PublicInvoiceView } from '@finly/types';
+import { PublicInvoiceSchema, type PublicInvoiceView } from '@finly/types';
 
 /**
  * Sprint 4 §4.7 — server-side fetch публічного view інвойсу для Server
@@ -6,6 +6,11 @@ import type { PublicInvoiceView } from '@finly/types';
  *
  * **Той самий patern, що `loadPublicView` Sprint 3** (server-only native
  * fetch до `API_INTERNAL_URL`; ISR `revalidate: 60`).
+ *
+ * **Zod-parse на boundary** (Sprint 4 review fix): API JSON містить дати як
+ * ISO-strings; `PublicInvoiceSchema` (`z.coerce.date()`) нормалізує `validUntil`
+ * у `Date` instance, що очікують consumer-и (`InvoicePublicView`,
+ * `getInvoiceStatus`).
  */
 export async function loadPublicInvoiceView(
     businessSlug: string,
@@ -25,6 +30,6 @@ export async function loadPublicInvoiceView(
             `Public invoice fetch failed: ${res.status} ${res.statusText}`,
         );
     }
-    const json = (await res.json()) as { data: PublicInvoiceView };
-    return json.data;
+    const json = (await res.json()) as { data: unknown };
+    return PublicInvoiceSchema.parse(json.data);
 }

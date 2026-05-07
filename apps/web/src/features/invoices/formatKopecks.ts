@@ -33,15 +33,18 @@ export function formatKopecksAsHryvnia(
  *
  * `null` validUntil → завжди "active" (інвойс без терміну дії).
  * `validUntil < now` → "expired".
+ *
+ * **Контракт**: `validUntil` приходить як `Date` instance — `shared/api/invoices`
+ * нормалізує JSON ISO-string → `Date` через Zod-parse на boundary. Defensive
+ * `string`-fallback свідомо НЕ підтримується — це маскувало б повернення
+ * boundary-bug-у.
  */
 export type InvoiceLifecycleStatus = 'active' | 'expired';
 
 export function getInvoiceStatus(
-    validUntil: Date | string | null,
+    validUntil: Date | null,
     now: Date = new Date(),
 ): InvoiceLifecycleStatus {
     if (validUntil === null) return 'active';
-    const target =
-        validUntil instanceof Date ? validUntil : new Date(validUntil);
-    return target.getTime() < now.getTime() ? 'expired' : 'active';
+    return validUntil.getTime() < now.getTime() ? 'expired' : 'active';
 }

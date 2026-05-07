@@ -7,6 +7,7 @@ import {
     type BusinessType,
 } from '@finly/types';
 import { BANK_DISPLAY } from '@/shared/icons';
+import UiButton from '@/shared/ui/UiButton';
 import UiQrImage from '@/shared/ui/UiQrImage';
 import {
     formatKopecksAsHryvnia,
@@ -181,22 +182,30 @@ function PaymentSection({
                 </div>
             </div>
 
-            {/* 2 active CTAs */}
+            {/* 2 active CTAs — зовнішні платіжні `bank://`-схеми, тож
+                native <a> через UiButton as="a" (Next <Link> підставив би
+                client-side router, який не знає про non-http протоколи). */}
             <div className="space-y-3">
-                <a
+                <UiButton
+                    as="a"
                     href={nbuLinks.primary}
                     rel="external"
-                    className="bg-primary text-primary-foreground hover:bg-primary/90 flex w-full items-center justify-center rounded-md px-4 py-3 text-sm font-semibold transition-colors"
+                    variant="filled"
+                    size="md"
+                    className="w-full"
                 >
                     Інший банк
-                </a>
-                <a
+                </UiButton>
+                <UiButton
+                    as="a"
                     href={nbuLinks.legacy}
                     rel="external"
-                    className="border-border text-muted-foreground hover:bg-accent flex w-full items-center justify-center rounded-md border px-4 py-3 text-sm font-medium transition-colors"
+                    variant="outline"
+                    size="md"
+                    className="w-full"
                 >
                     Інший банк (запасний варіант)
-                </a>
+                </UiButton>
                 <p className="text-muted-foreground text-center text-xs">
                     Якщо ваш банк не відкрився — спробуйте запасний варіант
                 </p>

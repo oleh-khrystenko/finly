@@ -9,3 +9,7 @@ export {
     scheduleInvoiceDeleteWithUndo,
     INVOICE_UNDO_TIMEOUT_MS,
 } from './scheduleInvoiceDeleteWithUndo';
+export {
+    usePendingInvoiceDeletesStore,
+    makeInvoiceKey,
+} from './pendingInvoiceDeletesStore';

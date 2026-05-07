@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { ArrowLeft, ExternalLink, Trash2 } from 'lucide-react';
 import { AxiosError } from 'axios';
 import { toast } from 'sonner';
@@ -211,13 +210,16 @@ export default function InvoiceCabinetPage() {
         <UiPageContainer className="space-y-6 py-8 md:py-12">
             {/* Top toolbar */}
             <div className="flex flex-col gap-4">
-                <Link
+                <UiButton
+                    as="link"
                     href={`/business/${business.slug}#invoices`}
-                    className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm"
+                    variant="text"
+                    size="sm"
+                    IconLeft={<ArrowLeft />}
+                    className="self-start px-0"
                 >
-                    <ArrowLeft className="size-4" />
                     Назад до бізнесу
-                </Link>
+                </UiButton>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                     {/*
                      * Plan §4.6: "заголовок 'Рахунок №… — {amount-formatted}'".

@@ -57,13 +57,4 @@ describe('getInvoiceStatus', () => {
         // millisecond-tick.
         expect(getInvoiceStatus(now, now)).toBe('active');
     });
-
-    it('ISO-string input парситься так само як Date', () => {
-        expect(getInvoiceStatus('2026-12-31T00:00:00.000Z', now)).toBe(
-            'active',
-        );
-        expect(getInvoiceStatus('2026-04-01T00:00:00.000Z', now)).toBe(
-            'expired',
-        );
-    });
 });

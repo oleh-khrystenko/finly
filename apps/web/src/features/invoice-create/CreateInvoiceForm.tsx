@@ -20,7 +20,7 @@ import {
     type SlugPreset,
 } from '@finly/types';
 import { createInvoice, getApiMessage } from '@/shared/api';
-import { getZodFieldError } from '@/shared/lib';
+import { getZodFieldError, kyivEndOfDayInstant } from '@/shared/lib';
 import UiButton from '@/shared/ui/UiButton';
 import UiInput from '@/shared/ui/UiInput';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
@@ -149,8 +149,11 @@ function formValuesToCreateRequest(values: FormValues): CreateInvoiceRequest {
         paymentPurpose: values.paymentPurpose,
         validUntil:
             values.validUntilMode === 'date' && values.validUntilDate
-                ? // 23:59:59 локальний UA-час — Sprint 4 SP-7.
-                  new Date(`${values.validUntilDate}T23:59:59`)
+                ? // SP-7 — фіксуємо 23:59:59 у Europe/Kyiv tz, незалежно
+                  // від tz браузера (`new Date('YYYY-MM-DDTHH:MM:SS')` без
+                  // `Z` interpret-ується як local time клієнта — зсунуло б
+                  // backend Kyiv-tz parsing на сусідній день).
+                  kyivEndOfDayInstant(values.validUntilDate)
                 : null,
         slugInput: buildSlugInput(values),
     };

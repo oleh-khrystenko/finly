@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { AxiosError } from 'axios';
 import {
@@ -94,13 +93,16 @@ export default function NewInvoicePage() {
 
     return (
         <UiPageContainer className="space-y-6 py-8 md:py-12">
-            <Link
+            <UiButton
+                as="link"
                 href={`/business/${business.slug}#invoices`}
-                className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm"
+                variant="text"
+                size="sm"
+                IconLeft={<ArrowLeft />}
+                className="self-start px-0"
             >
-                <ArrowLeft className="size-4" />
                 Назад до бізнесу
-            </Link>
+            </UiButton>
             <UiPageHeading>Виставити рахунок</UiPageHeading>
             <CreateInvoiceForm business={business} />
         </UiPageContainer>
