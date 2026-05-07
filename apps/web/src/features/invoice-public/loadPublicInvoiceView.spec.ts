@@ -55,7 +55,7 @@ describe('loadPublicInvoiceView', () => {
         );
         expect(fetchMock).toHaveBeenCalledWith(
             'http://api:4000/api/businesses/public/IvanEnko/invoices/inv-001-aB3xQ9k7',
-            { next: { revalidate: 60 } },
+            { cache: 'no-store' },
         );
         expect(result).toEqual(sampleView);
     });
@@ -104,7 +104,7 @@ describe('loadPublicInvoiceView', () => {
         process.env.API_INTERNAL_URL = 'http://api:4000';
     });
 
-    it('використовує ISR revalidate: 60 (Sprint 3 §F4)', async () => {
+    it("використовує `cache: 'no-store'` — invoice mutable payment data (review fix)", async () => {
         fetchMock.mockResolvedValue({
             ok: true,
             status: 200,
@@ -112,6 +112,6 @@ describe('loadPublicInvoiceView', () => {
         });
         await loadPublicInvoiceView('biz', 'inv');
         const opts = fetchMock.mock.calls[0]![1];
-        expect(opts).toEqual({ next: { revalidate: 60 } });
+        expect(opts).toEqual({ cache: 'no-store' });
     });
 });

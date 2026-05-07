@@ -292,12 +292,98 @@ describe('CreateInvoiceForm — coupled amount × amountLocked (SP-6)', () => {
 
     it('amount=number → switch enabled', async () => {
         render(<CreateInvoiceForm business={baseBusiness} />);
-        const amountInput = screen.getByPlaceholderText('1500.00');
+        const amountInput = screen.getByPlaceholderText('1500,50');
         await act(async () => {
             fireEvent.change(amountInput, { target: { value: '1500' } });
         });
         const lockSwitch = document.getElementById('amount-lock-switch');
         expect(lockSwitch).not.toBeDisabled();
+    });
+
+    it('UA-кома приймається: 1500,50 → 150050 копійок', async () => {
+        render(<CreateInvoiceForm business={baseBusiness} />);
+        const amountInput = screen.getByPlaceholderText('1500,50');
+        await act(async () => {
+            fireEvent.change(amountInput, { target: { value: '1500,50' } });
+        });
+        // Switch ON ⇔ amount valid → enabled (parseUaMoney повертає копійки).
+        const lockSwitch = document.getElementById('amount-lock-switch');
+        expect(lockSwitch).not.toBeDisabled();
+    });
+
+    /**
+     * Sprint 4 review fix — критичний регресійний тест:
+     * **Transient parse-error НЕ повинен скидати `amountLocked`.**
+     *
+     * Раніше `parsedAmount === null` мав подвійний сенс (signage АБО invalid),
+     * тож useEffect SP-6 reset-ив amountLocked при будь-якому невалідному
+     * вводі під час набору. Сценарій: ФОП ввів 1500 → toggle "Дозволити
+     * правити" OFF (amountLocked=true) → виправляє суму на 1500,50, але між
+     * цим transient input "1500,abc" парсився як invalid → reset amountLocked
+     * на false → submit іде з allow-edit, попри початковий намір ФОПа.
+     */
+    it('transient invalid input → amountLocked НЕ скидається', async () => {
+        render(<CreateInvoiceForm business={baseBusiness} />);
+        const amountInput = screen.getByPlaceholderText('1500,50');
+        const lockSwitch = document.getElementById('amount-lock-switch')!;
+
+        // 1. Ввести валідну суму.
+        await act(async () => {
+            fireEvent.change(amountInput, { target: { value: '1500' } });
+        });
+        expect(lockSwitch).not.toBeDisabled();
+
+        // 2. Toggle "Дозволити правити" → OFF (тобто amountLocked=true).
+        //    Switch має aria-checked='true' (allowEdit=true) за замовчуванням;
+        //    клік перемкне у allowEdit=false ⇒ amountLocked=true.
+        await act(async () => {
+            fireEvent.click(lockSwitch);
+        });
+        expect(lockSwitch).toHaveAttribute('aria-checked', 'false');
+
+        // 3. Введемо transient invalid input.
+        await act(async () => {
+            fireEvent.change(amountInput, { target: { value: '1500abc' } });
+        });
+
+        // 4. Перевірка: amountLocked НЕ скинувся (switch все ще
+        //    aria-checked='false' ⇔ allowEdit=false ⇔ amountLocked=true).
+        //    Switch стає disabled (бо input invalid), але state зберігається.
+        expect(lockSwitch).toBeDisabled();
+        expect(lockSwitch).toHaveAttribute('aria-checked', 'false');
+
+        // 5. Виправимо ввід — switch знову enabled і lock-state intact.
+        await act(async () => {
+            fireEvent.change(amountInput, { target: { value: '1500,50' } });
+        });
+        expect(lockSwitch).not.toBeDisabled();
+        expect(lockSwitch).toHaveAttribute('aria-checked', 'false');
+    });
+
+    /**
+     * Sanity-counterpart: справжній signage-mode (parse-ok, empty input)
+     * ВСЕ ЩЕ скидає amountLocked. Це SP-6, не повинне зламатись.
+     */
+    it('semantic signage (empty input) → amountLocked скидається', async () => {
+        render(<CreateInvoiceForm business={baseBusiness} />);
+        const amountInput = screen.getByPlaceholderText('1500,50');
+        const lockSwitch = document.getElementById('amount-lock-switch')!;
+
+        await act(async () => {
+            fireEvent.change(amountInput, { target: { value: '1500' } });
+        });
+        await act(async () => {
+            fireEvent.click(lockSwitch);
+        });
+        expect(lockSwitch).toHaveAttribute('aria-checked', 'false');
+
+        // Очистимо input — це справжній signage (parse-ok, kopecks=null).
+        await act(async () => {
+            fireEvent.change(amountInput, { target: { value: '' } });
+        });
+        await waitFor(() => {
+            expect(lockSwitch).toHaveAttribute('aria-checked', 'true');
+        });
     });
 });
 

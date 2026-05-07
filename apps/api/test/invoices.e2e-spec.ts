@@ -963,7 +963,7 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                 expect(links.legacy).toMatch(/^https:\/\/bank\.gov\.ua\/qr\//);
             });
 
-            it('Cache-Control header присутній', async () => {
+            it("Cache-Control: no-store — invoice mutable payment data (review fix)", async () => {
                 const user = await createUser();
                 const businessSlug = await createBusinessFor(user);
                 const invoiceSlug = await seedInvoice({
@@ -976,9 +976,7 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                         `/api/businesses/public/${businessSlug}/invoices/${invoiceSlug}`
                     )
                     .expect(200);
-                expect(res.headers['cache-control']).toBe(
-                    'public, max-age=3600, stale-while-revalidate=86400'
-                );
+                expect(res.headers['cache-control']).toBe('no-store');
             });
 
             it('case-insensitive lookup business / case-sensitive lookup invoice', async () => {

@@ -25,16 +25,19 @@ const PAGE_SIZE = 10;
  * **Layout.** `UiSectionCard` з `headerRight`-CTA "Виставити рахунок";
  * всередині — empty-state АБО list карток з "Завантажити ще"-trigger-button.
  *
- * **Pagination state.** Тримаємо `loaded: Invoice[]` (накопичувальний) +
- * `total: number` для знання, коли зупинятись. Кожен "Завантажити ще" робить
- * fetch з `page = поточна + 1`, потім `mergeUniqueById` зливає items з
- * existing-prev: дублі (інвойс, що з'явився повторно через паралельний
- * insert/order-shift) перезаписуються по `id`, не дублюються в UI. Map-merge
- * preserves order: existing зберігають свою позицію, нові додаються в кінець.
+ * **State-discriminator (review fix).** `data: { paramSlug, items, total,
+ * page } | null` — items ключуються route-param-ом. Якщо `businessSlug`
+ * змінився між page-навігаціями (cabinet → інший cabinet → той самий список
+ * через soft-back), старі items відкидаються render-ом до завершення нового
+ * fetch. Без discriminator-у: попередня сторінка показувалася за свіжою
+ * URL до завершення async-fetch, що ламає UX і race-condition безпеку.
  *
- * **State-mutation у async callback-ах** — той самий React 19 invariant, що
- * Sprint 3 cabinet (`page.tsx`): синхронний reset перед fetch порушує
- * react-hooks/set-state-in-effect.
+ * **Pagination state.** `loaded: Invoice[]` (накопичувальний) + `total: number`
+ * для знання, коли зупинятись. Кожен "Завантажити ще" робить fetch з
+ * `page = поточна + 1`, потім `mergeUniqueById` зливає items з existing-prev:
+ * дублі (інвойс, що з'явився повторно через паралельний insert/order-shift)
+ * перезаписуються по `id`, не дублюються в UI. Map-merge preserves order:
+ * existing зберігають свою позицію, нові додаються в кінець.
  */
 
 /**
@@ -51,95 +54,116 @@ function mergeUniqueById<T extends { id: string }>(
     for (const item of next) map.set(item.id, item);
     return Array.from(map.values());
 }
+
+interface SectionData {
+    paramSlug: string;
+    items: Invoice[];
+    total: number;
+    page: number;
+}
+
+interface SectionError {
+    paramSlug: string;
+    message: string;
+}
+
+function extractMessage(err: unknown): string {
+    const code =
+        err instanceof AxiosError
+            ? ((err.response?.data as { error?: { code?: string } } | undefined)
+                  ?.error?.code ?? 'unknown')
+            : 'unknown';
+    return getApiMessage(code, 'invoices');
+}
+
 export default function InvoicesSection({
     businessSlug,
     payPublicOrigin,
 }: Props) {
-    const [items, setItems] = useState<Invoice[] | null>(null);
-    const [total, setTotal] = useState<number>(0);
-    const [page, setPage] = useState<number>(1);
+    const [data, setData] = useState<SectionData | null>(null);
+    const [error, setError] = useState<SectionError | null>(null);
     const [loadingMore, setLoadingMore] = useState(false);
-    const [error, setError] = useState<string | null>(null);
 
-    // Sprint 4 §4.6 — той самий патерн, що Sprint 3 business-list:
-    // pendingInvoiceDeletesStore filter-ить items, що вже у 5s-undo вікні.
-    // Без цього: optimistic redirect з invoice-cabinet → fresh fetch → бачимо
-    // інвойс ще присутнім у списку до того, як backend DELETE реально
-    // спрацює. Subscribe-селектор повертає Set, useState re-render при change.
+    // Sprint 4 §4.6 — pendingInvoiceDeletesStore filter-ить items, що вже у
+    // 5s-undo вікні. Без цього: optimistic redirect з invoice-cabinet →
+    // fresh fetch → бачимо інвойс ще присутнім у списку до того, як backend
+    // DELETE реально спрацює.
     const pendingDeleteKeys = usePendingInvoiceDeletesStore((s) => s.keys);
 
-    // Initial load.
+    // Initial / re-fetch на зміну businessSlug.
     useEffect(() => {
         let cancelled = false;
         listInvoices(businessSlug, 1, PAGE_SIZE)
             .then((res) => {
                 if (cancelled) return;
-                setItems(res.items);
-                setTotal(res.total);
-                setPage(res.page);
+                setData({
+                    paramSlug: businessSlug,
+                    items: res.items,
+                    total: res.total,
+                    page: res.page,
+                });
                 setError(null);
             })
             .catch((err: unknown) => {
                 if (cancelled) return;
-                const code =
-                    err instanceof AxiosError
-                        ? ((
-                              err.response?.data as
-                                  | { error?: { code?: string } }
-                                  | undefined
-                          )?.error?.code ?? 'unknown')
-                        : 'unknown';
-                setError(getApiMessage(code, 'invoices'));
+                setError({
+                    paramSlug: businessSlug,
+                    message: extractMessage(err),
+                });
             });
         return () => {
             cancelled = true;
         };
     }, [businessSlug]);
 
+    const isCurrent = data?.paramSlug === businessSlug;
+    const isErrorCurrent = error?.paramSlug === businessSlug;
+
     const loadMore = useCallback(async () => {
-        if (loadingMore || !items) return;
+        if (loadingMore || !data || data.paramSlug !== businessSlug) return;
+        const captured = businessSlug;
         setLoadingMore(true);
         try {
-            const next = await listInvoices(
-                businessSlug,
-                page + 1,
-                PAGE_SIZE,
+            const next = await listInvoices(captured, data.page + 1, PAGE_SIZE);
+            // Apply тільки якщо state ще відповідає тому самому бізнесу —
+            // інакше fetch може долетіти після page-navigation і записати
+            // чужі items.
+            setData((prev) =>
+                prev && prev.paramSlug === captured
+                    ? {
+                          paramSlug: captured,
+                          items: mergeUniqueById(prev.items, next.items),
+                          total: next.total,
+                          page: next.page,
+                      }
+                    : prev,
             );
-            setItems((prev) =>
-                prev ? mergeUniqueById(prev, next.items) : next.items,
-            );
-            setTotal(next.total);
-            setPage(next.page);
         } catch (err: unknown) {
-            const code =
-                err instanceof AxiosError
-                    ? ((
-                          err.response?.data as
-                              | { error?: { code?: string } }
-                              | undefined
-                      )?.error?.code ?? 'unknown')
-                    : 'unknown';
-            setError(getApiMessage(code, 'invoices'));
+            setError({
+                paramSlug: captured,
+                message: extractMessage(err),
+            });
         } finally {
             setLoadingMore(false);
         }
-    }, [businessSlug, items, loadingMore, page]);
+    }, [businessSlug, data, loadingMore]);
 
     const visibleItems = useMemo(() => {
-        if (items === null) return null;
-        return items.filter(
+        if (!isCurrent || !data) return null;
+        return data.items.filter(
             (i) => !pendingDeleteKeys.has(`${businessSlug}/${i.slug}`),
         );
-    }, [items, pendingDeleteKeys, businessSlug]);
+    }, [isCurrent, data, pendingDeleteKeys, businessSlug]);
 
     // `total` приходить з backend — це source of truth по фактичному
     // remaining-count. Frontend pending-deletes тимчасово ховають N items з UI;
     // зменшуємо total відповідно, щоб "Завантажити ще ({total - items.length})"
     // не показувало від'ємні / надто великі числа.
+    const total = isCurrent && data ? data.total : 0;
     const hiddenInList =
-        items === null
+        visibleItems === null || data === null
             ? 0
-            : items.length - (visibleItems?.length ?? 0);
+            : data.items.length - visibleItems.length;
     const visibleTotal = Math.max(0, total - hiddenInList);
     const hasMore =
         visibleItems !== null && visibleItems.length < visibleTotal;
@@ -162,19 +186,21 @@ export default function InvoicesSection({
                 ) : undefined
             }
         >
-            {visibleItems === null && !error && (
+            {visibleItems === null && !isErrorCurrent && (
                 <div className="flex justify-center py-8">
                     <UiSpinner size="md" />
                 </div>
             )}
 
-            {error && (
-                <p className="text-destructive py-4 text-sm">{error}</p>
+            {isErrorCurrent && (
+                <p className="text-destructive py-4 text-sm">
+                    {error?.message}
+                </p>
             )}
 
-            {visibleItems !== null && visibleItems.length === 0 && !error && (
-                <EmptyState businessSlug={businessSlug} />
-            )}
+            {visibleItems !== null &&
+                visibleItems.length === 0 &&
+                !isErrorCurrent && <EmptyState businessSlug={businessSlug} />}
 
             {visibleItems !== null && visibleItems.length > 0 && (
                 <div className="space-y-3">

@@ -27,10 +27,15 @@ import { formatKopecksAsHryvnia } from '@/features/invoices/formatKopecks';
  * інформацію у purpose). `seoIndexEnabled` toggle для інвойсу свідомо
  * відсутній.
  *
- * **ISR `revalidate: 60`** — той самий, що Sprint 3.
+ * **`dynamic = 'force-dynamic'`** (Sprint 4 review fix) — invoice mutable
+ * payment data, ISR-кеш робив shipped fix-ив stale view: видалений рахунок
+ * ще видно клієнту після `cache: 'no-store'` на API-fetch не міг "пробити"
+ * Next ISR-snapshot. Force-dynamic примушує SSR на кожний request — це
+ * правильна модель для invoice-page (на відміну від business-page, що
+ * залишається ISR-кеш-friendly).
  */
 
-export const revalidate = 60;
+export const dynamic = 'force-dynamic';
 
 interface Props {
     params: Promise<{ slug: string; invoiceSlug: string }>;

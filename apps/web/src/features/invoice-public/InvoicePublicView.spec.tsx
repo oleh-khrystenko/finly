@@ -92,14 +92,17 @@ describe('InvoicePublicView (Sprint 4 §4.7)', () => {
             ).toBeInTheDocument();
         });
 
-        it('expired → банк-grid + CTAs + QR ВІДСУТНІ', () => {
+        it('expired → CTAs + QR ВІДСУТНІ', () => {
             const past = new Date('2024-01-01');
             render(
                 <InvoicePublicView {...baseProps} validUntil={past} />,
             );
-            // Жодного "Інший банк"-CTA
+            // Жодного NBU-CTA
             expect(
-                screen.queryByText('Інший банк'),
+                screen.queryByRole('link', { name: 'Відкрити в банку' }),
+            ).not.toBeInTheDocument();
+            expect(
+                screen.queryByRole('link', { name: 'Запасний варіант' }),
             ).not.toBeInTheDocument();
             // Жодного QR-img
             expect(
@@ -107,7 +110,7 @@ describe('InvoicePublicView (Sprint 4 §4.7)', () => {
             ).not.toBeInTheDocument();
         });
 
-        it('active → банк-grid + 2 CTAs + 2 QRs РЕНДЕРЯТЬСЯ', () => {
+        it('active → 2 CTAs + 2 QRs РЕНДЕРЯТЬСЯ (без dead bank-grid, review fix)', () => {
             const future = new Date();
             future.setFullYear(future.getFullYear() + 1);
             render(
@@ -115,8 +118,11 @@ describe('InvoicePublicView (Sprint 4 §4.7)', () => {
             );
             // 2 CTAs:
             expect(
-                screen.getAllByRole('link', { name: /Інший банк/ }).length,
-            ).toBe(2);
+                screen.getByRole('link', { name: 'Відкрити в банку' }),
+            ).toBeInTheDocument();
+            expect(
+                screen.getByRole('link', { name: 'Запасний варіант' }),
+            ).toBeInTheDocument();
             // 2 QR images:
             expect(
                 screen.getByAltText('QR на основну адресу'),
@@ -132,22 +138,25 @@ describe('InvoicePublicView (Sprint 4 §4.7)', () => {
                 screen.queryByText('Термін рахунку минув'),
             ).not.toBeInTheDocument();
             expect(
-                screen.getAllByRole('link', { name: /Інший банк/ }).length,
-            ).toBe(2);
+                screen.getByRole('link', { name: 'Відкрити в банку' }),
+            ).toBeInTheDocument();
         });
     });
 
     describe('NBU CTA / QR URLs', () => {
         it('CTAs мають правильні NBU URLs з payload', () => {
             render(<InvoicePublicView {...baseProps} />);
-            const links = screen.getAllByRole('link', {
-                name: /Інший банк/,
+            const primary = screen.getByRole('link', {
+                name: 'Відкрити в банку',
             });
-            expect(links[0]).toHaveAttribute(
+            const legacy = screen.getByRole('link', {
+                name: 'Запасний варіант',
+            });
+            expect(primary).toHaveAttribute(
                 'href',
                 'https://qr.bank.gov.ua/abc',
             );
-            expect(links[1]).toHaveAttribute(
+            expect(legacy).toHaveAttribute(
                 'href',
                 'https://bank.gov.ua/qr/abc',
             );

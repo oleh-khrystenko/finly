@@ -13,6 +13,10 @@ import { useDeleteBusinessConfirmStore } from './deleteBusinessConfirmStore';
  * видалить усі invoices разом з business у одній transaction; ФОП має
  * знати цифру **до** натискання "Видалити". UA-плюрал ("1 рахунок" /
  * "2 рахунки" / "5 рахунків") — той самий patern, що `BusinessCard`-counter.
+ *
+ * **Без слова "активних"** — counter рахує **усі** invoice-документи, включно
+ * з expired (узгоджено з `BusinessCard`-комент `apps/web/src/app/(protected)/
+ * business/page.tsx`). "Активний" вводив би в оману у destructive-confirmation.
  */
 
 export default function DeleteBusinessConfirmDialog() {
@@ -30,9 +34,9 @@ export default function DeleteBusinessConfirmDialog() {
         if (invoicesCount > 0) {
             const counter = pluralizeUa(
                 invoicesCount,
-                'активний рахунок',
-                'активних рахунки',
-                'активних рахунків',
+                'рахунок',
+                'рахунки',
+                'рахунків',
             );
             description += ` У бізнесу ${counter} — вони теж зникнуть.`;
         }

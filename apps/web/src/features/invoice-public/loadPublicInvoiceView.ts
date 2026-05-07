@@ -4,8 +4,12 @@ import { PublicInvoiceSchema, type PublicInvoiceView } from '@finly/types';
  * Sprint 4 §4.7 — server-side fetch публічного view інвойсу для Server
  * Component на `app/host-pay/[slug]/[invoiceSlug]/page.tsx`.
  *
- * **Той самий patern, що `loadPublicView` Sprint 3** (server-only native
- * fetch до `API_INTERNAL_URL`; ISR `revalidate: 60`).
+ * Server-only native fetch до `API_INTERNAL_URL`. На відміну від Sprint 3
+ * `loadPublicView` (бізнес — vanity вивіска з ISR `revalidate: 60`), invoice —
+ * mutable payment-команда: `cache: 'no-store'` гарантує fresh fetch на кожен
+ * request. Stale-кеш ламає payment correctness (видалений рахунок ще видно,
+ * стара сума показується після редагування). CDN-relief, якщо знадобиться, —
+ * через ETag, не через time-based cache window.
  *
  * **Zod-parse на boundary** (Sprint 4 review fix): API JSON містить дати як
  * ISO-strings; `PublicInvoiceSchema` (`z.coerce.date()`) нормалізує `validUntil`
@@ -23,7 +27,11 @@ export async function loadPublicInvoiceView(
         );
     }
     const url = `${apiBase}/api/businesses/public/${encodeURIComponent(businessSlug)}/invoices/${encodeURIComponent(invoiceSlug)}`;
-    const res = await fetch(url, { next: { revalidate: 60 } });
+    // `cache: 'no-store'` — invoice mutable (Sprint 4 review fix). Stale-кеш
+    // ламає payment correctness: видалений рахунок ще видно клієнту, або
+    // показується стара сума після редагування. CDN-relief, якщо знадобиться,
+    // — через ETag, не через time-based ISR.
+    const res = await fetch(url, { cache: 'no-store' });
     if (res.status === 404) return null;
     if (!res.ok) {
         throw new Error(

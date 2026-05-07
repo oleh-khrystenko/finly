@@ -59,6 +59,10 @@ const VALIDATION_MESSAGES: Record<string, string> = {
     INVALID_AMOUNT_OVERFLOW: 'Сума занадто велика. Максимум 999 999 999.99 ₴',
     AMOUNT_LOCKED_REQUIRES_AMOUNT:
         'Заблокувати редагування суми можна лише при заданій сумі',
+    INVALID_AMOUNT_FORMAT:
+        'Введіть число (наприклад, 1500 або 1500,50)',
+    INVALID_AMOUNT_PRECISION: 'Не більше двох знаків після коми',
+    INVALID_AMOUNT_NEGATIVE: 'Сума не може бути від’ємною',
 
     // --- Slug бізнесу / інвойсу ---
     INVALID_SLUG_TOO_SHORT: 'Посилання занадто коротке',

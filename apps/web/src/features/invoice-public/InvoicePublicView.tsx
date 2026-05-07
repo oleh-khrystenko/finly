@@ -1,12 +1,10 @@
 'use client';
 
 import {
-    BANK_LABEL,
     BUSINESS_TYPE_LABEL,
     type BankCode,
     type BusinessType,
 } from '@finly/types';
-import { BANK_DISPLAY } from '@/shared/icons';
 import UiButton from '@/shared/ui/UiButton';
 import UiQrImage from '@/shared/ui/UiQrImage';
 import {
@@ -46,16 +44,22 @@ const DATE_LOCALE = 'uk-UA';
  *   1. Cabinet preview-toggle на `business/{slug}/invoice/{invoiceSlug}` (§4.6).
  *   2. Host-aware route `host-pay/{slug}/{invoiceSlug}` (§4.7).
  *
- * **Layout** — той самий 11-bank-grid + 2 NBU CTAs + 2 QR що Sprint 3
- * `PublicBusinessView`, плюс invoice-overlay:
+ * **Layout (Sprint 4 review fix)** — 2 NBU CTAs ("Відкрити в банку" / "Запасний
+ * варіант") + 2 QR. 11-bank-grid (як у Sprint 3 `PublicBusinessView`) свідомо
+ * прибраний до Sprint 5 розблокування per-bank deep-links: dead-grid із
+ * tooltip-only-hint-ом не давав робочого UX (на mobile tooltip invisible) і
+ * приховував primary route оплати. Sprint 5 поверне grid у активному вигляді
+ * як основний CTA.
+ *
+ * Над payment-section:
  *   - Заголовок з amount (`"Рахунок на 1 500,00 ₴"` або `"Рахунок на оплату"`
  *     якщо amount=null).
  *   - Sub-info блок: "Призначення: {purpose}" + "Дійсний до: {date}".
  *
  * **Expired-banner sanity-block** — якщо `validUntil < now`, заміщує весь
- * payment-flow (банки + кнопки + QR) попередженням "Термін рахунку минув".
- * Банк-додаток сам не valid-ate validUntil robustly, тож user-side block —
- * додатковий шар захисту.
+ * payment-flow (CTAs + QR) попередженням "Термін рахунку минув". Банк-додаток
+ * сам не valid-ate validUntil robustly, тож user-side block — додатковий шар
+ * захисту.
  */
 export default function InvoicePublicView({
     amount,
@@ -132,7 +136,6 @@ export default function InvoicePublicView({
                 </div>
             ) : (
                 <PaymentSection
-                    business={business}
                     nbuLinks={nbuLinks}
                     qrPrimary={qrPrimary}
                     qrLegacy={qrLegacy}
@@ -143,49 +146,30 @@ export default function InvoicePublicView({
 }
 
 function PaymentSection({
-    business,
     nbuLinks,
     qrPrimary,
     qrLegacy,
 }: {
-    business: { acceptedBanks: BankCode[] };
     nbuLinks: { primary: string; legacy: string };
     qrPrimary: string;
     qrLegacy: string;
 }) {
     return (
         <div className="space-y-6">
-            {/* 11 inactive bank tiles (Sprint 5 розблокує per-bank deep-links). */}
+            {/*
+             * Sprint 4 — 11-bank-grid НЕ показуємо до Sprint 5 розблокування
+             * per-bank deep-links (раніше тут був dead-grid із title="Незабаром"
+             * tooltip-ом, що на mobile invisible). Натомість єдиний universal
+             * NBU CTA + QR — обидва робочі шляхи. Sprint 5 поверне grid у
+             * активному вигляді як primary CTA.
+             */}
             <div className="space-y-3">
                 <h2 className="text-foreground text-center text-base font-semibold">
-                    Оберіть банк, з якого бажаєте оплатити
+                    Відкрити в банк-додатку
                 </h2>
-                <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
-                    {business.acceptedBanks.map((bank) => {
-                        const Icon = BANK_DISPLAY[bank];
-                        return (
-                            <div
-                                key={bank}
-                                aria-disabled
-                                className="border-border bg-muted/30 text-muted-foreground flex h-20 cursor-not-allowed flex-col items-center justify-center gap-1.5 rounded-md border px-2 text-center opacity-70 grayscale"
-                                title="Незабаром"
-                            >
-                                <div className="size-10">
-                                    <Icon />
-                                </div>
-                                <span className="text-[10px] leading-tight">
-                                    {BANK_LABEL[bank]}
-                                </span>
-                            </div>
-                        );
-                    })}
-                </div>
-            </div>
-
-            {/* 2 active CTAs — зовнішні платіжні `bank://`-схеми, тож
-                native <a> через UiButton as="a" (Next <Link> підставив би
-                client-side router, який не знає про non-http протоколи). */}
-            <div className="space-y-3">
+                {/* 2 active CTAs — зовнішні платіжні `bank://`-схеми, тож
+                    native <a> через UiButton as="a" (Next <Link> підставив би
+                    client-side router, який не знає про non-http протоколи). */}
                 <UiButton
                     as="a"
                     href={nbuLinks.primary}
@@ -194,7 +178,7 @@ function PaymentSection({
                     size="md"
                     className="w-full"
                 >
-                    Інший банк
+                    Відкрити в банку
                 </UiButton>
                 <UiButton
                     as="a"
@@ -204,7 +188,7 @@ function PaymentSection({
                     size="md"
                     className="w-full"
                 >
-                    Інший банк (запасний варіант)
+                    Запасний варіант
                 </UiButton>
                 <p className="text-muted-foreground text-center text-xs">
                     Якщо ваш банк не відкрився — спробуйте запасний варіант

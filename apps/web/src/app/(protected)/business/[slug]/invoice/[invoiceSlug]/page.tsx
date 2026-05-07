@@ -36,6 +36,46 @@ import {
 import { InvoicePublicView } from '@/features/invoice-public';
 import { formatKopecksAsHryvnia } from '@/features/invoices';
 
+/**
+ * Sprint 4 §4.6 — кабінет інвойсу `/business/{slug}/invoice/{invoiceSlug}`.
+ *
+ * **Layout повторює Sprint 3 cabinet-зону**: top toolbar (back-link, heading,
+ * preview-toggle, "Відкрити в новій вкладці") + 6 секцій-карток + Danger zone.
+ * Inline-edit per field через `UiEditableField` (commonший primitive у
+ * `shared/ui/`).
+ *
+ * **State-discriminator (review fix).** `data: { paramSlug, paramInvoiceSlug,
+ * business, invoice } | null` — обʼєднує business+invoice у monolithic snapshot
+ * з ключем-route-params. При client-side navigation між invoice-pages одного
+ * route shape (`/business/.../invoice/X` → `.../invoice/Y`):
+ *   - `data` лишається старим до завершення нового fetch — але він
+ *     **відкидається** render-ом, бо його `paramSlug`/`paramInvoiceSlug` ≠
+ *     поточних `params`. Користувач бачить spinner, не stale рахунок.
+ *   - `handlePatch`/`handleDelete` працюють з local-data (capture у closure)
+ *     — гарантовано мутують саме той рахунок, що ФОП бачив на екрані.
+ * Без цього discriminator-у можна було зберегти/видалити не той інвойс,
+ * якщо click трапився під час param-transition.
+ *
+ * **Preview-toggle (SP-2)** — той самий patern, що Sprint 3: prefetch public-
+ * view одразу при mount-i, instant-toggle "Кабінет / Перегляд як клієнт".
+ *
+ * **Delete з 5s Undo** — `scheduleInvoiceDeleteWithUndo`. Optimistic redirect
+ * на `/business/{slug}#invoices`, cancel-button у toast повертає на cabinet.
+ */
+
+interface LoadedData {
+    paramSlug: string;
+    paramInvoiceSlug: string;
+    business: BusinessWithInvoicesCount;
+    invoice: Invoice;
+}
+
+interface ErrorState {
+    paramSlug: string;
+    paramInvoiceSlug: string;
+    code: string;
+}
+
 type PublicViewState =
     | { kind: 'idle' }
     | {
@@ -46,75 +86,73 @@ type PublicViewState =
       }
     | { kind: 'failed'; businessSlug: string; invoiceSlug: string };
 
-/**
- * Sprint 4 §4.6 — кабінет інвойсу `/business/{slug}/invoice/{invoiceSlug}`.
- *
- * **Layout повторює Sprint 3 cabinet-зону**: top toolbar (back-link, heading,
- * preview-toggle, "Відкрити в новій вкладці") + 6 секцій-карток + Danger zone.
- * Inline-edit per field через `UiEditableField` (commonший primitive у
- * `shared/ui/`).
- *
- * **Preview-toggle (SP-2)** — той самий patern, що Sprint 3: prefetch public-
- * view одразу при mount-i, instant-toggle "Кабінет / Перегляд як клієнт".
- * `state.businessSlug + invoiceSlug` як discriminator-key — ловить stale-
- * state при швидкому переході між інвойсами.
- *
- * **Delete з 5s Undo** — `scheduleInvoiceDeleteWithUndo` (той самий patern,
- * що Sprint 3 для бізнесу). Optimistic redirect на `/business/{slug}#invoices`,
- * cancel-button у toast повертає на cabinet інвойсу.
- */
+function extractErrorCode(err: unknown): string {
+    if (err instanceof AxiosError) {
+        return (
+            (err.response?.data as { error?: { code?: string } } | undefined)
+                ?.error?.code ?? 'unknown'
+        );
+    }
+    return 'unknown';
+}
+
 export default function InvoiceCabinetPage() {
     const router = useRouter();
     const params = useParams<{ slug: string; invoiceSlug: string }>();
     const openDeleteConfirm = useDeleteInvoiceConfirmStore((s) => s.open);
 
-    const [business, setBusiness] = useState<
-        BusinessWithInvoicesCount | null
-    >(null);
-    const [invoice, setInvoice] = useState<Invoice | null>(null);
-    const [error, setError] = useState<{ code: string } | null>(null);
+    const [data, setData] = useState<LoadedData | null>(null);
+    const [error, setError] = useState<ErrorState | null>(null);
     const [previewMode, setPreviewMode] = useState(false);
     const [publicView, setPublicView] = useState<PublicViewState>({
         kind: 'idle',
     });
 
+    const paramSlug = params.slug;
+    const paramInvoiceSlug = params.invoiceSlug;
+
     // Parallel fetch business + invoice. State-mutation у async-callback (React 19
     // invariant — той самий, що Sprint 3 cabinet).
     useEffect(() => {
-        if (!params.slug || !params.invoiceSlug) return;
+        if (!paramSlug || !paramInvoiceSlug) return;
         let cancelled = false;
         Promise.all([
-            getBusinessBySlug(params.slug),
-            getInvoiceBySlug(params.slug, params.invoiceSlug),
+            getBusinessBySlug(paramSlug),
+            getInvoiceBySlug(paramSlug, paramInvoiceSlug),
         ])
             .then(([b, inv]) => {
                 if (cancelled) return;
-                setBusiness(b);
-                setInvoice(inv);
+                setData({
+                    paramSlug,
+                    paramInvoiceSlug,
+                    business: b,
+                    invoice: inv,
+                });
                 setError(null);
             })
             .catch((err: unknown) => {
                 if (cancelled) return;
-                const code =
-                    err instanceof AxiosError
-                        ? ((
-                              err.response?.data as
-                                  | { error?: { code?: string } }
-                                  | undefined
-                          )?.error?.code ?? 'unknown')
-                        : 'unknown';
-                setError({ code });
+                setError({
+                    paramSlug,
+                    paramInvoiceSlug,
+                    code: extractErrorCode(err),
+                });
             });
         return () => {
             cancelled = true;
         };
-    }, [params.slug, params.invoiceSlug]);
+    }, [paramSlug, paramInvoiceSlug]);
 
-    // Prefetch public-view для preview-toggle.
+    // Prefetch public-view для preview-toggle. Тригериться лише після того, як
+    // `data` стає current-for-params — інакше pre-fetch стартував би на
+    // stale-біз/інвойс після param-change.
+    const isDataCurrent =
+        data?.paramSlug === paramSlug &&
+        data?.paramInvoiceSlug === paramInvoiceSlug;
     useEffect(() => {
-        if (!business || !invoice) return;
-        const businessSlug = business.slug;
-        const invoiceSlug = invoice.slug;
+        if (!data || !isDataCurrent) return;
+        const businessSlug = data.business.slug;
+        const invoiceSlug = data.invoice.slug;
         let cancelled = false;
         getPublicInvoiceView(businessSlug, invoiceSlug)
             .then((view) => {
@@ -139,38 +177,78 @@ export default function InvoiceCabinetPage() {
         return () => {
             cancelled = true;
         };
-    }, [business, invoice]);
+    }, [data, isDataCurrent]);
 
     const handlePatch = useCallback(
-        async (patch: UpdateInvoiceRequest) => {
-            if (!business || !invoice) return;
+        async (
+            patch: UpdateInvoiceRequest,
+            // Capture identifiers через closure — мутуємо саме ту invoice, що
+            // користувач бачив на екрані під час click-у. Якщо параметри
+            // route змінилися між render-ом і submit-ом, нові callback-и
+            // отримають новий closure після re-render-у.
+            captured: { businessSlug: string; invoiceSlug: string },
+        ) => {
             try {
                 const updated = await updateInvoice(
-                    business.slug,
-                    invoice.slug,
+                    captured.businessSlug,
+                    captured.invoiceSlug,
                     patch,
                 );
-                setInvoice(updated);
+                // Apply update тільки якщо state ще відповідає тому інвойсу,
+                // що ми patch-нули. Якщо ФОП за час fetch-у перейшов на інший
+                // — silently skip setData (інвойс уже не на екрані).
+                setData((prev) =>
+                    prev &&
+                    prev.business.slug === captured.businessSlug &&
+                    prev.invoice.slug === captured.invoiceSlug
+                        ? { ...prev, invoice: updated }
+                        : prev,
+                );
                 toast.success('Зміни збережено');
             } catch (err: unknown) {
-                const code =
-                    err instanceof AxiosError
-                        ? ((
-                              err.response?.data as
-                                  | { error?: { code?: string } }
-                                  | undefined
-                          )?.error?.code ?? 'unknown')
-                        : 'unknown';
-                const msg = getApiMessage(code, 'invoices');
+                const msg = getApiMessage(extractErrorCode(err), 'invoices');
                 toast.error(msg);
                 throw new Error(msg);
             }
         },
-        [business, invoice],
+        [],
     );
 
-    const handleDelete = useCallback(() => {
-        if (!business || !invoice) return;
+    if (!isDataCurrent && !error) {
+        return (
+            <UiPageContainer className="py-16">
+                <div className="flex justify-center">
+                    <UiSpinner size="md" />
+                </div>
+            </UiPageContainer>
+        );
+    }
+
+    if (error && error.paramSlug === paramSlug &&
+        error.paramInvoiceSlug === paramInvoiceSlug) {
+        return <ErrorPage code={error.code} />;
+    }
+    if (!data || !isDataCurrent) {
+        return (
+            <UiPageContainer className="py-16">
+                <div className="flex justify-center">
+                    <UiSpinner size="md" />
+                </div>
+            </UiPageContainer>
+        );
+    }
+
+    const { business, invoice } = data;
+    const formattedAmount = formatKopecksAsHryvnia(invoice.amount);
+    const publicUrl = `${ENV.NEXT_PUBLIC_PAY_PUBLIC_URL.replace(/\/$/, '')}/${business.slug}/${invoice.slug}`;
+
+    const onSave = (patch: UpdateInvoiceRequest) =>
+        handlePatch(patch, {
+            businessSlug: business.slug,
+            invoiceSlug: invoice.slug,
+        });
+
+    const handleDelete = () => {
         const businessSlug = business.slug;
         const invoiceSlug = invoice.slug;
         // Sprint 4 §4.6 — той самий 2-step Sprint 3 patern: confirm-modal →
@@ -188,23 +266,7 @@ export default function InvoiceCabinetPage() {
                     ),
             });
         });
-    }, [business, invoice, openDeleteConfirm, router]);
-
-    if ((business === null || invoice === null) && !error) {
-        return (
-            <UiPageContainer className="py-16">
-                <div className="flex justify-center">
-                    <UiSpinner size="md" />
-                </div>
-            </UiPageContainer>
-        );
-    }
-
-    if (error) return <ErrorPage code={error.code} />;
-    if (!business || !invoice) return null;
-
-    const formattedAmount = formatKopecksAsHryvnia(invoice.amount);
-    const publicUrl = `${ENV.NEXT_PUBLIC_PAY_PUBLIC_URL.replace(/\/$/, '')}/${business.slug}/${invoice.slug}`;
+    };
 
     return (
         <UiPageContainer className="space-y-6 py-8 md:py-12">
@@ -280,16 +342,13 @@ export default function InvoiceCabinetPage() {
                 />
             ) : (
                 <div className="space-y-4">
-                    <AmountSection invoice={invoice} onSave={handlePatch} />
+                    <AmountSection invoice={invoice} onSave={onSave} />
                     <PurposeSection
                         invoice={invoice}
                         business={business}
-                        onSave={handlePatch}
+                        onSave={onSave}
                     />
-                    <ValidUntilSection
-                        invoice={invoice}
-                        onSave={handlePatch}
-                    />
+                    <ValidUntilSection invoice={invoice} onSave={onSave} />
                     <SlugSection
                         invoice={invoice}
                         businessSlug={business.slug}

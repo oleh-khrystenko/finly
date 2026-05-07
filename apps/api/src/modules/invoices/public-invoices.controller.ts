@@ -33,7 +33,9 @@ import type { InvoiceDocument } from './schemas/invoice.schema';
  *
  * **Окремий controller від `InvoicesController` (cabinet).** Розділення зон
  * by design (той самий патерн, що Sprint 3 `PublicBusinessesController`):
- *  - public — без guard-ів, без cookie / Authorization, з агресивним CDN-cache.
+ *  - public — без guard-ів, без cookie / Authorization. На відміну від
+ *    business-public, тут **без CDN-cache** (`Cache-Control: no-store`,
+ *    обґрунтування нижче) — invoice mutable payment data.
  *  - cabinet — за `JwtActiveGuard` + `BusinessAccessGuard`, без CDN-cache.
  *  Спільні primitives (`BusinessesService.getBySlug` case-insensitive,
  *  `InvoicesService.getBySlug` case-sensitive) — single read-path для обох
@@ -62,10 +64,16 @@ import type { InvoiceDocument } from './schemas/invoice.schema';
  * не-залогіненими). Глобальний `OnboardingInterceptor` пропустимо явно через
  * decorator.
  *
- * **`Cache-Control: public, max-age=3600, stale-while-revalidate=86400`** —
- * безпечно тут (немає `Authorization`/cookie; shared cache не отримає response
- * специфічний для user-а). Кеш — інвалідовується через 1 годину; SWR-вікно
- * 24 години для CDN-graceful-revalidation.
+ * **`Cache-Control: no-store`** — invoice — це mutable payment command:
+ * `amount`, `paymentPurpose`, `validUntil`, lockMask і delete-state можуть
+ * змінитися ФОПом у будь-який момент. Aggressive shared-cache (`public,
+ * max-age=3600, SWR=86400`) у Sprint 4 створював correctness-ризик: клієнт
+ * по збереженому посиланню міг отримати застарілу суму/QR після редагування
+ * або взагалі бачити рахунок після видалення. Для payment flow це
+ * неприйнятно. CDN-relief, якщо знадобиться у майбутньому, реалізуємо через
+ * ETag-валідацію або cache-busting query (`?v={updatedAt}`), не через
+ * time-based stale window. Business endpoints (vanity вивіска, immutable-ish)
+ * залишаються з агресивним кешем — у `PublicBusinessesController`.
  */
 @Controller('businesses/public/:slug/invoices')
 export class PublicInvoicesController {
@@ -77,10 +85,7 @@ export class PublicInvoicesController {
 
     @SkipOnboarding()
     @Get(':invoiceSlug')
-    @Header(
-        'Cache-Control',
-        'public, max-age=3600, stale-while-revalidate=86400'
-    )
+    @Header('Cache-Control', 'no-store')
     async getPublic(
         @Param('slug') slug: string,
         @Param('invoiceSlug') invoiceSlug: string
@@ -134,10 +139,7 @@ export class PublicInvoicesController {
     @SkipOnboarding()
     @Get(':invoiceSlug/qr/business.png')
     @Header('Content-Type', 'image/png')
-    @Header(
-        'Cache-Control',
-        'public, max-age=3600, stale-while-revalidate=86400'
-    )
+    @Header('Cache-Control', 'no-store')
     async getBusinessQr(
         @Param('slug') slug: string,
         @Param('invoiceSlug') invoiceSlug: string,
@@ -161,10 +163,7 @@ export class PublicInvoicesController {
     @SkipOnboarding()
     @Get(':invoiceSlug/qr/nbu.png')
     @Header('Content-Type', 'image/png')
-    @Header(
-        'Cache-Control',
-        'public, max-age=3600, stale-while-revalidate=86400'
-    )
+    @Header('Cache-Control', 'no-store')
     async getNbuQr(
         @Param('slug') slug: string,
         @Param('invoiceSlug') invoiceSlug: string,
