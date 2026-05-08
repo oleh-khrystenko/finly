@@ -151,7 +151,7 @@ describe('InvoicesService (Sprint 4 §4.2)', () => {
                 // Sprint 4 review fix — generator-API тепер 2-arg (input,
                 // session). У unit-spec session — mock-object без identity-
                 // вимог; перевіряємо лише, що передається не-null/undefined.
-                expect.anything(),
+                expect.anything()
             );
         });
 
@@ -440,7 +440,9 @@ describe('InvoicesService (Sprint 4 §4.2)', () => {
                 // Pipeline-update (array, not plain doc) — `$cond` керує
                 // snapshot mirror-ом без partial-snapshot для legacy (null).
                 expect(Array.isArray(updateArg)).toBe(true);
-                const setStage = (updateArg as Array<{ $set: Record<string, unknown> }>)[0]!.$set;
+                const setStage = (
+                    updateArg as Array<{ $set: Record<string, unknown> }>
+                )[0].$set;
                 expect(setStage.paymentPurpose).toBe('Updated');
                 expect(setStage.payeeSnapshot).toEqual({
                     $cond: [
@@ -466,7 +468,9 @@ describe('InvoicesService (Sprint 4 §4.2)', () => {
                 });
                 const updateArg =
                     invoiceModel.findOneAndUpdate.mock.calls[0]![1];
-                const setStage = (updateArg as Array<{ $set: Record<string, unknown> }>)[0]!.$set;
+                const setStage = (
+                    updateArg as Array<{ $set: Record<string, unknown> }>
+                )[0].$set;
                 // Top-level зберігає null (user-input semantics).
                 expect(setStage.paymentPurpose).toBeNull();
                 // Snapshot mirror має RESOLVED-string (effectiveInvoicePurpose
@@ -479,8 +483,7 @@ describe('InvoicesService (Sprint 4 §4.2)', () => {
                             $mergeObjects: [
                                 '$payeeSnapshot',
                                 {
-                                    paymentPurpose:
-                                        'Default biz purpose',
+                                    paymentPurpose: 'Default biz purpose',
                                 },
                             ],
                         },
@@ -498,7 +501,9 @@ describe('InvoicesService (Sprint 4 §4.2)', () => {
                 });
                 const updateArg =
                     invoiceModel.findOneAndUpdate.mock.calls[0]![1];
-                const setStage = (updateArg as Array<{ $set: Record<string, unknown> }>)[0]!.$set;
+                const setStage = (
+                    updateArg as Array<{ $set: Record<string, unknown> }>
+                )[0].$set;
                 expect(setStage.amount).toBe(200000);
                 expect(setStage).not.toHaveProperty('payeeSnapshot');
                 expect(setStage).not.toHaveProperty('paymentPurpose');

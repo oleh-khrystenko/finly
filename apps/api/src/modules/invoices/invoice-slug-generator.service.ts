@@ -370,7 +370,7 @@ export class InvoiceSlugGeneratorService {
             [{ businessId, scope, last: legacyMax + 1 }],
             { session: session ?? undefined }
         );
-        return created[0]!.last;
+        return created[0].last;
     }
 
     /**

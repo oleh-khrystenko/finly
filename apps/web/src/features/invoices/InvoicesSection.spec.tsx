@@ -24,6 +24,7 @@ describe('InvoicesSection (Sprint 4 §4.4)', () => {
         const { container } = render(
             <InvoicesSection
                 businessSlug="IvanEnko"
+                businessPaymentPurposeTemplate="Оплата послуг ФОП"
                 payPublicOrigin={PAY_ORIGIN}
             />,
         );
@@ -41,6 +42,7 @@ describe('InvoicesSection (Sprint 4 §4.4)', () => {
         render(
             <InvoicesSection
                 businessSlug="IvanEnko"
+                businessPaymentPurposeTemplate="Оплата послуг ФОП"
                 payPublicOrigin={PAY_ORIGIN}
             />,
         );
@@ -86,6 +88,7 @@ describe('InvoicesSection (Sprint 4 §4.4)', () => {
         render(
             <InvoicesSection
                 businessSlug="IvanEnko"
+                businessPaymentPurposeTemplate="Оплата послуг ФОП"
                 payPublicOrigin={PAY_ORIGIN}
             />,
         );
@@ -110,6 +113,7 @@ describe('InvoicesSection (Sprint 4 §4.4)', () => {
         const { container } = render(
             <InvoicesSection
                 businessSlug="IvanEnko"
+                businessPaymentPurposeTemplate="Оплата послуг ФОП"
                 payPublicOrigin={PAY_ORIGIN}
             />,
         );
@@ -144,6 +148,7 @@ describe('InvoicesSection (Sprint 4 §4.4)', () => {
         render(
             <InvoicesSection
                 businessSlug="IvanEnko"
+                businessPaymentPurposeTemplate="Оплата послуг ФОП"
                 payPublicOrigin={PAY_ORIGIN}
             />,
         );

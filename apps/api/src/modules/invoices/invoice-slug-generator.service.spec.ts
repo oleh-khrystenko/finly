@@ -81,7 +81,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
      * у standalone Mongo (без replica-set / TX-support).
      */
     const gen = (
-        input: GenerateInvoiceSlugInput,
+        input: GenerateInvoiceSlugInput
     ): ReturnType<typeof service.generateInvoiceSlug> =>
         service.generateInvoiceSlug(input, null);
 

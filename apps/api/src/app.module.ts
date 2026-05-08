@@ -26,7 +26,20 @@ import { AiModule } from './modules/ai/ai.module';
             isGlobal: true,
         }),
         ThrottlerModule.forRoot({
-            throttlers: [{ ttl: 60000, limit: 60 }],
+            // Named throttlers: дефолтний — для cabinet/auth/AI/storage/payments
+            // (60 req/min на IP як guard від abuse). Окрема `public-payment`-
+            // policy — для public-payment endpoints (`PublicBusinessesController`,
+            // `PublicInvoicesController`): за NAT/CDN/Next-server-proxy багато
+            // різних клієнтів виглядають для API як один IP, і дефолтний 60/min
+            // блокує реальні платежі (сторінка робить >=3 виклики: JSON view +
+            // 2 QR PNG; миттєвий шквал 20 клієнтів вичерпує budget). Захист
+            // зберігається — limit просто вищий під специфіку зони. Apply через
+            // `@Throttle({ 'public-payment': ... })` + `@SkipThrottle({ default:
+            // true })` на public-контролерах.
+            throttlers: [
+                { name: 'default', ttl: 60000, limit: 60 },
+                { name: 'public-payment', ttl: 60000, limit: 600 },
+            ],
         }),
         ScheduleModule.forRoot(),
         MongooseModule.forRoot(ENV.MONGODB_URI),

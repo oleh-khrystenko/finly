@@ -343,10 +343,7 @@ export class BusinessesService {
                 // (нешкідливо для коректності, бо _id unique і не reuse-ається,
                 // але засмічує колекцію). Атомарно у тій самій TX-сесії —
                 // якщо TX abort-ить, counters лишаються разом з invoices.
-                await this.counterModel.deleteMany(
-                    { businessId },
-                    { session }
-                );
+                await this.counterModel.deleteMany({ businessId }, { session });
                 await this.businessModel.deleteOne(
                     { _id: businessId },
                     { session }

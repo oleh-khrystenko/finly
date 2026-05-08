@@ -13,6 +13,14 @@ import InvoiceCard from './InvoiceCard';
 
 interface Props {
     businessSlug: string;
+    /**
+     * Template з batch-fetched `Business` на parent-page. Lifted-down до
+     * `InvoiceCard` для inheritance fallback (`paymentPurpose ?? template`) —
+     * mirror backend-резолвера `effectiveInvoicePurpose`. Section не робить
+     * власного fetch business-document-у; template приходить з cabinet-page,
+     * де `Business` вже завантажений для решти секцій.
+     */
+    businessPaymentPurposeTemplate: string;
     /** Public-payment-page origin для побудови copy-link URL у InvoiceCard. */
     payPublicOrigin: string;
 }
@@ -78,6 +86,7 @@ function extractMessage(err: unknown): string {
 
 export default function InvoicesSection({
     businessSlug,
+    businessPaymentPurposeTemplate,
     payPublicOrigin,
 }: Props) {
     const [data, setData] = useState<SectionData | null>(null);
@@ -218,6 +227,9 @@ export default function InvoicesSection({
                                 key={inv.id}
                                 invoice={inv}
                                 businessSlug={businessSlug}
+                                businessPaymentPurposeTemplate={
+                                    businessPaymentPurposeTemplate
+                                }
                                 payPublicOrigin={payPublicOrigin}
                             />
                         ))}

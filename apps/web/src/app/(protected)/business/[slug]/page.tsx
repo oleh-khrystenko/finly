@@ -264,6 +264,9 @@ export default function BusinessSlugPage() {
                     />
                     <InvoicesSection
                         businessSlug={business.slug}
+                        businessPaymentPurposeTemplate={
+                            business.paymentPurposeTemplate
+                        }
                         payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
                     />
 

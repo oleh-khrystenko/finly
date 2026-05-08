@@ -40,9 +40,8 @@ export class InvoicePayeeSnapshot {
     paymentPurpose!: string;
 }
 
-const InvoicePayeeSnapshotSchema = SchemaFactory.createForClass(
-    InvoicePayeeSnapshot
-);
+const InvoicePayeeSnapshotSchema =
+    SchemaFactory.createForClass(InvoicePayeeSnapshot);
 
 /**
  * Інвойс — одноразова платіжка під конкретний бізнес ("Модель А", див.

@@ -9,6 +9,7 @@ import {
     Query,
     Res,
 } from '@nestjs/common';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { Response } from 'express';
 import {
     NBU_HOST_LEGACY,
@@ -77,6 +78,17 @@ import type { InvoiceDocument } from './schemas/invoice.schema';
  * time-based stale window. Business endpoints (vanity вивіска, immutable-ish)
  * залишаються з агресивним кешем — у `PublicBusinessesController`.
  */
+/**
+ * **Throttle policy.** Public payment endpoints живуть під окремим named
+ * throttler-ом `'public-payment'` (`app.module.ts`): public invoice page робить
+ * 3 виклики на render (JSON view + 2 QR PNG), а CDN-cache тут свідомо
+ * вимкнений (`Cache-Control: no-store`, mutable payment data) — тож шквал
+ * клієнтів через NAT/proxy швидко перевершив би дефолтний 60/min на IP.
+ * `@SkipThrottle({ default: true })` вимикає default; `@Throttle({
+ * 'public-payment': ... })` ставить вищу policy. Захист зберігається.
+ */
+@SkipThrottle({ default: true })
+@Throttle({ 'public-payment': { limit: 600, ttl: 60000 } })
 @Controller('businesses/public/:slug/invoices')
 export class PublicInvoicesController {
     constructor(

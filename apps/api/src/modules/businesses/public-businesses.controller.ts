@@ -8,6 +8,7 @@ import {
     Query,
     Res,
 } from '@nestjs/common';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { Response } from 'express';
 import {
     NBU_HOST_LEGACY,
@@ -60,6 +61,16 @@ import { buildPayloadInputFromBusiness } from './payload-mapper';
  * банк-додаток; QR PNG → банк-сканер). JSON-shape не дає raw IBAN/ІПН для
  * довільного автоматизованого збору без декодування Base64URL за NBU specs.
  */
+/**
+ * **Throttle policy.** Public payment endpoints живуть під окремим named
+ * throttler-ом `'public-payment'` (`app.module.ts`): NAT/CDN/Next-server-proxy
+ * згортають багато реальних платників в один API-IP, і дефолтний 60/min
+ * блокував би оплату. `@SkipThrottle({ default: true })` явно вимикає default,
+ * `@Throttle({ 'public-payment': ... })` ставить вищу policy. Захист
+ * зберігається — просто з ширшим budget-ом.
+ */
+@SkipThrottle({ default: true })
+@Throttle({ 'public-payment': { limit: 600, ttl: 60000 } })
 @Controller('businesses/public')
 export class PublicBusinessesController {
     constructor(
