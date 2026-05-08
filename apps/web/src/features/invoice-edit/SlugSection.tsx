@@ -44,7 +44,7 @@ export default function SlugSection({
                     <p className="text-muted-foreground text-xs font-medium">
                         Slug рахунку
                     </p>
-                    <p className="text-foreground mt-1 font-mono text-sm">
+                    <p className="text-foreground mt-1 font-mono text-sm break-all">
                         {invoice.slug}
                     </p>
                     <p className="text-muted-foreground mt-0.5 text-xs">

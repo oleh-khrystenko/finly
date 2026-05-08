@@ -635,7 +635,7 @@ export default function CreateInvoiceForm({ business }: Props) {
                                     <p className="text-muted-foreground text-xs">
                                         Сервер додасть унікальний хвіст
                                         автоматично:{' '}
-                                        <span className="font-mono">
+                                        <span className="font-mono break-all">
                                             {humanPart || 'ваш-варіант'}
                                             -aB3xQ9k7
                                         </span>{' '}

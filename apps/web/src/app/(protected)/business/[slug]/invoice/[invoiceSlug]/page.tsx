@@ -76,15 +76,30 @@ interface ErrorState {
     code: string;
 }
 
+/**
+ * Preview-кеш ключується по `(businessSlug, invoiceSlug, updatedAtIso)`. Slug
+ * незмінний після створення (Sprint 4 §"НЕ-скоуп"), тож без `updatedAtIso`
+ * patch-успіх не інвалідовував би state і preview-панель показувала б stale
+ * amount/purpose/validUntil між моментом success-toast-у і завершенням
+ * наступного fetch-у. `updatedAt` міняється на кожен successful PATCH —
+ * version-key, який автоматично змушує `InvoicePreviewPanel` рендерити
+ * spinner поки live-view не дотягнеться.
+ */
 type PublicViewState =
     | { kind: 'idle' }
     | {
           kind: 'loaded';
           businessSlug: string;
           invoiceSlug: string;
+          updatedAtIso: string;
           view: PublicInvoiceView;
       }
-    | { kind: 'failed'; businessSlug: string; invoiceSlug: string };
+    | {
+          kind: 'failed';
+          businessSlug: string;
+          invoiceSlug: string;
+          updatedAtIso: string;
+      };
 
 function extractErrorCode(err: unknown): string {
     if (err instanceof AxiosError) {
@@ -145,7 +160,8 @@ export default function InvoiceCabinetPage() {
 
     // Prefetch public-view для preview-toggle. Тригериться лише після того, як
     // `data` стає current-for-params — інакше pre-fetch стартував би на
-    // stale-біз/інвойс після param-change.
+    // stale-біз/інвойс після param-change. Effect re-runs також після кожного
+    // successful PATCH (нова `updatedAt` → нове референс-значення `data`).
     const isDataCurrent =
         data?.paramSlug === paramSlug &&
         data?.paramInvoiceSlug === paramInvoiceSlug;
@@ -153,6 +169,7 @@ export default function InvoiceCabinetPage() {
         if (!data || !isDataCurrent) return;
         const businessSlug = data.business.slug;
         const invoiceSlug = data.invoice.slug;
+        const updatedAtIso = data.invoice.updatedAt.toISOString();
         let cancelled = false;
         getPublicInvoiceView(businessSlug, invoiceSlug)
             .then((view) => {
@@ -161,6 +178,7 @@ export default function InvoiceCabinetPage() {
                         kind: 'loaded',
                         businessSlug,
                         invoiceSlug,
+                        updatedAtIso,
                         view,
                     });
                 }
@@ -171,6 +189,7 @@ export default function InvoiceCabinetPage() {
                         kind: 'failed',
                         businessSlug,
                         invoiceSlug,
+                        updatedAtIso,
                     });
                 }
             });
@@ -291,9 +310,19 @@ export default function InvoiceCabinetPage() {
                      * необов'язкова (signage-mode: amount=null → опускаємо
                      * другий сегмент).
                      */}
-                    <h1 className="text-foreground text-2xl font-bold tracking-tight md:text-3xl">
+                    {/*
+                     * `min-w-0` потрібно як flex-item-у (parent — flex-wrap):
+                     * без нього h1.min-content-width = довжина mono-slug-у і
+                     * h1 фактично не shrink-ається < 320px. `break-all` на
+                     * span дозволяє mono-slug-у переноситися мід-символьно
+                     * (slug — технічний рядок, без природних word-boundaries
+                     * між human-частиною й 8-char tail).
+                     */}
+                    <h1 className="text-foreground min-w-0 text-2xl font-bold tracking-tight md:text-3xl">
                         Рахунок{' '}
-                        <span className="font-mono">№{invoice.slug}</span>
+                        <span className="font-mono break-all">
+                            №{invoice.slug}
+                        </span>
                         {formattedAmount && (
                             <>
                                 {' '}
@@ -339,6 +368,7 @@ export default function InvoiceCabinetPage() {
                     state={publicView}
                     expectedBusinessSlug={business.slug}
                     expectedInvoiceSlug={invoice.slug}
+                    expectedUpdatedAtIso={invoice.updatedAt.toISOString()}
                 />
             ) : (
                 <div className="space-y-4">
@@ -386,15 +416,18 @@ function InvoicePreviewPanel({
     state,
     expectedBusinessSlug,
     expectedInvoiceSlug,
+    expectedUpdatedAtIso,
 }: {
     state: PublicViewState;
     expectedBusinessSlug: string;
     expectedInvoiceSlug: string;
+    expectedUpdatedAtIso: string;
 }) {
     const isCurrent =
         state.kind !== 'idle' &&
         state.businessSlug === expectedBusinessSlug &&
-        state.invoiceSlug === expectedInvoiceSlug;
+        state.invoiceSlug === expectedInvoiceSlug &&
+        state.updatedAtIso === expectedUpdatedAtIso;
 
     return (
         <div className="border-border bg-background rounded-xl border">
