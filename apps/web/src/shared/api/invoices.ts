@@ -1,4 +1,4 @@
-import { apiClient } from './client';
+import { apiClient, publicFetchJson } from './client';
 import {
     InvoiceSchema,
     PublicInvoiceSchema,
@@ -100,14 +100,27 @@ export async function deleteInvoice(
 
 /**
  * Sprint 4 §4.3 — public-зона view для cabinet preview-toggle (Sprint 4 §4.6).
- * Без auth, без cookies; whitelist 7 полів + nbuLinks.
+ *
+ * **`publicFetchJson` (review fix), не cabinet `apiClient`.** Контракт
+ * endpoint-а: `Cache-Control: no-store` (Sprint 4 review — invoice mutable
+ * payment data, aggressive shared cache створював би correctness-ризик —
+ * див. `public-invoices.controller.ts`). Тобто кеш-rationale тут не
+ * актуальний; реальна причина окремого client-а — **public/cabinet
+ * isolation** (§3.9): cabinet apiClient шле `Authorization: Bearer ...` +
+ * cookies, а public hop має бути identical для anonymous і authed user-а
+ * (інакше preview-toggle і реальний render клієнта розходяться, плюс
+ * session-identifiers leak-аються у public контур).
+ *
+ * Native fetch + `credentials: 'omit'` — єдиний спосіб справді не
+ * надіслати cookies на same-origin /api (axios `withCredentials: false` для
+ * same-origin не вирізає cookies — XHR-обмеження, див. `client.ts`).
  */
 export async function getPublicInvoiceView(
     businessSlug: string,
     invoiceSlug: string,
 ): Promise<PublicInvoiceView> {
-    const { data } = await apiClient.get<{ data: unknown }>(
+    const json = await publicFetchJson<{ data: unknown }>(
         `/businesses/public/${encodeURIComponent(businessSlug)}/invoices/${encodeURIComponent(invoiceSlug)}`,
     );
-    return PublicInvoiceSchema.parse(data.data);
+    return PublicInvoiceSchema.parse(json.data);
 }

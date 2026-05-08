@@ -37,6 +37,19 @@ interface Props {
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
+    // Defense-in-depth host-check (review fix) — той самий patern, що
+    // page-handler нижче. Без guard-а тут `generateMetadata` обходить host-
+    // isolation на metadata-stage: cabinet host, що випадково потрапив у
+    // Next.js route-resolver, fetch-ив би public-business-view і формував
+    // би metadata по чужому контуру. Page handler потім робить 404, але
+    // metadata-fetch уже стався.
+    const headerList = await headers();
+    if (!isPublicHost(headerList.get('host'))) {
+        return {
+            title: 'Сторінку не знайдено — Finly',
+            robots: { index: false, follow: false },
+        };
+    }
     const { slug } = await params;
     const view = await loadPublicView(slug);
     if (!view) {

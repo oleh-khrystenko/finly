@@ -42,6 +42,21 @@ interface Props {
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
+    // Defense-in-depth host-check (review fix). Page handler нижче робить
+    // ту саму перевірку перед fetch, але `generateMetadata` — окрема
+    // SSR-stage функція з власним call-graph-ом. Без host-guard-а тут
+    // cabinet host (`finly.com.ua/host-pay/...`), що випадково потрапив
+    // у Next.js route-resolver через middleware-bypass / hot-reload race,
+    // тихо викликав би `loadPublicInvoiceView` і fetch-ив би invoice-data
+    // на cabinet-зоні. Page handler потім зробив би 404, але data leak у
+    // metadata-stage уже стався.
+    const headerList = await headers();
+    if (!isPublicHost(headerList.get('host'))) {
+        return {
+            title: 'Сторінку не знайдено — Finly',
+            robots: { index: false, follow: false },
+        };
+    }
     const { slug, invoiceSlug } = await params;
     const view = await loadPublicInvoiceView(slug, invoiceSlug);
     if (!view) {

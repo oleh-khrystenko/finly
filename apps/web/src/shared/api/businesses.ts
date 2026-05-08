@@ -1,4 +1,4 @@
-import { apiClient } from './client';
+import { apiClient, publicFetchJson } from './client';
 import type {
     Business,
     BusinessWithInvoicesCount,
@@ -60,16 +60,28 @@ export async function deleteBusiness(slug: string): Promise<void> {
 }
 
 /**
- * Sprint 3 §3.3 + §3.8 (preview-toggle) — public-зона view. Без auth, без
- * cookies; повертає 6 whitelist-полів + nbuLinks. Cabinet preview-mode
- * викликає це для рендеру `<PublicBusinessView>` без leak реквізитів через
- * cabinet-endpoint.
+ * Sprint 3 §3.3 + §3.8 (preview-toggle) — public-зона view. Cabinet preview-
+ * mode викликає це для рендеру `<PublicBusinessView>` без leak реквізитів
+ * через cabinet-endpoint.
+ *
+ * **`publicFetchJson` (review fix), не cabinet `apiClient`.** Endpoint має
+ * `Cache-Control: public, max-age=3600, SWR=86400`, тож тут на відміну від
+ * invoice-варіанту обидва rationale діють:
+ *   1. **CDN-cache contract** — cabinet apiClient шле `Authorization` +
+ *      cookies; CDN автоматично знімає shared-cache eligibility з authed
+ *      requests, навіть якщо API відповідає `Cache-Control: public`.
+ *   2. **Public/cabinet isolation §3.9** — public response identical для
+ *      anonymous і authed user-а; жодного session-identifier-у у public hop.
+ *
+ * Same-origin /api у prod-like setup-i: axios `withCredentials: false`
+ * не блокує cookies (XHR-обмеження). Native fetch з `credentials: 'omit'`
+ * — єдиний реальний механізм. Деталі — `client.ts`.
  */
 export async function getPublicBusinessView(
     slug: string,
 ): Promise<PublicBusinessView> {
-    const { data } = await apiClient.get<{ data: PublicBusinessView }>(
+    const json = await publicFetchJson<{ data: PublicBusinessView }>(
         `/businesses/public/${encodeURIComponent(slug)}`,
     );
-    return data.data;
+    return json.data;
 }
