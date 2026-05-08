@@ -1,7 +1,10 @@
 import { z } from 'zod';
 
 import { MVP_BANKS } from '../constants/banks';
-import { BUSINESS_TYPES } from '../enums/business-type';
+import {
+    BUSINESS_TYPES,
+    requiresTaxation,
+} from '../enums/business-type';
 import {
     TAXATION_SYSTEMS,
     isVatAllowedTaxationSystem,
@@ -9,7 +12,7 @@ import {
 import { effectiveLimit, isWithinByteLimit } from '../qr/limits';
 import { objectIdSchema } from '../validation/common';
 import { ibanZod } from '../validation/iban';
-import { individualTaxIdZod } from '../validation/tax-id';
+import { isTaxIdValidForType, payerTaxIdZod } from '../validation/tax-id';
 import { slugPresetSchema } from './invoice';
 
 /**
@@ -29,9 +32,16 @@ import { slugPresetSchema } from './invoice';
  * **Coupled-інваріанти (refine-only):**
  * 1. `ownerId === null ⇒ managers.length ≥ 1` — ownerless-бізнес без керівників
  *    — невалідний стан БД (нема як до нього достукатись).
- * 2. `isVatPayer === true ⇒ taxationSystem ∈ VAT_ALLOWED_TAXATION_SYSTEMS`
+ * 2. `requiresTaxation(type) ⇔ (taxationSystem !== null && isVatPayer !== null)`
+ *    — Sprint 7 §SP-3 інваріант iff. `fop`/`tov` мусять мати taxation-поля;
+ *    `individual`/`organization` мусять мати їх null. Backward-direction
+ *    (garbage-taxation у не-taxation-type) блокує data-corruption-state.
+ * 3. `taxId-формат відповідає type` — Sprint 7 §SP-4 RNOKPP+checksum для
+ *    individual/fop, ЄДРПОУ 8-digit без checksum для tov/organization.
+ * 4. `isVatPayer === true ⇒ taxationSystem ∈ VAT_ALLOWED_TAXATION_SYSTEMS`
  *    (Sprint 3 рішення C1) — ПДВ legitимно платять лише на спрощеній-3 чи
- *    загальній. На spрощених-1/-2 платник ПДВ — нелегальний стан.
+ *    загальній. Активний лише коли обидва поля не-null (для individual /
+ *    organization тривіально-true: short-circuit на null).
  *
  * Жоден з цих refine-ів Mongoose comb-валідатором не виразить — тримаємо у
  * Zod як single source of truth.
@@ -77,9 +87,28 @@ export const businessSlugLowerSchema = z
         message: 'INVALID_SLUG_LOWER_FORMAT',
     });
 
+/**
+ * Sub-схема реквізитів. Sprint 7 §SP-4 — type-binding (10-digit для individual/
+ * fop vs 8-digit для tov/organization) живе на parent-рівні `BusinessSchema`
+ * (read-side refine `TAX_ID_FORMAT_MISMATCH_TYPE`) і на write-DTO рівні
+ * `CreateBusinessSchema` per-variant requisites-shape. На рівні БД
+ * `BusinessRequisites.taxId: string` — без розгалуження за форматом.
+ *
+ * **`taxId: payerTaxIdZod`, не `z.string()` plain** — defense-in-depth для
+ * read-side і `UpdateBusinessSchema` (partial PATCH без `type`-context-у).
+ * Sub-schema reject-ить structurally garbage (`'abc'`, 5/9/11-digit, …)
+ * незалежно від parent-context-у. Parent-refine `TAX_ID_FORMAT_MISMATCH_TYPE`
+ * спрацьовує лише на pass object-shape: за слабкої sub-схеми невалідний taxId
+ * у PATCH прослизав би до service-layer-у, де type-binding-перевірка живе
+ * як cross-check, але structural перевірка має зайти раніше.
+ *
+ * Sub-schema приймає union {RNOKPP, ЄДРПОУ}; type-binding дискримінує всередині
+ * (read-refine + service cross-check для PATCH; create-DTO discriminated union
+ * вибирає konkrétний валідатор per-variant).
+ */
 export const BusinessRequisitesSchema = z.object({
     iban: ibanZod,
-    taxId: individualTaxIdZod,
+    taxId: payerTaxIdZod,
 });
 
 export const businessNameSchema = z
@@ -110,8 +139,16 @@ export const BusinessSchema = z
         slugLower: businessSlugLowerSchema,
         name: businessNameSchema,
         requisites: BusinessRequisitesSchema,
-        taxationSystem: taxationSystemSchema,
-        isVatPayer: z.boolean(),
+        /**
+         * Sprint 7 §SP-3 — nullable. `null` для типів, що не мають оподаткування
+         * (`individual`, `organization`); non-null для `fop`/`tov` (enforced
+         * через iff-refine `TAXATION_FIELDS_MISMATCH_TYPE` нижче).
+         */
+        taxationSystem: taxationSystemSchema.nullable(),
+        /**
+         * Sprint 7 §SP-3 — nullable, semantics symmetric to `taxationSystem`.
+         */
+        isVatPayer: z.boolean().nullable(),
         paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
         acceptedBanks: z.array(bankCodeSchema),
         seoIndexEnabled: z.boolean(),
@@ -146,7 +183,40 @@ export const BusinessSchema = z
         path: ['slugLower'],
     })
     .refine(
-        (b) => !b.isVatPayer || isVatAllowedTaxationSystem(b.taxationSystem),
+        // Sprint 7 §SP-3 — strict iff. Слабка форма `requiresTaxation(type)
+        // === (both-non-null)` пропускає mixed-state (одне garbage, інше null)
+        // на не-taxation-types, бо обидві сторони стають `false === false`.
+        // Сильніший інваріант: для taxation-types обидва non-null; для
+        // не-taxation-types обидва null. Будь-яке garbage поле блокується
+        // незалежно від другого.
+        (b) =>
+            requiresTaxation(b.type)
+                ? b.taxationSystem !== null && b.isVatPayer !== null
+                : b.taxationSystem === null && b.isVatPayer === null,
+        {
+            message: 'TAXATION_FIELDS_MISMATCH_TYPE',
+            path: ['taxationSystem'],
+        }
+    )
+    .refine(
+        // Sprint 7 §SP-4 — taxId-формат за `type`. Path `requisites.taxId` —
+        // щоб RHF inline-помилка з'явилася саме під полем введення.
+        (b) => isTaxIdValidForType(b.type, b.requisites.taxId),
+        {
+            message: 'TAX_ID_FORMAT_MISMATCH_TYPE',
+            path: ['requisites', 'taxId'],
+        }
+    )
+    .refine(
+        // Sprint 3 C1 — VAT × taxationSystem coupled-rule. Sprint 7 модифікація:
+        // активний лише коли обидва поля non-null. Для individual / organization
+        // вони обидва null → short-circuit тривіально-true (зловлено iff-refine
+        // вище).
+        (b) =>
+            b.taxationSystem === null ||
+            b.isVatPayer === null ||
+            !b.isVatPayer ||
+            isVatAllowedTaxationSystem(b.taxationSystem),
         {
             message: 'INVALID_VAT_FOR_TAXATION_SYSTEM',
             path: ['isVatPayer'],

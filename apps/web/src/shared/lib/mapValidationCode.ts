@@ -38,9 +38,11 @@ const VALIDATION_MESSAGES: Record<string, string> = {
     INVALID_LAST_NAME_FORMAT:
         'Прізвище може містити лише літери, пробіли, дефіси та апострофи',
 
-    // --- Реквізити (IBAN, ІПН) ---
+    // --- Реквізити (IBAN, ІПН / ЄДРПОУ) ---
     INVALID_IBAN: 'Перевірте IBAN: 29 символів, починається з UA',
-    INVALID_TAX_ID: 'Перевірте ІПН: рівно 10 цифр',
+    INVALID_TAX_ID: 'Перевірте РНОКПП: рівно 10 цифр',
+    // Sprint 7 §7.1 — структурна перевірка ЄДРПОУ для tov / organization.
+    INVALID_LEGAL_TAX_ID: 'Перевірте ЄДРПОУ: рівно 8 цифр',
 
     // --- Назва бізнесу / інвойсу ---
     INVALID_NAME_REQUIRED: 'Введіть назву',
@@ -83,6 +85,16 @@ const VALIDATION_MESSAGES: Record<string, string> = {
         'Платник ПДВ можливий лише на спрощеній-3 або загальній системі',
     ACCEPTED_BANKS_REQUIRED: 'Оберіть хоча б один банк',
     OWNERLESS_BUSINESS_REQUIRES_MANAGER: 'Додайте хоча б одного керівника',
+    // Sprint 7 §SP-3 — iff-інваріант (taxation iff requiresTaxation(type)).
+    // Звичайний user через wizard-форму цього не побачить (write-DTO
+    // discriminated union відсікає таку комбінацію раніше); код призначений
+    // для curl-ів та safety-net-у на read-side.
+    TAXATION_FIELDS_MISMATCH_TYPE:
+        'Поля оподаткування не відповідають типу платника',
+    // Sprint 7 §SP-4 — taxId-формат за `type`. Inline-помилка під полем
+    // "Код одержувача"; видається з backend-у при mismatch (Crок 6).
+    TAX_ID_FORMAT_MISMATCH_TYPE:
+        'Код одержувача не відповідає формату для цього типу платника',
 };
 
 const FALLBACK = 'Перевірте правильність значення';

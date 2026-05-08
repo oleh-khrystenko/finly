@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import type { BusinessType } from '../enums/business-type';
+
 /**
  * Validators для "Коду одержувача" платіжного payload-у НБУ (постанова № 97,
  * додатки 3/4 §IV.10.5). Норматив дозволяє рівно дві довжини:
@@ -113,3 +115,37 @@ export type LegalEntityTaxId = z.infer<typeof legalEntityTaxIdZod>;
 export const payerTaxIdZod = z.union([individualTaxIdZod, legalEntityTaxIdZod]);
 
 export type PayerTaxId = z.infer<typeof payerTaxIdZod>;
+
+/**
+ * Sprint 7 §SP-4 — discriminator-helper для перевірки `requisites.taxId`
+ * у контексті відомого `BusinessType`.
+ *
+ * Single source of truth для трьох callsite-ів:
+ *  1. `BusinessSchema` entity-refine (`TAX_ID_FORMAT_MISMATCH_TYPE`) — read-side
+ *     інваріант, що збережений документ має taxId-формат, який матчить його
+ *     `type`.
+ *  2. `BusinessesService.update` cross-check — PATCH без `type`-context-у:
+ *     service читає document-resident `type` і використовує цей helper, щоб
+ *     обрати правильний валідатор для нового taxId-значення.
+ *  3. Frontend `RequisitesSection` / `Step2Requisites` — inline-валідатор поля
+ *     "Код одержувача" з `taxIdLengthFor(type)`-aware label / maxLength.
+ *
+ * **Семантика per `type`:**
+ *  - `individual`, `fop` — РНОКПП, 10 цифр + checksum (повний `isValidIndividualTaxId`).
+ *  - `tov`, `organization` — ЄДРПОУ, 8 цифр без checksum (Sprint 7 §SP-2).
+ *
+ * Discriminator-таблиця замість `if/else` дає compile-error при додаванні
+ * нового `BusinessType` без оновлення мапінгу — той самий fail-fast pattern,
+ * що `taxIdLengthFor`.
+ */
+const TAX_ID_VALIDATOR_BY_TYPE: Record<BusinessType, (value: string) => boolean> = {
+    individual: isValidIndividualTaxId,
+    fop: isValidIndividualTaxId,
+    tov: (value) => EDRPOU_PATTERN.test(value),
+    organization: (value) => EDRPOU_PATTERN.test(value),
+};
+
+export const isTaxIdValidForType = (
+    type: BusinessType,
+    value: string
+): boolean => TAX_ID_VALIDATOR_BY_TYPE[type](value);

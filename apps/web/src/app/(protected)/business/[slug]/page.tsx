@@ -31,6 +31,7 @@ import {
     QrSection,
     RequisitesSection,
     TaxationSection,
+    hasTaxationFields,
     scheduleDeleteWithUndo,
     useDeleteBusinessConfirmStore,
 } from '@/features/business-edit';
@@ -241,7 +242,21 @@ export default function BusinessSlugPage() {
                         business={business}
                         onSave={handlePatch}
                     />
-                    <TaxationSection business={business} onSave={handlePatch} />
+                    {/*
+                     * Sprint 7 §7.8 — TaxationSection рендериться лише для
+                     * `fop` / `tov`. `hasTaxationFields` type-guard narrow-ить
+                     * `business.taxationSystem` / `isVatPayer` до non-null —
+                     * без guard секція TS-incompatible (Sprint 7 §SP-3 nullable).
+                     * Conditional **unmount** (а не disabled) — UX-rationale
+                     * §SP-7: для individual / organization не показуємо
+                     * порожнє поле, а взагалі не рендеримо секцію.
+                     */}
+                    {hasTaxationFields(business) && (
+                        <TaxationSection
+                            business={business}
+                            onSave={handlePatch}
+                        />
+                    )}
                     <BanksSection business={business} onSave={handlePatch} />
                     <PublicSection
                         business={business}

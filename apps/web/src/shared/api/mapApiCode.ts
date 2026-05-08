@@ -83,6 +83,20 @@ const ERRORS: Record<string, MessageDict> = {
         // Окреме повідомлення від generic `INVALID_TAX_ID` (РНОКПП), щоб
         // user розумів специфіку поля свого типу платника.
         invalid_legal_tax_id: 'ЄДРПОУ має містити 8 цифр',
+        // Sprint 7 §7.5 forward-direction — користувач передав taxation-поле
+        // для individual / organization, де воно не застосовується. UX:
+        // "приберіть поле з форми".
+        taxation_not_applicable_for_type:
+            'Поля оподаткування недоступні для цього типу платника',
+        // Sprint 7 §7.5 backward-direction — користувач намагається очистити
+        // обов'язкове taxation-поле на fop / tov через null. UX: "оберіть
+        // систему оподаткування" (recovery-path відрізняється від forward-direction).
+        taxation_required_for_type:
+            'Оберіть систему оподаткування — вона обов’язкова для цього типу платника',
+        // Sprint 7 §7.5 — type-binding на PATCH `requisites.taxId`. Структурно
+        // валідний код, але невідповідного формату для типу бізнесу.
+        tax_id_format_mismatch_type:
+            'Код одержувача не відповідає формату для цього типу платника',
         // Sprint 4 §4.2 SP-5 — cascade-delete без replica-set. Нейтральне
         // user-facing повідомлення: справжню причину (infra-misconfig) видно
         // лише у server-логах, не leak-ається user-у.

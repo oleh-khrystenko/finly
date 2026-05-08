@@ -1,9 +1,14 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import type { Business } from '@finly/types';
-import TaxationSection from './TaxationSection';
+import TaxationSection, {
+    type TaxationCapableBusiness,
+} from './TaxationSection';
 
-const baseBusiness: Business = {
+// Sprint 7 §7.8 — фікстура використовує `TaxationCapableBusiness` (intersection
+// `Business & { taxationSystem: TaxationSystem; isVatPayer: boolean }`), бо
+// саме цей narrow-тип очікує `TaxationSection.Props`. Parent у production
+// гарантує цю форму через `hasTaxationFields`-type-guard перед рендером.
+const baseBusiness: TaxationCapableBusiness = {
     id: '507f1f77bcf86cd799439011',
     type: 'fop',
     ownerId: '507f1f77bcf86cd799439012',
@@ -17,6 +22,7 @@ const baseBusiness: Business = {
     paymentPurposeTemplate: 'Оплата',
     acceptedBanks: ['privatbank'],
     seoIndexEnabled: false,
+    invoiceSlugPresetDefault: null,
     deletedAt: null,
     createdAt: new Date('2026-05-01'),
     updatedAt: new Date('2026-05-01'),
@@ -42,7 +48,7 @@ describe('TaxationSection — coupled rule (Sprint 3 §C1)', () => {
     });
 
     it('VAT switch disabled з existing simplified-1 (coupled-rule UI guard)', () => {
-        const businessWithSimp1: Business = {
+        const businessWithSimp1: TaxationCapableBusiness = {
             ...baseBusiness,
             taxationSystem: 'simplified-1',
             isVatPayer: false,

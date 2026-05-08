@@ -85,21 +85,32 @@ export class Business {
     requisites!: BusinessRequisites;
 
     /**
-     * Система оподаткування ФОП (Sprint 3 рішення C1). Coupled-валідація з
-     * `isVatPayer` (ПДВ дозволено лише на `simplified-3` / `general`) живе у
-     * Zod-refine `BusinessSchema` + write-DTO; Mongoose тут забезпечує лише
-     * структурний enum-guard.
+     * Система оподаткування ФОП / ТОВ. Coupled-валідація з `isVatPayer` (ПДВ
+     * дозволено лише на `simplified-3` / `general`) живе у Zod-refine
+     * `BusinessSchema` + write-DTO; Mongoose тут забезпечує лише структурний
+     * enum-guard.
+     *
+     * **Sprint 7 §SP-3 — nullable.** `null` для типів без оподаткування
+     * (`individual`, `organization`); non-null для `fop` / `tov`. Coupled-rule
+     * `requiresTaxation(type) ⇔ both-non-null` живе у Zod entity-refine
+     * (`TAXATION_FIELDS_MISMATCH_TYPE`) + write-DTO discriminated union, не на
+     * Mongoose-layer (комбінаторне правило з parent-context Mongoose-валідатор
+     * не виразить). `default: null` тут — щоб individual/organization-документи
+     * на `Model.create({ ...dto })` отримували чисте null без ручного
+     * service-нормалізатора-everywhere; для fop/tov write-DTO discriminated
+     * union вимагає поле явно (clear semantics).
      */
-    @Prop({ required: true, type: String, enum: TAXATION_SYSTEMS })
-    taxationSystem!: TaxationSystem;
+    @Prop({ required: false, type: String, enum: TAXATION_SYSTEMS, default: null })
+    taxationSystem!: TaxationSystem | null;
 
     /**
-     * Платник ПДВ (Sprint 3 C1). Default `false` — більшість ФОП на спрощеній
-     * системі без ПДВ. Coupled-rule з `taxationSystem` enforce-иться на
-     * write-paths (Zod), не на DB-layer.
+     * Платник ПДВ. Sprint 7 §SP-3 — nullable, симетрично до `taxationSystem`.
+     * Coupled-rule з `taxationSystem` enforce-иться на write-paths (Zod), не
+     * на DB-layer. `default: null` — для individual/organization, де поле
+     * семантично не застосовується.
      */
-    @Prop({ type: Boolean, default: false })
-    isVatPayer!: boolean;
+    @Prop({ type: Boolean, default: null })
+    isVatPayer!: boolean | null;
 
     @Prop({ required: true, trim: true })
     paymentPurposeTemplate!: string;

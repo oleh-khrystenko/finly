@@ -79,7 +79,12 @@ describe('BusinessSchema', () => {
         expect(result.success).toBe(false);
     });
 
-    it('rejects invalid IPN (tax-id) inside requisites', () => {
+    it('rejects structurally invalid taxId at sub-schema level (Sprint 7 §SP-4 defense-in-depth)', () => {
+        // `BusinessRequisitesSchema.taxId: payerTaxIdZod` reject-ить structurally
+        // garbage (10-digit з wrong checksum, 7-digit, 9-digit, alpha) до того, як
+        // parent-refine `TAX_ID_FORMAT_MISMATCH_TYPE` дістанеться. Type-binding
+        // живе на parent-refine — покрито окремими тестами у "Sprint 7 — type-driven
+        // refines" блоці нижче.
         const result = BusinessSchema.safeParse({
             ...VALID_BUSINESS,
             requisites: { iban: VALID_IBAN, taxId: '1234567890' },
@@ -330,6 +335,296 @@ describe('BusinessSchema', () => {
             const result = BusinessSchema.safeParse(without);
             expect(result.success).toBe(false);
         });
+    });
+
+    // -------------------------------------------------------------------------
+    // Sprint 7 §SP-3 + §SP-4 — type-driven refines: (taxation iff
+    // requiresTaxation(type)) і (taxId-format matches type).
+    //
+    // Golden vectors для 4 типів × (valid, missing-taxation, garbage-taxation,
+    // taxId-wrong-length) — точне покриття per §7.2 acceptance.
+    // -------------------------------------------------------------------------
+
+    describe('Sprint 7 — type-driven refines', () => {
+        const VALID_RNOKPP = '1234567899'; // 10 digits + valid checksum
+        const VALID_EDRPOU = '12345678'; // 8 digits, no checksum
+
+        const buildBusiness = (overrides: Record<string, unknown>) => ({
+            ...VALID_BUSINESS,
+            ...overrides,
+        });
+
+        describe('individual (no taxation, RNOKPP)', () => {
+            const base = {
+                type: 'individual' as const,
+                taxationSystem: null,
+                isVatPayer: null,
+                requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+            };
+
+            it('accepts valid individual (taxation-fields null, RNOKPP 10-digit)', () => {
+                const result = BusinessSchema.safeParse(buildBusiness(base));
+                expect(result.success).toBe(true);
+            });
+
+            it('rejects garbage taxationSystem on individual → TAXATION_FIELDS_MISMATCH_TYPE', () => {
+                const result = BusinessSchema.safeParse(
+                    buildBusiness({ ...base, taxationSystem: 'general' })
+                );
+                expect(result.success).toBe(false);
+                if (!result.success) {
+                    expect(
+                        result.error.issues.some(
+                            (i) => i.message === 'TAXATION_FIELDS_MISMATCH_TYPE'
+                        )
+                    ).toBe(true);
+                }
+            });
+
+            it('rejects garbage isVatPayer on individual → TAXATION_FIELDS_MISMATCH_TYPE', () => {
+                const result = BusinessSchema.safeParse(
+                    buildBusiness({ ...base, isVatPayer: false })
+                );
+                expect(result.success).toBe(false);
+                if (!result.success) {
+                    expect(
+                        result.error.issues.some(
+                            (i) => i.message === 'TAXATION_FIELDS_MISMATCH_TYPE'
+                        )
+                    ).toBe(true);
+                }
+            });
+
+            it('rejects 8-digit ЄДРПОУ on individual → TAX_ID_FORMAT_MISMATCH_TYPE', () => {
+                const result = BusinessSchema.safeParse(
+                    buildBusiness({
+                        ...base,
+                        requisites: { iban: VALID_IBAN, taxId: VALID_EDRPOU },
+                    })
+                );
+                expect(result.success).toBe(false);
+                if (!result.success) {
+                    expect(
+                        result.error.issues.some(
+                            (i) => i.message === 'TAX_ID_FORMAT_MISMATCH_TYPE'
+                        )
+                    ).toBe(true);
+                }
+            });
+        });
+
+        describe('fop (taxation required, RNOKPP)', () => {
+            const base = {
+                type: 'fop' as const,
+                taxationSystem: 'simplified-3' as const,
+                isVatPayer: false,
+                requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+            };
+
+            it('accepts valid fop', () => {
+                const result = BusinessSchema.safeParse(buildBusiness(base));
+                expect(result.success).toBe(true);
+            });
+
+            it('rejects null taxationSystem on fop → TAXATION_FIELDS_MISMATCH_TYPE', () => {
+                const result = BusinessSchema.safeParse(
+                    buildBusiness({ ...base, taxationSystem: null })
+                );
+                expect(result.success).toBe(false);
+                if (!result.success) {
+                    expect(
+                        result.error.issues.some(
+                            (i) => i.message === 'TAXATION_FIELDS_MISMATCH_TYPE'
+                        )
+                    ).toBe(true);
+                }
+            });
+
+            it('rejects null isVatPayer on fop → TAXATION_FIELDS_MISMATCH_TYPE', () => {
+                const result = BusinessSchema.safeParse(
+                    buildBusiness({ ...base, isVatPayer: null })
+                );
+                expect(result.success).toBe(false);
+                if (!result.success) {
+                    expect(
+                        result.error.issues.some(
+                            (i) => i.message === 'TAXATION_FIELDS_MISMATCH_TYPE'
+                        )
+                    ).toBe(true);
+                }
+            });
+
+            it('rejects 8-digit ЄДРПОУ on fop → TAX_ID_FORMAT_MISMATCH_TYPE', () => {
+                const result = BusinessSchema.safeParse(
+                    buildBusiness({
+                        ...base,
+                        requisites: { iban: VALID_IBAN, taxId: VALID_EDRPOU },
+                    })
+                );
+                expect(result.success).toBe(false);
+                if (!result.success) {
+                    expect(
+                        result.error.issues.some(
+                            (i) => i.message === 'TAX_ID_FORMAT_MISMATCH_TYPE'
+                        )
+                    ).toBe(true);
+                }
+            });
+        });
+
+        describe('tov (taxation required, ЄДРПОУ)', () => {
+            const base = {
+                type: 'tov' as const,
+                taxationSystem: 'general' as const,
+                isVatPayer: true,
+                requisites: { iban: VALID_IBAN, taxId: VALID_EDRPOU },
+            };
+
+            it('accepts valid tov with VAT on general', () => {
+                const result = BusinessSchema.safeParse(buildBusiness(base));
+                expect(result.success).toBe(true);
+            });
+
+            it('rejects null taxationSystem on tov → TAXATION_FIELDS_MISMATCH_TYPE', () => {
+                const result = BusinessSchema.safeParse(
+                    buildBusiness({ ...base, taxationSystem: null })
+                );
+                expect(result.success).toBe(false);
+                if (!result.success) {
+                    expect(
+                        result.error.issues.some(
+                            (i) => i.message === 'TAXATION_FIELDS_MISMATCH_TYPE'
+                        )
+                    ).toBe(true);
+                }
+            });
+
+            it('rejects 10-digit RNOKPP on tov → TAX_ID_FORMAT_MISMATCH_TYPE', () => {
+                const result = BusinessSchema.safeParse(
+                    buildBusiness({
+                        ...base,
+                        requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+                    })
+                );
+                expect(result.success).toBe(false);
+                if (!result.success) {
+                    expect(
+                        result.error.issues.some(
+                            (i) => i.message === 'TAX_ID_FORMAT_MISMATCH_TYPE'
+                        )
+                    ).toBe(true);
+                }
+            });
+
+            it('still enforces VAT × taxation coupling on tov (Sprint 3 C1)', () => {
+                const result = BusinessSchema.safeParse(
+                    buildBusiness({
+                        ...base,
+                        taxationSystem: 'simplified-1',
+                        isVatPayer: true,
+                    })
+                );
+                expect(result.success).toBe(false);
+                if (!result.success) {
+                    expect(
+                        result.error.issues.some(
+                            (i) =>
+                                i.message ===
+                                'INVALID_VAT_FOR_TAXATION_SYSTEM'
+                        )
+                    ).toBe(true);
+                }
+            });
+        });
+
+        describe('organization (no taxation, ЄДРПОУ)', () => {
+            const base = {
+                type: 'organization' as const,
+                taxationSystem: null,
+                isVatPayer: null,
+                requisites: { iban: VALID_IBAN, taxId: VALID_EDRPOU },
+            };
+
+            it('accepts valid organization', () => {
+                const result = BusinessSchema.safeParse(buildBusiness(base));
+                expect(result.success).toBe(true);
+            });
+
+            it('rejects garbage taxationSystem on organization → TAXATION_FIELDS_MISMATCH_TYPE', () => {
+                const result = BusinessSchema.safeParse(
+                    buildBusiness({ ...base, taxationSystem: 'simplified-3' })
+                );
+                expect(result.success).toBe(false);
+                if (!result.success) {
+                    expect(
+                        result.error.issues.some(
+                            (i) => i.message === 'TAXATION_FIELDS_MISMATCH_TYPE'
+                        )
+                    ).toBe(true);
+                }
+            });
+
+            it('rejects 10-digit RNOKPP on organization → TAX_ID_FORMAT_MISMATCH_TYPE', () => {
+                const result = BusinessSchema.safeParse(
+                    buildBusiness({
+                        ...base,
+                        requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+                    })
+                );
+                expect(result.success).toBe(false);
+                if (!result.success) {
+                    expect(
+                        result.error.issues.some(
+                            (i) => i.message === 'TAX_ID_FORMAT_MISMATCH_TYPE'
+                        )
+                    ).toBe(true);
+                }
+            });
+
+        });
+
+        // Sub-schema sanity: `BusinessRequisitesSchema.taxId: payerTaxIdZod`
+        // reject-ить structurally невалідне (ні 10-digit + checksum, ні 8-digit
+        // pattern) на write- і read-paths однаково — незалежно від `type`.
+        // Type-binding (`TAX_ID_FORMAT_MISMATCH_TYPE`) живе на parent-refine
+        // і активується лише після pass sub-schema; cases вище покривають.
+        it.each([
+            '',
+            '1234567', // 7 digits — ні те, ні те
+            '123456789', // 9 digits
+            '12345678901', // 11 digits
+            'abcdefgh',
+            '1234567a',
+        ])(
+            'rejects structurally invalid taxId %p regardless of type',
+            (taxId) => {
+                for (const type of [
+                    'individual',
+                    'fop',
+                    'tov',
+                    'organization',
+                ] as const) {
+                    const taxationOverrides =
+                        type === 'fop' || type === 'tov'
+                            ? {
+                                  taxationSystem: 'simplified-3' as const,
+                                  isVatPayer: false,
+                              }
+                            : {
+                                  taxationSystem: null,
+                                  isVatPayer: null,
+                              };
+                    const result = BusinessSchema.safeParse(
+                        buildBusiness({
+                            type,
+                            ...taxationOverrides,
+                            requisites: { iban: VALID_IBAN, taxId },
+                        })
+                    );
+                    expect(result.success).toBe(false);
+                }
+            }
+        );
     });
 
     describe('paymentPurposeTemplate — char/byte limits derived from NBU spec', () => {

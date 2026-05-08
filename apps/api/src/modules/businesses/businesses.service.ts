@@ -10,6 +10,8 @@ import { Connection, Model, Types, type FilterQuery } from 'mongoose';
 import {
     RESPONSE_CODE,
     VAT_ALLOWED_TAXATION_SYSTEMS,
+    isTaxIdValidForType,
+    requiresTaxation,
     type BusinessWithInvoicesCount,
     type CreateBusinessRequest,
     type UpdateBusinessRequest,
@@ -85,9 +87,28 @@ export class BusinessesService {
             ? { ownerId: null, managers: [userObjectId] }
             : { ownerId: userObjectId, managers: [] as Types.ObjectId[] };
 
+        // Sprint 7 §SP-3 — discriminated-union variants `individual` /
+        // `organization` фізично не містять taxation-полів у DTO-shape. Mongoose
+        // schema має `default: null`, але для type-safety і явності контракту
+        // (Mongoose default спрацьовує на рівні документа, не на spread-у dto)
+        // нормалізуємо тут: для не-taxation типів — non-undefined `null`, що
+        // robustно проходить через будь-який middleware/transform.
+        //
+        // Discriminator-narrowing через literal-comparison: TS звужує
+        // `CreateBusinessRequest` до fop/tov-variant-у і дає доступ до
+        // `taxationSystem` / `isVatPayer` без cast-ів.
+        const taxationFields =
+            dto.type === 'fop' || dto.type === 'tov'
+                ? {
+                      taxationSystem: dto.taxationSystem,
+                      isVatPayer: dto.isVatPayer,
+                  }
+                : { taxationSystem: null, isVatPayer: null };
+
         try {
             return await this.businessModel.create({
                 ...dto,
+                ...taxationFields,
                 slug,
                 slugLower: slug.toLowerCase(),
                 ...ownership,
@@ -227,13 +248,78 @@ export class BusinessesService {
         slug: string,
         dto: UpdateBusinessRequest
     ): Promise<BusinessDocument> {
+        const slugLower = slug.toLowerCase();
+
+        // Sprint 7 §7.5 — type-aware cross-checks на UPDATE. PATCH не несе
+        // `type` (immutable post-creation, §SP-8); service читає document-
+        // resident `type` коли payload містить type-залежні поля. Один read
+        // покриває обидва cross-check-и (taxation-applicability + taxId-format-
+        // binding) — single round-trip перед write.
+        const dtoTouchesTaxation =
+            dto.taxationSystem !== undefined || dto.isVatPayer !== undefined;
+        const dtoTouchesTaxId = dto.requisites?.taxId !== undefined;
+
+        if (dtoTouchesTaxation || dtoTouchesTaxId) {
+            const existing = await this.businessModel
+                .findOne({ slugLower }, { type: 1 })
+                .lean<{ type: CreateBusinessRequest['type'] }>()
+                .exec();
+            if (!existing) {
+                throw new NotFoundException({
+                    code: RESPONSE_CODE.BUSINESS_NOT_FOUND,
+                    message: 'Business not found',
+                });
+            }
+            const existingType = existing.type;
+
+            if (dtoTouchesTaxation && !requiresTaxation(existingType)) {
+                // Forward-direction: individual / organization — taxation-поля
+                // не застосовуються (включно з `null`-clear, що для immutable-
+                // null-стану — bug у клієнті). UX-recovery: видалити поле з
+                // PATCH-payload-у.
+                throw new BadRequestException({
+                    code: RESPONSE_CODE.TAXATION_NOT_APPLICABLE_FOR_TYPE,
+                    message:
+                        'Taxation fields not applicable for this business type',
+                });
+            }
+
+            if (
+                dtoTouchesTaxation &&
+                requiresTaxation(existingType) &&
+                (dto.taxationSystem === null || dto.isVatPayer === null)
+            ) {
+                // Backward-direction: fop / tov — заборонено clear-out (передача
+                // null) обов'язкового taxation-поля. null-clear на taxation-
+                // required-type створив би invalid stored state
+                // (TAXATION_FIELDS_MISMATCH_TYPE у entity-Zod на read). UX-
+                // recovery різний від forward-direction-у — окремий код
+                // `TAXATION_REQUIRED_FOR_TYPE` ("оберіть систему оподаткування").
+                throw new BadRequestException({
+                    code: RESPONSE_CODE.TAXATION_REQUIRED_FOR_TYPE,
+                    message:
+                        'Taxation fields are required for this business type',
+                });
+            }
+
+            if (dtoTouchesTaxId) {
+                const newTaxId = dto.requisites!.taxId!;
+                if (!isTaxIdValidForType(existingType, newTaxId)) {
+                    throw new BadRequestException({
+                        code: RESPONSE_CODE.TAX_ID_FORMAT_MISMATCH_TYPE,
+                        message:
+                            'Tax id format does not match the business type',
+                    });
+                }
+            }
+        }
+
         // Atomic update + coupled VAT × taxationSystem check у `$expr`-filter
         // — single round-trip у happy path. `$expr` обчислює пару
         // (incoming-or-existing isVatPayer, incoming-or-existing taxationSystem)
         // і блокує update, якщо пара (true, ∉ VAT_ALLOWED_TAXATION_SYSTEMS).
         // Mongo aggregation expression: literal-значення з dto замінює
         // `'$<fieldname>'`-reference на існуюче поле документа.
-        const slugLower = slug.toLowerCase();
         const hasCoupledFields =
             dto.isVatPayer !== undefined || dto.taxationSystem !== undefined;
 

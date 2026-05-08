@@ -18,7 +18,10 @@ import UiTextarea from '@/shared/ui/UiTextarea';
 import UiCheckbox from '@/shared/ui/UiCheckbox';
 import UiButton from '@/shared/ui/UiButton';
 import UiSpinner from '@/shared/ui/UiSpinner';
-import { useBusinessWizardStore } from './businessWizardStore';
+import {
+    buildCreateRequestFromDraft,
+    useBusinessWizardStore,
+} from './businessWizardStore';
 
 const PurposeSchema = businessPaymentPurposeTemplateSchema;
 const PurposeWrap = z.object({ paymentPurposeTemplate: PurposeSchema });
@@ -69,21 +72,28 @@ export default function Step4PurposeBanks() {
     const onSubmit = async () => {
         if (!canSubmit) return;
 
-        // Sprint 3 §3.7 — фінальна валідація через `CreateBusinessSchema`
-        // перед submit. Захист від stale sessionStorage / drift у store
-        // (наприклад, persist-блок на step 1 устарів, формат полів змінився
-        // між версіями). Без safeParse тут TypeScript-cast `as` приховав
-        // би неповний DTO, і API повернув би 400 з generic VALIDATION_ERROR
-        // без вказання, який саме крок треба переробити.
-        const draft = {
-            ...formData,
-            paymentPurposeTemplate: purpose,
-            acceptedBanks,
-        };
-        const parsed = CreateBusinessSchema.safeParse(draft);
+        // Sprint 3 §3.7 + Sprint 7 §7.7 — фінальна валідація через
+        // `CreateBusinessSchema` перед submit. Захист від stale sessionStorage
+        // / drift у store. Sprint 7 додав discriminated-union dispatch:
+        // `buildCreateRequestFromDraft` маппить flat draft у потрібний
+        // variant per `type`, відсікаючи stale taxation-поля для
+        // individual/organization (інакше `.strict()` reject-нув би).
+        let request;
+        try {
+            request = buildCreateRequestFromDraft({
+                ...formData,
+                paymentPurposeTemplate: purpose,
+                acceptedBanks,
+            });
+        } catch {
+            toast.error(
+                'Дані форми застаріли. Будь ласка, заповніть кроки заново.',
+            );
+            setStep(1);
+            return;
+        }
+        const parsed = CreateBusinessSchema.safeParse(request);
         if (!parsed.success) {
-            // Дані з попередніх кроків неконсистентні. Reset wizard на step 1
-            // щоб ФОП пройшов flow заново (forms підхоплять відсутні поля).
             toast.error(
                 'Дані форми застаріли. Будь ласка, заповніть кроки заново.',
             );

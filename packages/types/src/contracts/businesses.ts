@@ -12,11 +12,16 @@ import {
     type Business,
 } from '../entities/business';
 import { slugPresetSchema } from '../entities/invoice';
+import { ibanZod } from '../validation/iban';
+import {
+    individualTaxIdZod,
+    legalEntityTaxIdZod,
+} from '../validation/tax-id';
 
 /**
- * Sprint 3 §3.1 — write-side контракти Business для cabinet endpoint-ів і
- * public-фетчу. Single source of truth для API DTO (`createZodDto`) і
- * frontend RHF-resolver-ів.
+ * Sprint 3 §3.1 + Sprint 7 §SP-3/§SP-4 — write-side контракти Business для
+ * cabinet endpoint-ів і public-фетчу. Single source of truth для API DTO
+ * (`createZodDto`) і frontend RHF-resolver-ів.
  *
  * **Що жодна з write-схем (Create/Update) не приймає** — поля, що генеруються
  * БД або сервісом, або керуються окремими flow:
@@ -29,10 +34,11 @@ import { slugPresetSchema } from '../entities/invoice';
  *  - `deletedAt` — Sprint 3 робить hard-delete (рішення C2); soft-delete не
  *    керується через API.
  *
- * **`type` приймається тільки на створенні** (Sprint 3 README §132): бізнес
- * фіксує юр-форму при `POST /businesses/me`, далі вона immutable. Update-DTO
- * `type` навмисно виключає (Sprint 4+ при появі ТОВ можуть додатись правила
- * міграції — окремий method, не звичайний PATCH).
+ * **`type` приймається тільки на створенні** (Sprint 7 §SP-8): бізнес фіксує
+ * юр-форму при `POST /businesses/me`, далі immutable. Update-DTO `type`
+ * навмисно виключає — зміна `type` каскадно ламає taxId-формат, taxation-
+ * presence, isVatPayer-presence (4 revalidation-и). Якщо ФОП юридично став
+ * ТОВ — це новий бізнес, не PATCH.
  *
  * **Coupled-rule `taxationSystem × isVatPayer`** (рішення C1) дублюється тут і
  * в entity-схемі: API-side Zod це safety-net на випадок drift-у frontend-схеми
@@ -40,6 +46,15 @@ import { slugPresetSchema } from '../entities/invoice';
  * `VALIDATION_ERROR`. Frontend бачить inline-помилку через ту саму схему.
  */
 
+const acceptedBanksField = z.array(bankCodeSchema).min(1, {
+    message: 'ACCEPTED_BANKS_REQUIRED',
+});
+
+/**
+ * Coupled VAT × taxationSystem refine — застосовується **per-variant** у
+ * fop / tov create-варіантах. Для individual / organization variants поля
+ * фізично відсутні, refine не потрібен.
+ */
 const taxationVatCheck = (data: {
     taxationSystem: z.infer<typeof taxationSystemSchema>;
     isVatPayer: boolean;
@@ -52,32 +67,98 @@ const taxationVatRefineOptions = {
 };
 
 /**
- * `CreateBusinessSchema` — повний payload з 4-крокового wizard-а (§3.7).
- * Усі бізнес-поля required; slug сервер генерує сам, ownership резолвить
- * з `worksAsBookkeeper`-toggle користувача.
+ * Sprint 7 §SP-3 + §SP-4 — `CreateBusinessSchema` як `z.discriminatedUnion`
+ * по `type`. Кожен variant явно описує **тільки ті поля, що мають юридичний
+ * сенс для цього типу**:
+ *  - `individual` / `organization` — без taxation-полів (поля фізично
+ *    відсутні у TS-типі; frontend handler-и не зможуть передати їх без
+ *    compile-error).
+ *  - `fop` / `tov` — з `taxationSystem` + `isVatPayer` + per-variant
+ *    coupled-refine.
+ *  - `requisites.taxId` валідатор обирається per-variant: `individualTaxIdZod`
+ *    (10 цифр + checksum) для individual / fop; `legalEntityTaxIdZod`
+ *    (8 цифр) для tov / organization.
+ *
+ * **Чому discriminatedUnion, а не single-shape з conditional refine**: TS-
+ * exhaustiveness — додавання нового `BusinessType` без оновлення схеми дає
+ * compile-error на `z.discriminatedUnion(...)` literal-tuple. Conditional
+ * refine на single-shape обманює type-checker і дозволяє skip-нути нову
+ * branch.
  *
  * **`acceptedBanks` — мінімум 1** (рішення B6: дефолт усі 11 на UI, але
  * в контракті — не-пустий список; нульовий стан неможливий).
  */
-export const CreateBusinessSchema = z
+const createIndividualVariant = z
     .object({
-        type: businessTypeSchema,
+        type: z.literal('individual'),
         name: businessNameSchema,
-        requisites: BusinessRequisitesSchema,
+        requisites: z.object({
+            iban: ibanZod,
+            taxId: individualTaxIdZod,
+        }),
+        paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
+        acceptedBanks: acceptedBanksField,
+    })
+    .strict();
+
+const createFopVariant = z
+    .object({
+        type: z.literal('fop'),
+        name: businessNameSchema,
+        requisites: z.object({
+            iban: ibanZod,
+            taxId: individualTaxIdZod,
+        }),
         taxationSystem: taxationSystemSchema,
         isVatPayer: z.boolean(),
         paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
-        acceptedBanks: z.array(bankCodeSchema).min(1, {
-            message: 'ACCEPTED_BANKS_REQUIRED',
-        }),
+        acceptedBanks: acceptedBanksField,
     })
     .strict()
     .refine(taxationVatCheck, taxationVatRefineOptions);
 
+const createTovVariant = z
+    .object({
+        type: z.literal('tov'),
+        name: businessNameSchema,
+        requisites: z.object({
+            iban: ibanZod,
+            taxId: legalEntityTaxIdZod,
+        }),
+        taxationSystem: taxationSystemSchema,
+        isVatPayer: z.boolean(),
+        paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
+        acceptedBanks: acceptedBanksField,
+    })
+    .strict()
+    .refine(taxationVatCheck, taxationVatRefineOptions);
+
+const createOrganizationVariant = z
+    .object({
+        type: z.literal('organization'),
+        name: businessNameSchema,
+        requisites: z.object({
+            iban: ibanZod,
+            taxId: legalEntityTaxIdZod,
+        }),
+        paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
+        acceptedBanks: acceptedBanksField,
+    })
+    .strict();
+
+export const CreateBusinessSchema = z.discriminatedUnion('type', [
+    createIndividualVariant,
+    createFopVariant,
+    createTovVariant,
+    createOrganizationVariant,
+]);
+
 export type CreateBusinessRequest = z.infer<typeof CreateBusinessSchema>;
 
 /**
- * `UpdateBusinessSchema` — partial по edit-allowed підмножині.
+ * `UpdateBusinessSchema` — partial по edit-allowed підмножині. Sprint 7 залишає
+ * **single-shape `.partial().strict()`** (НЕ discriminated union), бо partial-
+ * PATCH не несе `type` (immutable post-creation, §SP-8).
  *
  * **`.strict()` modifier** обов'язковий — невідомі ключі payload-а (`slug`,
  * `type`, `ownerId`, `managers`, `slugLower`) повинні бути reject-ом, не
@@ -85,6 +166,15 @@ export type CreateBusinessRequest = z.infer<typeof CreateBusinessSchema>;
  * захисту від slug-mutation: schema → ZodValidationPipe → 400; service
  * не дублює перевірку, бо TypeScript `UpdateBusinessRequest` просто не
  * містить цих ключів.
+ *
+ * **Type-binding для `requisites.taxId` і `taxation-fields`** — на service-
+ * layer (`BusinessesService.update` читає document-resident `type` з БД,
+ * валідує проти PATCH-payload-у). DTO-Zod не має `type`-context-у; перевірки
+ * живуть там, де `type` доступний без додаткового round-trip.
+ *
+ * Sub-schema `BusinessRequisitesSchema.taxId: payerTaxIdZod` (union
+ * RNOKPP ∪ ЄДРПОУ) reject-ить **structurally** garbage таксайди; type-
+ * binding (RNOKPP-on-tov, EDRPOU-on-individual) додає service-layer.
  *
  * **Coupled-валідація `taxationSystem × isVatPayer`** активується тільки
  * якщо клієнт передав **обидва** поля у одному PATCH — щоб inline-edit
@@ -99,12 +189,27 @@ export const UpdateBusinessSchema = z
     .object({
         name: businessNameSchema,
         requisites: BusinessRequisitesSchema,
-        taxationSystem: taxationSystemSchema,
-        isVatPayer: z.boolean(),
+        /**
+         * Sprint 7 §SP-3 — `nullable()` пропускає `null` через DTO-рівень,
+         * щоб service-layer міг кинути type-aware код замість generic
+         * `VALIDATION_ERROR`. Подальша валідація на write-path:
+         *  - `type ∈ {fop, tov}` + PATCH `null` → 400 `TAXATION_REQUIRED_FOR_TYPE`
+         *    ("оберіть систему оподаткування" — поле обов'язкове для цього типу).
+         *  - `type ∈ {individual, organization}` + PATCH non-null → 400
+         *    `TAXATION_NOT_APPLICABLE_FOR_TYPE` ("приберіть поле" — воно
+         *    недоступне для цього типу).
+         *  - `type ∈ {individual, organization}` + PATCH `null` → також
+         *    `TAXATION_NOT_APPLICABLE_FOR_TYPE` (PATCH семантично
+         *    сигналізує "змінити", що для immutable-null-стану не має сенсу).
+         *
+         * `type` immutable post-creation (§SP-8) — реальний шлях "перейти з
+         * fop на individual" — створення нового бізнесу, не PATCH. DTO дає
+         * null лише як технічну поверхню для специфічних error-кодів.
+         */
+        taxationSystem: taxationSystemSchema.nullable(),
+        isVatPayer: z.boolean().nullable(),
         paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
-        acceptedBanks: z.array(bankCodeSchema).min(1, {
-            message: 'ACCEPTED_BANKS_REQUIRED',
-        }),
+        acceptedBanks: acceptedBanksField,
         seoIndexEnabled: z.boolean(),
         /**
          * Sprint 4 §4.1 — bizness-level дефолт slug-preset для нових інвойсів.
@@ -119,11 +224,27 @@ export const UpdateBusinessSchema = z
     .partial()
     .strict()
     .refine(
-        (data) =>
-            data.taxationSystem === undefined ||
-            data.isVatPayer === undefined ||
-            isVatAllowedTaxationSystem(data.taxationSystem) ||
-            !data.isVatPayer,
+        (data) => {
+            // Coupled refine активний лише коли обидва поля передані і
+            // обидва не-null. null-сторона — service-layer відповідальність
+            // (читає document-resident `type`).
+            if (
+                data.taxationSystem === undefined ||
+                data.isVatPayer === undefined
+            ) {
+                return true;
+            }
+            if (
+                data.taxationSystem === null ||
+                data.isVatPayer === null
+            ) {
+                return true;
+            }
+            return (
+                isVatAllowedTaxationSystem(data.taxationSystem) ||
+                !data.isVatPayer
+            );
+        },
         {
             message: 'INVALID_VAT_FOR_TAXATION_SYSTEM',
             path: ['isVatPayer'],

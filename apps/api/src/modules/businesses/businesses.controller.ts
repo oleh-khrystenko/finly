@@ -9,7 +9,12 @@ import {
     Post,
     UseGuards,
 } from '@nestjs/common';
-import type { BusinessWithInvoicesCount } from '@finly/types';
+import { ZodValidationPipe } from 'nestjs-zod';
+import {
+    CreateBusinessSchema,
+    type BusinessWithInvoicesCount,
+    type CreateBusinessRequest,
+} from '@finly/types';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
@@ -17,7 +22,6 @@ import { InvoicesService } from '../invoices/invoices.service';
 import type { UserDocument } from '../users/schemas/user.schema';
 import { BusinessAccessGuard, CurrentBusiness } from './business-access.guard';
 import { BusinessesService } from './businesses.service';
-import { CreateBusinessDto } from './dto/create-business.dto';
 import { UpdateBusinessDto } from './dto/update-business.dto';
 import type { BusinessDocument } from './schemas/business.schema';
 
@@ -67,8 +71,21 @@ export class BusinessesController {
     @HttpCode(HttpStatus.CREATED)
     async create(
         @CurrentUser() user: UserDocument,
-        @Body() dto: CreateBusinessDto
+        @Body(new ZodValidationPipe(CreateBusinessSchema))
+        dto: CreateBusinessRequest
     ): Promise<{ data: BusinessDocument }> {
+        // Sprint 7 §SP-3 — `CreateBusinessSchema` — `z.discriminatedUnion`,
+        // чий `parse()` повертає TS-union. `createZodDto` (nestjs-zod) не
+        // підтримує union-output для class-extends (TS2509: Base constructor
+        // return type ... is not an object type), тому використовуємо
+        // **public param-level pipe** з конструктором `ZodValidationPipe
+        // (schema)` — стандартний flow nestjs-zod без DTO-class wrapper-у.
+        //
+        // Глобальний `ZodValidationPipe` (зареєстрований у `main.ts`)
+        // пропускає payload (metatype = primitive `Object` без `isZodDto`),
+        // param-level pipe виконує `validate(value, CreateBusinessSchema)` —
+        // повна discriminated-union-валідація. `dto` тип-narrow-ається через
+        // `dto.type` discriminator без cast-ів.
         const business = await this.businessesService.create(
             user._id.toString(),
             dto,

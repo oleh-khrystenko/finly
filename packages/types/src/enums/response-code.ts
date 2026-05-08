@@ -73,6 +73,48 @@ export const RESPONSE_CODE = {
      * tech-backlog ticket.
      */
     INVALID_LEGAL_TAX_ID: 'INVALID_LEGAL_TAX_ID',
+    /**
+     * Sprint 7 §7.5 — service-layer cross-check на UPDATE: PATCH містить
+     * `taxationSystem` чи `isVatPayer`, але document-resident `type` —
+     * `individual` чи `organization`, де taxation-поля семантично не
+     * застосовуються (не існує "ОСББ на спрощеній-3").
+     *
+     * **Виключно forward-direction garbage** ("поля недоступні для цього
+     * типу"). Зворотний випадок (null-clear на fop/tov, де поля обов'язкові)
+     * — окремий код `TAXATION_REQUIRED_FOR_TYPE`, бо UX-recovery різний:
+     *  - тут: видалити поле з PATCH-payload-у;
+     *  - там: передати non-null значення.
+     *
+     * Чому окремий код від `TAXATION_FIELDS_MISMATCH_TYPE` (read-side
+     * entity-refine): user-action — PATCH; recoverable client-side. Generic
+     * refine-error описує symmetric data-state-violation, інтерпретується для
+     * UI як "бекенд-bug"; цей же код — UX-actionable.
+     */
+    TAXATION_NOT_APPLICABLE_FOR_TYPE: 'TAXATION_NOT_APPLICABLE_FOR_TYPE',
+    /**
+     * Sprint 7 §7.5 — backward-сторона того ж cross-check-у: PATCH намагається
+     * очистити (`null`) `taxationSystem` чи `isVatPayer` на бізнесі типу
+     * `fop` / `tov`, де таксейшн-поля обов'язкові. Семантично це "ви не
+     * можете видалити обов'язкове поле", не "поле недоступне".
+     *
+     * Recovery-path для UI: передати non-null значення (підказка "оберіть
+     * систему оподаткування"). Реальний flow зміни на null — створення нового
+     * бізнесу типу `individual` / `organization`, бо `type` immutable
+     * post-creation (§SP-8).
+     */
+    TAXATION_REQUIRED_FOR_TYPE: 'TAXATION_REQUIRED_FOR_TYPE',
+    /**
+     * Sprint 7 §7.5 — service-layer cross-check на UPDATE: PATCH містить
+     * `requisites.taxId` неправильного формату для document-resident `type`
+     * (наприклад, 8-digit ЄДРПОУ при type=fop, або 10-digit РНОКПП при
+     * type=tov).
+     *
+     * Окремий код від `INVALID_TAX_ID` / `INVALID_LEGAL_TAX_ID` — ці два
+     * описують **структурну** помилку (regex/checksum), цей — **type-binding**
+     * (формат сам валідний, але не для цього `type`). UI підказує "ваш бізнес
+     * — ФОП, потрібен 10-цифровий РНОКПП", не "введіть валідний код".
+     */
+    TAX_ID_FORMAT_MISMATCH_TYPE: 'TAX_ID_FORMAT_MISMATCH_TYPE',
 
     // --- invoices error (Sprint 4 §4.2 §4.8) ---
     /** Invoice не знайдено в межах business-у. `InvoiceAccessGuard` / `InvoicesService.getBySlug`. UA: "Рахунок не знайдено". */
@@ -149,6 +191,9 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.SLUG_GENERATION_FAILED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVALID_VAT_FOR_TAXATION_SYSTEM]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVALID_LEGAL_TAX_ID]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.TAXATION_NOT_APPLICABLE_FOR_TYPE]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.TAXATION_REQUIRED_FOR_TYPE]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.TAX_ID_FORMAT_MISMATCH_TYPE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVOICE_NOT_FOUND]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVOICE_SLUG_GENERATION_FAILED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVOICE_AMOUNT_LOCKED_REQUIRES_AMOUNT]: RESPONSE_TYPE.ERROR,

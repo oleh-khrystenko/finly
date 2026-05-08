@@ -41,7 +41,9 @@ describe('Business schema (Mongoose integration)', () => {
     });
 
     it('persists owned business with all required fields and applies defaults', async () => {
-        const doc = await BusinessModel.create(buildFixture());
+        const doc = await BusinessModel.create(
+            buildFixture({ isVatPayer: false })
+        );
 
         expect(doc._id).toBeDefined();
         expect(doc.type).toBe('fop');
@@ -49,7 +51,7 @@ describe('Business schema (Mongoose integration)', () => {
         expect(doc.managers).toEqual([]);
         expect(doc.acceptedBanks).toEqual(['privatbank', 'monobank']);
         expect(doc.taxationSystem).toBe('simplified-3');
-        expect(doc.isVatPayer).toBe(false); // default
+        expect(doc.isVatPayer).toBe(false);
         expect(doc.seoIndexEnabled).toBe(false); // default
         expect(doc.invoiceSlugPresetDefault).toBeNull(); // Sprint 4 §4.1
         expect(doc.createdAt).toBeInstanceOf(Date);
@@ -159,11 +161,37 @@ describe('Business schema (Mongoose integration)', () => {
     });
 
     it('rejects unknown business type', async () => {
+        // Sprint 7 розширив enum до 4 значень. Тестуємо невалідний літерал.
         await expect(
             BusinessModel.create(
-                buildFixture({ type: 'tov' as unknown as 'fop' })
+                buildFixture({ type: 'sole-proprietor' as unknown as 'fop' })
             )
-        ).rejects.toThrow(/tov.*enum/i);
+        ).rejects.toThrow(/sole-proprietor.*enum/i);
+    });
+
+    it('Sprint 7 — приймає всі 4 BusinessType-літерали (individual, fop, tov, organization)', async () => {
+        // Sprint 7 §SP-3 — Mongoose enum-validator пропускає всі 4 значення.
+        // Coupled-rule (`requiresTaxation(type) ⇔ both-non-null`) живе у
+        // Zod-refine, не у Mongoose; тут перевіряємо лише структурний enum-guard.
+        for (const type of ['individual', 'fop', 'tov', 'organization'] as const) {
+            const doc = await BusinessModel.create(
+                buildFixture({
+                    type: type as 'fop',
+                    slug: `Slug${type}`,
+                    slugLower: `slug${type}`,
+                    ownerId: new Types.ObjectId(),
+                    taxationSystem:
+                        type === 'fop' || type === 'tov'
+                            ? ('simplified-3' as const)
+                            : (null as unknown as 'simplified-3'),
+                    isVatPayer:
+                        type === 'fop' || type === 'tov'
+                            ? false
+                            : (null as unknown as boolean),
+                })
+            );
+            expect(doc.type).toBe(type);
+        }
     });
 
     it('rejects unknown taxationSystem', async () => {
@@ -204,11 +232,17 @@ describe('Business schema (Mongoose integration)', () => {
         ).rejects.toThrow();
     });
 
-    it('rejects missing required taxationSystem', async () => {
-        const { taxationSystem: _omit, ...without } = buildFixture();
-        await expect(
-            BusinessModel.create(without as unknown as Business)
-        ).rejects.toThrow();
+    it('Sprint 7 §SP-3 — приймає документ без taxationSystem (default null для individual/organization)', async () => {
+        // taxationSystem стало nullable з default null. Це навмисно — Mongoose
+        // структурно дозволяє відсутність; iff-coupled-rule живе у Zod-refine.
+        const { taxationSystem: _omit, isVatPayer: _omit2, ...without } = buildFixture();
+        void _omit;
+        void _omit2;
+        const doc = await BusinessModel.create(
+            { ...(without as unknown as Business), type: 'individual' as const }
+        );
+        expect(doc.taxationSystem).toBeNull();
+        expect(doc.isVatPayer).toBeNull();
     });
 
     it('does NOT enforce ownerless ⇒ managers ≥ 1 invariant at Mongoose layer (app-layer rule)', async () => {

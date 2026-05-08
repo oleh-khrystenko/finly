@@ -100,6 +100,134 @@ describe('CreateBusinessSchema', () => {
         });
         expect(result.success).toBe(false);
     });
+
+    // -------------------------------------------------------------------------
+    // Sprint 7 §SP-3 + §SP-4 — discriminatedUnion per `type`. Кожен variant
+    // експонує лише ті поля, що мають юр-сенс. 4 positive (один на тип),
+    // 4 negative (per-variant strictness violations).
+    // -------------------------------------------------------------------------
+
+    describe('Sprint 7 — discriminated union per type', () => {
+        const VALID_RNOKPP = '1234567899';
+        const VALID_EDRPOU = '12345678';
+
+        const baseFields = {
+            name: 'Іваненко',
+            paymentPurposeTemplate: 'Збір',
+            acceptedBanks: ['privatbank' as const],
+        };
+
+        it('accepts individual without taxation-fields, з 10-digit RNOKPP', () => {
+            const result = CreateBusinessSchema.safeParse({
+                ...baseFields,
+                type: 'individual',
+                requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+            });
+            expect(result.success).toBe(true);
+        });
+
+        it('accepts fop with taxation-fields і 10-digit RNOKPP', () => {
+            const result = CreateBusinessSchema.safeParse({
+                ...baseFields,
+                type: 'fop',
+                requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+                taxationSystem: 'simplified-3',
+                isVatPayer: false,
+            });
+            expect(result.success).toBe(true);
+        });
+
+        it('accepts tov with taxation-fields і 8-digit ЄДРПОУ', () => {
+            const result = CreateBusinessSchema.safeParse({
+                ...baseFields,
+                type: 'tov',
+                requisites: { iban: VALID_IBAN, taxId: VALID_EDRPOU },
+                taxationSystem: 'general',
+                isVatPayer: true,
+            });
+            expect(result.success).toBe(true);
+        });
+
+        it('accepts organization without taxation-fields, з 8-digit ЄДРПОУ', () => {
+            const result = CreateBusinessSchema.safeParse({
+                ...baseFields,
+                type: 'organization',
+                requisites: { iban: VALID_IBAN, taxId: VALID_EDRPOU },
+            });
+            expect(result.success).toBe(true);
+        });
+
+        it('rejects taxation-fields у individual variant (.strict() unknown key)', () => {
+            const result = CreateBusinessSchema.safeParse({
+                ...baseFields,
+                type: 'individual',
+                requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+                taxationSystem: 'simplified-3',
+                isVatPayer: false,
+            });
+            expect(result.success).toBe(false);
+        });
+
+        it('rejects taxation-fields у organization variant (.strict() unknown key)', () => {
+            const result = CreateBusinessSchema.safeParse({
+                ...baseFields,
+                type: 'organization',
+                requisites: { iban: VALID_IBAN, taxId: VALID_EDRPOU },
+                taxationSystem: 'simplified-3',
+                isVatPayer: false,
+            });
+            expect(result.success).toBe(false);
+        });
+
+        it('rejects 8-digit ЄДРПОУ для type=fop (per-variant individualTaxIdZod)', () => {
+            const result = CreateBusinessSchema.safeParse({
+                ...baseFields,
+                type: 'fop',
+                requisites: { iban: VALID_IBAN, taxId: VALID_EDRPOU },
+                taxationSystem: 'simplified-3',
+                isVatPayer: false,
+            });
+            expect(result.success).toBe(false);
+        });
+
+        it('rejects 10-digit RNOKPP для type=organization (per-variant legalEntityTaxIdZod)', () => {
+            const result = CreateBusinessSchema.safeParse({
+                ...baseFields,
+                type: 'organization',
+                requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+            });
+            expect(result.success).toBe(false);
+        });
+
+        it('rejects missing taxationSystem на fop variant', () => {
+            const result = CreateBusinessSchema.safeParse({
+                ...baseFields,
+                type: 'fop',
+                requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+                isVatPayer: false,
+            });
+            expect(result.success).toBe(false);
+        });
+
+        it('rejects missing taxationSystem на tov variant', () => {
+            const result = CreateBusinessSchema.safeParse({
+                ...baseFields,
+                type: 'tov',
+                requisites: { iban: VALID_IBAN, taxId: VALID_EDRPOU },
+                isVatPayer: true,
+            });
+            expect(result.success).toBe(false);
+        });
+
+        it('rejects unknown discriminator value', () => {
+            const result = CreateBusinessSchema.safeParse({
+                ...baseFields,
+                type: 'startup',
+                requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+            });
+            expect(result.success).toBe(false);
+        });
+    });
 });
 
 describe('UpdateBusinessSchema', () => {

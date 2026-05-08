@@ -20,10 +20,38 @@ const SELECT_OPTIONS = TAXATION_SYSTEMS.map((value) => ({
     label: TAXATION_SYSTEM_LABEL[value],
 }));
 
+/**
+ * Sprint 7 §7.8 / §SP-3 — `Business.taxationSystem` і `isVatPayer` тепер
+ * nullable (для individual / organization). TaxationSection семантично
+ * валідна тільки для типів, що **мають** taxation-поля (`fop` / `tov`).
+ *
+ * Замість runtime-null-guard всередині секції robимо contract-narrow на
+ * Props-рівні: parent (`(protected)/business/[slug]/page.tsx`) гарантує
+ * non-null значення через `hasTaxationFields(business)` type-guard перед
+ * рендером (Sprint 7 §7.8 conditional unmount). TS-помилка на рівні DOM-
+ * insertion-у унеможливлює забуття цього guard-а.
+ */
+export type TaxationCapableBusiness = Business & {
+    taxationSystem: TaxationSystem;
+    isVatPayer: boolean;
+};
+
+/**
+ * Type-guard для conditional-render-у TaxationSection. `requiresTaxation
+ * (b.type)` гарантує narrow за Sprint 7 entity-refine
+ * (`TAXATION_FIELDS_MISMATCH_TYPE`); явна null-перевірка — defensive для
+ * legacy-документів і edge-cases (TS-narrow цей invariant з типу не виведе).
+ */
+export function hasTaxationFields(
+    business: Business,
+): business is TaxationCapableBusiness {
+    return business.taxationSystem !== null && business.isVatPayer !== null;
+}
+
 interface Props {
-    business: Business;
+    business: TaxationCapableBusiness;
     onSave: (
-        patch: Pick<Business, 'taxationSystem' | 'isVatPayer'>,
+        patch: Pick<TaxationCapableBusiness, 'taxationSystem' | 'isVatPayer'>,
     ) => Promise<void>;
 }
 
