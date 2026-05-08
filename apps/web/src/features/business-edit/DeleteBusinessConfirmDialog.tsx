@@ -1,6 +1,6 @@
 'use client';
 
-import { pluralizeUa } from '@/shared/lib';
+import { pluralizeUa, useAutoCancelOnRouteChange } from '@/shared/lib';
 import { UiConfirmDialog } from '@/shared/ui/UiConfirmDialog';
 import { useDeleteBusinessConfirmStore } from './deleteBusinessConfirmStore';
 
@@ -19,6 +19,14 @@ import { useDeleteBusinessConfirmStore } from './deleteBusinessConfirmStore';
  * business/page.tsx`). "Активний" вводив би в оману у destructive-confirmation.
  */
 
+/**
+ * **Lifecycle cleanup на route-change (review fix)** — `useAutoCancelOnRoute-
+ * Change`. Той самий клас проблеми, що `DeleteInvoiceConfirmDialog` /
+ * `SlugPresetWarningDialog`: глобальний store + route-local closure
+ * (`onConfirm` замикає `business.slug` cabinet-page-у). Без guard-а ФОП
+ * міг би відкрити confirm на бізнесі A, перейти на бізнес B, натиснути
+ * Confirm — і запустити 5s-undo cascade-delete на бізнес A.
+ */
 export default function DeleteBusinessConfirmDialog() {
     const isOpen = useDeleteBusinessConfirmStore((s) => s.isOpen);
     const business = useDeleteBusinessConfirmStore((s) => s.business);
@@ -27,6 +35,8 @@ export default function DeleteBusinessConfirmDialog() {
     );
     const onConfirm = useDeleteBusinessConfirmStore((s) => s.onConfirm);
     const close = useDeleteBusinessConfirmStore((s) => s.close);
+
+    useAutoCancelOnRouteChange(isOpen, close);
 
     let description = '';
     if (business) {

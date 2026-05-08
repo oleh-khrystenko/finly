@@ -1,7 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import { usePathname } from 'next/navigation';
+import { useAutoCancelOnRouteChange } from '@/shared/lib';
 import { UiConfirmDialog } from '@/shared/ui/UiConfirmDialog';
 import { useSlugPresetWarningStore } from './slugPresetWarningStore';
 
@@ -15,39 +14,18 @@ import { useSlugPresetWarningStore } from './slugPresetWarningStore';
  * Обидва шляхи детерміновано викликають правильний callback із пари, що
  * caller передав у `open()`. Без `subscribe`-race-у на `isOpen`-зміну.
  *
- * **Lifecycle cleanup на route-change (review fix).** Глобальний store
- * тримає route-local closures (`onSave({ ... })` у `InvoicesSettingsSection`
- * — captures `business` slug). Якщо ФОП відкрив warning, навігував на інший
- * бізнес/сторінку і потім натиснув confirm — старий closure спрацював би
- * проти контексту, з якого вже вийшли (PATCH-чекладений на старий бізнес).
- * Інваріант: "global warning живе тільки в межах одного pathname". При зміні
- * pathname dialog авто-cancel-ить — onCancel-callback ловить race
- * детерміновано, як і будь-який intentional dismiss (ESC, click-outside).
- * Резолвить promise-у caller-а у `false` навіть коли той unmount-ився:
- * resolve на dead promise — no-op у React.
+ * **Lifecycle cleanup на route-change (review fix)** — `useAutoCancelOnRoute-
+ * Change`. Глобальний store тримає route-local closures (`onSave({ ... })`
+ * у `InvoicesSettingsSection` — captures `business` slug). Без guard-а
+ * confirm після переходу спрацював би проти старого контексту (PATCH на
+ * старий бізнес). Resolve у `false` для caller, що unmount-ився, — no-op.
  */
 export default function SlugPresetWarningDialog() {
     const isOpen = useSlugPresetWarningStore((s) => s.isOpen);
     const confirm = useSlugPresetWarningStore((s) => s.confirm);
     const cancel = useSlugPresetWarningStore((s) => s.cancel);
 
-    const pathname = usePathname();
-    // Snapshot останнього pathname-у, при якому dialog був відкритий. Без
-    // snapshot-а `isOpen && pathname-changed` не розрізнити "відкрили на
-    // цьому pathname-i" від "відкрили десь і pathname вже інший від mount-у".
-    const openedAtPathnameRef = useRef<string | null>(null);
-    useEffect(() => {
-        if (isOpen) {
-            if (openedAtPathnameRef.current === null) {
-                openedAtPathnameRef.current = pathname;
-            } else if (openedAtPathnameRef.current !== pathname) {
-                cancel();
-                openedAtPathnameRef.current = null;
-            }
-        } else {
-            openedAtPathnameRef.current = null;
-        }
-    }, [isOpen, pathname, cancel]);
+    useAutoCancelOnRouteChange(isOpen, cancel);
 
     return (
         <UiConfirmDialog
