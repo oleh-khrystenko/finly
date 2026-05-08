@@ -58,7 +58,7 @@ describe('BusinessSchema', () => {
     it('rejects unknown business type', () => {
         const result = BusinessSchema.safeParse({
             ...VALID_BUSINESS,
-            type: 'tov',
+            type: 'sole-proprietor',
         });
         expect(result.success).toBe(false);
     });
