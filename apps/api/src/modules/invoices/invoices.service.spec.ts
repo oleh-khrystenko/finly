@@ -134,12 +134,18 @@ describe('InvoicesService (Sprint 4 §4.2)', () => {
                 ...baseDto,
                 paymentPurpose: null,
             });
-            expect(slugGenerator.generateInvoiceSlug).toHaveBeenCalledWith({
-                businessId,
-                slugInput: baseDto.slugInput,
-                paymentPurpose: null,
-                businessPaymentPurposeTemplate: 'Default biz purpose',
-            });
+            expect(slugGenerator.generateInvoiceSlug).toHaveBeenCalledWith(
+                {
+                    businessId,
+                    slugInput: baseDto.slugInput,
+                    paymentPurpose: null,
+                    businessPaymentPurposeTemplate: 'Default biz purpose',
+                },
+                // Sprint 4 review fix — generator-API тепер 2-arg (input,
+                // session). У unit-spec session — mock-object без identity-
+                // вимог; перевіряємо лише, що передається не-null/undefined.
+                expect.anything(),
+            );
         });
 
         it('persistить generator-output у документ (slug, slugPreset, slugCounterScope, slugCounter)', async () => {

@@ -190,13 +190,22 @@ export class InvoicesService {
                         message: 'Business deleted during invoice creation',
                     });
                 }
-                const slugInfo = await this.slugGenerator.generateInvoiceSlug({
-                    businessId: business._id,
-                    slugInput: dto.slugInput,
-                    paymentPurpose: dto.paymentPurpose,
-                    businessPaymentPurposeTemplate:
-                        business.paymentPurposeTemplate,
-                });
+                const slugInfo = await this.slugGenerator.generateInvoiceSlug(
+                    {
+                        businessId: business._id,
+                        slugInput: dto.slugInput,
+                        paymentPurpose: dto.paymentPurpose,
+                        businessPaymentPurposeTemplate:
+                            business.paymentPurposeTemplate,
+                    },
+                    // Counter $inc живе у тій самій сесії, що invoice insert
+                    // (Sprint 4 review fix). TX abort → counter rollback
+                    // разом з invoice; counter-allocation і invoice insert —
+                    // atomically-or-nothing. Це гарантує monotonic
+                    // invariant навіть на retry-paths (cascade-delete won
+                    // race, validation failure post-allocate).
+                    session
+                );
                 const docs = await this.invoiceModel.create(
                     [
                         {

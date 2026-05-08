@@ -17,6 +17,10 @@ import {
 
 import { isTransactionsUnsupportedError } from '../../common/mongoose/transactions-unsupported';
 import {
+    InvoiceSlugCounter,
+    type InvoiceSlugCounterDocument,
+} from '../invoices/schemas/invoice-slug-counter.schema';
+import {
     Invoice,
     type InvoiceDocument,
 } from '../invoices/schemas/invoice.schema';
@@ -62,6 +66,8 @@ export class BusinessesService {
         private readonly businessModel: Model<BusinessDocument>,
         @InjectModel(Invoice.name)
         private readonly invoiceModel: Model<InvoiceDocument>,
+        @InjectModel(InvoiceSlugCounter.name)
+        private readonly counterModel: Model<InvoiceSlugCounterDocument>,
         @InjectConnection()
         private readonly connection: Connection,
         private readonly slugGenerator: SlugGeneratorService
@@ -331,6 +337,16 @@ export class BusinessesService {
         try {
             await session.withTransaction(async () => {
                 await this.invoiceModel.deleteMany({ businessId }, { session });
+                // Sprint 4 review fix — cascade-видалення counter-doc-ів того
+                // самого business-у. Без цього counter-доки залишалися б
+                // orphan-ами per business _id з-під видаленого бізнесу
+                // (нешкідливо для коректності, бо _id unique і не reuse-ається,
+                // але засмічує колекцію). Атомарно у тій самій TX-сесії —
+                // якщо TX abort-ить, counters лишаються разом з invoices.
+                await this.counterModel.deleteMany(
+                    { businessId },
+                    { session }
+                );
                 await this.businessModel.deleteOne(
                     { _id: businessId },
                     { session }

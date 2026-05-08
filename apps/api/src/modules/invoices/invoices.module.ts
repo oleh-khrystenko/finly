@@ -12,6 +12,10 @@ import { InvoiceSlugGeneratorService } from './invoice-slug-generator.service';
 import { InvoicesController } from './invoices.controller';
 import { InvoicesService } from './invoices.service';
 import { PublicInvoicesController } from './public-invoices.controller';
+import {
+    InvoiceSlugCounter,
+    InvoiceSlugCounterSchema,
+} from './schemas/invoice-slug-counter.schema';
 import { Invoice, InvoiceSchema } from './schemas/invoice.schema';
 
 /**
@@ -45,6 +49,9 @@ import { Invoice, InvoiceSchema } from './schemas/invoice.schema';
         MongooseModule.forFeature([
             { name: Invoice.name, schema: InvoiceSchema },
             { name: Business.name, schema: BusinessSchema },
+            // Sprint 4 review fix — окрема counter-колекція для slug-генератора
+            // (monotonic invariant per (businessId, scope) crossing deletes).
+            { name: InvoiceSlugCounter.name, schema: InvoiceSlugCounterSchema },
         ]),
         forwardRef(() => BusinessesModule),
         QrModule,

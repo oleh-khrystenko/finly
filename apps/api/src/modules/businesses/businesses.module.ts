@@ -1,6 +1,10 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 
+import {
+    InvoiceSlugCounter,
+    InvoiceSlugCounterSchema,
+} from '../invoices/schemas/invoice-slug-counter.schema';
 import { Invoice, InvoiceSchema } from '../invoices/schemas/invoice.schema';
 import { InvoiceSlugGeneratorService } from '../invoices/invoice-slug-generator.service';
 import { InvoicesService } from '../invoices/invoices.service';
@@ -43,6 +47,11 @@ import { SlugGeneratorService } from './slug-generator.service';
         MongooseModule.forFeature([
             { name: Business.name, schema: BusinessSchema },
             { name: Invoice.name, schema: InvoiceSchema },
+            // Sprint 4 review fix — counter-колекція реєструється і тут, бо
+            // `BusinessesService.delete` робить cascade-видалення counter-
+            // doc-ів у тій самій транзакції, що invoices+business (інакше —
+            // orphan counters per business _id з-під видаленого бізнесу).
+            { name: InvoiceSlugCounter.name, schema: InvoiceSlugCounterSchema },
         ]),
         QrModule,
         UsersModule,

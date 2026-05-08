@@ -12,6 +12,7 @@ import type {
     UpdateBusinessRequest,
 } from '@finly/types';
 
+import { InvoiceSlugCounter } from '../invoices/schemas/invoice-slug-counter.schema';
 import { Invoice } from '../invoices/schemas/invoice.schema';
 import { BusinessesService } from './businesses.service';
 import type { BusinessDocument } from './schemas/business.schema';
@@ -30,6 +31,9 @@ describe('BusinessesService', () => {
     }>;
     let invoiceModel: jest.Mocked<{
         countDocuments: jest.Mock;
+        deleteMany: jest.Mock;
+    }>;
+    let counterModel: jest.Mocked<{
         deleteMany: jest.Mock;
     }>;
     let session: jest.Mocked<{
@@ -67,6 +71,9 @@ describe('BusinessesService', () => {
             countDocuments: jest.fn().mockResolvedValue(0),
             deleteMany: jest.fn().mockResolvedValue({ deletedCount: 0 }),
         };
+        counterModel = {
+            deleteMany: jest.fn().mockResolvedValue({ deletedCount: 0 }),
+        };
         // Default session: `withTransaction(cb)` запускає cb напряму (success),
         // повертає cb's resolved value. Тести cascade-delete можуть переоприділити
         // session.withTransaction для simulate failure / replica-set absence.
@@ -93,6 +100,10 @@ describe('BusinessesService', () => {
                 {
                     provide: getModelToken(Invoice.name),
                     useValue: invoiceModel,
+                },
+                {
+                    provide: getModelToken(InvoiceSlugCounter.name),
+                    useValue: counterModel,
                 },
                 {
                     provide: getConnectionToken(),

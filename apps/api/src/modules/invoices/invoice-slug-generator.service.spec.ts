@@ -5,7 +5,15 @@ import { getKyivYearMonth } from '@finly/types';
 import { Model, Types } from 'mongoose';
 
 import { createStandaloneMongo } from '../../test-utils/mongo';
-import { InvoiceSlugGeneratorService } from './invoice-slug-generator.service';
+import {
+    InvoiceSlugGeneratorService,
+    type GenerateInvoiceSlugInput,
+} from './invoice-slug-generator.service';
+import {
+    InvoiceSlugCounter,
+    InvoiceSlugCounterDocument,
+    InvoiceSlugCounterSchema,
+} from './schemas/invoice-slug-counter.schema';
 import {
     Invoice,
     InvoiceDocument,
@@ -23,6 +31,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
     let moduleRef: TestingModule;
     let service: InvoiceSlugGeneratorService;
     let invoiceModel: Model<InvoiceDocument>;
+    let counterModel: Model<InvoiceSlugCounterDocument>;
     let businessId: Types.ObjectId;
 
     beforeAll(async () => {
@@ -32,6 +41,10 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                 MongooseModule.forRoot(mongo.uri),
                 MongooseModule.forFeature([
                     { name: Invoice.name, schema: InvoiceSchema },
+                    {
+                        name: InvoiceSlugCounter.name,
+                        schema: InvoiceSlugCounterSchema,
+                    },
                 ]),
             ],
             providers: [InvoiceSlugGeneratorService],
@@ -41,11 +54,13 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
         // HTTP-listener — нам потрібен лише DI-context для тестування service-у.
         service = moduleRef.get(InvoiceSlugGeneratorService);
         invoiceModel = moduleRef.get(getModelToken(Invoice.name));
+        counterModel = moduleRef.get(getModelToken(InvoiceSlugCounter.name));
         // Sprint 4 §4.1 — explicit index sync, щоб partial-unique compound
         // `(businessId, slugCounterScope, slugCounter)` точно існував до
         // race-test-у. Mongoose autoIndex може race з першим `create`-ом
         // на heavy-load test runner — `syncIndexes` await гарантує готовність.
         await invoiceModel.syncIndexes();
+        await counterModel.syncIndexes();
     }, 30_000);
 
     afterAll(async () => {
@@ -55,8 +70,20 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
 
     beforeEach(async () => {
         await invoiceModel.deleteMany({});
+        await counterModel.deleteMany({});
         businessId = new Types.ObjectId();
     });
+
+    /**
+     * Test-only wrapper, що делегує до service з `null`-сесією. Production-
+     * каллер (`InvoicesService.create`) завжди передає реальну `ClientSession`
+     * для atomic counter-allocation у транзакції; тут unit-тестуємо генератор
+     * у standalone Mongo (без replica-set / TX-support).
+     */
+    const gen = (
+        input: GenerateInvoiceSlugInput,
+    ): ReturnType<typeof service.generateInvoiceSlug> =>
+        service.generateInvoiceSlug(input, null);
 
     /**
      * Helper: створює invoice-документ з мінімально-валідними полями.
@@ -85,7 +112,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
 
     describe('kind=explicit', () => {
         it('повертає {humanPart}-{tail}, slugPreset=null, counter-fields=null', async () => {
-            const result = await service.generateInvoiceSlug({
+            const result = await gen({
                 businessId,
                 slugInput: { kind: 'explicit', humanPart: 'inv-2026' },
                 paymentPurpose: null,
@@ -100,7 +127,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
 
     describe('kind=random', () => {
         it('повертає голий 8-char tail, slugPreset=null, counter-fields=null', async () => {
-            const result = await service.generateInvoiceSlug({
+            const result = await gen({
                 businessId,
                 slugInput: { kind: 'random' },
                 paymentPurpose: null,
@@ -115,7 +142,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
 
     describe('kind=preset, simple', () => {
         it('перший інвойс — inv-001 + counter-fields seeded', async () => {
-            const result = await service.generateInvoiceSlug({
+            const result = await gen({
                 businessId,
                 slugInput: { kind: 'preset', preset: 'simple' },
                 paymentPurpose: null,
@@ -129,7 +156,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
 
         it('monotonic counter: 10 послідовних інвойсів — inv-001..inv-010', async () => {
             for (let i = 1; i <= 10; i++) {
-                const r = await service.generateInvoiceSlug({
+                const r = await gen({
                     businessId,
                     slugInput: { kind: 'preset', preset: 'simple' },
                     paymentPurpose: null,
@@ -163,7 +190,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                 // counter-fields навмисно null — explicit не використовує counter
             });
 
-            const result = await service.generateInvoiceSlug({
+            const result = await gen({
                 businessId,
                 slugInput: { kind: 'preset', preset: 'simple' },
                 paymentPurpose: null,
@@ -189,7 +216,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                 deletedAt: null,
             });
 
-            const result = await service.generateInvoiceSlug({
+            const result = await gen({
                 businessId,
                 slugInput: { kind: 'preset', preset: 'simple' },
                 paymentPurpose: null,
@@ -233,6 +260,97 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
             ).rejects.toMatchObject({ code: 11000 });
         });
 
+        it('counter monotonic across deletes: видалення invoice не reset-ить counter (Sprint 4 review fix)', async () => {
+            // КРИТИЧНИЙ INVARIANT (Sprint 4 review fix): counter-doc живе
+            // незалежно від invoice-документів. Раніше `MAX(slugCounter)+1`
+            // over invoice-документами reset-ився після delete (видалили
+            // inv-003 → MAX=2 → counter знову 3 → візуально дублікат
+            // `inv-003-{newTail}`). Тепер counter живе у своїй колекції;
+            // hard-delete invoice не торкається counter-doc-у.
+            //
+            // Симулюємо post-deploy steady-state:
+            //   counter-doc.last = 3 (3 prior allocations)
+            //   invoices: counter=1, counter=2 (counter=3 invoice deleted)
+            await counterModel.create({
+                businessId,
+                scope: 'simple',
+                last: 3,
+            });
+            await insertInvoice({
+                slug: 'inv-001-aaaaaaaa',
+                slugPreset: 'simple',
+                slugCounterScope: 'simple',
+                slugCounter: 1,
+            });
+            await insertInvoice({
+                slug: 'inv-002-bbbbbbbb',
+                slugPreset: 'simple',
+                slugCounterScope: 'simple',
+                slugCounter: 2,
+            });
+            // No invoice with counter=3 (deleted by user). Старий
+            // MAX(N)+1-aggregation поверне 3 (counter reuse — баг). Новий
+            // counter-doc.$inc поверне 4 (monotonic invariant).
+
+            const r = await gen({
+                businessId,
+                slugInput: { kind: 'preset', preset: 'simple' },
+                paymentPurpose: null,
+                businessPaymentPurposeTemplate: 'Оплата',
+            });
+            expect(r.slug).toMatch(/^inv-004-[A-Za-z0-9]{8}$/);
+            expect(r.slugCounter).toBe(4);
+
+            const counterDoc = await counterModel
+                .findOne({ businessId, scope: 'simple' })
+                .lean();
+            expect(counterDoc?.last).toBe(4);
+        });
+
+        it('lazy bootstrap: counter-doc відсутній, але legacy invoices мають counter-значення → counter стартує за legacy MAX', async () => {
+            // Post-deploy перший allocate per (business, scope) на legacy data:
+            // counter-doc ще не існує, але існують invoices з counter-значеннями.
+            // Без bootstrap-у counter стартував би з 1 → collision проти
+            // existing invoice з counter=1 → retry-on-11000 у InvoicesService
+            // → exhaust MAX_RETRIES при ≥4 legacy invoices у scope-i. Lazy
+            // bootstrap pre-skip-ає за legacy MAX, гарантуючи clean-allocate
+            // на першому пост-деплой інвойсі.
+            await insertInvoice({
+                slug: 'inv-001-aaaaaaaa',
+                slugPreset: 'simple',
+                slugCounterScope: 'simple',
+                slugCounter: 1,
+            });
+            await insertInvoice({
+                slug: 'inv-002-bbbbbbbb',
+                slugPreset: 'simple',
+                slugCounterScope: 'simple',
+                slugCounter: 2,
+            });
+            await insertInvoice({
+                slug: 'inv-005-cccccccc',
+                slugPreset: 'simple',
+                slugCounterScope: 'simple',
+                slugCounter: 5,
+            });
+            // No counter-doc. Allocate має знайти legacyMax=5, створити
+            // counter-doc з last=6, повернути 6.
+
+            const r = await gen({
+                businessId,
+                slugInput: { kind: 'preset', preset: 'simple' },
+                paymentPurpose: null,
+                businessPaymentPurposeTemplate: 'Оплата',
+            });
+            expect(r.slug).toMatch(/^inv-006-[A-Za-z0-9]{8}$/);
+            expect(r.slugCounter).toBe(6);
+
+            const counterDoc = await counterModel
+                .findOne({ businessId, scope: 'simple' })
+                .lean();
+            expect(counterDoc?.last).toBe(6);
+        });
+
         it('partial-unique НЕ блокує non-counter режими (slugCounter=null)', async () => {
             // explicit/random/with-purpose всі мають counter-fields=null.
             // partial-filter `slugCounter: { $type: 'int' }` виключає null
@@ -263,7 +381,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
 
     describe('kind=preset, with-month', () => {
         it('містить YYYY-MM prefix у Kyiv-tz і слідує counter', async () => {
-            const r = await service.generateInvoiceSlug({
+            const r = await gen({
                 businessId,
                 slugInput: { kind: 'preset', preset: 'with-month' },
                 paymentPurpose: null,
@@ -280,29 +398,38 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
 
         it('counter ігнорує інший місяць (наступний місяць → counter starts again at 1)', async () => {
             // Sprint 4 §4.1 — counter per (business, year, month) reset-иться
-            // на новий місяць. Емулюємо "у попередньому місяці був інвойс 005".
+            // на новий місяць. Sprint 4 review fix: seed-имо РЕАЛЬНИЙ counter-
+            // doc для попереднього місяця (не invoice з null-counter-fields,
+            // що нічого не доводив про counter-isolation).
             const { year, month } = getKyivYearMonth(new Date());
-            const prevMonthPrefix =
+            const prevMonthScope =
                 month === 1
-                    ? `${year - 1}-12-`
-                    : `${year}-${String(month - 1).padStart(2, '0')}-`;
-            await insertInvoice({
-                slug: `${prevMonthPrefix}005-aaaaaaaa`,
-                slugPreset: 'with-month',
+                    ? `${year - 1}-12`
+                    : `${year}-${String(month - 1).padStart(2, '0')}`;
+            await counterModel.create({
+                businessId,
+                scope: prevMonthScope,
+                last: 5,
             });
 
-            const r = await service.generateInvoiceSlug({
+            const r = await gen({
                 businessId,
                 slugInput: { kind: 'preset', preset: 'with-month' },
                 paymentPurpose: null,
                 businessPaymentPurposeTemplate: 'Оплата',
             });
-            // Все одно 001 — попередній місяць не впливає
+            // Все одно 001 — попередній місяць має окремий counter-namespace.
             const yyyy = year;
             const mm = String(month).padStart(2, '0');
             expect(r.slug).toMatch(
                 new RegExp(`^${yyyy}-${mm}-001-[A-Za-z0-9]{8}$`)
             );
+            expect(r.slugCounter).toBe(1);
+            // Counter-doc для попереднього місяця має лишитись недоторканим.
+            const prev = await counterModel
+                .findOne({ businessId, scope: prevMonthScope })
+                .lean();
+            expect(prev?.last).toBe(5);
         });
 
         it('boundary midnight: інвойс o 1.06.2026 00:30 Київ (= UTC 31.05 21:30Z) → prefix 2026-06-, не 2026-05-', async () => {
@@ -323,7 +450,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                 .spyOn(service as unknown as { now: () => Date }, 'now')
                 .mockReturnValue(new Date('2026-05-31T21:30:00.000Z'));
             try {
-                const r = await service.generateInvoiceSlug({
+                const r = await gen({
                     businessId,
                     slugInput: { kind: 'preset', preset: 'with-month' },
                     paymentPurpose: null,
@@ -338,7 +465,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
 
     describe('kind=preset, with-year', () => {
         it('містить YYYY prefix у Kyiv-tz і counter', async () => {
-            const r = await service.generateInvoiceSlug({
+            const r = await gen({
                 businessId,
                 slugInput: { kind: 'preset', preset: 'with-year' },
                 paymentPurpose: null,
@@ -359,7 +486,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                 .spyOn(service as unknown as { now: () => Date }, 'now')
                 .mockReturnValue(new Date('2026-12-31T22:30:00.000Z'));
             try {
-                const r = await service.generateInvoiceSlug({
+                const r = await gen({
                     businessId,
                     slugInput: { kind: 'preset', preset: 'with-year' },
                     paymentPurpose: null,
@@ -374,7 +501,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
 
     describe('kind=preset, with-purpose', () => {
         it('explicit paymentPurpose — slug містить slugified explicit-purpose', async () => {
-            const r = await service.generateInvoiceSlug({
+            const r = await gen({
                 businessId,
                 slugInput: { kind: 'preset', preset: 'with-purpose' },
                 paymentPurpose: 'Оплата за консультацію',
@@ -385,7 +512,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
         });
 
         it('paymentPurpose=null — inheritance з business template', async () => {
-            const r = await service.generateInvoiceSlug({
+            const r = await gen({
                 businessId,
                 slugInput: { kind: 'preset', preset: 'with-purpose' },
                 paymentPurpose: null,
@@ -396,7 +523,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
         });
 
         it('empty-after-slugify (emoji-only) → fallback на рівень 3', async () => {
-            const r = await service.generateInvoiceSlug({
+            const r = await gen({
                 businessId,
                 slugInput: { kind: 'preset', preset: 'with-purpose' },
                 paymentPurpose: '🎉🎁',
@@ -407,7 +534,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
         });
 
         it("apostrophe-cyrillic edge — m'iaso → miaso", async () => {
-            const r = await service.generateInvoiceSlug({
+            const r = await gen({
                 businessId,
                 slugInput: { kind: 'preset', preset: 'with-purpose' },
                 paymentPurpose: 'М’ясо',
@@ -417,7 +544,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
         });
 
         it('numeric purpose preserved у slug', async () => {
-            const r = await service.generateInvoiceSlug({
+            const r = await gen({
                 businessId,
                 slugInput: { kind: 'preset', preset: 'with-purpose' },
                 paymentPurpose: 'Замовлення 147',
@@ -437,7 +564,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                 .mockResolvedValue({ _id: new Types.ObjectId() });
 
             await expect(
-                service.generateInvoiceSlug({
+                gen({
                     businessId,
                     slugInput: { kind: 'random' },
                     paymentPurpose: null,
@@ -459,7 +586,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                     ) as ReturnType<typeof invoiceModel.exists>;
                 });
 
-            const r = await service.generateInvoiceSlug({
+            const r = await gen({
                 businessId,
                 slugInput: { kind: 'random' },
                 paymentPurpose: null,
