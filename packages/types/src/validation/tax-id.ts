@@ -1,20 +1,26 @@
 import { z } from 'zod';
 
 /**
- * ІПН (індивідуальний податковий номер) фізичної особи / ФОП в Україні.
+ * Validators для "Коду одержувача" платіжного payload-у НБУ (постанова № 97,
+ * додатки 3/4 §IV.10.5). Норматив дозволяє рівно дві довжини:
  *
- * Формат — рівно 10 десяткових цифр. 10-та цифра — контрольна, обчислюється з
- * перших 9 за алгоритмом ДПС (постанова з зміна податкового реєстру):
+ *  - **РНОКПП** (10 цифр) — фізособа / ФОП. Десята цифра — контрольна,
+ *    обчислена з перших 9 за алгоритмом ДПС.
+ *  - **ЄДРПОУ** (8 цифр) — юр.особа (ТОВ, ОСББ, благодійний фонд, …).
  *
- *   weights = [-1, 5, 7, 9, 4, 6, 10, 5, 7]
- *   control = (Σ digit_i × weight_i) mod 11 mod 10
- *
- * Зовнішня операція `mod 10` потрібна для випадку, коли `Σ mod 11 == 10`:
- * контрольна цифра не може бути двозначною, тому згортається у `0`.
- *
- * **Не реалізуємо**: ЄДРПОУ-валідатор (для ТОВ/ВАТ — Phase 1.5+); валідація
- * дати народження, закодованої у перших 5 цифрах ІПН (це окреме business-rule,
- * не частина checksum-перевірки).
+ * Sprint 7 розширює реєстр з одного валідатора (`individualTaxIdZod`) на трійку:
+ *  - `individualTaxIdZod` — без змін, лишається для callsite-ів, що знають
+ *    про резидентську фізособу (Sprint 4 invoice-payee-snapshot, окремі
+ *    cabinet-форми у режимі `type ∈ {individual, fop}`).
+ *  - `legalEntityTaxIdZod` — нове, лише структурна перевірка `^\d{8}$` без
+ *    ДКСУ-checksum (Sprint 7 §SP-2 rationale: 2-фазний алгоритм має edge-cases
+ *    зі legacy-кодами, naive-implementation відсіче 5-10% валідних реальних
+ *    ЄДРПОУ як false-negative; банк-додаток клієнта валідує реквізити при
+ *    списанні. Tech-backlog ticket фіксує можливість додати checksum пізніше
+ *    без breaking-change — додавання refine-у не ламає валідні документи).
+ *  - `payerTaxIdZod` — union 10-цифрового РНОКПП ∪ 8-цифрового ЄДРПОУ;
+ *    використовується там, де `type` отримувача невідомий statически, як-от у
+ *    QR-payload-builder-і `PayloadInputSchema.receiverTaxId` (Sprint 7 §SP-10).
  */
 
 const IPN_LENGTH = 10;
@@ -29,6 +35,18 @@ function controlDigit(first9: string): number {
     return ((sum % 11) + 11) % 11 % 10;
 }
 
+/**
+ * РНОКПП (10 цифр + контрольна цифра за алгоритмом ДПС).
+ *
+ *   weights = [-1, 5, 7, 9, 4, 6, 10, 5, 7]
+ *   control = (Σ digit_i × weight_i) mod 11 mod 10
+ *
+ * Зовнішня операція `mod 10` потрібна для випадку, коли `Σ mod 11 == 10`:
+ * контрольна цифра не може бути двозначною, тому згортається у `0`.
+ *
+ * **Не реалізуємо** валідацію дати народження, закодованої у перших 5 цифрах
+ * РНОКПП (це окреме business-rule, не частина checksum-перевірки).
+ */
 export function isValidIndividualTaxId(value: string): boolean {
     if (typeof value !== 'string') return false;
     if (value.length !== IPN_LENGTH) return false;
@@ -43,3 +61,55 @@ export const individualTaxIdZod = z
     .refine(isValidIndividualTaxId, { message: 'INVALID_TAX_ID' });
 
 export type IndividualTaxId = z.infer<typeof individualTaxIdZod>;
+
+/**
+ * ЄДРПОУ — 8 десяткових цифр, без checksum-перевірки на MVP (Sprint 7 §SP-2).
+ *
+ * **Чому без checksum:**
+ *  1. ДКСУ-алгоритм має 2-фазну логіку (друге проходження з вагами 3..9 у разі
+ *     залишку 10 на першому проході) і edge-cases (legacy-коди до 1992 для
+ *     державних підприємств, нерезидентські коди, коди філій). Naive-impl
+ *     відсіче 5-10% валідних реальних ЄДРПОУ як false-negative — для MVP, де
+ *     ми відкриваємось на нові сегменти, заблокований ОСББ зі старим
+ *     легітимним кодом — гірший провал, ніж пропущений typo.
+ *  2. ЄДРПОУ — публічний реєстр (юрособу можна перевірити на opendatabot за
+ *     5 секунд). РНОКПП-checksum мав сенс, бо РНОКПП — особистий код, його
+ *     легко зробити з помилкою при ручному введенні; ЄДРПОУ зазвичай
+ *     copy-paste з документа.
+ *  3. Реальний контроль "чи код валідний" робить банк-додаток клієнта при
+ *     списанні (Finly як "тупий генератор", модель А — `qr-decisions.md` §1.12).
+ *
+ * Додавання checksum пізніше — non-breaking change (нові документи можуть
+ * мати помилку тільки коли writer ігнорує warning, що uncommon).
+ */
+const EDRPOU_PATTERN = /^\d{8}$/;
+
+export const legalEntityTaxIdZod = z.string().regex(EDRPOU_PATTERN, {
+    message: 'INVALID_LEGAL_TAX_ID',
+});
+
+export type LegalEntityTaxId = z.infer<typeof legalEntityTaxIdZod>;
+
+/**
+ * Union-валідатор для "Коду одержувача" у NBU payload-builder-і (Sprint 7 §SP-10).
+ *
+ * Норматив НБУ дозволяє рівно 2 формати; будь-яке третє не існує у production
+ * payment-flow. Union дає чисту semantic "приймаємо рівно один з двох", без
+ * stale options.
+ *
+ * **Чому НЕ перейменовуємо `individualTaxIdZod` → `residentTaxIdZod`** і не
+ * заміняємо його у downstream callsite-ах: name-стабільність публічного API
+ * `@finly/types`. Sprint 4 invoice-payee-snapshot уже locked-in цей імпорт у
+ * множині consumer-ів — перейменування ламає 4-5 callsite-ів без функціональної
+ * різниці.
+ *
+ * **Issue-shape при провалі:** Zod union повідомляє issues від обох member-ів
+ * (`INVALID_TAX_ID` від `individualTaxIdZod`, `INVALID_LEGAL_TAX_ID` від
+ * `legalEntityTaxIdZod`). Consumer-сторона (`PayloadInputSchema`) це internal
+ * validation; user-facing error-mapping живе на рівні cabinet-форм, які
+ * вибирають konkrétно `individualTaxIdZod` або `legalEntityTaxIdZod` за
+ * `taxIdLengthFor(type)` (Sprint 7 §7.7 / §7.8) — там issue-code однозначний.
+ */
+export const payerTaxIdZod = z.union([individualTaxIdZod, legalEntityTaxIdZod]);
+
+export type PayerTaxId = z.infer<typeof payerTaxIdZod>;

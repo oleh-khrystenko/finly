@@ -79,6 +79,10 @@ const ERRORS: Record<string, MessageDict> = {
             'Не вдалося згенерувати посилання. Спробуйте ще раз',
         invalid_vat_for_taxation_system:
             'Платник ПДВ дозволений лише на спрощеній-3 або загальній системі',
+        // Sprint 7 §7.1 — структурна помилка ЄДРПОУ (`type ∈ {tov, organization}`).
+        // Окреме повідомлення від generic `INVALID_TAX_ID` (РНОКПП), щоб
+        // user розумів специфіку поля свого типу платника.
+        invalid_legal_tax_id: 'ЄДРПОУ має містити 8 цифр',
         // Sprint 4 §4.2 SP-5 — cascade-delete без replica-set. Нейтральне
         // user-facing повідомлення: справжню причину (infra-misconfig) видно
         // лише у server-логах, не leak-ається user-у.

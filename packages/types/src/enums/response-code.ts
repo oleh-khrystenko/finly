@@ -58,6 +58,21 @@ export const RESPONSE_CODE = {
      * Recoverable client-side: ФОП обирає валідну пару і повторно save-ить.
      */
     INVALID_VAT_FOR_TAXATION_SYSTEM: 'INVALID_VAT_FOR_TAXATION_SYSTEM',
+    /**
+     * Sprint 7 §7.1 — структурна перевірка ЄДРПОУ (`^\d{8}$`) для типів
+     * `tov` / `organization`. Окремий код від `INVALID_TAX_ID` (РНОКПП), щоб
+     * `mapApiCode` міг видати специфічне повідомлення "ЄДРПОУ має містити
+     * 8 цифр" замість загального "Неправильний податковий код".
+     *
+     * Розгалуження валідатора живе у Zod write-DTO (`CreateBusinessSchema`
+     * discriminated union per `type`) і у `BusinessesService.update`
+     * (читає document-resident `type` для PATCH без `type`-context).
+     *
+     * **MVP не валідує ДКСУ-checksum** (Sprint 7 §SP-2): naive-impl false-
+     * negative-ить ~5-10% валідних реальних ЄДРПОУ; checksum — окремий
+     * tech-backlog ticket.
+     */
+    INVALID_LEGAL_TAX_ID: 'INVALID_LEGAL_TAX_ID',
 
     // --- invoices error (Sprint 4 §4.2 §4.8) ---
     /** Invoice не знайдено в межах business-у. `InvoiceAccessGuard` / `InvoicesService.getBySlug`. UA: "Рахунок не знайдено". */
@@ -133,6 +148,7 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.BUSINESS_ACCESS_DENIED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.SLUG_GENERATION_FAILED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVALID_VAT_FOR_TAXATION_SYSTEM]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.INVALID_LEGAL_TAX_ID]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVOICE_NOT_FOUND]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVOICE_SLUG_GENERATION_FAILED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVOICE_AMOUNT_LOCKED_REQUIRES_AMOUNT]: RESPONSE_TYPE.ERROR,

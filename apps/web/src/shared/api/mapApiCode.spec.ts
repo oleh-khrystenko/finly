@@ -45,4 +45,13 @@ describe('getApiMessage', () => {
             getApiMessage('RATE_LIMIT_EXCEEDED', 'generic', { minutes: 15 }),
         ).toBe('Забагато запитів. Спробуйте через 15 хвилин');
     });
+
+    it('returns ЄДРПОУ-specific message for INVALID_LEGAL_TAX_ID', () => {
+        // Sprint 7 §7.1 — окремий код для tov / organization структурної
+        // помилки. Без цього мапінгу user бачив би UNKNOWN_FALLBACK
+        // ("Сталася помилка"), що порушує `tone.md`.
+        expect(getApiMessage('INVALID_LEGAL_TAX_ID', 'businesses')).toBe(
+            'ЄДРПОУ має містити 8 цифр',
+        );
+    });
 });
