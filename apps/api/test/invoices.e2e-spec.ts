@@ -680,6 +680,88 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             ).toBe('New purpose');
         });
 
+        it('PATCH paymentPurpose → public view відразу віддає новий purpose (snapshot mirror)', async () => {
+            // Sprint 4 review fix regression: snapshot.paymentPurpose тепер
+            // mirror-иться на PATCH. Без mirror-у клієнт по public-link бачив
+            // би старий purpose назавжди — прямо суперечить контракту
+            // "invoice mutable payment data" (public-invoices controller doc).
+            const user = await createUser();
+            const slug = await createBusinessFor(user);
+            const create = await supertest(app.getHttpServer())
+                .post(`/api/businesses/me/${slug}/invoices`)
+                .set('Authorization', bearerFor(user))
+                .send({
+                    amount: 100,
+                    amountLocked: false,
+                    paymentPurpose: 'Original',
+                    validUntil: null,
+                    slugInput: { kind: 'random' },
+                });
+            const invoiceSlug = (create.body as { data: { slug: string } }).data
+                .slug;
+
+            // Sanity: public-view спочатку показує "Original".
+            const before = await supertest(app.getHttpServer())
+                .get(`/api/businesses/public/${slug}/invoices/${invoiceSlug}`)
+                .expect(200);
+            expect(
+                (before.body as { data: { paymentPurpose: string } }).data
+                    .paymentPurpose
+            ).toBe('Original');
+
+            // Cabinet PATCH purpose → "Updated".
+            await supertest(app.getHttpServer())
+                .patch(`/api/businesses/me/${slug}/invoices/${invoiceSlug}`)
+                .set('Authorization', bearerFor(user))
+                .send({ paymentPurpose: 'Updated' })
+                .expect(200);
+
+            // Public-view відразу віддає "Updated" — snapshot mirror спрацював.
+            const after = await supertest(app.getHttpServer())
+                .get(`/api/businesses/public/${slug}/invoices/${invoiceSlug}`)
+                .expect(200);
+            expect(
+                (after.body as { data: { paymentPurpose: string } }).data
+                    .paymentPurpose
+            ).toBe('Updated');
+        });
+
+        it('PATCH paymentPurpose=null → public view показує business template (snapshot resolved)', async () => {
+            // null-inheritance на PATCH: service.update resolve-ить null →
+            // business.paymentPurposeTemplate і mirror-ить у snapshot. Public
+            // payload завжди має конкретний рядок (не null).
+            const user = await createUser();
+            const slug = await createBusinessFor(user);
+            const create = await supertest(app.getHttpServer())
+                .post(`/api/businesses/me/${slug}/invoices`)
+                .set('Authorization', bearerFor(user))
+                .send({
+                    amount: 100,
+                    amountLocked: false,
+                    paymentPurpose: 'Set explicitly',
+                    validUntil: null,
+                    slugInput: { kind: 'random' },
+                });
+            const invoiceSlug = (create.body as { data: { slug: string } }).data
+                .slug;
+
+            // PATCH paymentPurpose=null → resolve до template.
+            await supertest(app.getHttpServer())
+                .patch(`/api/businesses/me/${slug}/invoices/${invoiceSlug}`)
+                .set('Authorization', bearerFor(user))
+                .send({ paymentPurpose: null })
+                .expect(200);
+
+            const view = await supertest(app.getHttpServer())
+                .get(`/api/businesses/public/${slug}/invoices/${invoiceSlug}`)
+                .expect(200);
+            // Public-purpose === business.paymentPurposeTemplate seeded у helper.
+            expect(
+                (view.body as { data: { paymentPurpose: string } }).data
+                    .paymentPurpose
+            ).toBe('Оплата за послуги');
+        });
+
         it('reject спробу змінити slug через PATCH — 400 (slug-immutability via .strict())', async () => {
             const user = await createUser();
             const slug = await createBusinessFor(user);

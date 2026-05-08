@@ -124,22 +124,31 @@ export class PublicInvoicesController {
         // PublicInvoiceSchema.parse — це whitelist-фільтр: усе, що не у
         // схемі, відкидається. Якщо колись Mongoose-doc отримає leak-поле
         // — це місце відрубає його перед серіалізацією.
+        // Sprint 4 review fix — snapshot fields пріоритет, fallback на
+        // live business для legacy invoices (pre-snapshot створених).
+        // `paymentPurpose` і `business.name` у public-view МУСЯТЬ матчити
+        // payload (NBU QR/link) — інакше клієнт бачить одне, банк-додаток
+        // отримує інше. payload-mapper уже використовує snapshot першим;
+        // тут робимо те саме для view-shape consistency.
+        const snapshot = invoice.payeeSnapshot;
         const view = PublicInvoiceSchema.parse({
             amount: invoice.amount,
             amountLocked: invoice.amountLocked,
-            // Sprint 4 §4.7 — resolve `paymentPurpose` через
-            // `effectiveInvoicePurpose` (inheritance-rule, той самий шлях що
-            // `payloadInput.purpose`). Single source of truth: UI sub-info
-            // блок і NBU payload показують однаковий текст.
-            paymentPurpose: effectiveInvoicePurpose(
-                invoice.paymentPurpose,
-                business.paymentPurposeTemplate
-            ),
+            paymentPurpose:
+                snapshot?.paymentPurpose ??
+                effectiveInvoicePurpose(
+                    invoice.paymentPurpose,
+                    business.paymentPurposeTemplate
+                ),
             validUntil: invoice.validUntil,
             slug: invoice.slug,
             business: {
                 type: business.type,
-                name: business.name,
+                // Snapshot recipient name — той самий, що у NBU payload.
+                // Якщо ФОП перейменував business після виставлення інвойсу,
+                // клієнт бачить original ім'я, що відповідає платіжній
+                // команді у банку.
+                name: snapshot?.recipientName ?? business.name,
                 slug: business.slug,
                 acceptedBanks: business.acceptedBanks,
             },

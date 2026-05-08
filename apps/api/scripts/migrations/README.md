@@ -42,6 +42,11 @@ pnpm --filter api migration:slug-lower
 docker compose --profile migrations run --rm api-migrations
 ```
 
+Контейнер виконує `pnpm run migration:all` (Dockerfile CMD) — chain усіх
+міграцій chronologically. Кожна ідемпотентна, тож вже-прокатані no-op-ляться;
+нові додаються через `migration:all` у `apps/api/package.json` без зміни
+Dockerfile/deploy.yml.
+
 Перед `docker compose up -d api`. Exit-code != 0 → deploy abort + rollback.
 
 ### Manual override (operational, якщо CI не спрацював)
@@ -57,6 +62,7 @@ docker compose --profile migrations run --rm api-migrations
 | Скрипт | Створено | Навіщо | Staging | Production |
 |---|---|---|---|---|
 | `2026-05-03-businesses-slug-lower.ts` | 2026-05-03 | Sprint 3 §3.1: перенесення unique-index `slug` → `slugLower` (case-preserved display + case-insensitive uniqueness, рішення E1). Drop `{slug:1}_unique` → backfill `slugLower=$toLower($slug)` → create `{slugLower:1}_unique`. | ⬜ | ⬜ |
+| `2026-05-08-invoices-payee-snapshot.ts` | 2026-05-08 | Sprint 4 review fix: backfill `Invoice.payeeSnapshot` (recipientName + iban + taxId + resolved paymentPurpose) для existing invoices. Public NBU/QR payload тепер будується зі snapshot-у; legacy invoices без snapshot fallback-лять на live business у `payload-mapper`. Two-pass: load businesses у map → bulkWrite invoices з resolved snapshot. | ⬜ | ⬜ |
 
 **Заповнення колонок Staging/Production:** виконавець ставить ✅ + дату при
 успішному run-і. Якщо run упав — записує причину у Notes-секцію нижче, fix-ить,

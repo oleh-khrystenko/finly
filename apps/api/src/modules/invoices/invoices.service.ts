@@ -19,6 +19,7 @@ import {
     type BusinessDocument,
 } from '../businesses/schemas/business.schema';
 import { InvoiceSlugGeneratorService } from './invoice-slug-generator.service';
+import { effectiveInvoicePurpose } from './purpose-resolver';
 import { Invoice, InvoiceDocument } from './schemas/invoice.schema';
 
 export interface PaginationParams {
@@ -206,6 +207,20 @@ export class InvoicesService {
                     // race, validation failure post-allocate).
                     session
                 );
+                // Sprint 4 review fix — snapshot платіжних реквізитів на
+                // момент create. Public NBU/QR-payload public-зони
+                // будується з цього snapshot-у, не з runtime-mutable
+                // Business: ФОП не може тіньово підмінити IBAN/ім'я/
+                // призначення на вже виданих рахунках через редагування
+                // налаштувань бізнесу. `effectiveInvoicePurpose` resolve-ить
+                // null-inheritance до конкретного рядка — той самий
+                // resolved-purpose, що використає slug-генератор для
+                // `with-purpose`-пресета (single source of truth: URL і
+                // payload показують ідентичний текст без drift-у).
+                const effectivePurpose = effectiveInvoicePurpose(
+                    dto.paymentPurpose,
+                    business.paymentPurposeTemplate
+                );
                 const docs = await this.invoiceModel.create(
                     [
                         {
@@ -218,6 +233,12 @@ export class InvoicesService {
                             slugPreset: slugInfo.slugPreset,
                             slugCounterScope: slugInfo.slugCounterScope,
                             slugCounter: slugInfo.slugCounter,
+                            payeeSnapshot: {
+                                recipientName: business.name,
+                                iban: business.requisites.iban,
+                                taxId: business.requisites.taxId,
+                                paymentPurpose: effectivePurpose,
+                            },
                         },
                     ],
                     { session }
@@ -314,13 +335,38 @@ export class InvoicesService {
 
     /**
      * Atomic update + coupled `amount × amountLocked` cross-field check у
-     * `$expr`-filter (Sprint 3 §3.2 pattern). Single round-trip у happy path.
+     * `$expr`-filter (Sprint 3 §3.2 pattern) + snapshot mirror на PATCH
+     * `paymentPurpose` (Sprint 4 review fix).
      *
-     * Coupled-rule: NOT (next.amount === null AND next.amountLocked === true).
+     * **Coupled-rule:** NOT (next.amount === null AND next.amountLocked === true).
      * De Morgan → next.amount !== null OR next.amountLocked !== true.
+     *
+     * **Snapshot mirror на `paymentPurpose`-PATCH** (Sprint 4 review re-fix).
+     * `payeeSnapshot.paymentPurpose` — single source of truth для public NBU/
+     * QR payload (`buildPayloadInputFromInvoice` + `PublicInvoicesController.
+     * getPublic`). Якщо PATCH міняє `invoice.paymentPurpose`, але snapshot
+     * лишається frozen-from-create — клієнт і банк бачать stale текст, що
+     * прямо суперечить контракту "invoice mutable payment data" (див.
+     * `public-invoices.controller.ts` doc-block: amount/paymentPurpose/
+     * validUntil/lockMask змінні в будь-який момент). Sync контракт:
+     * snapshot.paymentPurpose тримає effective-resolved-purpose, що відповідає
+     * **поточному** invoice.paymentPurpose. На PATCH: resolve null→
+     * business.paymentPurposeTemplate, mirror у snapshot.
+     *
+     * **Aggregation pipeline update з `$cond`** — single round-trip, що
+     * розрізняє snapshot-having (mirror через `$mergeObjects`) і legacy
+     * (snapshot=null, лишаємо null; `payload-mapper` fallback-ить на
+     * `invoice.paymentPurpose`+template). Без pipeline-update довелось би
+     * робити preliminary findOne для snapshot-state-check + умовний $set —
+     * додатковий round-trip + race з concurrent PATCH-ом.
+     *
+     * **`business` параметр (не `businessId`).** Service потребує
+     * `business.paymentPurposeTemplate` для null-inheritance-resolution на
+     * snapshot mirror. Controller вже має повний `BusinessDocument` через
+     * `BusinessAccessGuard`; передавати ще і businessId окремо — duplication.
      */
     async update(
-        businessId: Types.ObjectId,
+        business: BusinessDocument,
         invoiceSlug: string,
         dto: UpdateInvoiceRequest
     ): Promise<InvoiceDocument> {
@@ -331,6 +377,7 @@ export class InvoicesService {
         if (dto.validUntil !== undefined) {
             assertValidUntilNotInPast(dto.validUntil);
         }
+        const businessId = business._id;
         const filter: FilterQuery<InvoiceDocument> = {
             businessId,
             slug: invoiceSlug,
@@ -349,13 +396,54 @@ export class InvoicesService {
             };
         }
 
-        const updated = await this.invoiceModel
-            .findOneAndUpdate(
-                filter,
-                { $set: dto },
-                { new: true, runValidators: true }
-            )
-            .exec();
+        // Build pipeline-stage `$set`-ops — explicit per-field, щоб aggregation-
+        // pipeline-update (potential strip-у unknown DTO-полів через
+        // `.strict()` Zod) мав чітко визначений набір. `paymentPurpose`
+        // оброблюється окремо разом з snapshot mirror.
+        const setStage: Record<string, unknown> = {};
+        if (dto.amount !== undefined) setStage.amount = dto.amount;
+        if (dto.amountLocked !== undefined)
+            setStage.amountLocked = dto.amountLocked;
+        if (dto.validUntil !== undefined) setStage.validUntil = dto.validUntil;
+        if (dto.paymentPurpose !== undefined) {
+            const resolved = effectiveInvoicePurpose(
+                dto.paymentPurpose,
+                business.paymentPurposeTemplate
+            );
+            setStage.paymentPurpose = dto.paymentPurpose;
+            // `$cond` гілки:
+            //  - snapshot null (legacy без backfill-у) → лишаємо null;
+            //    payload-mapper fallback-ить на `invoice.paymentPurpose` +
+            //    template (the very fallback path, який буде drop-нуто
+            //    у Sprint 6 cleanup після повної міграції).
+            //  - snapshot non-null → `$mergeObjects` patch-ить лише поле
+            //    paymentPurpose, зберігаючи recipientName/iban/taxId.
+            setStage.payeeSnapshot = {
+                $cond: [
+                    { $eq: ['$payeeSnapshot', null] },
+                    '$payeeSnapshot',
+                    {
+                        $mergeObjects: [
+                            '$payeeSnapshot',
+                            { paymentPurpose: resolved },
+                        ],
+                    },
+                ],
+            };
+        }
+
+        const updated =
+            Object.keys(setStage).length > 0
+                ? await this.invoiceModel
+                      .findOneAndUpdate(filter, [{ $set: setStage }], {
+                          new: true,
+                      })
+                      .exec()
+                : // No-op PATCH — DTO порожній (Zod strip-нув усі ключі).
+                  // Повертаємо поточний документ через single read.
+                  await this.invoiceModel
+                      .findOne({ businessId, slug: invoiceSlug })
+                      .exec();
         if (updated) return updated;
 
         // Filter не пропустив update. Розрізняємо 400 (coupled violation) vs

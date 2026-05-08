@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { SLUG_PRESETS } from '../enums/slug-preset';
 import { effectiveLimit, isWithinByteLimit } from '../qr/limits';
 import { objectIdSchema } from '../validation/common';
+import { ibanZod } from '../validation/iban';
+import { individualTaxIdZod } from '../validation/tax-id';
 
 /**
  * Інвойс — одноразова платіжка під конкретний бізнес.
@@ -35,8 +37,25 @@ import { objectIdSchema } from '../validation/common';
  */
 
 const PURPOSE_LIMIT = effectiveLimit('purpose');
+const NAME_LIMIT = effectiveLimit('receiverName');
 
 export const slugPresetSchema = z.enum(SLUG_PRESETS);
+
+/**
+ * Sprint 4 review fix — schema для `recipientName` у `payeeSnapshot` (snapshot
+ * `business.name` на момент створення інвойсу). Limits ідентичні
+ * `businessNameSchema` (NBU payload-spec § "name"-поле). Inline-визначення
+ * замість re-export з `business.ts` через зворотній circular import:
+ * `business.ts` уже залежить від `slugPresetSchema` цього модуля.
+ */
+const payeeNameSchema = z
+    .string()
+    .trim()
+    .min(1, { message: 'INVALID_NAME_REQUIRED' })
+    .max(NAME_LIMIT.chars, { message: 'INVALID_NAME_CHAR_LENGTH' })
+    .refine((v) => isWithinByteLimit(v, NAME_LIMIT.bytes), {
+        message: 'INVALID_NAME_BYTE_LENGTH',
+    });
 
 /**
  * Slug інвойсу: `{людська-частина}-{8-char-tail}` АБО просто `{8-char-tail}`.
@@ -63,6 +82,39 @@ export const invoicePaymentPurposeSchema = z
         message: 'INVALID_PURPOSE_BYTE_LENGTH',
     });
 
+/**
+ * Sprint 4 review fix — `payeeSnapshot` фрозить платіжні реквізити на момент
+ * створення інвойсу. Public NBU/QR payload будується з цього snapshot-у, а
+ * не з runtime-mutable Business.
+ *
+ * **Чому окремий subdoc.** Payment instruction — атомарна одиниця: усі
+ * чотири поля разом утворюють "хто отримує + за що". Embedded subdoc
+ * робить snapshot semantically-explicit (vs flat fields, де неясно, які
+ * поля frozen, а які live).
+ *
+ * **`paymentPurpose: string` (non-nullable у snapshot)** — на create
+ * `service` resolve-ить `dto.paymentPurpose ?? business.paymentPurposeTemplate`
+ * у конкретний рядок. Раніше `null` → runtime-resolve через поточний
+ * template → drift при редагуванні business-template. Тепер effective-purpose
+ * заморожений на момент create.
+ *
+ * **`.nullable()` на entity-level** — для backwards-compat з legacy invoices,
+ * створеними до Sprint 4 review fix. `payload-mapper` fallback-ить на
+ * `effectiveInvoicePurpose(invoice.paymentPurpose, business.paymentPurposeTemplate)`
+ * + live business reqs коли `payeeSnapshot === null`. Migration script
+ * `2026-05-08-invoices-payee-snapshot.ts` backfill-ить snapshot для
+ * existing invoices з current business state (best-effort на migration
+ * boundary; всі post-deploy invoices мають snapshot з-під service-create).
+ */
+export const InvoicePayeeSnapshotSchema = z.object({
+    recipientName: payeeNameSchema,
+    iban: ibanZod,
+    taxId: individualTaxIdZod,
+    paymentPurpose: invoicePaymentPurposeSchema,
+});
+
+export type InvoicePayeeSnapshot = z.infer<typeof InvoicePayeeSnapshotSchema>;
+
 export const InvoiceSchema = z
     .object({
         id: objectIdSchema,
@@ -73,6 +125,7 @@ export const InvoiceSchema = z
         paymentPurpose: invoicePaymentPurposeSchema.nullable(),
         validUntil: z.coerce.date().nullable(),
         slugPreset: slugPresetSchema.nullable(),
+        payeeSnapshot: InvoicePayeeSnapshotSchema.nullable().default(null),
         /**
          * Sprint 4 §4.1 — counter-namespace string для preset-режимів з
          * лічильником ('simple' | YYYY | 'YYYY-MM'). `null` для inших

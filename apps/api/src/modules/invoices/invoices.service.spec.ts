@@ -36,6 +36,13 @@ describe('InvoicesService (Sprint 4 §4.2)', () => {
     const businessId = new Types.ObjectId();
     const business = {
         _id: businessId,
+        name: 'ФОП Іваненко',
+        // Sprint 4 review fix — `payeeSnapshot` snapshots ці поля у
+        // service.create. Без них create-call падає на undefined access.
+        requisites: {
+            iban: 'UA213223130000026007233566001',
+            taxId: '1234567899',
+        },
         paymentPurposeTemplate: 'Default biz purpose',
     } as BusinessDocument;
 
@@ -354,7 +361,7 @@ describe('InvoicesService (Sprint 4 §4.2)', () => {
 
         it('без coupled-полів — filter без $expr, exists() не викликається', async () => {
             mockUpdateReturn({ paymentPurpose: 'New' });
-            await service.update(businessId, 'inv-001-x', {
+            await service.update(business, 'inv-001-x', {
                 paymentPurpose: 'New',
             });
             const filter = invoiceModel.findOneAndUpdate.mock.calls[0]![0];
@@ -365,7 +372,7 @@ describe('InvoicesService (Sprint 4 §4.2)', () => {
 
         it('coupled (тільки amountLocked): vat-літерал, amount — field-ref', async () => {
             mockUpdateReturn({});
-            await service.update(businessId, 'inv-001-x', {
+            await service.update(business, 'inv-001-x', {
                 amountLocked: true,
             });
             const filter = invoiceModel.findOneAndUpdate.mock.calls[0]![0];
@@ -376,7 +383,7 @@ describe('InvoicesService (Sprint 4 §4.2)', () => {
 
         it('coupled (тільки amount=null): amount-літерал, locked — field-ref', async () => {
             mockUpdateReturn({});
-            await service.update(businessId, 'inv-001-x', { amount: null });
+            await service.update(business, 'inv-001-x', { amount: null });
             const filter = invoiceModel.findOneAndUpdate.mock.calls[0]![0];
             expect(filter.$expr).toEqual({
                 $or: [{ $ne: [null, null] }, { $ne: ['$amountLocked', true] }],
@@ -389,14 +396,14 @@ describe('InvoicesService (Sprint 4 §4.2)', () => {
                 _id: new Types.ObjectId(),
             });
             await expect(
-                service.update(businessId, 'inv-001-x', { amountLocked: true })
+                service.update(business, 'inv-001-x', { amountLocked: true })
             ).rejects.toBeInstanceOf(BadRequestException);
         });
 
         it('NotFound (no coupled fields): findOneAndUpdate→null → 404 без exists()', async () => {
             mockUpdateReturn(null);
             await expect(
-                service.update(businessId, 'gone', { paymentPurpose: 'X' })
+                service.update(business, 'gone', { paymentPurpose: 'X' })
             ).rejects.toBeInstanceOf(NotFoundException);
             expect(invoiceModel.exists).not.toHaveBeenCalled();
         });
@@ -405,7 +412,7 @@ describe('InvoicesService (Sprint 4 §4.2)', () => {
             mockUpdateReturn(null);
             invoiceModel.exists.mockResolvedValue(null);
             await expect(
-                service.update(businessId, 'gone', { amountLocked: true })
+                service.update(business, 'gone', { amountLocked: true })
             ).rejects.toBeInstanceOf(NotFoundException);
         });
 
@@ -414,22 +421,101 @@ describe('InvoicesService (Sprint 4 §4.2)', () => {
             // зачіпається (findOneAndUpdate не повинен викликатись).
             const past = new Date(Date.now() - 60_000);
             await expect(
-                service.update(businessId, 'inv-001', { validUntil: past })
+                service.update(business, 'inv-001', { validUntil: past })
             ).rejects.toBeInstanceOf(BadRequestException);
             expect(invoiceModel.findOneAndUpdate).not.toHaveBeenCalled();
+        });
+
+        describe('payeeSnapshot.paymentPurpose mirror (Sprint 4 review fix)', () => {
+            it('PATCH paymentPurpose → resolved + dual update top-level + snapshot via $cond pipeline', async () => {
+                // КРИТИЧНИЙ INVARIANT: snapshot.paymentPurpose — single
+                // source of truth для public payload. Без mirror-у клієнт+банк
+                // бачать stale текст після ФОП-PATCH-у paymentPurpose.
+                mockUpdateReturn({ paymentPurpose: 'Updated' });
+                await service.update(business, 'inv-001-x', {
+                    paymentPurpose: 'Updated',
+                });
+                const updateArg =
+                    invoiceModel.findOneAndUpdate.mock.calls[0]![1];
+                // Pipeline-update (array, not plain doc) — `$cond` керує
+                // snapshot mirror-ом без partial-snapshot для legacy (null).
+                expect(Array.isArray(updateArg)).toBe(true);
+                const setStage = (updateArg as Array<{ $set: Record<string, unknown> }>)[0]!.$set;
+                expect(setStage.paymentPurpose).toBe('Updated');
+                expect(setStage.payeeSnapshot).toEqual({
+                    $cond: [
+                        { $eq: ['$payeeSnapshot', null] },
+                        '$payeeSnapshot',
+                        {
+                            $mergeObjects: [
+                                '$payeeSnapshot',
+                                { paymentPurpose: 'Updated' },
+                            ],
+                        },
+                    ],
+                });
+            });
+
+            it('PATCH paymentPurpose=null → resolve через business.template + mirror у snapshot', async () => {
+                // null-inheritance на PATCH: resolved у конкретний рядок,
+                // який mirror-иться у snapshot. Frozen forever — наступний
+                // PATCH ще раз resolve-ить, snapshot tracks current state.
+                mockUpdateReturn({ paymentPurpose: null });
+                await service.update(business, 'inv-001-x', {
+                    paymentPurpose: null,
+                });
+                const updateArg =
+                    invoiceModel.findOneAndUpdate.mock.calls[0]![1];
+                const setStage = (updateArg as Array<{ $set: Record<string, unknown> }>)[0]!.$set;
+                // Top-level зберігає null (user-input semantics).
+                expect(setStage.paymentPurpose).toBeNull();
+                // Snapshot mirror має RESOLVED-string (effectiveInvoicePurpose
+                // result), не null — щоб payload завжди мав конкретний текст.
+                expect(setStage.payeeSnapshot).toEqual({
+                    $cond: [
+                        { $eq: ['$payeeSnapshot', null] },
+                        '$payeeSnapshot',
+                        {
+                            $mergeObjects: [
+                                '$payeeSnapshot',
+                                {
+                                    paymentPurpose:
+                                        'Default biz purpose',
+                                },
+                            ],
+                        },
+                    ],
+                });
+            });
+
+            it('PATCH без paymentPurpose → не торкає snapshot', async () => {
+                // Якщо PATCH не міняє purpose — snapshot.paymentPurpose
+                // залишається без змін. setStage не повинен містити
+                // payeeSnapshot.
+                mockUpdateReturn({ amount: 200000 });
+                await service.update(business, 'inv-001-x', {
+                    amount: 200000,
+                });
+                const updateArg =
+                    invoiceModel.findOneAndUpdate.mock.calls[0]![1];
+                const setStage = (updateArg as Array<{ $set: Record<string, unknown> }>)[0]!.$set;
+                expect(setStage.amount).toBe(200000);
+                expect(setStage).not.toHaveProperty('payeeSnapshot');
+                expect(setStage).not.toHaveProperty('paymentPurpose');
+            });
         });
 
         it('validUntil=null на PATCH → пропускає, дозволяється', async () => {
             mockUpdateReturn({ validUntil: null });
             await expect(
-                service.update(businessId, 'inv-001', { validUntil: null })
+                service.update(business, 'inv-001', { validUntil: null })
             ).resolves.toBeDefined();
         });
 
         it('PATCH без validUntil поля (undefined) → не валидує time-rule', async () => {
             mockUpdateReturn({ paymentPurpose: 'X' });
             await expect(
-                service.update(businessId, 'inv-001', { paymentPurpose: 'X' })
+                service.update(business, 'inv-001', { paymentPurpose: 'X' })
             ).resolves.toBeDefined();
         });
     });
