@@ -31,6 +31,7 @@ export default function Step4PurposeBanks() {
     const formData = useBusinessWizardStore((s) => s.formData);
     const patch = useBusinessWizardStore((s) => s.patchFormData);
     const setStep = useBusinessWizardStore((s) => s.setStep);
+    const prevStep = useBusinessWizardStore((s) => s.prevStep);
     const reset = useBusinessWizardStore((s) => s.reset);
 
     const [purpose, setPurpose] = useState<string>(
@@ -89,7 +90,7 @@ export default function Step4PurposeBanks() {
             toast.error(
                 'Дані форми застаріли. Будь ласка, заповніть кроки заново.',
             );
-            setStep(1);
+            setStep('type-name');
             return;
         }
         const parsed = CreateBusinessSchema.safeParse(request);
@@ -97,7 +98,7 @@ export default function Step4PurposeBanks() {
             toast.error(
                 'Дані форми застаріли. Будь ласка, заповніть кроки заново.',
             );
-            setStep(1);
+            setStep('type-name');
             return;
         }
 
@@ -174,7 +175,7 @@ export default function Step4PurposeBanks() {
                     variant="outline"
                     size="md"
                     disabled={submitting}
-                    onClick={() => setStep(3)}
+                    onClick={() => prevStep()}
                 >
                     Назад
                 </UiButton>

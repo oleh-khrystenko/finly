@@ -38,6 +38,7 @@ Ui-компоненти інкапсулюють:
 | `UiConfirmDialog` | `window.confirm()`, кастомні confirmation modals | `default`, `destructive`; controlled (open/onOpenChange); Radix AlertDialog |
 | `UiTextarea` | `<textarea>` | `outlined`, `filled` |
 | `UiChipGroup` | Radio-style inline chip selector | -- (sizes: sm/md/lg); Headless UI RadioGroup |
+| `UiRadioCardGroup` | Radio-style grid cards з title + description (+ optional icon) | -- ; responsive `columns: { mobile: 1\|2, desktop: 2\|3\|4 }`; Headless UI RadioGroup; built-in arrow-key + roving tabindex; generic `<TValue extends string>` |
 | `UiModal` | Centered modal / bottom sheet dialogs | controlled (open/onOpenChange); mobile bottom sheet, desktop centered; hideOverlay, hideCloseButton; Radix Dialog |
 | `UiHeaderShell` | Структурна обгортка header-зони (`<header>` + container h-16) | -- ; className override |
 | `UiEditableField` | Inline-edit per field (read mode → "олівець" → edit mode з ✓/✗ кнопками) | Generic над `TValue`; renderer-props (`renderRead`/`renderEdit`); async `onSave`; optional `validate`; `disabled` |
