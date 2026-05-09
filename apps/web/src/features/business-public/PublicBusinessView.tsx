@@ -1,15 +1,16 @@
 'use client';
 
-import {
-    BANK_LABEL,
-    BUSINESS_TYPE_LABEL,
-    type BankCode,
-    type BusinessType,
-} from '@finly/types';
+import { BANK_LABEL, type BankCode, type BusinessType } from '@finly/types';
 import { BANK_DISPLAY } from '@/shared/icons';
 import UiQrImage from '@/shared/ui/UiQrImage';
 
 interface Props {
+    /**
+     * Sprint 7 §SP-5 — `type` лишається у Props для майбутніх SEO-meta /
+     * aria-label use-case-ів (cabinet preview-toggle передає його з cabinet
+     * fetch-у). H1-heading його **не** використовує — Sprint 7 уніфікував
+     * heading до type-нейтрального формулювання.
+     */
     type: BusinessType;
     name: string;
     slug: string;
@@ -24,13 +25,26 @@ interface Props {
 }
 
 /**
- * Sprint 3 §3.9 — публічна вивіска бізнесу. Reusable у двох місцях:
- *   1. Phase 8 cabinet preview-toggle (B2 "Перегляд як клієнт").
- *   2. Host-aware route (Phase 9 — `app/host-pay/[slug]/page.tsx` через
- *      middleware-rewrite з `pay.finly.com.ua/{slug}`).
+ * Sprint 3 §3.9 + Sprint 7 §SP-5 — публічна вивіска бізнесу. Reusable у двох
+ * місцях:
+ *   1. Cabinet preview-toggle (Sprint 3 B2 "Перегляд як клієнт").
+ *   2. Host-aware route (`app/host-pay/[slug]/page.tsx` через middleware-
+ *      rewrite з `pay.finly.com.ua/{slug}`).
+ *
+ * **Sprint 7 §SP-5 — heading type-нейтральний**: `'Платіж на користь {name}'`
+ * для всіх 4 типів. До Sprint 7 був `'Оплата на ${BUSINESS_TYPE_LABEL[type]}
+ * ${name}'`, але після розширення enum-у до 4 типів цей формат давав
+ * лінгвістично незграбні комбінації ("Оплата на фізособа Іваненко"); крім
+ * того, назва бізнесу зазвичай вже містить юр-форму ("ФОП Іваненко І.І.",
+ * "ТОВ Каса Здоров'я") — type-префікс дублював інформацію. "Платіж на користь
+ * {name}" — нейтральне юр-формулювання, що працює для всіх кейсів.
+ *
+ * **Type залишається у Props** — SEO meta-tag і aria-label-ам потрібен для
+ * `<title>` пошукової видачі ("Оплата на ФОП Іваненко — Finly"); але h1 його
+ * не використовує (sprint plan §SP-5 явно фіксує цей trade-off).
  *
  * Layout (E7 рішення):
- *   - Заголовок "Оплата на {Тип} {Назва}".
+ *   - Заголовок "Платіж на користь {name}".
  *   - Сітка 11 generic bank-tile (B1: неактивні, grayscale, з підписом
  *     "Незабаром"). Sprint 5 розблокує per-bank deep-links.
  *   - 2 активні CTA з `nbuLinks.primary`/`.legacy` href — ОС handle через
@@ -38,14 +52,14 @@ interface Props {
  *   - 2 QR-картинки на API endpoints (host=primary | legacy).
  */
 export default function PublicBusinessView({
-    type,
+    type: _type,
     name,
     slug,
     acceptedBanks,
     nbuLinks,
     apiBase = '/api',
 }: Props) {
-    const heading = `Оплата на ${BUSINESS_TYPE_LABEL[type]} ${name}`;
+    const heading = `Платіж на користь ${name}`;
 
     const qrPrimary = `${apiBase}/businesses/public/${encodeURIComponent(slug)}/qr/nbu.png?host=primary`;
     const qrLegacy = `${apiBase}/businesses/public/${encodeURIComponent(slug)}/qr/nbu.png?host=legacy`;

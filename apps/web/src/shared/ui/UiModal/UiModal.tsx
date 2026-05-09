@@ -31,7 +31,7 @@ function UiModalOverlay({ className }: { className?: string }) {
                 'fixed inset-0 z-50 bg-black/50',
                 'data-[state=open]:animate-in data-[state=closed]:animate-out',
                 'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
-                className,
+                className
             )}
         />
     );
@@ -59,7 +59,7 @@ function UiModalContent({
                     'inset-x-0 bottom-0 max-h-[90vh] overflow-y-auto rounded-t-2xl border-t shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.15)]',
                     // Desktop: centered modal layout
                     'md:inset-auto md:top-1/2 md:left-1/2 md:max-h-[85vh] md:w-full md:max-w-lg md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-2xl md:border md:shadow-lg',
-                    className,
+                    className
                 )}
                 {...props}
             >
@@ -68,8 +68,8 @@ function UiModalContent({
                     <DialogPrimitive.Close
                         className={composeClasses(
                             'absolute top-3 right-4 flex size-8 cursor-pointer items-center justify-center rounded-md opacity-70 transition-opacity',
-                            'hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none',
-                            'disabled:pointer-events-none',
+                            'focus:ring-ring hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-none',
+                            'disabled:pointer-events-none'
                         )}
                     >
                         <X className="size-5" />
@@ -84,10 +84,7 @@ function UiModalContent({
 function UiModalHeader({ className, ...props }: UiModalHeaderProps) {
     return (
         <div
-            className={composeClasses(
-                'flex flex-col gap-1.5 p-4',
-                className,
-            )}
+            className={composeClasses('flex flex-col gap-1.5 p-4', className)}
             {...props}
         />
     );
@@ -98,7 +95,7 @@ function UiModalTitle({ className, ...props }: UiModalTitleProps) {
         <DialogPrimitive.Title
             className={composeClasses(
                 'text-foreground font-semibold',
-                className,
+                className
             )}
             {...props}
         />

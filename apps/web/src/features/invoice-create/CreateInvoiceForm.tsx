@@ -156,9 +156,7 @@ function buildSlugInput(values: FormValues): SlugInput {
         return { kind: 'random' };
     }
     // 'preset:*'
-    const preset = values.slugOption.slice(
-        'preset:'.length,
-    ) as SlugPreset;
+    const preset = values.slugOption.slice('preset:'.length) as SlugPreset;
     return { kind: 'preset', preset };
 }
 
@@ -171,7 +169,7 @@ function formValuesToCreateRequest(values: FormValues): CreateInvoiceRequest {
     const money = parseUaMoney(values.amountInput);
     if (!money.ok) {
         throw new Error(
-            `formValuesToCreateRequest invariant: amountInput "${values.amountInput}" expected pre-validated, got ${money.error}`,
+            `formValuesToCreateRequest invariant: amountInput "${values.amountInput}" expected pre-validated, got ${money.error}`
         );
     }
     // SP-6: signage-режим завжди надсилає amountLocked=false (Zod-refine
@@ -315,7 +313,7 @@ export default function CreateInvoiceForm({ business }: Props) {
 
     const initialOption = useMemo(
         () => defaultSlugOption(business),
-        [business],
+        [business]
     );
 
     const form = useForm<FormValues>({
@@ -395,16 +393,13 @@ export default function CreateInvoiceForm({ business }: Props) {
      * Cancel → revert до previous option.
      */
     const [acknowledged, setAcknowledged] = useState<Set<SlugInputOption>>(
-        new Set(),
+        new Set()
     );
     const handleSlugOptionChange = (
         next: SlugInputOption,
-        prev: SlugInputOption,
+        prev: SlugInputOption
     ): void => {
-        if (
-            next === 'preset:with-purpose' &&
-            !acknowledged.has(next)
-        ) {
+        if (next === 'preset:with-purpose' && !acknowledged.has(next)) {
             openWarning(
                 () => {
                     setAcknowledged((s) => new Set(s).add(next));
@@ -412,7 +407,7 @@ export default function CreateInvoiceForm({ business }: Props) {
                 },
                 () => {
                     setValue('slugOption', prev, { shouldDirty: false });
-                },
+                }
             );
             return;
         }
@@ -426,7 +421,7 @@ export default function CreateInvoiceForm({ business }: Props) {
             const created = await createInvoice(business.slug, payload);
             toast.success('Рахунок створено');
             router.replace(
-                `/business/${business.slug}/invoice/${created.slug}`,
+                `/business/${business.slug}/invoice/${created.slug}`
             );
         } catch (err: unknown) {
             const code =
@@ -608,7 +603,7 @@ export default function CreateInvoiceForm({ business }: Props) {
                         onChange={(v) =>
                             handleSlugOptionChange(
                                 v as SlugInputOption,
-                                slugOption,
+                                slugOption
                             )
                         }
                     />
@@ -630,7 +625,9 @@ export default function CreateInvoiceForm({ business }: Props) {
                                         }
                                         placeholder="наприклад: order-2026-may"
                                         maxLength={60}
-                                        error={getZodFieldError(fieldState.error)}
+                                        error={getZodFieldError(
+                                            fieldState.error
+                                        )}
                                     />
                                     <p className="text-muted-foreground text-xs">
                                         Сервер додасть унікальний хвіст
@@ -685,9 +682,7 @@ export default function CreateInvoiceForm({ business }: Props) {
                     variant="filled"
                     size="md"
                     disabled={
-                        submitting ||
-                        formState.isSubmitting ||
-                        purposeOverflow
+                        submitting || formState.isSubmitting || purposeOverflow
                     }
                 >
                     {submitting ? 'Створюю...' : 'Створити рахунок'}

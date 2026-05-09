@@ -90,7 +90,10 @@ const yymmddhhmmssSchema = z.string().regex(/^\d{12}$/, {
  *   - Max 99_999_999_999 копійок = 999_999_999.99 грн (нормативний максимум).
  */
 export const PayloadInputSchema = z.object({
-    receiverName: z.string().trim().min(1, { message: 'INVALID_RECEIVER_NAME' }),
+    receiverName: z
+        .string()
+        .trim()
+        .min(1, { message: 'INVALID_RECEIVER_NAME' }),
     iban: ibanZod,
     /**
      * Sprint 7 §SP-10 — `payerTaxIdZod` (union RNOKPP-10 ∪ ЄДРПОУ-8) замість

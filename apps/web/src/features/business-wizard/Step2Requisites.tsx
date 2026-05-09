@@ -4,60 +4,12 @@ import { useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import {
-    ibanZod,
-    individualTaxIdZod,
-    legalEntityTaxIdZod,
-    taxIdLengthFor,
-    type BusinessType,
-} from '@finly/types';
+import { ibanZod, individualTaxIdZod } from '@finly/types';
 import UiInput from '@/shared/ui/UiInput';
 import UiButton from '@/shared/ui/UiButton';
 import { getZodFieldError } from '@/shared/lib';
+import { taxIdFieldConfig } from '@/entities/business';
 import { useBusinessWizardStore } from './businessWizardStore';
-
-/**
- * Sprint 7 §7.7 / §SP-4 — type-aware UI-параметри для поля "Код одержувача".
- *
- * Норматив НБУ §IV.10.5 дозволяє рівно 2 формати — РНОКПП (10 цифр + checksum)
- * АБО ЄДРПОУ (8 цифр без checksum). UI-помилка має зватися **точно**, бо
- * `mapValidationCode` бачить різні issue-коди (`INVALID_TAX_ID` vs
- * `INVALID_LEGAL_TAX_ID`); але label / placeholder теж мусять відрізнятись —
- * "ЄДРПОУ" і "РНОКПП" мають різні юридичні значення, а універсальне "Код
- * одержувача" не дає user-у швидко зрозуміти, що ввести.
- *
- * **Discriminator-таблиця** замість `if/else` — додавання нового `BusinessType`
- * без оновлення цього мапінгу дає compile-error через `Record<BusinessType,
- * ...>` exhaustiveness (fail-fast convention).
- */
-interface TaxIdFieldConfig {
-    label: string;
-    placeholder: string;
-    validator: typeof individualTaxIdZod | typeof legalEntityTaxIdZod;
-}
-
-const TAX_ID_CONFIG: Record<BusinessType, TaxIdFieldConfig> = {
-    individual: {
-        label: 'РНОКПП',
-        placeholder: '1234567890',
-        validator: individualTaxIdZod,
-    },
-    fop: {
-        label: 'РНОКПП',
-        placeholder: '1234567890',
-        validator: individualTaxIdZod,
-    },
-    tov: {
-        label: 'ЄДРПОУ',
-        placeholder: '12345678',
-        validator: legalEntityTaxIdZod,
-    },
-    organization: {
-        label: 'ЄДРПОУ',
-        placeholder: '12345678',
-        validator: legalEntityTaxIdZod,
-    },
-};
 
 export default function Step2Requisites() {
     const formData = useBusinessWizardStore((s) => s.formData);
@@ -69,7 +21,8 @@ export default function Step2Requisites() {
      * Defensive: якщо store потрапив у Step 'requisites' без обраного `type`
      * (наприклад, stale sessionStorage drift), редіректимо назад на Step 1
      * замість render-у з невідомим валідатором. Це той самий sanity-fail-safe
-     * patern, що Sprint 4 використовує у Step 'taxation' (§7.7 sprint-плану).
+     * patern, що Step3Taxation робить через `requiresTaxation` (§7.7
+     * sprint-плану).
      */
     useEffect(() => {
         if (!formData.type) {
@@ -78,15 +31,26 @@ export default function Step2Requisites() {
     }, [formData.type, setStep]);
 
     const type = formData.type;
-    const config = type ? TAX_ID_CONFIG[type] : TAX_ID_CONFIG.fop;
+    // Sprint 7 §SP-4 — type-aware UI-config через shared helper. Той самий
+    // мапінг використовує `RequisitesSection` у cabinet edit; зміна label-копії
+    // у одному місці — propagates в обох UI-точках.
+    //
+    // Fallback на `individualTaxIdZod` — щоб TS звузив `Schema` до конкретного
+    // ZodObject-shape з `taxId: ZodType<string>` (без union з generic ZodString).
+    // Runtime-фолбек ніколи не triggers, бо при `!type` early-return нижче
+    // skip-ить render до redirect-у `useEffect` вище. RHF / `useForm` потребують
+    // **stable Schema** на кожен render (хук-порядок), тому неможливо
+    // повертати null зі store-config.
+    const config = type ? taxIdFieldConfig(type) : null;
+    const taxIdValidator = config?.validator ?? individualTaxIdZod;
 
     const Schema = useMemo(
         () =>
             z.object({
                 iban: ibanZod,
-                taxId: config.validator,
+                taxId: taxIdValidator,
             }),
-        [config.validator],
+        [taxIdValidator]
     );
     type Values = z.input<typeof Schema>;
 
@@ -107,7 +71,7 @@ export default function Step2Requisites() {
         nextStep();
     };
 
-    if (!type) return null; // Effect вище redirect-ить, render skip під час transition.
+    if (!type || !config) return null; // Effect вище redirect-ить, render skip під час transition.
 
     return (
         <form
@@ -126,7 +90,7 @@ export default function Step2Requisites() {
                 label={config.label}
                 placeholder={config.placeholder}
                 inputMode="numeric"
-                maxLength={taxIdLengthFor(type)}
+                maxLength={config.maxLength}
                 {...form.register('taxId')}
                 error={getZodFieldError(errors.taxId)}
             />

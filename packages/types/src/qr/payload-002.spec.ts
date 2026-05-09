@@ -1,8 +1,5 @@
 import { PayloadValidationError } from './errors';
-import {
-    PAYLOAD_002_FIELD_COUNT,
-    build002Payload,
-} from './payload-002';
+import { PAYLOAD_002_FIELD_COUNT, build002Payload } from './payload-002';
 
 const VALID_IBAN = 'UA213223130000026007233566001';
 const VALID_IPN = '1234567899';
@@ -146,7 +143,7 @@ describe('build002Payload — golden vectors (8+ кейсів)', () => {
     });
 
     it('11. special chars у purpose («», № апостроф)', () => {
-        const purpose = 'Оплата за товари «Кав\'ярня» №147';
+        const purpose = "Оплата за товари «Кав'ярня» №147";
         const payload = build002Payload({ ...baseInput, purpose });
         expect(payload.split('\n')[11]).toBe(purpose);
     });
@@ -297,7 +294,7 @@ describe('build002Payload — reject NBU charset violations (Додаток 1 §
         expect(() =>
             build002Payload({
                 ...baseInput,
-                receiverName: 'ТОВ «Кав\'ярня»',
+                receiverName: "ТОВ «Кав'ярня»",
                 purpose: 'Оплата за замовлення №147 — товари',
             })
         ).not.toThrow();
@@ -307,7 +304,8 @@ describe('build002Payload — reject NBU charset violations (Додаток 1 §
         expect(() =>
             build002Payload({
                 ...baseInput,
-                receiverName: 'АБВГҐДЕЄЖЗИІЇЙКЛМНОПРСТУФХЦЧШЩЬЮЯабвгґдеєжзиіїйклмнопрстуфхцчшщьюя',
+                receiverName:
+                    'АБВГҐДЕЄЖЗИІЇЙКЛМНОПРСТУФХЦЧШЩЬЮЯабвгґдеєжзиіїйклмнопрстуфхцчшщьюя',
             })
         ).not.toThrow();
     });

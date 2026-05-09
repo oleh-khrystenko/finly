@@ -1,10 +1,7 @@
 import { z } from 'zod';
 
 import { MVP_BANKS } from '../constants/banks';
-import {
-    BUSINESS_TYPES,
-    requiresTaxation,
-} from '../enums/business-type';
+import { BUSINESS_TYPES, requiresTaxation } from '../enums/business-type';
 import {
     TAXATION_SYSTEMS,
     isVatAllowedTaxationSystem,

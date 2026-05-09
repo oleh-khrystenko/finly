@@ -18,12 +18,12 @@ import { PublicInvoiceSchema, type PublicInvoiceView } from '@finly/types';
  */
 export async function loadPublicInvoiceView(
     businessSlug: string,
-    invoiceSlug: string,
+    invoiceSlug: string
 ): Promise<PublicInvoiceView | null> {
     const apiBase = process.env.API_INTERNAL_URL;
     if (!apiBase) {
         throw new Error(
-            '❌ API_INTERNAL_URL is not defined (server-side env required for public page rendering)',
+            '❌ API_INTERNAL_URL is not defined (server-side env required for public page rendering)'
         );
     }
     const url = `${apiBase}/api/businesses/public/${encodeURIComponent(businessSlug)}/invoices/${encodeURIComponent(invoiceSlug)}`;
@@ -35,7 +35,7 @@ export async function loadPublicInvoiceView(
     if (res.status === 404) return null;
     if (!res.ok) {
         throw new Error(
-            `Public invoice fetch failed: ${res.status} ${res.statusText}`,
+            `Public invoice fetch failed: ${res.status} ${res.statusText}`
         );
     }
     const json = (await res.json()) as { data: unknown };

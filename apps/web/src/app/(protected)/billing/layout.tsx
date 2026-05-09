@@ -13,10 +13,6 @@ export function generateMetadata(): Metadata {
     });
 }
 
-export default function BillingLayout({
-    children,
-}: {
-    children: ReactNode;
-}) {
+export default function BillingLayout({ children }: { children: ReactNode }) {
     return <>{children}</>;
 }

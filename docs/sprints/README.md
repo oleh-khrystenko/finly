@@ -9,9 +9,9 @@
 ## [1. Архітектурний фундамент](01-foundation/README.md)
 
 - [x] Схеми БД (closed-end, без UI там, де "заготовка")
-  - [x] `User`: `lastName` required, `role` enum, `worksAsBookkeeper`
-  - [x] `Business`: `type`, nullable `ownerId`, `managers`, реквізити
-  - [x] `Invoice`: належить бізнесу, slug, lock-поля
+    - [x] `User`: `lastName` required, `role` enum, `worksAsBookkeeper`
+    - [x] `Business`: `type`, nullable `ownerId`, `managers`, реквізити
+    - [x] `Invoice`: належить бізнесу, slug, lock-поля
 - [x] Юридичні сторінки (TOS / Privacy під Finly)
 
 > Code-deliverables закриті. Open: `pnpm lint` без warnings (86 preexisting → винесено в [`tech-backlog.md`](../product/tech-backlog.md)); юридичне фінал-ревʼю — Sprint 6.

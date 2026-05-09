@@ -54,10 +54,7 @@ const PAGE_SIZE = 10;
  * Якщо новий item має той самий `id`, що existing — overwrite-иться (свіжіша
  * версія перемагає, логічно для optimistic-state-у).
  */
-function mergeUniqueById<T extends { id: string }>(
-    prev: T[],
-    next: T[],
-): T[] {
+function mergeUniqueById<T extends { id: string }>(prev: T[], next: T[]): T[] {
     const map = new Map<string, T>(prev.map((item) => [item.id, item]));
     for (const item of next) map.set(item.id, item);
     return Array.from(map.values());
@@ -145,7 +142,7 @@ export default function InvoicesSection({
                           total: next.total,
                           page: next.page,
                       }
-                    : prev,
+                    : prev
             );
             // Review fix — попередня помилка ("Завантажити ще" failed → toast),
             // якщо вона стосувалася того самого бізнесу, при наступному
@@ -153,7 +150,7 @@ export default function InvoicesSection({
             // лишалася над свіжим списком (initial-load очищала помилку,
             // loadMore ні — асиметрія state-flow-у).
             setError((prev) =>
-                prev && prev.paramSlug === captured ? null : prev,
+                prev && prev.paramSlug === captured ? null : prev
             );
         } catch (err: unknown) {
             setError({
@@ -168,7 +165,7 @@ export default function InvoicesSection({
     const visibleItems = useMemo(() => {
         if (!isCurrent || !data) return null;
         return data.items.filter(
-            (i) => !pendingDeleteKeys.has(`${businessSlug}/${i.slug}`),
+            (i) => !pendingDeleteKeys.has(`${businessSlug}/${i.slug}`)
         );
     }, [isCurrent, data, pendingDeleteKeys, businessSlug]);
 
@@ -182,8 +179,7 @@ export default function InvoicesSection({
             ? 0
             : data.items.length - visibleItems.length;
     const visibleTotal = Math.max(0, total - hiddenInList);
-    const hasMore =
-        visibleItems !== null && visibleItems.length < visibleTotal;
+    const hasMore = visibleItems !== null && visibleItems.length < visibleTotal;
 
     return (
         <UiSectionCard

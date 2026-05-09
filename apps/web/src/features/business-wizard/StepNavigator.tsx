@@ -3,10 +3,7 @@
 import type { ReactNode } from 'react';
 import UiButton from '@/shared/ui/UiButton';
 import { composeClasses } from '@/shared/lib';
-import {
-    STEP_TITLES,
-    type BusinessWizardStep,
-} from './businessWizardStore';
+import { STEP_TITLES, type BusinessWizardStep } from './businessWizardStore';
 
 type StepState = 'passed' | 'current' | 'future';
 
@@ -49,7 +46,7 @@ function StepIndicator({
                 state === 'current' && 'bg-primary text-primary-foreground',
                 state === 'passed' && 'bg-success text-success-foreground',
                 state === 'future' &&
-                    'border-border text-muted-foreground border bg-background',
+                    'border-border text-muted-foreground bg-background border'
             )}
         >
             {index + 1}
@@ -140,7 +137,7 @@ export default function StepNavigator({ current, steps, onJumpBack }: Props) {
                                         stepState === 'current' &&
                                             'text-foreground font-semibold',
                                         stepState === 'future' &&
-                                            'text-muted-foreground opacity-50',
+                                            'text-muted-foreground opacity-50'
                                     )}
                                 >
                                     <StepIndicator

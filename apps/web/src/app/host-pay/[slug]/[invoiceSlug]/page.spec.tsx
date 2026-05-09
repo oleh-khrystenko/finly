@@ -94,10 +94,10 @@ describe('host-pay/[slug]/[invoiceSlug]/page (Sprint 4 §4.7)', () => {
         render(ui);
         expect(screen.getByTestId('invoice-public-view')).toBeInTheDocument();
         expect(screen.getByTestId('invoice-slug')).toHaveTextContent(
-            'inv-001-aB3xQ9k7',
+            'inv-001-aB3xQ9k7'
         );
         expect(screen.getByTestId('business-slug')).toHaveTextContent(
-            'IvanEnko',
+            'IvanEnko'
         );
     });
 
@@ -110,10 +110,10 @@ describe('host-pay/[slug]/[invoiceSlug]/page (Sprint 4 §4.7)', () => {
                     slug: 'ivanenko',
                     invoiceSlug: 'inv-001-aB3xQ9k7',
                 }),
-            }),
+            })
         ).rejects.toThrow(/NEXT_REDIRECT:\/IvanEnko\/inv-001-aB3xQ9k7/);
         expect(mockPermanentRedirect).toHaveBeenCalledWith(
-            '/IvanEnko/inv-001-aB3xQ9k7',
+            '/IvanEnko/inv-001-aB3xQ9k7'
         );
     });
 
@@ -142,7 +142,7 @@ describe('host-pay/[slug]/[invoiceSlug]/page (Sprint 4 §4.7)', () => {
         // Page render-ить view.slug (canonical), не user-input — single source
         // of truth для slug у render-i — backend response.
         expect(screen.getByTestId('invoice-slug')).toHaveTextContent(
-            'inv-001-aB3xQ9k7',
+            'inv-001-aB3xQ9k7'
         );
     });
 
@@ -154,7 +154,7 @@ describe('host-pay/[slug]/[invoiceSlug]/page (Sprint 4 §4.7)', () => {
                     slug: 'biz',
                     invoiceSlug: 'missing',
                 }),
-            }),
+            })
         ).rejects.toThrow('NEXT_NOT_FOUND');
     });
 
@@ -168,7 +168,7 @@ describe('host-pay/[slug]/[invoiceSlug]/page (Sprint 4 §4.7)', () => {
                     slug: 'IvanEnko',
                     invoiceSlug: 'inv-001-aB3xQ9k7',
                 }),
-            }),
+            })
         ).rejects.toThrow('NEXT_NOT_FOUND');
         // loadPublicInvoiceView НЕ викликався — host-check блокує до fetch-у.
         expect(mockLoadPublicInvoiceView).not.toHaveBeenCalled();

@@ -12,16 +12,12 @@ void VALID_IBAN;
 void VALID_TAX_ID;
 
 describe('humanSlugPartSchema', () => {
-    it.each([
-        'invoice',
-        'inv-001',
-        'order-2026-may',
-        'a',
-        '12345',
-        'a-b-c-d',
-    ])('parses valid kebab-case "%s"', (slug) => {
-        expect(humanSlugPartSchema.safeParse(slug).success).toBe(true);
-    });
+    it.each(['invoice', 'inv-001', 'order-2026-may', 'a', '12345', 'a-b-c-d'])(
+        'parses valid kebab-case "%s"',
+        (slug) => {
+            expect(humanSlugPartSchema.safeParse(slug).success).toBe(true);
+        }
+    );
 
     it.each([
         ['', 'INVALID_HUMAN_SLUG_PART_LENGTH'],

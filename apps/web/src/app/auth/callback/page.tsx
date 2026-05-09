@@ -19,7 +19,7 @@ export default function CallbackPage() {
     useEffect(() => {
         const isAccountDeleted =
             new URLSearchParams(window.location.search).get(
-                'account_deleted',
+                'account_deleted'
             ) === 'true';
 
         const authenticate = async () => {

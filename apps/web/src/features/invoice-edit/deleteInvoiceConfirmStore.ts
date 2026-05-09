@@ -31,7 +31,6 @@ export const useDeleteInvoiceConfirmStore = create<State>((set) => ({
     isOpen: false,
     invoice: null,
     onConfirm: null,
-    open: (invoice, onConfirm) =>
-        set({ isOpen: true, invoice, onConfirm }),
+    open: (invoice, onConfirm) => set({ isOpen: true, invoice, onConfirm }),
     close: () => set({ isOpen: false, invoice: null, onConfirm: null }),
 }));

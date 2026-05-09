@@ -1,7 +1,4 @@
-import {
-    PAYLOAD_FUNCTIONS_003,
-    PayloadInputSchema,
-} from './input';
+import { PAYLOAD_FUNCTIONS_003, PayloadInputSchema } from './input';
 
 // Checksum-valid IBAN та ІПН з Sprint 1 специфікацій валідаторів (iban.spec.ts, tax-id.spec.ts).
 const VALID_IBAN = 'UA213223130000026007233566001';
@@ -124,7 +121,7 @@ describe('PayloadInputSchema — required fields', () => {
         expect(result.success).toBe(false);
     });
 
-    it('відхиляє від\'ємну amountKopecks', () => {
+    it("відхиляє від'ємну amountKopecks", () => {
         const result = PayloadInputSchema.safeParse({
             ...baseValidInput,
             amountKopecks: -1,

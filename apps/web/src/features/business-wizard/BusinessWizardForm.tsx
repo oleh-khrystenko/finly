@@ -62,7 +62,7 @@ export default function BusinessWizardForm() {
 
     const steps = useMemo(
         () => computeStepsForType(formData.type),
-        [formData.type],
+        [formData.type]
     );
 
     return (

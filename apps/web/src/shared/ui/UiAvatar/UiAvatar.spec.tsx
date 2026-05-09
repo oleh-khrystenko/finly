@@ -113,7 +113,9 @@ describe('UiAvatar', () => {
         // The visible text node is wrapped in an aria-hidden span, while
         // the root span is the single labeled region the screen reader
         // sees. There must be exactly one accessible "Jane Doe" image.
-        expect(screen.getAllByRole('img', { name: 'Jane Doe' })).toHaveLength(1);
+        expect(screen.getAllByRole('img', { name: 'Jane Doe' })).toHaveLength(
+            1
+        );
         expect(screen.getByText('JD').getAttribute('aria-hidden')).toBe('true');
     });
 });

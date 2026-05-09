@@ -21,10 +21,10 @@ Overlay ніколи не монтується поруч із trigger. Trigger 
 
 ## Реєстр overlay-примітивів
 
-| Примітив | Призначення | Radix база |
-|----------|-------------|------------|
-| `UiModal` | Модалки з контентом (форми, деталі, wizard) | `react-dialog` |
-| `UiSheet` | Бокові/нижні панелі (навігація, фільтри, мобільний контент) | `react-dialog` |
+| Примітив          | Призначення                                                    | Radix база           |
+| ----------------- | -------------------------------------------------------------- | -------------------- |
+| `UiModal`         | Модалки з контентом (форми, деталі, wizard)                    | `react-dialog`       |
+| `UiSheet`         | Бокові/нижні панелі (навігація, фільтри, мобільний контент)    | `react-dialog`       |
 | `UiConfirmDialog` | Підтвердження дій (видалення, скидання, деструктивні операції) | `react-alert-dialog` |
 
 ## Rules
@@ -50,6 +50,7 @@ features/{domain}/
 Store може містити payload для параметризації overlay (наприклад, ID сутності для підтвердження видалення, режим відкриття).
 
 **Заборонено:**
+
 - `useState` для стану overlay
 - `renderWrapper` / render prop патерни для передачі модалки через trigger
 - Винесення overlay store у глобальний `src/stores/` каталог (lint-error)
@@ -64,11 +65,11 @@ Store може містити payload для параметризації overla
 
 ### 4. Вибір примітиву
 
-| Сценарій | Примітив |
-|----------|----------|
-| Форма, wizard, деталі сутності, складний контент | `UiModal` |
-| Підтвердження дії (1 питання → confirm/cancel) | `UiConfirmDialog` |
-| Навігація, фільтри, мобільний контент, бокова панель | `UiSheet` |
+| Сценарій                                             | Примітив          |
+| ---------------------------------------------------- | ----------------- |
+| Форма, wizard, деталі сутності, складний контент     | `UiModal`         |
+| Підтвердження дії (1 питання → confirm/cancel)       | `UiConfirmDialog` |
+| Навігація, фільтри, мобільний контент, бокова панель | `UiSheet`         |
 
 Якщо overlay починається як confirm, але потребує форму (наприклад, введення пароля для підтвердження) — використовуй `UiModal`, не `UiConfirmDialog`.
 
@@ -82,6 +83,7 @@ features/{domain}/
 ```
 
 Overlay-компонент:
+
 - Читає `isOpen` та `close` зі store через **relative import** (`./{name}DialogStore`)
 - Не приймає `children` і не рендерить trigger
 - Містить весь контент overlay (або делегує internal-компонентам feature)
@@ -110,6 +112,7 @@ Overlay не може відкривати інший overlay. Якщо потр
 ## Приклад: правильна реалізація (in-slice ownership)
 
 **Store (поруч з overlay компонентом):**
+
 ```ts
 // features/profile/avatarUploadDialogStore.ts
 import { create } from 'zustand';
@@ -124,6 +127,7 @@ export const useAvatarUploadDialogStore = create<AvatarUploadDialogState>(
 ```
 
 **Overlay компонент (relative import зі свого slice):**
+
 ```tsx
 // features/profile/AvatarUploadDialog.tsx
 import { useAvatarUploadDialogStore } from './avatarUploadDialogStore';
@@ -141,24 +145,31 @@ export default function AvatarUploadDialog() {
 ```
 
 **Реєстрація в overlay registry (єдиний global mount point):**
+
 ```tsx
 // app/overlays.tsx
 const AvatarUploadDialog = dynamic(
-    () => import('@/features/profile/AvatarUploadDialog'),
+    () => import('@/features/profile/AvatarUploadDialog')
 );
 
 export function Overlays() {
-    return <><AvatarUploadDialog />{/* ... */}</>;
+    return (
+        <>
+            <AvatarUploadDialog />
+            {/* ... */}
+        </>
+    );
 }
 ```
 
 **Trigger зсередини того ж slice (профільна сторінка):**
+
 ```tsx
 // app/[locale]/(protected)/profile/AvatarSection.tsx
 import { useAvatarUploadDialogStore } from '@/features/profile/avatarUploadDialogStore';
 
 const open = useAvatarUploadDialogStore((s) => s.open);
-<UiButton onClick={open}>Upload avatar</UiButton>
+<UiButton onClick={open}>Upload avatar</UiButton>;
 ```
 
 ## Cross-slice триггер

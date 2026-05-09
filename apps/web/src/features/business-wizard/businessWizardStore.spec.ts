@@ -93,7 +93,7 @@ describe('useBusinessWizardStore', () => {
             // React-залежностях (наприклад, BusinessWizardForm useMemo).
             expect(computeStepsForType('fop')).toBe(computeStepsForType('tov'));
             expect(computeStepsForType('individual')).toBe(
-                computeStepsForType('organization'),
+                computeStepsForType('organization')
             );
         });
     });
@@ -119,14 +119,7 @@ describe('useBusinessWizardStore', () => {
         });
 
         it('відхиляє довільні строки і non-string значення', () => {
-            for (const v of [
-                'unknown-step',
-                '',
-                undefined,
-                null,
-                {},
-                [],
-            ]) {
+            for (const v of ['unknown-step', '', undefined, null, {}, []]) {
                 expect(isBusinessWizardStep(v)).toBe(false);
             }
         });
@@ -174,21 +167,21 @@ describe('useBusinessWizardStore', () => {
                             },
                         },
                         version: 0,
-                    }),
+                    })
                 );
 
                 // Force re-hydration з migrate-flow.
                 await useBusinessWizardStore.persist.rehydrate();
 
                 expect(useBusinessWizardStore.getState().currentStep).toBe(
-                    expectedNamed,
+                    expectedNamed
                 );
                 // Зберігається formData з legacy state — wizard продовжує
                 // з місця, де користувач зупинився.
                 expect(useBusinessWizardStore.getState().formData.name).toBe(
-                    'Іваненко',
+                    'Іваненко'
                 );
-            },
+            }
         );
 
         it('garbage currentStep (невалідний numeric / unknown string) → fallback type-name', async () => {
@@ -197,11 +190,11 @@ describe('useBusinessWizardStore', () => {
                 JSON.stringify({
                     state: { currentStep: 99, formData: { type: 'fop' } },
                     version: 0,
-                }),
+                })
             );
             await useBusinessWizardStore.persist.rehydrate();
             expect(useBusinessWizardStore.getState().currentStep).toBe(
-                'type-name',
+                'type-name'
             );
         });
 
@@ -214,11 +207,11 @@ describe('useBusinessWizardStore', () => {
                         formData: { type: 'fop', name: 'Іваненко' },
                     },
                     version: 2,
-                }),
+                })
             );
             await useBusinessWizardStore.persist.rehydrate();
             expect(useBusinessWizardStore.getState().currentStep).toBe(
-                'taxation',
+                'taxation'
             );
         });
     });
@@ -299,24 +292,24 @@ describe('useBusinessWizardStore', () => {
             const { setType, nextStep } = useBusinessWizardStore.getState();
             setType('fop');
             expect(useBusinessWizardStore.getState().currentStep).toBe(
-                'type-name',
+                'type-name'
             );
             nextStep();
             expect(useBusinessWizardStore.getState().currentStep).toBe(
-                'requisites',
+                'requisites'
             );
             nextStep();
             expect(useBusinessWizardStore.getState().currentStep).toBe(
-                'taxation',
+                'taxation'
             );
             nextStep();
             expect(useBusinessWizardStore.getState().currentStep).toBe(
-                'purpose-banks',
+                'purpose-banks'
             );
             // Final step: nextStep — no-op
             nextStep();
             expect(useBusinessWizardStore.getState().currentStep).toBe(
-                'purpose-banks',
+                'purpose-banks'
             );
         });
 
@@ -325,12 +318,12 @@ describe('useBusinessWizardStore', () => {
             setType('individual');
             nextStep();
             expect(useBusinessWizardStore.getState().currentStep).toBe(
-                'requisites',
+                'requisites'
             );
             nextStep();
             // Очікуємо, що skip перейде одразу на purpose-banks
             expect(useBusinessWizardStore.getState().currentStep).toBe(
-                'purpose-banks',
+                'purpose-banks'
             );
         });
 
@@ -341,20 +334,20 @@ describe('useBusinessWizardStore', () => {
             nextStep(); // → requisites
             nextStep(); // → purpose-banks (skip taxation)
             expect(useBusinessWizardStore.getState().currentStep).toBe(
-                'purpose-banks',
+                'purpose-banks'
             );
             prevStep(); // → requisites (без taxation у history)
             expect(useBusinessWizardStore.getState().currentStep).toBe(
-                'requisites',
+                'requisites'
             );
             prevStep(); // → type-name
             expect(useBusinessWizardStore.getState().currentStep).toBe(
-                'type-name',
+                'type-name'
             );
             // Перший step — prevStep no-op
             prevStep();
             expect(useBusinessWizardStore.getState().currentStep).toBe(
-                'type-name',
+                'type-name'
             );
         });
 
@@ -369,7 +362,7 @@ describe('useBusinessWizardStore', () => {
             nextStep();
             nextStep();
             expect(useBusinessWizardStore.getState().currentStep).toBe(
-                'taxation',
+                'taxation'
             );
             // Симулюємо jump-back на Step 1 + зміну типу
             setStep('type-name');
@@ -377,7 +370,7 @@ describe('useBusinessWizardStore', () => {
             // Стан: currentStep='type-name', steps=[type-name, requisites,
             // purpose-banks]. Це ОК, юзер просто йде через 3-крок-flow.
             expect(useBusinessWizardStore.getState().currentStep).toBe(
-                'type-name',
+                'type-name'
             );
         });
     });

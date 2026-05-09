@@ -50,9 +50,7 @@ const DangerZone = () => {
                     });
                 }
                 setCooldownSec(RESEND_COOLDOWN_SEC);
-                toast.success(
-                    'Посилання для підтвердження надіслано на пошту',
-                );
+                toast.success('Посилання для підтвердження надіслано на пошту');
             }
         } catch (error) {
             const code =
@@ -63,9 +61,7 @@ const DangerZone = () => {
             if (code === 'RATE_LIMIT_EXCEEDED') {
                 toast.error('Забагато запитів. Спробуйте через 15 хвилин');
             } else if (code === 'EMAIL_SEND_FAILED') {
-                toast.error(
-                    'Не вдалося виконати операцію. Спробуйте пізніше',
-                );
+                toast.error('Не вдалося виконати операцію. Спробуйте пізніше');
             } else {
                 toast.error('Невірний пароль');
             }
@@ -87,7 +83,7 @@ const DangerZone = () => {
                 </p>
 
                 {isPendingDeletion && (
-                    <div className="mt-4 rounded-lg border border-primary/30 bg-primary/10 p-4">
+                    <div className="border-primary/30 bg-primary/10 mt-4 rounded-lg border p-4">
                         <p className="text-primary text-sm font-medium">
                             Перевірте пошту
                         </p>

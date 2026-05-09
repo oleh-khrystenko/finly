@@ -34,7 +34,7 @@ function controlDigit(first9: string): number {
     for (let i = 0; i < IPN_WEIGHTS.length; i++) {
         sum += (first9.charCodeAt(i) - 48) * IPN_WEIGHTS[i]!;
     }
-    return ((sum % 11) + 11) % 11 % 10;
+    return (((sum % 11) + 11) % 11) % 10;
 }
 
 /**
@@ -138,7 +138,10 @@ export type PayerTaxId = z.infer<typeof payerTaxIdZod>;
  * нового `BusinessType` без оновлення мапінгу — той самий fail-fast pattern,
  * що `taxIdLengthFor`.
  */
-const TAX_ID_VALIDATOR_BY_TYPE: Record<BusinessType, (value: string) => boolean> = {
+const TAX_ID_VALIDATOR_BY_TYPE: Record<
+    BusinessType,
+    (value: string) => boolean
+> = {
     individual: isValidIndividualTaxId,
     fop: isValidIndividualTaxId,
     tov: (value) => EDRPOU_PATTERN.test(value),

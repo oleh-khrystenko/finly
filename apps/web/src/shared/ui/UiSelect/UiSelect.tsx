@@ -68,11 +68,11 @@ const UiSelect = forwardRef<HTMLButtonElement, UiSelectProps>((props, ref) => {
                 {label && (
                     <label
                         id={generatedId}
-                        className="mb-1 block text-sm font-medium text-foreground"
+                        className="text-foreground mb-1 block text-sm font-medium"
                     >
                         {label}
                         {required && (
-                            <span className="ml-1 text-destructive">*</span>
+                            <span className="text-destructive ml-1">*</span>
                         )}
                     </label>
                 )}
@@ -91,7 +91,7 @@ const UiSelect = forwardRef<HTMLButtonElement, UiSelectProps>((props, ref) => {
                     >
                         {selected?.label || placeholder}
                     </span>
-                    <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform ui-open:rotate-180" />
+                    <ChevronDown className="text-muted-foreground ui-open:rotate-180 h-4 w-4 shrink-0 transition-transform" />
                 </ListboxButton>
 
                 <ListboxOptions
@@ -99,7 +99,7 @@ const UiSelect = forwardRef<HTMLButtonElement, UiSelectProps>((props, ref) => {
                     className={composeClasses(
                         'absolute z-50 mt-1 w-full',
                         'max-h-60 overflow-auto',
-                        'rounded-lg border border-border bg-card shadow-md',
+                        'border-border bg-card rounded-lg border shadow-md',
                         'focus:outline-none'
                     )}
                 >
@@ -109,8 +109,8 @@ const UiSelect = forwardRef<HTMLButtonElement, UiSelectProps>((props, ref) => {
                                 key={option.value}
                                 value={option.value}
                                 className={composeClasses(
-                                    'flex cursor-pointer select-none items-center justify-between',
-                                    'rounded-md text-foreground transition-colors',
+                                    'flex cursor-pointer items-center justify-between select-none',
+                                    'text-foreground rounded-md transition-colors',
                                     'data-focus:bg-accent',
                                     optionSizeStyles[size]
                                 )}
@@ -126,7 +126,7 @@ const UiSelect = forwardRef<HTMLButtonElement, UiSelectProps>((props, ref) => {
                                             {option.label}
                                         </span>
                                         {isSelected && (
-                                            <Check className="h-4 w-4 shrink-0 text-primary" />
+                                            <Check className="text-primary h-4 w-4 shrink-0" />
                                         )}
                                     </>
                                 )}
@@ -135,7 +135,7 @@ const UiSelect = forwardRef<HTMLButtonElement, UiSelectProps>((props, ref) => {
                     </div>
                 </ListboxOptions>
                 {error && (
-                    <p className="mt-1 text-sm text-destructive">{error}</p>
+                    <p className="text-destructive mt-1 text-sm">{error}</p>
                 )}
             </div>
         </Listbox>

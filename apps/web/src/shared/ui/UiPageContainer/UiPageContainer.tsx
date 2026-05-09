@@ -13,7 +13,7 @@ const UiPageContainer = ({
         className={composeClasses(
             'mx-auto flex w-full max-w-3xl flex-col px-4',
             fixed ? viewportHeight : viewportMinHeight,
-            className,
+            className
         )}
     >
         {children}

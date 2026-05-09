@@ -47,16 +47,16 @@ describe('BusinessWizardForm', () => {
 
             // 4 radio-cards
             expect(
-                screen.getByRole('radio', { name: /Я особисто/ }),
+                screen.getByRole('radio', { name: /Я особисто/ })
             ).toBeInTheDocument();
             expect(
-                screen.getByRole('radio', { name: /^ФОП/ }),
+                screen.getByRole('radio', { name: /^ФОП/ })
             ).toBeInTheDocument();
             expect(
-                screen.getByRole('radio', { name: /^ТОВ/ }),
+                screen.getByRole('radio', { name: /^ТОВ/ })
             ).toBeInTheDocument();
             expect(
-                screen.getByRole('radio', { name: /ОСББ/ }),
+                screen.getByRole('radio', { name: /ОСББ/ })
             ).toBeInTheDocument();
 
             const nextButton = screen.getByRole('button', { name: /далі/i });
@@ -95,17 +95,15 @@ describe('BusinessWizardForm', () => {
 
             await waitFor(() => {
                 expect(
-                    screen.getByPlaceholderText(VALID_IBAN),
+                    screen.getByPlaceholderText(VALID_IBAN)
                 ).toBeInTheDocument();
             });
             expect(useBusinessWizardStore.getState().currentStep).toBe(
-                'requisites',
+                'requisites'
             );
-            expect(useBusinessWizardStore.getState().formData.type).toBe(
-                'fop',
-            );
+            expect(useBusinessWizardStore.getState().formData.type).toBe('fop');
             expect(useBusinessWizardStore.getState().formData.name).toBe(
-                'Іваненко',
+                'Іваненко'
             );
         });
     });
@@ -251,14 +249,14 @@ describe('BusinessWizardForm', () => {
             // Effect виконується після першого render-у. Чекаємо стейт-зміни.
             return waitFor(() => {
                 expect(useBusinessWizardStore.getState().currentStep).toBe(
-                    'purpose-banks',
+                    'purpose-banks'
                 );
             });
         });
     });
 
     describe("Step 'purpose-banks' — submit з 4-type-aware payload-ом", () => {
-        it("fop submit з повним CreateBusinessRequest (taxation присутній)", async () => {
+        it('fop submit з повним CreateBusinessRequest (taxation присутній)', async () => {
             act(() => {
                 useBusinessWizardStore.setState({
                     currentStep: 'purpose-banks',
@@ -286,7 +284,7 @@ describe('BusinessWizardForm', () => {
             fireEvent.click(createButton);
 
             await waitFor(() =>
-                expect(mockCreateBusiness).toHaveBeenCalledTimes(1),
+                expect(mockCreateBusiness).toHaveBeenCalledTimes(1)
             );
             expect(mockCreateBusiness).toHaveBeenCalledWith({
                 type: 'fop',
@@ -299,12 +297,12 @@ describe('BusinessWizardForm', () => {
             });
             await waitFor(() =>
                 expect(mockRouterReplace).toHaveBeenCalledWith(
-                    '/business/aB3xQ9k7',
-                ),
+                    '/business/aB3xQ9k7'
+                )
             );
         });
 
-        it("individual submit БЕЗ taxation-полів (Sprint 7 §SP-3 discriminated union)", async () => {
+        it('individual submit БЕЗ taxation-полів (Sprint 7 §SP-3 discriminated union)', async () => {
             // Backend reject-нув би taxation-поля для individual через
             // .strict()-variant (`createIndividualVariant`). buildCreateRequestFromDraft
             // має відсікти taxation з payload-у незалежно від stale draft state.
@@ -333,7 +331,7 @@ describe('BusinessWizardForm', () => {
             fireEvent.click(screen.getByRole('button', { name: /створити/i }));
 
             await waitFor(() =>
-                expect(mockCreateBusiness).toHaveBeenCalledTimes(1),
+                expect(mockCreateBusiness).toHaveBeenCalledTimes(1)
             );
             const payload = mockCreateBusiness.mock.calls[0]![0];
             expect(payload.type).toBe('individual');
@@ -341,7 +339,7 @@ describe('BusinessWizardForm', () => {
             expect(payload).not.toHaveProperty('isVatPayer');
         });
 
-        it("organization submit з ЄДРПОУ (8-digit), без taxation-полів", async () => {
+        it('organization submit з ЄДРПОУ (8-digit), без taxation-полів', async () => {
             act(() => {
                 useBusinessWizardStore.setState({
                     currentStep: 'purpose-banks',
@@ -363,7 +361,7 @@ describe('BusinessWizardForm', () => {
             fireEvent.click(screen.getByRole('button', { name: /створити/i }));
 
             await waitFor(() =>
-                expect(mockCreateBusiness).toHaveBeenCalledTimes(1),
+                expect(mockCreateBusiness).toHaveBeenCalledTimes(1)
             );
             const payload = mockCreateBusiness.mock.calls[0]![0];
             expect(payload.type).toBe('organization');
@@ -393,10 +391,10 @@ describe('BusinessWizardForm', () => {
 
             await waitFor(() => expect(mockRouterReplace).toHaveBeenCalled());
             expect(useBusinessWizardStore.getState().currentStep).toBe(
-                'type-name',
+                'type-name'
             );
             expect(
-                useBusinessWizardStore.getState().formData.name,
+                useBusinessWizardStore.getState().formData.name
             ).toBeUndefined();
         });
 
@@ -428,7 +426,7 @@ describe('BusinessWizardForm', () => {
             await waitFor(() => expect(mockToastError).toHaveBeenCalled());
             expect(mockCreateBusiness).not.toHaveBeenCalled();
             expect(useBusinessWizardStore.getState().currentStep).toBe(
-                'type-name',
+                'type-name'
             );
         });
     });

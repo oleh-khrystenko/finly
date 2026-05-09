@@ -1,7 +1,4 @@
-import {
-    formatKopecksAsHryvnia,
-    getInvoiceStatus,
-} from './formatKopecks';
+import { formatKopecksAsHryvnia, getInvoiceStatus } from './formatKopecks';
 
 describe('formatKopecksAsHryvnia', () => {
     it('null → null (caller вирішує fallback)', () => {
@@ -28,7 +25,7 @@ describe('formatKopecksAsHryvnia', () => {
 
     it('99_999_999_999 копійок (максимум) → "999 999 999,99 ₴"', () => {
         expect(formatKopecksAsHryvnia(99_999_999_999)).toMatch(
-            /^999\s999\s999,99\s?₴$/,
+            /^999\s999\s999,99\s?₴$/
         );
     });
 });

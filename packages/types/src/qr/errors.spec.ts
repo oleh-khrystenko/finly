@@ -1,7 +1,4 @@
-import {
-    PAYLOAD_ERROR_CODES,
-    PayloadValidationError,
-} from './errors';
+import { PAYLOAD_ERROR_CODES, PayloadValidationError } from './errors';
 
 describe('PayloadValidationError', () => {
     it('зберігає code, field, version у public-полях', () => {

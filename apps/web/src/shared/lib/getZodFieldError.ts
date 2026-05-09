@@ -14,7 +14,7 @@ import { mapValidationCode } from './mapValidationCode';
  * що показати: ручний літерал чи прохід через мапер.
  */
 export function getZodFieldError(
-    error: FieldError | undefined,
+    error: FieldError | undefined
 ): string | undefined {
     return mapValidationCode(error?.message);
 }

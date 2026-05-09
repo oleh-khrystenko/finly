@@ -18,7 +18,7 @@ interface Props {
     onSave: (
         patch:
             | { paymentPurposeTemplate: string }
-            | { acceptedBanks: BankCode[] },
+            | { acceptedBanks: BankCode[] }
     ) => Promise<void>;
 }
 
@@ -44,9 +44,8 @@ export default function BanksSection({ business, onSave }: Props) {
                             businessPaymentPurposeTemplateSchema.safeParse(v);
                         return r.success
                             ? null
-                            : (mapValidationCode(
-                                  r.error.issues[0]?.message,
-                              ) ?? null);
+                            : (mapValidationCode(r.error.issues[0]?.message) ??
+                                  null);
                     }}
                     onSave={(paymentPurposeTemplate) =>
                         onSave({ paymentPurposeTemplate })
@@ -86,8 +85,8 @@ export default function BanksSection({ business, onSave }: Props) {
                                                             ? value
                                                             : [...value, bank]
                                                         : value.filter(
-                                                              (b) => b !== bank,
-                                                          ),
+                                                              (b) => b !== bank
+                                                          )
                                                 );
                                             }}
                                         />

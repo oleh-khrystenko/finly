@@ -12,13 +12,13 @@ import {
 describe('effectiveInvoicePurpose (frontend mirror)', () => {
     it('returns invoice purpose коли non-null', () => {
         expect(effectiveInvoicePurpose('Custom invoice', 'Default biz')).toBe(
-            'Custom invoice',
+            'Custom invoice'
         );
     });
 
     it('returns business template коли invoice purpose === null', () => {
         expect(effectiveInvoicePurpose(null, 'Default biz')).toBe(
-            'Default biz',
+            'Default biz'
         );
     });
 
@@ -32,7 +32,7 @@ describe('effectiveInvoicePurpose (frontend mirror)', () => {
 
     it('повертає cyrillic input as-is', () => {
         expect(
-            effectiveInvoicePurpose('Оплата за консультацію', 'Default'),
+            effectiveInvoicePurpose('Оплата за консультацію', 'Default')
         ).toBe('Оплата за консультацію');
     });
 
@@ -46,9 +46,7 @@ describe('effectiveInvoicePurpose (frontend mirror)', () => {
 // NBU payload. Якщо backend chain зміниться (наприклад, snapshot як hint
 // замість primary), цей spec має бути оновлений у тому ж commit-і.
 describe('resolveInvoicePayeePurpose (snapshot-aware mirror)', () => {
-    const makeSnapshot = (
-        purpose: string,
-    ): InvoicePayeeSnapshot => ({
+    const makeSnapshot = (purpose: string): InvoicePayeeSnapshot => ({
         recipientName: 'ФОП Іванко',
         iban: 'UA213223130000026007233566001',
         taxId: '1234567890',
@@ -63,8 +61,8 @@ describe('resolveInvoicePayeePurpose (snapshot-aware mirror)', () => {
             resolveInvoicePayeePurpose(
                 makeSnapshot('Original template at create'),
                 null,
-                'New template after edit',
-            ),
+                'New template after edit'
+            )
         ).toBe('Original template at create');
     });
 
@@ -77,20 +75,20 @@ describe('resolveInvoicePayeePurpose (snapshot-aware mirror)', () => {
             resolveInvoicePayeePurpose(
                 makeSnapshot('Snapshot wins'),
                 'Per-invoice override',
-                'Template',
-            ),
+                'Template'
+            )
         ).toBe('Snapshot wins');
     });
 
     it('legacy fallback: snapshot=null + paymentPurpose=null → live template', () => {
         expect(
-            resolveInvoicePayeePurpose(null, null, 'Послуги web-розробки'),
+            resolveInvoicePayeePurpose(null, null, 'Послуги web-розробки')
         ).toBe('Послуги web-розробки');
     });
 
     it('legacy fallback: snapshot=null + paymentPurpose=string → invoice override', () => {
         expect(
-            resolveInvoicePayeePurpose(null, 'Per-invoice override', 'Default'),
+            resolveInvoicePayeePurpose(null, 'Per-invoice override', 'Default')
         ).toBe('Per-invoice override');
     });
 });

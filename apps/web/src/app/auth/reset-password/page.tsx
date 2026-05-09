@@ -42,7 +42,7 @@ function ResetPasswordContent() {
 
     const [status, setStatus] = useState<PageStatus>(token ? 'form' : 'error');
     const [errorMessage, setErrorMessage] = useState(
-        token ? '' : ERROR_INVALID_TOKEN,
+        token ? '' : ERROR_INVALID_TOKEN
     );
 
     const onSubmit = async (data: ResetPasswordFormValues) => {

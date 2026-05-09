@@ -37,9 +37,7 @@ describe('TaxationSection — coupled rule (Sprint 3 §C1)', () => {
 
     it('VAT switch checked + enabled з existing simplified-3 + isVatPayer=true', () => {
         render(<TaxationSection business={baseBusiness} onSave={jest.fn()} />);
-        fireEvent.click(
-            screen.getByLabelText('Редагувати: оподаткування'),
-        );
+        fireEvent.click(screen.getByLabelText('Редагувати: оподаткування'));
         const vatSwitch = screen.getByRole('switch', {
             name: /платник пдв/i,
         });
@@ -54,22 +52,15 @@ describe('TaxationSection — coupled rule (Sprint 3 §C1)', () => {
             isVatPayer: false,
         };
         render(
-            <TaxationSection
-                business={businessWithSimp1}
-                onSave={jest.fn()}
-            />,
+            <TaxationSection business={businessWithSimp1} onSave={jest.fn()} />
         );
-        fireEvent.click(
-            screen.getByLabelText('Редагувати: оподаткування'),
-        );
+        fireEvent.click(screen.getByLabelText('Редагувати: оподаткування'));
         const vatSwitch = screen.getByRole('switch', {
             name: /платник пдв/i,
         });
         expect(vatSwitch).toBeDisabled();
         expect(
-            screen.getByText(
-                /пдв доступний для спрощеної-3 і загальної/i,
-            ),
+            screen.getByText(/пдв доступний для спрощеної-3 і загальної/i)
         ).toBeInTheDocument();
     });
 
@@ -77,9 +68,7 @@ describe('TaxationSection — coupled rule (Sprint 3 §C1)', () => {
         const onSave = jest.fn().mockResolvedValue(undefined);
         render(<TaxationSection business={baseBusiness} onSave={onSave} />);
 
-        fireEvent.click(
-            screen.getByLabelText('Редагувати: оподаткування'),
-        );
+        fireEvent.click(screen.getByLabelText('Редагувати: оподаткування'));
         fireEvent.click(screen.getByText('Зберегти'));
         await Promise.resolve();
 
@@ -96,9 +85,7 @@ describe('TaxationSection — coupled rule (Sprint 3 §C1)', () => {
         const onSave = jest.fn().mockResolvedValue(undefined);
         render(<TaxationSection business={baseBusiness} onSave={onSave} />);
 
-        fireEvent.click(
-            screen.getByLabelText('Редагувати: оподаткування'),
-        );
+        fireEvent.click(screen.getByLabelText('Редагувати: оподаткування'));
 
         // VAT switch checked + enabled (existing simplified-3 + isVatPayer=true)
         const vatSwitch = screen.getByRole('switch', {
@@ -129,7 +116,7 @@ describe('TaxationSection — coupled rule (Sprint 3 §C1)', () => {
             expect(onSave).toHaveBeenCalledWith({
                 taxationSystem: 'simplified-1',
                 isVatPayer: false,
-            }),
+            })
         );
     });
 });

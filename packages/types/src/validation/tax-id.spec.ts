@@ -41,9 +41,9 @@ describe('isValidIndividualTaxId — golden vectors', () => {
     });
 
     it('rejects non-string input via the runtime guard', () => {
-        expect(
-            isValidIndividualTaxId(undefined as unknown as string)
-        ).toBe(false);
+        expect(isValidIndividualTaxId(undefined as unknown as string)).toBe(
+            false
+        );
         expect(isValidIndividualTaxId(null as unknown as string)).toBe(false);
         expect(isValidIndividualTaxId(1234567899 as unknown as string)).toBe(
             false

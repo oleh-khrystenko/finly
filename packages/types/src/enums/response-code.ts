@@ -160,8 +160,7 @@ export const RESPONSE_CODE = {
     INTERNAL_ERROR: 'INTERNAL_ERROR',
 } as const;
 
-export type ResponseCode =
-    (typeof RESPONSE_CODE)[keyof typeof RESPONSE_CODE];
+export type ResponseCode = (typeof RESPONSE_CODE)[keyof typeof RESPONSE_CODE];
 
 /** Маппінг код → тип для фронту (колір нотифікації тощо) */
 export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {

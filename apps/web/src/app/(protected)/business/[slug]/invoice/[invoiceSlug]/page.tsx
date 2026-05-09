@@ -205,13 +205,13 @@ export default function InvoiceCabinetPage() {
             // користувач бачив на екрані під час click-у. Якщо параметри
             // route змінилися між render-ом і submit-ом, нові callback-и
             // отримають новий closure після re-render-у.
-            captured: { businessSlug: string; invoiceSlug: string },
+            captured: { businessSlug: string; invoiceSlug: string }
         ) => {
             try {
                 const updated = await updateInvoice(
                     captured.businessSlug,
                     captured.invoiceSlug,
-                    patch,
+                    patch
                 );
                 // Apply update тільки якщо state ще відповідає тому інвойсу,
                 // що ми patch-нули. Якщо ФОП за час fetch-у перейшов на інший
@@ -221,7 +221,7 @@ export default function InvoiceCabinetPage() {
                     prev.business.slug === captured.businessSlug &&
                     prev.invoice.slug === captured.invoiceSlug
                         ? { ...prev, invoice: updated }
-                        : prev,
+                        : prev
                 );
                 toast.success('Зміни збережено');
             } catch (err: unknown) {
@@ -230,7 +230,7 @@ export default function InvoiceCabinetPage() {
                 throw new Error(msg);
             }
         },
-        [],
+        []
     );
 
     if (!isDataCurrent && !error) {
@@ -243,8 +243,11 @@ export default function InvoiceCabinetPage() {
         );
     }
 
-    if (error && error.paramSlug === paramSlug &&
-        error.paramInvoiceSlug === paramInvoiceSlug) {
+    if (
+        error &&
+        error.paramSlug === paramSlug &&
+        error.paramInvoiceSlug === paramInvoiceSlug
+    ) {
         return <ErrorPage code={error.code} />;
     }
     if (!data || !isDataCurrent) {
@@ -281,7 +284,7 @@ export default function InvoiceCabinetPage() {
                     router.replace(`/business/${businessSlug}#invoices`),
                 onCancelled: () =>
                     router.replace(
-                        `/business/${businessSlug}/invoice/${invoiceSlug}`,
+                        `/business/${businessSlug}/invoice/${invoiceSlug}`
                     ),
             });
         });
@@ -443,8 +446,8 @@ function InvoicePreviewPanel({
                 />
             ) : state.kind === 'failed' && isCurrent ? (
                 <p className="text-muted-foreground p-8 text-center text-sm">
-                    Не вдалося завантажити перегляд. Натисніть «Відкрити в
-                    новій вкладці» для перевірки.
+                    Не вдалося завантажити перегляд. Натисніть «Відкрити в новій
+                    вкладці» для перевірки.
                 </p>
             ) : (
                 <div className="flex justify-center py-16">

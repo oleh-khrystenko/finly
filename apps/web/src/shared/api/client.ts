@@ -20,7 +20,7 @@ export const apiClient = axios.create({
 export class PublicApiError extends Error {
     constructor(
         public readonly status: number,
-        public readonly statusText: string,
+        public readonly statusText: string
     ) {
         super(`Public API request failed: ${status} ${statusText}`);
         this.name = 'PublicApiError';

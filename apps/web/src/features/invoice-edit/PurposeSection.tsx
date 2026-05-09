@@ -13,9 +13,7 @@ import { mapValidationCode } from '@/shared/lib';
 interface Props {
     invoice: Invoice;
     business: Business;
-    onSave: (
-        patch: Partial<Pick<Invoice, 'paymentPurpose'>>,
-    ) => Promise<void>;
+    onSave: (patch: Partial<Pick<Invoice, 'paymentPurpose'>>) => Promise<void>;
 }
 
 /**
@@ -34,8 +32,8 @@ export default function PurposeSection({ invoice, business, onSave }: Props) {
                 renderRead={(v) =>
                     v === null ? (
                         <span className="text-muted-foreground italic">
-                            Використано з налаштувань бізнесу:
-                            «{business.paymentPurposeTemplate}»
+                            Використано з налаштувань бізнесу: «
+                            {business.paymentPurposeTemplate}»
                         </span>
                     ) : (
                         v

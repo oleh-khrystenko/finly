@@ -56,13 +56,13 @@ export default function SubscriptionStatus({ catalog }: Props) {
     return (
         <UiSectionCard title="Підписка" headerRight={billingLink}>
             {!hasActive ? (
-                <p className="mt-3 text-sm text-muted-foreground">
+                <p className="text-muted-foreground mt-3 text-sm">
                     Немає активної підписки
                 </p>
             ) : (
                 <div className="mt-3">
                     <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-semibold text-foreground">
+                        <span className="text-foreground font-semibold">
                             План {planName}
                         </span>
                         <span
@@ -77,26 +77,26 @@ export default function SubscriptionStatus({ catalog }: Props) {
                                 : 'Активна'}
                         </span>
                     </div>
-                    <p className="mt-1 text-sm text-muted-foreground">
+                    <p className="text-muted-foreground mt-1 text-sm">
                         {billing.cancelAtPeriodEnd
                             ? `Діє до ${formatLocalDate(billing.currentPeriodEnd)}`
                             : `Поновлення ${formatLocalDate(billing.currentPeriodEnd)}`}
                     </p>
                     {activePlan && (
-                        <p className="mt-0.5 text-sm text-muted-foreground">
+                        <p className="text-muted-foreground mt-0.5 text-sm">
                             {activePlan.executions.toLocaleString(INTL_LOCALE)}{' '}
                             виконань за період
                         </p>
                     )}
                     {billing.scheduledPlanCode && (
-                        <p className="mt-0.5 text-sm text-muted-foreground">
+                        <p className="text-muted-foreground mt-0.5 text-sm">
                             Перехід на{' '}
                             <span className="font-bold">
                                 {formatPlanName(billing.scheduledPlanCode)}
                             </span>{' '}
                             з{' '}
                             {formatLocalDate(
-                                billing.scheduledChangeDate ?? null,
+                                billing.scheduledChangeDate ?? null
                             )}
                         </p>
                     )}

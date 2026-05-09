@@ -33,12 +33,12 @@ const useIsHydrated = () =>
     useSyncExternalStore(
         subscribe,
         () => true,
-        () => false,
+        () => false
     );
 
 const getActiveTheme = (
     theme: string | undefined,
-    isHydrated: boolean,
+    isHydrated: boolean
 ): Theme => {
     if (!isHydrated) {
         return THEME.SYSTEM;

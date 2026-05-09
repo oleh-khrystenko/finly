@@ -35,11 +35,11 @@ export default function Step4PurposeBanks() {
     const reset = useBusinessWizardStore((s) => s.reset);
 
     const [purpose, setPurpose] = useState<string>(
-        formData.paymentPurposeTemplate ?? '',
+        formData.paymentPurposeTemplate ?? ''
     );
     const [purposeError, setPurposeError] = useState<string | undefined>();
     const [acceptedBanks, setAcceptedBanks] = useState<BankCode[]>(
-        formData.acceptedBanks ?? [...MVP_BANKS],
+        formData.acceptedBanks ?? [...MVP_BANKS]
     );
     const [submitting, setSubmitting] = useState(false);
 
@@ -56,14 +56,14 @@ export default function Step4PurposeBanks() {
                 ? prev.includes(bank)
                     ? prev
                     : [...prev, bank]
-                : prev.filter((b) => b !== bank),
+                : prev.filter((b) => b !== bank)
         );
     };
 
     const onPurposeBlur = () => {
         if (!purposeParse.success) {
             setPurposeError(
-                mapValidationCode(purposeParse.error.issues[0]?.message),
+                mapValidationCode(purposeParse.error.issues[0]?.message)
             );
         } else {
             setPurposeError(undefined);
@@ -88,7 +88,7 @@ export default function Step4PurposeBanks() {
             });
         } catch {
             toast.error(
-                'Дані форми застаріли. Будь ласка, заповніть кроки заново.',
+                'Дані форми застаріли. Будь ласка, заповніть кроки заново.'
             );
             setStep('type-name');
             return;
@@ -96,7 +96,7 @@ export default function Step4PurposeBanks() {
         const parsed = CreateBusinessSchema.safeParse(request);
         if (!parsed.success) {
             toast.error(
-                'Дані форми застаріли. Будь ласка, заповніть кроки заново.',
+                'Дані форми застаріли. Будь ласка, заповніть кроки заново.'
             );
             setStep('type-name');
             return;
@@ -111,9 +111,11 @@ export default function Step4PurposeBanks() {
         } catch (err) {
             const code =
                 err instanceof AxiosError
-                    ? (err.response?.data as
-                          | { error?: { code?: string } }
-                          | undefined)?.error?.code
+                    ? (
+                          err.response?.data as
+                              | { error?: { code?: string } }
+                              | undefined
+                      )?.error?.code
                     : undefined;
             toast.error(getApiMessage(code ?? 'unknown', 'businesses'));
             setSubmitting(false);

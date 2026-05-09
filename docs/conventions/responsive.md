@@ -5,6 +5,7 @@
 ## Принцип
 
 **Mobile-first** означає:
+
 - Базові стилі компонента — для мобільного.
 - Tailwind-модифікатори (`sm:`, `md:`, `lg:`, `xl:`) додають / змінюють поведінку для більших екранів.
 - НЕ навпаки (десктоп-стилі за замовчуванням, потім `max-md:` для мобільного — заборонено).
@@ -27,14 +28,14 @@
 
 Використовуємо стандартні Tailwind v4 breakpoints без custom-значень:
 
-| Префікс | Min-width | Цільові пристрої |
-|---|---|---|
-| (default) | 0px | Mobile portrait (iPhone SE → iPhone 15 Pro Max) |
-| `sm:` | 640px | Mobile landscape, малі планшети |
-| `md:` | 768px | Tablet portrait (iPad mini, iPad) |
-| `lg:` | 1024px | Tablet landscape, малі ноутбуки |
-| `xl:` | 1280px | Desktop |
-| `2xl:` | 1536px | Великі desktop-монітори |
+| Префікс   | Min-width | Цільові пристрої                                |
+| --------- | --------- | ----------------------------------------------- |
+| (default) | 0px       | Mobile portrait (iPhone SE → iPhone 15 Pro Max) |
+| `sm:`     | 640px     | Mobile landscape, малі планшети                 |
+| `md:`     | 768px     | Tablet portrait (iPad mini, iPad)               |
+| `lg:`     | 1024px    | Tablet landscape, малі ноутбуки                 |
+| `xl:`     | 1280px    | Desktop                                         |
+| `2xl:`    | 1536px    | Великі desktop-монітори                         |
 
 **Не вводити custom breakpoints без сильного обґрунтування** — це фрагментує компоненти і ускладнює QA.
 
@@ -45,6 +46,7 @@
 При ширині 320px (найвужчий iPhone SE 1-го покоління) сторінка **не повинна** мати горизонтального скролу. Тестується через DevTools "Responsive" 320×568.
 
 Типові порушники:
+
 - Великі таблиці без `overflow-x-auto` обгортки.
 - Inline-зображення з фіксованою шириною (`w-[800px]`).
 - `whitespace-nowrap` на довгих рядках без `overflow-hidden text-ellipsis`.
@@ -120,11 +122,11 @@
 
 Перед merge кожна нова сторінка / суттєво зміна layout перевіряється на трьох viewport-ах через DevTools:
 
-| Viewport | Розмір | Цільовий пристрій |
-|---|---|---|
-| Mobile | 375×667 | iPhone SE 2nd gen / iPhone 8 |
-| Tablet | 768×1024 | iPad portrait |
-| Desktop | 1440×900 | Ноутбук / середній монітор |
+| Viewport | Розмір   | Цільовий пристрій            |
+| -------- | -------- | ---------------------------- |
+| Mobile   | 375×667  | iPhone SE 2nd gen / iPhone 8 |
+| Tablet   | 768×1024 | iPad portrait                |
+| Desktop  | 1440×900 | Ноутбук / середній монітор   |
 
 ## Винятки
 

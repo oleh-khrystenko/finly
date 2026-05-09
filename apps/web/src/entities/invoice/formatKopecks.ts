@@ -17,9 +17,7 @@ const HRYVNIA_FORMATTER = new Intl.NumberFormat('uk-UA', {
     maximumFractionDigits: 2,
 });
 
-export function formatKopecksAsHryvnia(
-    kopecks: number | null,
-): string | null {
+export function formatKopecksAsHryvnia(kopecks: number | null): string | null {
     if (kopecks === null) return null;
     const hryvnia = kopecks / 100;
     return `${HRYVNIA_FORMATTER.format(hryvnia)} ₴`;
@@ -42,7 +40,7 @@ export type InvoiceLifecycleStatus = 'active' | 'expired';
 
 export function getInvoiceStatus(
     validUntil: Date | null,
-    now: Date = new Date(),
+    now: Date = new Date()
 ): InvoiceLifecycleStatus {
     if (validUntil === null) return 'active';
     return validUntil.getTime() < now.getTime() ? 'expired' : 'active';

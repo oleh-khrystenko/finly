@@ -11,7 +11,7 @@ import { useSlugPresetWarningStore } from '@/entities/invoice';
 interface Props {
     business: Business;
     onSave: (
-        patch: Pick<Business, 'invoiceSlugPresetDefault'>,
+        patch: Pick<Business, 'invoiceSlugPresetDefault'>
     ) => Promise<void>;
 }
 
@@ -64,7 +64,7 @@ const OPTIONS: { value: FormValue; label: string }[] = [
 ];
 
 const LABEL_BY_VALUE = new Map<string, string>(
-    OPTIONS.map((o) => [o.value, o.label]),
+    OPTIONS.map((o) => [o.value, o.label])
 );
 
 function toFormValue(preset: SlugPreset | null): FormValue {
@@ -116,7 +116,7 @@ export default function InvoicesSettingsSection({ business, onSave }: Props) {
             const confirmed = await new Promise<boolean>((resolve) => {
                 openWarning(
                     () => resolve(true),
-                    () => resolve(false),
+                    () => resolve(false)
                 );
             });
             if (!confirmed) {

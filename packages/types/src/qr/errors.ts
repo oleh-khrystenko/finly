@@ -37,8 +37,7 @@ export class PayloadValidationError extends Error {
         message?: string
     ) {
         super(
-            message ??
-                `${code} (field=${field}, version=${version ?? 'n/a'})`
+            message ?? `${code} (field=${field}, version=${version ?? 'n/a'})`
         );
         this.name = 'PayloadValidationError';
         this.code = code;

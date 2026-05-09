@@ -22,7 +22,7 @@ export default function HomePage() {
                 <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">
                     Finly
                 </h1>
-                <p className="mt-4 max-w-prose text-base text-muted-foreground">
+                <p className="text-muted-foreground mt-4 max-w-prose text-base">
                     Заглушка лендінгу. Увійдіть, щоб користуватися застосунком.
                 </p>
                 <div className="mt-8 flex flex-wrap items-center justify-center gap-3">

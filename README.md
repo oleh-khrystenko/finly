@@ -49,15 +49,15 @@ finly/
 
 ## Технології
 
-| Шар        | Технологія                                                                      |
-| ---------- | ------------------------------------------------------------------------------- |
-| Monorepo   | Turborepo + pnpm workspaces                                                    |
-| Frontend   | Next.js 16 (App Router), React 19, Zustand, TailwindCSS 4, next-intl, next-themes |
-| Backend    | NestJS 11, Mongoose (MongoDB), Passport (JWT + Google OAuth), ioredis (Redis)   |
-| Payments   | Stripe (subscriptions + one-off credit packs, webhook idempotency)              |
-| Shared     | Zod 4 (single source of truth), TypeScript 5.9 (strict)                        |
-| Email      | Resend                                                                          |
-| Тести      | Jest 30, Supertest, MongoMemoryServer                                           |
+| Шар      | Технологія                                                                        |
+| -------- | --------------------------------------------------------------------------------- |
+| Monorepo | Turborepo + pnpm workspaces                                                       |
+| Frontend | Next.js 16 (App Router), React 19, Zustand, TailwindCSS 4, next-intl, next-themes |
+| Backend  | NestJS 11, Mongoose (MongoDB), Passport (JWT + Google OAuth), ioredis (Redis)     |
+| Payments | Stripe (subscriptions + one-off credit packs, webhook idempotency)                |
+| Shared   | Zod 4 (single source of truth), TypeScript 5.9 (strict)                           |
+| Email    | Resend                                                                            |
+| Тести    | Jest 30, Supertest, MongoMemoryServer                                             |
 
 ---
 
@@ -146,12 +146,12 @@ echo '127.0.0.1 pay.finly.local' | sudo tee -a /etc/hosts
 docker compose -f docker-compose.dev.yml up --build
 ```
 
-| Сервіс   | URL / Порт                                  |
-| -------- | ------------------------------------------- |
-| Frontend | http://localhost:3000                        |
-| Backend  | http://localhost:4000                        |
-| MongoDB  | external (Atlas / Docker / local mongod)     |
-| Redis    | localhost:6379                               |
+| Сервіс   | URL / Порт                               |
+| -------- | ---------------------------------------- |
+| Frontend | http://localhost:3000                    |
+| Backend  | http://localhost:4000                    |
+| MongoDB  | external (Atlas / Docker / local mongod) |
+| Redis    | localhost:6379                           |
 
 Зупинити:
 
@@ -172,18 +172,18 @@ docker compose up --build -d
 
 ## Скрипти
 
-| Команда                                   | Опис                        |
-| ----------------------------------------- | --------------------------- |
-| `pnpm dev`                                | Dev-сервери через Turborepo |
-| `pnpm build`                              | Build all                   |
-| `pnpm lint`                               | Lint all                    |
-| `pnpm format`                             | Prettier format             |
-| `pnpm test`                               | Test all via Turborepo      |
-| `pnpm --filter api test`                  | API unit тести              |
-| `pnpm --filter api test:e2e`              | API E2E тести               |
-| `pnpm --filter api test:cov`              | API coverage                |
-| `pnpm --filter web test`                  | Web unit тести              |
-| `pnpm --filter @finly/types build`    | Build shared types          |
+| Команда                            | Опис                        |
+| ---------------------------------- | --------------------------- |
+| `pnpm dev`                         | Dev-сервери через Turborepo |
+| `pnpm build`                       | Build all                   |
+| `pnpm lint`                        | Lint all                    |
+| `pnpm format`                      | Prettier format             |
+| `pnpm test`                        | Test all via Turborepo      |
+| `pnpm --filter api test`           | API unit тести              |
+| `pnpm --filter api test:e2e`       | API E2E тести               |
+| `pnpm --filter api test:cov`       | API coverage                |
+| `pnpm --filter web test`           | Web unit тести              |
+| `pnpm --filter @finly/types build` | Build shared types          |
 
 ---
 
@@ -242,6 +242,7 @@ MONGODB_URI=mongodb://host.docker.internal:27017/finly_dev?replicaSet=rs0
 ```
 
 **Linux-specific.** `host.docker.internal` НЕ резолвиться ні в API-контейнері, ні в Mongo-контейнері без явного `host-gateway` alias-у. Тому:
+
 - `--add-host host.docker.internal:host-gateway` у `docker run` для Mongo (вище) — щоб heartbeat replica-set self-discovery не деградував.
 - `extra_hosts: ["host.docker.internal:host-gateway"]` у `api`-блоці `docker-compose.dev.yml` — уже додано Sprint 4 §4.0.
 

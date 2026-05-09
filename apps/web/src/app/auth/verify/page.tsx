@@ -25,7 +25,7 @@ function VerifyContent() {
     const redirectTarget =
         rawRedirect && isValidRedirect(rawRedirect) ? rawRedirect : '/profile';
     const [status, setStatus] = useState<VerifyStatus>(
-        token ? 'verifying' : 'error',
+        token ? 'verifying' : 'error'
     );
     const [errorMessage, setErrorMessage] = useState('');
 
@@ -86,7 +86,7 @@ function VerifyContent() {
     if (status === 'deleted') {
         return (
             <div className="flex flex-col items-center gap-4">
-                <CheckCircle className="h-12 w-12 text-success" />
+                <CheckCircle className="text-success h-12 w-12" />
                 <p className="text-foreground text-lg font-semibold">
                     Акаунт видалено
                 </p>
@@ -131,7 +131,9 @@ function VerifyContent() {
     return (
         <UiFullPageLoader
             message={
-                status === 'success' ? 'Перенаправлення…' : 'Перевіряємо посилання…'
+                status === 'success'
+                    ? 'Перенаправлення…'
+                    : 'Перевіряємо посилання…'
             }
         />
     );

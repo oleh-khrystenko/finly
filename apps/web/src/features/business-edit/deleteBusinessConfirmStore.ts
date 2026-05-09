@@ -28,7 +28,7 @@ interface State {
     open: (
         business: Business,
         invoicesCount: number,
-        onConfirm: () => void,
+        onConfirm: () => void
     ) => void;
     close: () => void;
 }

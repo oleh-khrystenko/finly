@@ -74,7 +74,10 @@ describe('BusinessSchema', () => {
     it('rejects invalid IBAN inside requisites', () => {
         const result = BusinessSchema.safeParse({
             ...VALID_BUSINESS,
-            requisites: { iban: 'UA00000000000000000000000000', taxId: VALID_TAX_ID },
+            requisites: {
+                iban: 'UA00000000000000000000000000',
+                taxId: VALID_TAX_ID,
+            },
         });
         expect(result.success).toBe(false);
     });
@@ -529,8 +532,7 @@ describe('BusinessSchema', () => {
                     expect(
                         result.error.issues.some(
                             (i) =>
-                                i.message ===
-                                'INVALID_VAT_FOR_TAXATION_SYSTEM'
+                                i.message === 'INVALID_VAT_FOR_TAXATION_SYSTEM'
                         )
                     ).toBe(true);
                 }
@@ -580,7 +582,6 @@ describe('BusinessSchema', () => {
                     ).toBe(true);
                 }
             });
-
         });
 
         // Sub-schema sanity: `BusinessRequisitesSchema.taxId: payerTaxIdZod`

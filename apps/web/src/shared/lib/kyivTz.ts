@@ -75,7 +75,7 @@ export function kyivEndOfDayInstant(yyyymmdd: string): Date {
     const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(yyyymmdd);
     if (!match) {
         throw new RangeError(
-            `kyivEndOfDayInstant: expected YYYY-MM-DD, got "${yyyymmdd}"`,
+            `kyivEndOfDayInstant: expected YYYY-MM-DD, got "${yyyymmdd}"`
         );
     }
     const [, ys, ms, ds] = match;

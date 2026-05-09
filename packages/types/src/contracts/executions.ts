@@ -77,6 +77,4 @@ export const PaginatedTransactionsSchema = z.object({
     hasMore: z.boolean(),
 });
 
-export type PaginatedTransactions = z.infer<
-    typeof PaginatedTransactionsSchema
->;
+export type PaginatedTransactions = z.infer<typeof PaginatedTransactionsSchema>;

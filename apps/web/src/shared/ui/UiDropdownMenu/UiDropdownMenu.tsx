@@ -1,12 +1,7 @@
 'use client';
 
 import { forwardRef, Fragment } from 'react';
-import {
-    Menu,
-    MenuButton,
-    MenuItem,
-    MenuItems,
-} from '@headlessui/react';
+import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
 import { composeClasses } from '@/shared/lib';
 import type {
     UiDropdownMenuProps,
@@ -45,20 +40,24 @@ const UiDropdownMenu = forwardRef<HTMLDivElement, UiDropdownMenuProps>(
         } = props;
 
         return (
-            <Menu as="div" className="relative inline-flex items-center" ref={ref}>
+            <Menu
+                as="div"
+                className="relative inline-flex items-center"
+                ref={ref}
+            >
                 <MenuButton as={Fragment}>{trigger}</MenuButton>
 
                 <MenuItems
                     className={composeClasses(
                         'absolute top-full z-50 mt-1 min-w-32',
-                        'rounded-lg border border-border bg-card shadow-md',
+                        'border-border bg-card rounded-lg border shadow-md',
                         'focus:outline-none',
                         alignStyles[align],
                         className
                     )}
                 >
                     {header && (
-                        <div className="border-b border-border px-3 py-2">
+                        <div className="border-border border-b px-3 py-2">
                             {header}
                         </div>
                     )}
@@ -86,7 +85,7 @@ const UiDropdownMenu = forwardRef<HTMLDivElement, UiDropdownMenuProps>(
                                             {item.label}
                                         </span>
                                         {item.badge != null && (
-                                            <span className="ml-auto rounded-full bg-muted px-1.5 py-0.5 text-xs leading-none text-muted-foreground">
+                                            <span className="bg-muted text-muted-foreground ml-auto rounded-full px-1.5 py-0.5 text-xs leading-none">
                                                 {item.badge}
                                             </span>
                                         )}

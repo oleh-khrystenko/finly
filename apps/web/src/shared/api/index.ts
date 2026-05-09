@@ -24,7 +24,12 @@ export {
     createPortalSession,
 } from './payments';
 export { spendExecutions, getExecutionTransactions } from './executions';
-export { streamAiChat, getChatHistory, clearChatHistory, AiChatError } from './ai';
+export {
+    streamAiChat,
+    getChatHistory,
+    clearChatHistory,
+    AiChatError,
+} from './ai';
 export {
     requestAvatarUploadUrl,
     commitAvatarUpload,

@@ -39,8 +39,7 @@ const ERRORS: Record<string, MessageDict> = {
     payments: {
         already_subscribed: 'У вас вже є активна підписка.',
         subscription_required: 'Для доступу потрібна активна підписка.',
-        no_billing_account:
-            'Платіжний акаунт не знайдено. Оформіть підписку.',
+        no_billing_account: 'Платіжний акаунт не знайдено. Оформіть підписку.',
     },
     users: {
         insufficient_executions:
@@ -63,8 +62,7 @@ const ERRORS: Record<string, MessageDict> = {
             'Повідомлення занадто довге для поточної розмови. Скоротіть його або очистіть історію чату.',
     },
     storage: {
-        avatar_upload_failed:
-            'Не вдалося завантажити фото. Спробуйте пізніше',
+        avatar_upload_failed: 'Не вдалося завантажити фото. Спробуйте пізніше',
         avatar_file_key_invalid:
             'Сесія завантаження закінчилась. Спробуйте ще раз',
         avatar_upload_not_found:
@@ -115,8 +113,7 @@ const ERRORS: Record<string, MessageDict> = {
         // toast — код використовується тільки якщо клієнт прямо запитає
         // expired QR-image (e.g., cached link, scraping).
         invoice_expired: 'Термін рахунку минув',
-        invoice_valid_until_in_past:
-            'Термін дії не може бути у минулому',
+        invoice_valid_until_in_past: 'Термін дії не може бути у минулому',
     },
 };
 
@@ -124,11 +121,11 @@ const UNKNOWN_FALLBACK = ERRORS.generic.unknown;
 
 function interpolate(
     template: string,
-    vars?: Record<string, string | number>,
+    vars?: Record<string, string | number>
 ): string {
     if (!vars) return template;
     return template.replace(/\{(\w+)\}/g, (match, key) =>
-        key in vars ? String(vars[key]) : match,
+        key in vars ? String(vars[key]) : match
     );
 }
 
@@ -142,7 +139,7 @@ function interpolate(
 export function getApiMessage(
     code: string,
     module?: string,
-    vars?: Record<string, string | number>,
+    vars?: Record<string, string | number>
 ): string {
     const lower = code.toLowerCase();
     const type = RESPONSE_CODE_TYPE[code as keyof typeof RESPONSE_CODE_TYPE];

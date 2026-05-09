@@ -73,12 +73,7 @@ export function build003Payload(rawInput: unknown): string {
         FIELD_LIMITS['003'].receiverName,
         '003'
     );
-    assertField(
-        'purpose',
-        input.purpose,
-        FIELD_LIMITS['003'].purpose,
-        '003'
-    );
+    assertField('purpose', input.purpose, FIELD_LIMITS['003'].purpose, '003');
     assertField(
         'categoryPurpose',
         categoryPurpose,

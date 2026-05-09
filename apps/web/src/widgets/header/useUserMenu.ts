@@ -44,7 +44,7 @@ export function useUserMenu(icons: {
     const clearUser = useAuthStore((s) => s.clearUser);
 
     const formattedExecutions = (user?.executions.balance ?? 0).toLocaleString(
-        'en-US',
+        'en-US'
     );
 
     const allItems: UserMenuItem[] = [
@@ -85,7 +85,7 @@ export function useUserMenu(icons: {
     ];
 
     const visibleItems = allItems.filter(
-        (item) => !item.route || !pathname.startsWith(item.route),
+        (item) => !item.route || !pathname.startsWith(item.route)
     );
 
     const handleSelect = (value: string, onBeforeNavigate?: () => void) => {
@@ -133,8 +133,13 @@ export function useUserMenu(icons: {
                       // Rollback: відновити попередній стан + toast.
                       setUser({ ...user, worksAsBookkeeper: previous });
                       const code =
-                          (err as { response?: { data?: { error?: { code?: string } } } })
-                              ?.response?.data?.error?.code ?? 'unknown';
+                          (
+                              err as {
+                                  response?: {
+                                      data?: { error?: { code?: string } };
+                                  };
+                              }
+                          )?.response?.data?.error?.code ?? 'unknown';
                       toast.error(getApiMessage(code, 'users'));
                   }
               },

@@ -61,8 +61,7 @@ const VALIDATION_MESSAGES: Record<string, string> = {
     INVALID_AMOUNT_OVERFLOW: 'Сума занадто велика. Максимум 999 999 999.99 ₴',
     AMOUNT_LOCKED_REQUIRES_AMOUNT:
         'Заблокувати редагування суми можна лише при заданій сумі',
-    INVALID_AMOUNT_FORMAT:
-        'Введіть число (наприклад, 1500 або 1500,50)',
+    INVALID_AMOUNT_FORMAT: 'Введіть число (наприклад, 1500 або 1500,50)',
     INVALID_AMOUNT_PRECISION: 'Не більше двох знаків після коми',
     INVALID_AMOUNT_NEGATIVE: 'Сума не може бути від’ємною',
 
@@ -106,7 +105,9 @@ const FALLBACK = 'Перевірте правильність значення';
  *
  * Відсутній/порожній код → `undefined` (RHF/UI рендерять "немає помилки").
  */
-export function mapValidationCode(code: string | undefined): string | undefined {
+export function mapValidationCode(
+    code: string | undefined
+): string | undefined {
     if (!code) return undefined;
     return VALIDATION_MESSAGES[code] ?? FALLBACK;
 }

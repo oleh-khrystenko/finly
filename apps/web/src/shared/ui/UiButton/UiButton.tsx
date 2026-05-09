@@ -51,7 +51,8 @@ const variantStyles: Record<UiButtonVariant, string> = {
     'destructive-outline':
         'border border-destructive bg-transparent text-destructive hover:bg-destructive/10 active:bg-destructive/20',
     text: 'bg-transparent text-muted-foreground hover:text-foreground',
-    'destructive-text': 'bg-transparent text-destructive hover:text-destructive/80',
+    'destructive-text':
+        'bg-transparent text-destructive hover:text-destructive/80',
     icon: 'bg-transparent text-muted-foreground hover:text-foreground',
     'icon-compact':
         'bg-transparent text-muted-foreground hover:text-foreground',

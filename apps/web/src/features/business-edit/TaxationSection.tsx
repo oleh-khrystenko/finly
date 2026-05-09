@@ -6,6 +6,7 @@ import {
     TAXATION_SYSTEMS,
     TAXATION_SYSTEM_LABEL,
     isVatAllowedTaxationSystem,
+    requiresTaxation,
     type Business,
     type TaxationSystem,
 } from '@finly/types';
@@ -37,21 +38,44 @@ export type TaxationCapableBusiness = Business & {
 };
 
 /**
- * Type-guard для conditional-render-у TaxationSection. `requiresTaxation
- * (b.type)` гарантує narrow за Sprint 7 entity-refine
- * (`TAXATION_FIELDS_MISMATCH_TYPE`); явна null-перевірка — defensive для
- * legacy-документів і edge-cases (TS-narrow цей invariant з типу не виведе).
+ * Type-guard для conditional-render-у TaxationSection. Sprint 7 §7.8 acceptance —
+ * **type-driven primary condition** (`requiresTaxation(b.type)`), плюс
+ * data-driven secondary (non-null both fields) для TS-narrow до
+ * `TaxationCapableBusiness`.
+ *
+ * **Чому обидві перевірки, а не лише `requiresTaxation`**:
+ *  - `requiresTaxation(b.type)` — primary, semantic-truth: "цей тип бізнесу
+ *    має taxation-поля". Conditional render у `business/[slug]/page.tsx`
+ *    реально type-driven — секція рендериться **лише** для `fop` / `tov`,
+ *    незалежно від data-state.
+ *  - `b.taxationSystem !== null && b.isVatPayer !== null` — secondary,
+ *    TS-narrow для `Props.business: TaxationCapableBusiness`. Без data-check
+ *    TS-narrow з `requiresTaxation` boolean не виводиться — `taxationSystem`
+ *    залишається `TaxationSystem | null`, що ламає тип props.
+ *  - **Drift-protection**: legacy-документ ФОП без taxation-полів (gap у
+ *    міграції) — guard повертає false → секція не рендериться → uncrash
+ *    runtime. Symmetric: drift'd individual з non-null taxation
+ *    (data-corruption через bypass entity-Zod) — guard теж false, секція
+ *    лишається unmounted (бо primary `requiresTaxation` false).
+ *
+ * Sprint 7 entity-Zod refine `TAXATION_FIELDS_MISMATCH_TYPE` гарантує iff на
+ * read-side; цей guard — runtime-safety для render-path-у, де entity-Zod
+ * може бути bypass-ний (raw aggregation output, mocked test fixtures).
  */
 export function hasTaxationFields(
-    business: Business,
+    business: Business
 ): business is TaxationCapableBusiness {
-    return business.taxationSystem !== null && business.isVatPayer !== null;
+    return (
+        requiresTaxation(business.type) &&
+        business.taxationSystem !== null &&
+        business.isVatPayer !== null
+    );
 }
 
 interface Props {
     business: TaxationCapableBusiness;
     onSave: (
-        patch: Pick<TaxationCapableBusiness, 'taxationSystem' | 'isVatPayer'>,
+        patch: Pick<TaxationCapableBusiness, 'taxationSystem' | 'isVatPayer'>
     ) => Promise<void>;
 }
 
@@ -68,7 +92,7 @@ interface Props {
 export default function TaxationSection({ business, onSave }: Props) {
     const [editing, setEditing] = useState(false);
     const [draftTaxation, setDraftTaxation] = useState<TaxationSystem>(
-        business.taxationSystem,
+        business.taxationSystem
     );
     const [draftVat, setDraftVat] = useState<boolean>(business.isVatPayer);
     const [error, setError] = useState<string | undefined>();
@@ -99,9 +123,7 @@ export default function TaxationSection({ business, onSave }: Props) {
             setError(undefined);
         } catch (err: unknown) {
             setError(
-                err instanceof Error
-                    ? err.message
-                    : 'Не вдалося зберегти',
+                err instanceof Error ? err.message : 'Не вдалося зберегти'
             );
         } finally {
             setSaving(false);
@@ -159,7 +181,7 @@ export default function TaxationSection({ business, onSave }: Props) {
                         value={draftTaxation}
                         onChange={handleTaxationChange}
                     />
-                    <div className="flex items-start justify-between gap-3 rounded-md border border-border p-3">
+                    <div className="border-border flex items-start justify-between gap-3 rounded-md border p-3">
                         <label
                             htmlFor="taxation-vat-toggle"
                             className="flex flex-1 cursor-pointer flex-col gap-1"

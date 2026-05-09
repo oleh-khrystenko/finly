@@ -2,10 +2,7 @@ import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { BUSINESS_TYPE_LABEL } from '@finly/types';
-import {
-    PublicBusinessView,
-    loadPublicView,
-} from '@/features/business-public';
+import { PublicBusinessView, loadPublicView } from '@/features/business-public';
 import { isPublicHost } from '@/shared/config/publicHosts';
 
 /**

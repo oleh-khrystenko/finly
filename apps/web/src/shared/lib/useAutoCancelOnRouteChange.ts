@@ -39,7 +39,7 @@ import { usePathname } from 'next/navigation';
  */
 export function useAutoCancelOnRouteChange(
     isOpen: boolean,
-    cancel: () => void,
+    cancel: () => void
 ): void {
     const pathname = usePathname();
     const openedAtPathnameRef = useRef<string | null>(null);

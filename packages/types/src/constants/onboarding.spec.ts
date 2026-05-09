@@ -12,7 +12,10 @@ describe('Onboarding required fields', () => {
     describe('isOnboardingComplete (read-path mirrors write-path schema)', () => {
         it('returns true when all required fields are present', () => {
             expect(
-                isOnboardingComplete({ firstName: 'Іван', lastName: 'Іваненко' })
+                isOnboardingComplete({
+                    firstName: 'Іван',
+                    lastName: 'Іваненко',
+                })
             ).toBe(true);
         });
 

@@ -79,7 +79,7 @@ describe('HostPayPage — host defense-in-depth (§3.9)', () => {
         mockLoadPublicView.mockResolvedValue(baseView);
 
         await expect(
-            HostPayPage({ params: Promise.resolve({ slug: 'IvanEnko' }) }),
+            HostPayPage({ params: Promise.resolve({ slug: 'IvanEnko' }) })
         ).rejects.toThrow('NEXT_NOT_FOUND');
 
         expect(mockNotFound).toHaveBeenCalledTimes(1);
@@ -90,7 +90,7 @@ describe('HostPayPage — host defense-in-depth (§3.9)', () => {
         mockLoadPublicView.mockResolvedValue(baseView);
 
         await expect(
-            HostPayPage({ params: Promise.resolve({ slug: 'IvanEnko' }) }),
+            HostPayPage({ params: Promise.resolve({ slug: 'IvanEnko' }) })
         ).rejects.toThrow('NEXT_NOT_FOUND');
     });
 
@@ -112,7 +112,7 @@ describe('HostPayPage — slug lookup (§3.1, §E1)', () => {
         mockLoadPublicView.mockResolvedValue(null);
 
         await expect(
-            HostPayPage({ params: Promise.resolve({ slug: 'no-such' }) }),
+            HostPayPage({ params: Promise.resolve({ slug: 'no-such' }) })
         ).rejects.toThrow('NEXT_NOT_FOUND');
         expect(mockNotFound).toHaveBeenCalled();
     });
@@ -127,7 +127,7 @@ describe('HostPayPage — slug lookup (§3.1, §E1)', () => {
 
         // URL-input lowercased — має redirect-итись.
         await expect(
-            HostPayPage({ params: Promise.resolve({ slug: 'ivanenko' }) }),
+            HostPayPage({ params: Promise.resolve({ slug: 'ivanenko' }) })
         ).rejects.toThrow('NEXT_REDIRECT:/IvanEnko');
         expect(mockPermanentRedirect).toHaveBeenCalledWith('/IvanEnko');
     });
@@ -158,11 +158,11 @@ describe('HostPayPage — render (§3.9 §E7)', () => {
 
         expect(screen.getByTestId('cta-primary')).toHaveAttribute(
             'href',
-            'https://qr.bank.gov.ua/abc',
+            'https://qr.bank.gov.ua/abc'
         );
         expect(screen.getByTestId('cta-legacy')).toHaveAttribute(
             'href',
-            'https://bank.gov.ua/qr/abc',
+            'https://bank.gov.ua/qr/abc'
         );
     });
 });

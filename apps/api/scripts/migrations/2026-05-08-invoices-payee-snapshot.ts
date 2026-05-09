@@ -128,7 +128,8 @@ export async function runMigration(db: Db): Promise<MigrationResult> {
                             iban: biz.requisites.iban,
                             taxId: biz.requisites.taxId,
                             paymentPurpose:
-                                inv.paymentPurpose ?? biz.paymentPurposeTemplate,
+                                inv.paymentPurpose ??
+                                biz.paymentPurposeTemplate,
                         },
                     },
                 },

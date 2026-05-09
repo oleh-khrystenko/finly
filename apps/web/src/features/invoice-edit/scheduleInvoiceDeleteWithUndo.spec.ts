@@ -35,7 +35,7 @@ jest.mock('sonner', () => ({
             dismiss: (...args: unknown[]) => mockToastDismiss(...args),
             message: (...args: unknown[]) => mockToastMessage(...args),
             error: (...args: unknown[]) => mockToastError(...args),
-        },
+        }
     ),
 }));
 
@@ -87,7 +87,7 @@ describe('scheduleInvoiceDeleteWithUndo', () => {
             expect.objectContaining({
                 duration: INVOICE_UNDO_TIMEOUT_MS,
                 action: expect.objectContaining({ label: 'Скасувати' }),
-            }),
+            })
         );
     });
 
@@ -148,7 +148,7 @@ describe('scheduleInvoiceDeleteWithUndo', () => {
             onCancelled: jest.fn(),
         });
         expect(usePendingInvoiceDeletesStore.getState().keys.has(KEY)).toBe(
-            true,
+            true
         );
     });
 
@@ -160,11 +160,11 @@ describe('scheduleInvoiceDeleteWithUndo', () => {
             onCancelled: jest.fn(),
         });
         expect(usePendingInvoiceDeletesStore.getState().keys.has(KEY)).toBe(
-            true,
+            true
         );
         lastToastAction!.onClick();
         expect(usePendingInvoiceDeletesStore.getState().keys.has(KEY)).toBe(
-            false,
+            false
         );
     });
 
@@ -181,7 +181,7 @@ describe('scheduleInvoiceDeleteWithUndo', () => {
         await Promise.resolve();
         await Promise.resolve();
         expect(usePendingInvoiceDeletesStore.getState().keys.has(KEY)).toBe(
-            true,
+            true
         );
         expect(mockDeleteInvoice).toHaveBeenCalledWith(BIZ, INV);
     });
@@ -202,7 +202,7 @@ describe('scheduleInvoiceDeleteWithUndo', () => {
         await Promise.resolve();
         await Promise.resolve();
         expect(usePendingInvoiceDeletesStore.getState().keys.has(KEY)).toBe(
-            false,
+            false
         );
     });
 });

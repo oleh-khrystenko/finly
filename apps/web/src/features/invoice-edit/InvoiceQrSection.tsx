@@ -28,7 +28,7 @@ export default function InvoiceQrSection({
 }: Props) {
     const [downloading, setDownloading] = useState(false);
     const url = `${apiBase}/businesses/public/${encodeURIComponent(
-        businessSlug,
+        businessSlug
     )}/invoices/${encodeURIComponent(invoice.slug)}/qr/business.png`;
 
     const handleDownload = async () => {

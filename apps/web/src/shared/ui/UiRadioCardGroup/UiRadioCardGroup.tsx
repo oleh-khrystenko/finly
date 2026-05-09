@@ -3,10 +3,7 @@
 import { useId } from 'react';
 import { Radio, RadioGroup } from '@headlessui/react';
 import { composeClasses } from '@/shared/lib';
-import type {
-    UiRadioCardGroupColumns,
-    UiRadioCardGroupProps,
-} from './types';
+import type { UiRadioCardGroupColumns, UiRadioCardGroupProps } from './types';
 
 /**
  * Grid-стиль radio-cards з title + description + optional icon.
@@ -53,7 +50,7 @@ const DESKTOP_COLUMN_CLASS_MAP: Record<
 };
 
 function UiRadioCardGroup<TValue extends string>(
-    props: UiRadioCardGroupProps<TValue>,
+    props: UiRadioCardGroupProps<TValue>
 ) {
     const {
         options,
@@ -111,7 +108,7 @@ function UiRadioCardGroup<TValue extends string>(
                 className={composeClasses(
                     'grid gap-2',
                     COLUMN_CLASS_MAP[mobileCols],
-                    DESKTOP_COLUMN_CLASS_MAP[desktopCols],
+                    DESKTOP_COLUMN_CLASS_MAP[desktopCols]
                 )}
             >
                 {options.map((option) => (
@@ -123,16 +120,13 @@ function UiRadioCardGroup<TValue extends string>(
                             'flex flex-col items-start gap-1 rounded-lg border p-3 text-left transition-colors',
                             'cursor-pointer select-none',
                             'border-border hover:bg-accent',
-                            'focus:outline-none data-focus:outline-ring data-focus:outline-2 data-focus:outline-offset-2 data-focus:outline',
-                            'data-checked:border-primary data-checked:bg-primary/5 data-checked:ring-2 data-checked:ring-primary/20 data-checked:hover:bg-primary/5',
-                            'data-disabled:cursor-not-allowed data-disabled:opacity-50',
+                            'data-focus:outline-ring focus:outline-none data-focus:outline data-focus:outline-2 data-focus:outline-offset-2',
+                            'data-checked:border-primary data-checked:bg-primary/5 data-checked:ring-primary/20 data-checked:hover:bg-primary/5 data-checked:ring-2',
+                            'data-disabled:cursor-not-allowed data-disabled:opacity-50'
                         )}
                     >
                         {option.icon && (
-                            <span
-                                className="text-muted-foreground"
-                                aria-hidden
-                            >
+                            <span className="text-muted-foreground" aria-hidden>
                                 {option.icon}
                             </span>
                         )}
@@ -147,9 +141,7 @@ function UiRadioCardGroup<TValue extends string>(
                     </Radio>
                 ))}
             </RadioGroup>
-            {error && (
-                <p className="text-destructive mt-1 text-sm">{error}</p>
-            )}
+            {error && <p className="text-destructive mt-1 text-sm">{error}</p>}
         </div>
     );
 }

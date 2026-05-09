@@ -27,7 +27,7 @@ import type { InvoicePayeeSnapshot } from '@finly/types';
  */
 export function effectiveInvoicePurpose(
     invoicePaymentPurpose: string | null,
-    businessPaymentPurposeTemplate: string,
+    businessPaymentPurposeTemplate: string
 ): string {
     return invoicePaymentPurpose ?? businessPaymentPurposeTemplate;
 }
@@ -55,13 +55,13 @@ export function effectiveInvoicePurpose(
 export function resolveInvoicePayeePurpose(
     snapshot: InvoicePayeeSnapshot | null,
     invoicePaymentPurpose: string | null,
-    businessPaymentPurposeTemplate: string,
+    businessPaymentPurposeTemplate: string
 ): string {
     return (
         snapshot?.paymentPurpose ??
         effectiveInvoicePurpose(
             invoicePaymentPurpose,
-            businessPaymentPurposeTemplate,
+            businessPaymentPurposeTemplate
         )
     );
 }
@@ -76,7 +76,7 @@ export function resolveInvoicePayeePurpose(
  */
 export function isInvoicePurposeRuntimeInherited(
     snapshot: InvoicePayeeSnapshot | null,
-    invoicePaymentPurpose: string | null,
+    invoicePaymentPurpose: string | null
 ): boolean {
     return snapshot === null && invoicePaymentPurpose === null;
 }

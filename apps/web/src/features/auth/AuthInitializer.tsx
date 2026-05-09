@@ -9,7 +9,11 @@ import { useAuthStore } from '@/entities/user';
 import { useTermsReacceptDialogStore } from './termsReacceptDialogStore';
 
 // Auth pages that handle their own refresh/verify flow
-const SELF_AUTH_PATHS = ['/auth/callback', '/auth/verify', '/auth/reset-password'];
+const SELF_AUTH_PATHS = [
+    '/auth/callback',
+    '/auth/verify',
+    '/auth/reset-password',
+];
 
 const AuthInitializer = () => {
     const setUser = useAuthStore((s) => s.setUser);

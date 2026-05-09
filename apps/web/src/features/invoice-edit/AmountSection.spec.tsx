@@ -30,7 +30,7 @@ describe('AmountSection (Sprint 4 §4.6 — coupled SP-6)', () => {
             <AmountSection
                 invoice={{ ...baseInvoice, amount: null, amountLocked: false }}
                 onSave={jest.fn()}
-            />,
+            />
         );
         const lockSwitch = screen.getByRole('switch');
         expect(lockSwitch).toBeDisabled();
@@ -41,10 +41,10 @@ describe('AmountSection (Sprint 4 §4.6 — coupled SP-6)', () => {
             <AmountSection
                 invoice={{ ...baseInvoice, amount: null, amountLocked: false }}
                 onSave={jest.fn()}
-            />,
+            />
         );
         expect(
-            screen.getByText(/Заблокувати можна лише при заданій сумі/),
+            screen.getByText(/Заблокувати можна лише при заданій сумі/)
         ).toBeInTheDocument();
     });
 
@@ -52,8 +52,8 @@ describe('AmountSection (Sprint 4 §4.6 — coupled SP-6)', () => {
         render(<AmountSection invoice={baseInvoice} onSave={jest.fn()} />);
         expect(
             screen.getByText(
-                /Якщо вимкнено — клієнт сплатить точно зазначену суму/,
-            ),
+                /Якщо вимкнено — клієнт сплатить точно зазначену суму/
+            )
         ).toBeInTheDocument();
     });
 
@@ -63,7 +63,7 @@ describe('AmountSection (Sprint 4 §4.6 — coupled SP-6)', () => {
         const lockSwitch = screen.getByRole('switch');
         fireEvent.click(lockSwitch);
         await waitFor(() =>
-            expect(onSave).toHaveBeenCalledWith({ amountLocked: false }),
+            expect(onSave).toHaveBeenCalledWith({ amountLocked: false })
         );
     });
 
@@ -83,7 +83,7 @@ describe('AmountSection (Sprint 4 §4.6 — coupled SP-6)', () => {
             render(<AmountSection invoice={baseInvoice} onSave={onSave} />);
             fireEvent.click(screen.getByRole('switch'));
             await waitFor(() =>
-                expect(onSave).toHaveBeenCalledWith({ amountLocked: false }),
+                expect(onSave).toHaveBeenCalledWith({ amountLocked: false })
             );
             // setSaving(false) у `finally`-блоці застосовується через React-
             // batched-update — `waitFor` дочекається прохід event-loop-у і
@@ -91,7 +91,7 @@ describe('AmountSection (Sprint 4 §4.6 — coupled SP-6)', () => {
             // unhandled rejection event прорвало б до `process.on`-listener-а
             // ще до цього waitFor (Node фіксує rejection на наступному tick-у).
             await waitFor(() =>
-                expect(screen.getByRole('switch')).not.toBeDisabled(),
+                expect(screen.getByRole('switch')).not.toBeDisabled()
             );
             expect(unhandled).not.toHaveBeenCalled();
         } finally {
@@ -105,7 +105,7 @@ describe('AmountSection (Sprint 4 §4.6 — coupled SP-6)', () => {
             () =>
                 new Promise<void>((resolve) => {
                     resolveOnSave = resolve;
-                }),
+                })
         );
         render(<AmountSection invoice={baseInvoice} onSave={onSave} />);
         const lockSwitch = screen.getByRole('switch');
@@ -125,7 +125,7 @@ describe('AmountSection (Sprint 4 §4.6 — coupled SP-6)', () => {
         fireEvent.change(input, { target: { value: '2500' } });
         fireEvent.click(screen.getByText('Зберегти'));
         await waitFor(() =>
-            expect(onSave).toHaveBeenCalledWith({ amount: 250000 }),
+            expect(onSave).toHaveBeenCalledWith({ amount: 250000 })
         );
     });
 
@@ -140,7 +140,7 @@ describe('AmountSection (Sprint 4 §4.6 — coupled SP-6)', () => {
             expect(onSave).toHaveBeenCalledWith({
                 amount: null,
                 amountLocked: false,
-            }),
+            })
         );
     });
 
@@ -187,7 +187,7 @@ describe('AmountSection (Sprint 4 §4.6 — coupled SP-6)', () => {
         fireEvent.change(input, { target: { value: '1500,50' } });
         fireEvent.click(screen.getByText('Зберегти'));
         await waitFor(() =>
-            expect(onSave).toHaveBeenCalledWith({ amount: 150050 }),
+            expect(onSave).toHaveBeenCalledWith({ amount: 150050 })
         );
     });
 

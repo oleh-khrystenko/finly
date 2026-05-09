@@ -29,7 +29,7 @@ jest.mock('@/entities/user', () => ({
             user: typeof baseUser | null;
             setUser: typeof mockSetUser;
             clearUser: typeof mockClearUser;
-        }) => unknown,
+        }) => unknown
     ) =>
         selector({
             user: userState.user,
@@ -72,7 +72,7 @@ describe('useUserMenu', () => {
         it('повертає item з value="businesses" і route="/business"', () => {
             const { result } = renderHook(() => useUserMenu(icons));
             const businesses = result.current.allItems.find(
-                (i) => i.value === 'businesses',
+                (i) => i.value === 'businesses'
             );
             expect(businesses).toBeDefined();
             expect(businesses?.route).toBe('/business');
@@ -82,7 +82,7 @@ describe('useUserMenu', () => {
         it('НЕ містить item з value="dashboard" (видалено E2)', () => {
             const { result } = renderHook(() => useUserMenu(icons));
             expect(
-                result.current.allItems.find((i) => i.value === 'dashboard'),
+                result.current.allItems.find((i) => i.value === 'dashboard')
             ).toBeUndefined();
         });
     });
@@ -104,7 +104,7 @@ describe('useUserMenu', () => {
         it('description без hover-tooltip — inline-текст (responsive.md §6)', () => {
             const { result } = renderHook(() => useUserMenu(icons));
             expect(result.current.bookkeeperToggle?.description).toBe(
-                'вести бізнеси клієнтів, які ще не зареєстровані у Finly',
+                'вести бізнеси клієнтів, які ще не зареєстровані у Finly'
             );
         });
 

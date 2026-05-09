@@ -2,14 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import { useTheme } from 'next-themes';
-import {
-    LogOut,
-    User,
-    CreditCard,
-    LogIn,
-    Briefcase,
-    Bot,
-} from 'lucide-react';
+import { LogOut, User, CreditCard, LogIn, Briefcase, Bot } from 'lucide-react';
 import ChangeTheme, {
     THEME_ICONS,
     THEME_LABELS,
@@ -121,7 +114,7 @@ export default function MobileMenuSheet() {
                                     alt={
                                         getFullName(
                                             user.profile.firstName,
-                                            user.profile.lastName,
+                                            user.profile.lastName
                                         ) ?? ''
                                     }
                                     fallback={initials}
@@ -130,7 +123,7 @@ export default function MobileMenuSheet() {
                                     <span className="truncate text-sm font-medium">
                                         {getFullName(
                                             user.profile.firstName,
-                                            user.profile.lastName,
+                                            user.profile.lastName
                                         )}
                                     </span>
                                     <span className="text-muted-foreground truncate text-xs">

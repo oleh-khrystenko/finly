@@ -43,7 +43,7 @@ describe('SessionExpiredHandler', () => {
 
         expect(mockClearUser).toHaveBeenCalledTimes(1);
         expect(mockToastInfo).toHaveBeenCalledWith(
-            'Термін дії сесії закінчився. Будь ласка, увійдіть знову.',
+            'Термін дії сесії закінчився. Будь ласка, увійдіть знову.'
         );
         // No other params → URL becomes the bare pathname.
         expect(mockReplace).toHaveBeenCalledWith('/auth/signin', {
@@ -55,7 +55,7 @@ describe('SessionExpiredHandler', () => {
         // A logged-in user redirected from /billing should preserve the
         // original `redirect` param so signin can return them after login.
         mockSearchParams = new URLSearchParams(
-            'reason=session-expired&redirect=%2Fbilling&email=foo%40bar.com',
+            'reason=session-expired&redirect=%2Fbilling&email=foo%40bar.com'
         );
 
         render(<SessionExpiredHandler />);

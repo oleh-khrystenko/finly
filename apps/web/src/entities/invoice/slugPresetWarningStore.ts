@@ -40,8 +40,7 @@ export const useSlugPresetWarningStore = create<State>((set, get) => ({
     isOpen: false,
     onConfirm: null,
     onCancel: null,
-    open: (onConfirm, onCancel) =>
-        set({ isOpen: true, onConfirm, onCancel }),
+    open: (onConfirm, onCancel) => set({ isOpen: true, onConfirm, onCancel }),
     confirm: () => {
         const cb = get().onConfirm;
         // Reset state BEFORE callback — щоб повторний open() усередині callback-а

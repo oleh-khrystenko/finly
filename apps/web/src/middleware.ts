@@ -48,7 +48,7 @@ export default function middleware(request: NextRequest) {
                 return new NextResponse(null, { status: 404 });
             }
             return NextResponse.rewrite(
-                new URL(`/host-pay/${slug}${search}`, request.url),
+                new URL(`/host-pay/${slug}${search}`, request.url)
             );
         }
 
@@ -66,8 +66,8 @@ export default function middleware(request: NextRequest) {
             return NextResponse.rewrite(
                 new URL(
                     `/host-pay/${businessSlug}/${invoiceSlug}${search}`,
-                    request.url,
-                ),
+                    request.url
+                )
             );
         }
 
@@ -86,7 +86,7 @@ export default function middleware(request: NextRequest) {
     if (pathname === '/dashboard' || pathname.startsWith('/dashboard/')) {
         const url = new URL(
             pathname.replace(/^\/dashboard/, '/business') + search,
-            request.url,
+            request.url
         );
         return NextResponse.redirect(url, 308);
     }

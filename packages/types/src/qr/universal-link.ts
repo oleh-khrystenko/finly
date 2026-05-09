@@ -1,10 +1,7 @@
 import { PayloadValidationError } from './errors';
 import type { PayloadVersion } from './format-version';
 import { PAYLOAD_BASE64URL_BYTE_LIMIT } from './limits';
-import {
-    URL_PREFIX_002,
-    isAllowedNbuPayloadLinkHost003,
-} from './url-prefix';
+import { URL_PREFIX_002, isAllowedNbuPayloadLinkHost003 } from './url-prefix';
 
 export interface BuildLinkOptions {
     /**

@@ -67,9 +67,11 @@ export function scheduleInvoiceDeleteWithUndo({
                 .remove(businessSlug, invoiceSlug);
             const code =
                 err instanceof AxiosError
-                    ? ((err.response?.data as
-                          | { error?: { code?: string } }
-                          | undefined)?.error?.code ?? 'unknown')
+                    ? ((
+                          err.response?.data as
+                              | { error?: { code?: string } }
+                              | undefined
+                      )?.error?.code ?? 'unknown')
                     : 'unknown';
             toast.error(getApiMessage(code, 'invoices'));
         });

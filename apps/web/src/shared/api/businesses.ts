@@ -26,31 +26,31 @@ export async function listBusinesses(): Promise<BusinessWithInvoicesCount[]> {
 }
 
 export async function createBusiness(
-    dto: CreateBusinessRequest,
+    dto: CreateBusinessRequest
 ): Promise<Business> {
     const { data } = await apiClient.post<{ data: Business }>(
         '/businesses/me',
-        dto,
+        dto
     );
     return data.data;
 }
 
 export async function getBusinessBySlug(
-    slug: string,
+    slug: string
 ): Promise<BusinessWithInvoicesCount> {
     const { data } = await apiClient.get<{ data: BusinessWithInvoicesCount }>(
-        `/businesses/me/${encodeURIComponent(slug)}`,
+        `/businesses/me/${encodeURIComponent(slug)}`
     );
     return data.data;
 }
 
 export async function updateBusiness(
     slug: string,
-    dto: UpdateBusinessRequest,
+    dto: UpdateBusinessRequest
 ): Promise<Business> {
     const { data } = await apiClient.patch<{ data: Business }>(
         `/businesses/me/${encodeURIComponent(slug)}`,
-        dto,
+        dto
     );
     return data.data;
 }
@@ -78,10 +78,10 @@ export async function deleteBusiness(slug: string): Promise<void> {
  * — єдиний реальний механізм. Деталі — `client.ts`.
  */
 export async function getPublicBusinessView(
-    slug: string,
+    slug: string
 ): Promise<PublicBusinessView> {
     const json = await publicFetchJson<{ data: PublicBusinessView }>(
-        `/businesses/public/${encodeURIComponent(slug)}`,
+        `/businesses/public/${encodeURIComponent(slug)}`
     );
     return json.data;
 }

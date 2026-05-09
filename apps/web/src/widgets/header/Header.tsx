@@ -1,14 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import {
-    LogOut,
-    User,
-    CreditCard,
-    Menu,
-    Briefcase,
-    Bot,
-} from 'lucide-react';
+import { LogOut, User, CreditCard, Menu, Briefcase, Bot } from 'lucide-react';
 import ChangeTheme from '@/features/change-theme';
 import { Logo } from '@/entities/brand';
 import UiButton from '@/shared/ui/UiButton';
@@ -97,7 +90,7 @@ const Header = () => {
                             history.replaceState(
                                 null,
                                 '',
-                                window.location.pathname,
+                                window.location.pathname
                             );
                         }}
                     >
@@ -159,7 +152,7 @@ const Header = () => {
                                             alt={
                                                 getFullName(
                                                     user.profile.firstName,
-                                                    user.profile.lastName,
+                                                    user.profile.lastName
                                                 ) ?? ''
                                             }
                                             fallback={initials}
@@ -168,7 +161,7 @@ const Header = () => {
                                             <span className="text-foreground text-sm font-medium">
                                                 {getFullName(
                                                     user.profile.firstName,
-                                                    user.profile.lastName,
+                                                    user.profile.lastName
                                                 )}
                                             </span>
                                             <span className="text-muted-foreground text-xs">
@@ -225,7 +218,7 @@ const Header = () => {
                                         alt={
                                             getFullName(
                                                 user.profile.firstName,
-                                                user.profile.lastName,
+                                                user.profile.lastName
                                             ) ?? ''
                                         }
                                         fallback={initials}

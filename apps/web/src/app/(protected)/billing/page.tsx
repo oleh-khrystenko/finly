@@ -16,7 +16,10 @@ import {
 } from '@/shared/api/payments';
 import { useAuthStore } from '@/entities/user';
 import { formatLocalDate, INTL_LOCALE } from '@/shared/lib';
-import { useBillingResetDialogStore, SubscriptionStatus } from '@/features/billing';
+import {
+    useBillingResetDialogStore,
+    SubscriptionStatus,
+} from '@/features/billing';
 import { formatPrice, type PaymentsCatalog } from '@finly/types';
 import UiButton from '@/shared/ui/UiButton';
 import UiLink from '@/shared/ui/UiLink';
@@ -98,7 +101,7 @@ export default function BillingPage() {
         getCatalog()
             .then(setCatalog)
             .catch(() =>
-                toast.error('Не вдалося завантажити інформацію про ціни'),
+                toast.error('Не вдалося завантажити інформацію про ціни')
             )
             .finally(() => setCatalogLoading(false));
     }, []);
@@ -112,8 +115,7 @@ export default function BillingPage() {
     const handleSubscriptionCheckout = async (planCode: string) => {
         setLoadingAction(`subscribe_${planCode}`);
         try {
-            const { checkoutUrl } =
-                await createSubscriptionCheckout(planCode);
+            const { checkoutUrl } = await createSubscriptionCheckout(planCode);
             window.location.assign(checkoutUrl);
         } catch {
             toast.error('Не вдалося створити сесію оплати');
@@ -144,7 +146,7 @@ export default function BillingPage() {
     };
 
     const activePlan = catalog?.subscriptionPlans.find(
-        (p) => p.code === billing?.planCode,
+        (p) => p.code === billing?.planCode
     );
 
     return (
@@ -205,7 +207,7 @@ export default function BillingPage() {
                                         <p className="text-foreground mt-3 text-4xl font-bold tracking-tight">
                                             {formatPrice(
                                                 plan.priceAmount,
-                                                plan.currency,
+                                                plan.currency
                                             )}
                                             <span className="text-muted-foreground text-lg font-normal">
                                                 {' '}
@@ -229,7 +231,7 @@ export default function BillingPage() {
                                                         <Check className="text-success h-4 w-4 shrink-0" />
                                                         {feature}
                                                     </li>
-                                                ),
+                                                )
                                             )}
                                         </ul>
 
@@ -243,7 +245,7 @@ export default function BillingPage() {
                                             className={`relative mt-8 w-full justify-center ${!plan.featured ? 'border-primary text-primary hover:bg-primary/10 hover:text-primary hover:border-primary' : ''}`}
                                             onClick={() =>
                                                 handleSubscriptionCheckout(
-                                                    plan.code,
+                                                    plan.code
                                                 )
                                             }
                                             disabled={
@@ -318,7 +320,7 @@ export default function BillingPage() {
                                 {!billing?.cancelAtPeriodEnd && activePlan && (
                                     <p className="text-muted-foreground mt-0.5 text-sm">
                                         {activePlan.executions.toLocaleString(
-                                            INTL_LOCALE,
+                                            INTL_LOCALE
                                         )}{' '}
                                         виконань за період
                                     </p>
@@ -328,12 +330,12 @@ export default function BillingPage() {
                                         Перехід на{' '}
                                         <span className="font-bold">
                                             {planName(
-                                                billing.scheduledPlanCode,
+                                                billing.scheduledPlanCode
                                             )}
                                         </span>{' '}
                                         з{' '}
                                         {formatLocalDate(
-                                            billing.scheduledChangeDate ?? null,
+                                            billing.scheduledChangeDate ?? null
                                         )}
                                     </p>
                                 )}
@@ -382,7 +384,9 @@ export default function BillingPage() {
                         <p className="text-muted-foreground text-sm">
                             Ваш баланс:{' '}
                             <span className="text-primary font-semibold">
-                                {user.executions.balance.toLocaleString('en-US')}
+                                {user.executions.balance.toLocaleString(
+                                    'en-US'
+                                )}
                             </span>{' '}
                             виконань
                         </p>
@@ -440,12 +444,12 @@ export default function BillingPage() {
                                             <p className="text-foreground text-xl font-bold">
                                                 {formatPrice(
                                                     pack.priceAmount,
-                                                    pack.currency,
+                                                    pack.currency
                                                 )}
                                             </p>
                                             <p className="text-muted-foreground text-xs">
                                                 {pack.executions.toLocaleString(
-                                                    'en-US',
+                                                    'en-US'
                                                 )}{' '}
                                                 виконань
                                             </p>

@@ -28,14 +28,12 @@ jest.mock('next/navigation', () => ({
 jest.mock('@/features/invoice-edit', () => ({
     AmountSection: () => <div data-testid="section-amount">Сума</div>,
     PurposeSection: () => <div data-testid="section-purpose">Призначення</div>,
-    ValidUntilSection: () => (
-        <div data-testid="section-validuntil">Термін</div>
-    ),
+    ValidUntilSection: () => <div data-testid="section-validuntil">Термін</div>,
     SlugSection: () => <div data-testid="section-slug">Slug</div>,
     InvoiceQrSection: () => <div data-testid="section-qr">QR</div>,
     scheduleInvoiceDeleteWithUndo: jest.fn(),
     useDeleteInvoiceConfirmStore: (
-        selector: (s: { open: typeof mockOpenDeleteConfirm }) => unknown,
+        selector: (s: { open: typeof mockOpenDeleteConfirm }) => unknown
     ) => selector({ open: mockOpenDeleteConfirm }),
 }));
 
@@ -160,14 +158,14 @@ describe('InvoiceCabinetPage (Sprint 4 §4.6 DoD smoke)', () => {
         // 6-та — Danger zone (inline у page-tsx)
         expect(screen.getByText('Небезпечна зона')).toBeInTheDocument();
         expect(
-            screen.getByRole('button', { name: /Видалити рахунок/ }),
+            screen.getByRole('button', { name: /Видалити рахунок/ })
         ).toBeInTheDocument();
     });
 
     it('preview-toggle вмикає InvoicePublicView (SP-2 prefetch-on-mount)', async () => {
         render(<InvoiceCabinetPage />);
         await waitFor(() =>
-            expect(screen.getByTestId('section-amount')).toBeInTheDocument(),
+            expect(screen.getByTestId('section-amount')).toBeInTheDocument()
         );
         // Перемикаємо toggle
         const toggleSwitch = screen.getByRole('switch', {
@@ -176,21 +174,21 @@ describe('InvoiceCabinetPage (Sprint 4 §4.6 DoD smoke)', () => {
         toggleSwitch.click();
         await waitFor(() =>
             expect(
-                screen.getByTestId('invoice-public-view'),
-            ).toBeInTheDocument(),
+                screen.getByTestId('invoice-public-view')
+            ).toBeInTheDocument()
         );
     });
 
     it('"Відкрити в новій вкладці" має href=public URL з business+invoice slug', async () => {
         render(<InvoiceCabinetPage />);
         await waitFor(() =>
-            expect(screen.getByTestId('section-amount')).toBeInTheDocument(),
+            expect(screen.getByTestId('section-amount')).toBeInTheDocument()
         );
         const link = screen.getByRole('link', {
             name: /Відкрити в новій вкладці/,
         });
         expect(link.getAttribute('href')).toMatch(
-            /\/IvanEnko\/inv-001-aB3xQ9k7$/,
+            /\/IvanEnko\/inv-001-aB3xQ9k7$/
         );
         expect(link).toHaveAttribute('target', '_blank');
     });
@@ -198,7 +196,7 @@ describe('InvoiceCabinetPage (Sprint 4 §4.6 DoD smoke)', () => {
     it('"Видалити рахунок" → відкриває confirm-modal (Sprint 3 patern consistency)', async () => {
         render(<InvoiceCabinetPage />);
         await waitFor(() =>
-            expect(screen.getByTestId('section-amount')).toBeInTheDocument(),
+            expect(screen.getByTestId('section-amount')).toBeInTheDocument()
         );
         const deleteBtn = screen.getByRole('button', {
             name: /Видалити рахунок/,
@@ -207,11 +205,9 @@ describe('InvoiceCabinetPage (Sprint 4 §4.6 DoD smoke)', () => {
         expect(mockOpenDeleteConfirm).toHaveBeenCalledTimes(1);
         // Перший аргумент — invoice document; другий — onConfirm callback.
         expect(mockOpenDeleteConfirm.mock.calls[0]![0].slug).toBe(
-            'inv-001-aB3xQ9k7',
+            'inv-001-aB3xQ9k7'
         );
-        expect(typeof mockOpenDeleteConfirm.mock.calls[0]![1]).toBe(
-            'function',
-        );
+        expect(typeof mockOpenDeleteConfirm.mock.calls[0]![1]).toBe('function');
     });
 
     it('error 404 INVOICE_NOT_FOUND → ErrorPage з "Рахунок не знайдено"', async () => {
@@ -225,7 +221,7 @@ describe('InvoiceCabinetPage (Sprint 4 §4.6 DoD smoke)', () => {
             {
                 status: 404,
                 data: { error: { code: 'INVOICE_NOT_FOUND' } },
-            },
+            }
         );
         mockGetInvoiceBySlug.mockRejectedValue(err);
         render(<InvoiceCabinetPage />);

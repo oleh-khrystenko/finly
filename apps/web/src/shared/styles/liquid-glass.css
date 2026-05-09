@@ -16,7 +16,11 @@
 
 .liquid-glass {
     background:
-        linear-gradient(180deg, var(--liquid-glass-highlight) 0%, transparent 60%),
+        linear-gradient(
+            180deg,
+            var(--liquid-glass-highlight) 0%,
+            transparent 60%
+        ),
         var(--liquid-glass-bg);
     backdrop-filter: blur(var(--liquid-glass-blur));
     box-shadow:

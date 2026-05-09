@@ -94,8 +94,8 @@ describe('migration 2026-05-08-invoices-payee-snapshot', () => {
         const result = await runMigration(mongoose.connection.db!);
         expect(result.backfilledDocs).toBe(1);
 
-        const updated = await mongoose.connection.db!
-            .collection(INVOICES_COLLECTION)
+        const updated = await mongoose.connection
+            .db!.collection(INVOICES_COLLECTION)
             .findOne({ _id: id });
         expect(updated?.payeeSnapshot).toEqual({
             recipientName: 'ФОП Іваненко',
@@ -113,11 +113,11 @@ describe('migration 2026-05-08-invoices-payee-snapshot', () => {
 
         await runMigration(mongoose.connection.db!);
 
-        const updated = await mongoose.connection.db!
-            .collection(INVOICES_COLLECTION)
+        const updated = await mongoose.connection
+            .db!.collection(INVOICES_COLLECTION)
             .findOne({ _id: id });
         expect(updated?.payeeSnapshot?.paymentPurpose).toBe(
-            'Послуги web-розробки',
+            'Послуги web-розробки'
         );
     });
 
@@ -138,8 +138,8 @@ describe('migration 2026-05-08-invoices-payee-snapshot', () => {
         const result = await runMigration(mongoose.connection.db!);
         expect(result.backfilledDocs).toBe(1);
 
-        const updated = await mongoose.connection.db!
-            .collection(INVOICES_COLLECTION)
+        const updated = await mongoose.connection
+            .db!.collection(INVOICES_COLLECTION)
             .findOne({ _id: id });
         expect(updated?.payeeSnapshot).not.toBeNull();
         expect(updated?.payeeSnapshot?.recipientName).toBe('ФОП Іваненко');
@@ -168,8 +168,8 @@ describe('migration 2026-05-08-invoices-payee-snapshot', () => {
         const result = await runMigration(mongoose.connection.db!);
         expect(result.backfilledDocs).toBe(3);
 
-        const all = await mongoose.connection.db!
-            .collection(INVOICES_COLLECTION)
+        const all = await mongoose.connection
+            .db!.collection(INVOICES_COLLECTION)
             .find({})
             .toArray();
         expect(all.every((d) => d.payeeSnapshot !== null)).toBe(true);

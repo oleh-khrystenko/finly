@@ -174,7 +174,12 @@ describe('Business schema (Mongoose integration)', () => {
         // Sprint 7 §SP-3 — Mongoose enum-validator пропускає всі 4 значення.
         // Coupled-rule (`requiresTaxation(type) ⇔ both-non-null`) живе у
         // Zod-refine, не у Mongoose; тут перевіряємо лише структурний enum-guard.
-        for (const type of ['individual', 'fop', 'tov', 'organization'] as const) {
+        for (const type of [
+            'individual',
+            'fop',
+            'tov',
+            'organization',
+        ] as const) {
             const doc = await BusinessModel.create(
                 buildFixture({
                     type: type as 'fop',
@@ -236,12 +241,17 @@ describe('Business schema (Mongoose integration)', () => {
     it('Sprint 7 §SP-3 — приймає документ без taxationSystem (default null для individual/organization)', async () => {
         // taxationSystem стало nullable з default null. Це навмисно — Mongoose
         // структурно дозволяє відсутність; iff-coupled-rule живе у Zod-refine.
-        const { taxationSystem: _omit, isVatPayer: _omit2, ...without } = buildFixture();
+        const {
+            taxationSystem: _omit,
+            isVatPayer: _omit2,
+            ...without
+        } = buildFixture();
         void _omit;
         void _omit2;
-        const doc = await BusinessModel.create(
-            { ...(without as unknown as Business), type: 'individual' as const }
-        );
+        const doc = await BusinessModel.create({
+            ...(without as unknown as Business),
+            type: 'individual' as const,
+        });
         expect(doc.taxationSystem).toBeNull();
         expect(doc.isVatPayer).toBeNull();
     });

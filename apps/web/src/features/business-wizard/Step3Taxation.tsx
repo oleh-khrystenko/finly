@@ -43,7 +43,7 @@ export default function Step3Taxation() {
         TaxationSystem | undefined
     >(formData.taxationSystem);
     const [isVatPayer, setIsVatPayer] = useState<boolean>(
-        formData.isVatPayer ?? false,
+        formData.isVatPayer ?? false
     );
 
     const vatAllowed =
@@ -78,7 +78,7 @@ export default function Step3Taxation() {
                 onChange={handleTaxationChange}
             />
 
-            <div className="flex items-start justify-between gap-3 rounded-md border border-border p-3">
+            <div className="border-border flex items-start justify-between gap-3 rounded-md border p-3">
                 <label
                     htmlFor="wizard-vat"
                     className="flex flex-1 cursor-pointer flex-col gap-1"

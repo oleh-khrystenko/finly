@@ -2,7 +2,9 @@ const REDIRECT_KEY = 'auth_redirect';
 
 /** Validate redirect path — must start with `/`, no protocol, no `//` */
 export function isValidRedirect(path: string): boolean {
-    return path.startsWith('/') && !path.startsWith('//') && !path.includes('://');
+    return (
+        path.startsWith('/') && !path.startsWith('//') && !path.includes('://')
+    );
 }
 
 export function saveRedirect(path: string): void {

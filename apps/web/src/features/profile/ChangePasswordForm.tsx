@@ -65,13 +65,9 @@ const ChangePasswordForm = ({ onDone, onCancel }: ChangePasswordFormProps) => {
                     message: 'Невірний пароль',
                 });
             } else if (code === 'RATE_LIMIT_EXCEEDED') {
-                toast.error(
-                    'Забагато запитів. Спробуйте через 15 хвилин',
-                );
+                toast.error('Забагато запитів. Спробуйте через 15 хвилин');
             } else {
-                toast.error(
-                    'Не вдалося виконати операцію. Спробуйте пізніше',
-                );
+                toast.error('Не вдалося виконати операцію. Спробуйте пізніше');
             }
         }
     };
@@ -88,7 +84,9 @@ const ChangePasswordForm = ({ onDone, onCancel }: ChangePasswordFormProps) => {
                             if (errors.currentPassword?.type === 'server') {
                                 form.clearErrors('currentPassword');
                             }
-                            if (errors.newPassword?.type === 'same_as_current') {
+                            if (
+                                errors.newPassword?.type === 'same_as_current'
+                            ) {
                                 form.clearErrors('newPassword');
                             }
                         },
@@ -113,7 +111,9 @@ const ChangePasswordForm = ({ onDone, onCancel }: ChangePasswordFormProps) => {
                 <UiPasswordInput
                     {...form.register('newPassword', {
                         onChange: () => {
-                            if (errors.newPassword?.type === 'same_as_current') {
+                            if (
+                                errors.newPassword?.type === 'same_as_current'
+                            ) {
                                 form.clearErrors('newPassword');
                             }
                         },
@@ -138,11 +138,7 @@ const ChangePasswordForm = ({ onDone, onCancel }: ChangePasswordFormProps) => {
                     size="md"
                     disabled={isSubmitting || !canSubmit}
                 >
-                    {isSubmitting ? (
-                        <UiSpinner size="sm" />
-                    ) : (
-                        'Змінити пароль'
-                    )}
+                    {isSubmitting ? <UiSpinner size="sm" /> : 'Змінити пароль'}
                 </UiButton>
 
                 <UiButton

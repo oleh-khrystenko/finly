@@ -23,7 +23,7 @@ export default function BillingSuccessPage() {
                 toast.success('Оплату здійснено');
             } catch {
                 toast.error(
-                    'Не вдалося оновити дані. Перезавантажте сторінку.',
+                    'Не вдалося оновити дані. Перезавантажте сторінку.'
                 );
             }
             const returnPath = searchParams.get('returnPath');

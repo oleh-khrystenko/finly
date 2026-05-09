@@ -36,10 +36,7 @@ import {
     useDeleteBusinessConfirmStore,
 } from '@/features/business-edit';
 import { PublicBusinessView } from '@/features/business-public';
-import {
-    InvoicesSection,
-    InvoicesSettingsSection,
-} from '@/features/invoices';
+import { InvoicesSection, InvoicesSettingsSection } from '@/features/invoices';
 
 // Discriminated union для prefetch-у public view. `slug` як discriminator
 // дозволяє відрізнити "поточна версія" від stale-state, що приходить з
@@ -55,7 +52,7 @@ export default function BusinessSlugPage() {
     const openDeleteConfirm = useDeleteBusinessConfirmStore((s) => s.open);
 
     const [business, setBusiness] = useState<BusinessWithInvoicesCount | null>(
-        null,
+        null
     );
     const [error, setError] = useState<{ code: string } | null>(null);
     const [previewMode, setPreviewMode] = useState(false);
@@ -244,9 +241,17 @@ export default function BusinessSlugPage() {
                     />
                     {/*
                      * Sprint 7 §7.8 — TaxationSection рендериться лише для
-                     * `fop` / `tov`. `hasTaxationFields` type-guard narrow-ить
-                     * `business.taxationSystem` / `isVatPayer` до non-null —
-                     * без guard секція TS-incompatible (Sprint 7 §SP-3 nullable).
+                     * `fop` / `tov`. `hasTaxationFields` — composite guard:
+                     *  1. **Type-driven primary**: `requiresTaxation(b.type)`
+                     *     (truth у `BUSINESS_TYPES`-tuple) — єдиний drive для
+                     *     render-decision. individual / organization не
+                     *     render-яться навіть якщо документ має non-null
+                     *     taxation (drift / data-corruption).
+                     *  2. **Data-driven secondary**: non-null both fields —
+                     *     TS-narrow до `TaxationCapableBusiness`-shape, що
+                     *     потребує `Props`. Drift-fallthrough guard для legacy-
+                     *     документів ФОП без taxation-полів.
+                     *
                      * Conditional **unmount** (а не disabled) — UX-rationale
                      * §SP-7: для individual / organization не показуємо
                      * порожнє поле, а взагалі не рендеримо секцію.

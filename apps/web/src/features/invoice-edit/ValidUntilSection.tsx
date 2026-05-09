@@ -10,9 +10,7 @@ import { getInvoiceStatus } from '@/entities/invoice';
 
 interface Props {
     invoice: Invoice;
-    onSave: (
-        patch: Partial<Pick<Invoice, 'validUntil'>>,
-    ) => Promise<void>;
+    onSave: (patch: Partial<Pick<Invoice, 'validUntil'>>) => Promise<void>;
 }
 
 const DATE_LOCALE = 'uk-UA';
@@ -75,8 +73,8 @@ export default function ValidUntilSection({ invoice, onSave }: Props) {
                                         // післязавтра-браузер і навпаки).
                                         setValue(
                                             kyivEndOfDayInstant(
-                                                kyivTomorrowIsoDate(),
-                                            ),
+                                                kyivTomorrowIsoDate()
+                                            )
                                         );
                                     }
                                 }}
@@ -92,7 +90,7 @@ export default function ValidUntilSection({ invoice, onSave }: Props) {
                                         }
                                         // SP-7 — фіксуємо 23:59:59 у Kyiv tz.
                                         setValue(
-                                            kyivEndOfDayInstant(e.target.value),
+                                            kyivEndOfDayInstant(e.target.value)
                                         );
                                     }}
                                 />

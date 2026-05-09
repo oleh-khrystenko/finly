@@ -46,9 +46,7 @@ describe('ProfileForm — lastName is required', () => {
     });
 
     it('renders required asterisk on the lastName label', () => {
-        render(
-            <ProfileForm user={baseUser} editable={true} onboardingMode />
-        );
+        render(<ProfileForm user={baseUser} editable={true} onboardingMode />);
 
         const lastNameLabel = screen.getByText(/Прізвище/i);
         // The required marker is a sibling `*` span — assert it's in the same label.
@@ -56,9 +54,7 @@ describe('ProfileForm — lastName is required', () => {
     });
 
     it('rejects submit when lastName is cleared (validation message shown)', async () => {
-        render(
-            <ProfileForm user={baseUser} editable={true} onboardingMode />
-        );
+        render(<ProfileForm user={baseUser} editable={true} onboardingMode />);
 
         const lastNameInput = screen.getByPlaceholderText(/Ваше прізвище/i);
         fireEvent.change(lastNameInput, { target: { value: '' } });
@@ -83,9 +79,7 @@ describe('ProfileForm — lastName is required', () => {
         mockUpdateProfile.mockResolvedValue(undefined);
         mockGetMe.mockResolvedValue(baseUser);
 
-        render(
-            <ProfileForm user={baseUser} editable={true} onboardingMode />
-        );
+        render(<ProfileForm user={baseUser} editable={true} onboardingMode />);
 
         const firstNameInput = screen.getByPlaceholderText(/Ваше ім'я/i);
         fireEvent.change(firstNameInput, { target: { value: 'Петро' } });

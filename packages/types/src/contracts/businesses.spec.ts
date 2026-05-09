@@ -264,10 +264,15 @@ describe('UpdateBusinessSchema', () => {
         'managers',
         'id',
         'createdAt',
-    ])('rejects невідомий ключ %s через .strict() (slug-mutation захист)', (key) => {
-        const result = UpdateBusinessSchema.safeParse({ [key]: 'whatever' });
-        expect(result.success).toBe(false);
-    });
+    ])(
+        'rejects невідомий ключ %s через .strict() (slug-mutation захист)',
+        (key) => {
+            const result = UpdateBusinessSchema.safeParse({
+                [key]: 'whatever',
+            });
+            expect(result.success).toBe(false);
+        }
+    );
 
     it('rejects coupled невалідну пару (simplified-1 + isVatPayer=true)', () => {
         const result = UpdateBusinessSchema.safeParse({

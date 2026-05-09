@@ -22,7 +22,7 @@ interface PendingInvoiceDeletesState {
 
 export function makeInvoiceKey(
     businessSlug: string,
-    invoiceSlug: string,
+    invoiceSlug: string
 ): string {
     return `${businessSlug}/${invoiceSlug}`;
 }
@@ -46,5 +46,5 @@ export const usePendingInvoiceDeletesStore = create<PendingInvoiceDeletesState>(
             }),
         has: (businessSlug, invoiceSlug) =>
             get().keys.has(makeInvoiceKey(businessSlug, invoiceSlug)),
-    }),
+    })
 );

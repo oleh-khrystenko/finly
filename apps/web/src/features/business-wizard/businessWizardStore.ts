@@ -49,7 +49,7 @@ const FULL_STEPS: readonly BusinessWizardStep[] = [
 const VALID_STEPS: ReadonlySet<string> = new Set(FULL_STEPS);
 
 export const isBusinessWizardStep = (
-    value: unknown,
+    value: unknown
 ): value is BusinessWizardStep =>
     typeof value === 'string' && VALID_STEPS.has(value);
 
@@ -73,7 +73,7 @@ const STEPS_WITHOUT_TAXATION: readonly BusinessWizardStep[] = [
  * (один і той самий reference повертається для одного й того самого type).
  */
 export const computeStepsForType = (
-    type: BusinessType | undefined,
+    type: BusinessType | undefined
 ): readonly BusinessWizardStep[] => {
     if (type === undefined) return FULL_STEPS;
     return requiresTaxation(type) ? FULL_STEPS : STEPS_WITHOUT_TAXATION;
@@ -198,7 +198,7 @@ const NUMERIC_STEP_TO_NAMED: Record<number, BusinessWizardStep> = {
 
 const migratePersistedState = (
     persistedState: unknown,
-    version: number,
+    version: number
 ): PersistedWizardState => {
     const fallback: PersistedWizardState = {
         currentStep: 'type-name',
@@ -215,8 +215,7 @@ const migratePersistedState = (
 
     let migratedStep: BusinessWizardStep;
     if (version < 2 && typeof state.currentStep === 'number') {
-        migratedStep =
-            NUMERIC_STEP_TO_NAMED[state.currentStep] ?? 'type-name';
+        migratedStep = NUMERIC_STEP_TO_NAMED[state.currentStep] ?? 'type-name';
     } else if (isBusinessWizardStep(state.currentStep)) {
         migratedStep = state.currentStep;
     } else {
@@ -303,8 +302,8 @@ export const useBusinessWizardStore = create<BusinessWizardState>()(
                 currentStep: state.currentStep,
                 formData: state.formData,
             }),
-        },
-    ),
+        }
+    )
 );
 
 /**
@@ -319,7 +318,7 @@ export const useBusinessWizardStore = create<BusinessWizardState>()(
  * point-edit, не shotgun-змін у компонентах.
  */
 export function buildCreateRequestFromDraft(
-    draft: BusinessWizardDraft,
+    draft: BusinessWizardDraft
 ): CreateBusinessRequest {
     const {
         type,
@@ -352,7 +351,7 @@ export function buildCreateRequestFromDraft(
             if (taxationSystem === undefined || isVatPayer === undefined) {
                 throw new Error(
                     'Wizard draft incomplete: taxation fields missing for ' +
-                        type,
+                        type
                 );
             }
             return {

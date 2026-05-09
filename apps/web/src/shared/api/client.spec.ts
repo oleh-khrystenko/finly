@@ -99,9 +99,7 @@ describe('client', () => {
 
             const config = await captureNextRequest();
 
-            expect(config.headers.get('Authorization')).toBe(
-                'Bearer my-token'
-            );
+            expect(config.headers.get('Authorization')).toBe('Bearer my-token');
         });
 
         it('does NOT add Authorization header when no token', async () => {
@@ -141,18 +139,14 @@ describe('client', () => {
         it('does NOT retry if already retried (_retry flag)', async () => {
             rejectNextRequest('/some-endpoint', 401, { _retry: true });
 
-            await expect(
-                apiClient.get('/some-endpoint')
-            ).rejects.toBeDefined();
+            await expect(apiClient.get('/some-endpoint')).rejects.toBeDefined();
             expect(mockAxiosPost).not.toHaveBeenCalled();
         });
 
         it('does NOT retry for non-401 errors', async () => {
             rejectNextRequest('/some-endpoint', 500);
 
-            await expect(
-                apiClient.get('/some-endpoint')
-            ).rejects.toBeDefined();
+            await expect(apiClient.get('/some-endpoint')).rejects.toBeDefined();
             expect(mockAxiosPost).not.toHaveBeenCalled();
         });
 
@@ -207,9 +201,7 @@ describe('client', () => {
         });
 
         it('on refresh failure → clears token and emits session-lost', async () => {
-            mockAxiosPost.mockRejectedValueOnce(
-                new Error('Refresh failed')
-            );
+            mockAxiosPost.mockRejectedValueOnce(new Error('Refresh failed'));
 
             const sessionLostListener = jest.fn();
             const unsubscribe = authEvents.on(

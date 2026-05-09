@@ -42,9 +42,8 @@ export default function BasicSection({ business, onSave }: Props) {
                         const r = businessNameSchema.safeParse(v);
                         return r.success
                             ? null
-                            : (mapValidationCode(
-                                  r.error.issues[0]?.message,
-                              ) ?? null);
+                            : (mapValidationCode(r.error.issues[0]?.message) ??
+                                  null);
                     }}
                     onSave={(v) => onSave({ name: v })}
                 />

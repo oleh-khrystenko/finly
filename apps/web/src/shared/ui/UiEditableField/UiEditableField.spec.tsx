@@ -16,12 +16,10 @@ describe('UiEditableField', () => {
                     />
                 )}
                 onSave={jest.fn()}
-            />,
+            />
         );
         expect(screen.getByText('Іваненко')).toBeInTheDocument();
-        expect(
-            screen.getByLabelText('Редагувати: Назва'),
-        ).toBeInTheDocument();
+        expect(screen.getByLabelText('Редагувати: Назва')).toBeInTheDocument();
     });
 
     it('переходить у edit-mode при кліку на "олівець"', () => {
@@ -38,7 +36,7 @@ describe('UiEditableField', () => {
                     />
                 )}
                 onSave={jest.fn()}
-            />,
+            />
         );
         fireEvent.click(screen.getByLabelText('Редагувати: Назва'));
         expect(screen.getByTestId('edit-input')).toBeInTheDocument();
@@ -61,7 +59,7 @@ describe('UiEditableField', () => {
                     />
                 )}
                 onSave={onSave}
-            />,
+            />
         );
         fireEvent.click(screen.getByLabelText('Редагувати: Назва'));
         fireEvent.change(screen.getByTestId('edit-input'), {
@@ -87,20 +85,16 @@ describe('UiEditableField', () => {
                     />
                 )}
                 onSave={onSave}
-            />,
+            />
         );
         fireEvent.click(screen.getByLabelText('Редагувати: Назва'));
         fireEvent.change(screen.getByTestId('edit-input'), {
             target: { value: 'New Name' },
         });
         fireEvent.click(screen.getByText('Зберегти'));
+        await waitFor(() => expect(onSave).toHaveBeenCalledWith('New Name'));
         await waitFor(() =>
-            expect(onSave).toHaveBeenCalledWith('New Name'),
-        );
-        await waitFor(() =>
-            expect(
-                screen.queryByTestId('edit-input'),
-            ).not.toBeInTheDocument(),
+            expect(screen.queryByTestId('edit-input')).not.toBeInTheDocument()
         );
     });
 
@@ -122,7 +116,7 @@ describe('UiEditableField', () => {
                     v.length === 0 ? 'Не може бути порожнім' : null
                 }
                 onSave={onSave}
-            />,
+            />
         );
         fireEvent.click(screen.getByLabelText('Редагувати: Назва'));
         fireEvent.change(screen.getByTestId('edit-input'), {

@@ -97,7 +97,7 @@ export default function InvoicePublicView({
                 <h1 className="text-foreground text-2xl font-bold tracking-tight break-words md:text-3xl">
                     {heading}
                 </h1>
-                <p className="text-muted-foreground break-words text-sm">
+                <p className="text-muted-foreground text-sm break-words">
                     {BUSINESS_TYPE_LABEL[business.type]} {business.name}
                 </p>
             </header>
@@ -120,7 +120,7 @@ export default function InvoicePublicView({
                         {validUntil === null
                             ? 'Без терміну'
                             : new Date(validUntil).toLocaleDateString(
-                                  DATE_LOCALE,
+                                  DATE_LOCALE
                               )}
                     </dd>
                 </div>

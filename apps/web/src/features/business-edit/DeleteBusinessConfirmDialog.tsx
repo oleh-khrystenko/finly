@@ -30,9 +30,7 @@ import { useDeleteBusinessConfirmStore } from './deleteBusinessConfirmStore';
 export default function DeleteBusinessConfirmDialog() {
     const isOpen = useDeleteBusinessConfirmStore((s) => s.isOpen);
     const business = useDeleteBusinessConfirmStore((s) => s.business);
-    const invoicesCount = useDeleteBusinessConfirmStore(
-        (s) => s.invoicesCount,
-    );
+    const invoicesCount = useDeleteBusinessConfirmStore((s) => s.invoicesCount);
     const onConfirm = useDeleteBusinessConfirmStore((s) => s.onConfirm);
     const close = useDeleteBusinessConfirmStore((s) => s.close);
 
@@ -46,7 +44,7 @@ export default function DeleteBusinessConfirmDialog() {
                 invoicesCount,
                 'рахунок',
                 'рахунки',
-                'рахунків',
+                'рахунків'
             );
             description += ` У бізнесу ${counter} — вони теж зникнуть.`;
         }

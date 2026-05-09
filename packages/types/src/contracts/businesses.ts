@@ -13,10 +13,7 @@ import {
 } from '../entities/business';
 import { slugPresetSchema } from '../entities/invoice';
 import { ibanZod } from '../validation/iban';
-import {
-    individualTaxIdZod,
-    legalEntityTaxIdZod,
-} from '../validation/tax-id';
+import { individualTaxIdZod, legalEntityTaxIdZod } from '../validation/tax-id';
 
 /**
  * Sprint 3 §3.1 + Sprint 7 §SP-3/§SP-4 — write-side контракти Business для
@@ -234,10 +231,7 @@ export const UpdateBusinessSchema = z
             ) {
                 return true;
             }
-            if (
-                data.taxationSystem === null ||
-                data.isVatPayer === null
-            ) {
+            if (data.taxationSystem === null || data.isVatPayer === null) {
                 return true;
             }
             return (

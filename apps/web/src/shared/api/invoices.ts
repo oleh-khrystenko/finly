@@ -42,11 +42,11 @@ interface PaginatedInvoicesEnvelope {
 export async function listInvoices(
     businessSlug: string,
     page = 1,
-    limit = 10,
+    limit = 10
 ): Promise<PaginatedInvoices> {
     const { data } = await apiClient.get<{ data: PaginatedInvoicesEnvelope }>(
         `/businesses/me/${encodeURIComponent(businessSlug)}/invoices`,
-        { params: { page, limit } },
+        { params: { page, limit } }
     );
     return {
         items: data.data.items.map((raw) => InvoiceSchema.parse(raw)),
@@ -58,21 +58,21 @@ export async function listInvoices(
 
 export async function createInvoice(
     businessSlug: string,
-    dto: CreateInvoiceRequest,
+    dto: CreateInvoiceRequest
 ): Promise<Invoice> {
     const { data } = await apiClient.post<{ data: unknown }>(
         `/businesses/me/${encodeURIComponent(businessSlug)}/invoices`,
-        dto,
+        dto
     );
     return InvoiceSchema.parse(data.data);
 }
 
 export async function getInvoiceBySlug(
     businessSlug: string,
-    invoiceSlug: string,
+    invoiceSlug: string
 ): Promise<Invoice> {
     const { data } = await apiClient.get<{ data: unknown }>(
-        `/businesses/me/${encodeURIComponent(businessSlug)}/invoices/${encodeURIComponent(invoiceSlug)}`,
+        `/businesses/me/${encodeURIComponent(businessSlug)}/invoices/${encodeURIComponent(invoiceSlug)}`
     );
     return InvoiceSchema.parse(data.data);
 }
@@ -80,21 +80,21 @@ export async function getInvoiceBySlug(
 export async function updateInvoice(
     businessSlug: string,
     invoiceSlug: string,
-    dto: UpdateInvoiceRequest,
+    dto: UpdateInvoiceRequest
 ): Promise<Invoice> {
     const { data } = await apiClient.patch<{ data: unknown }>(
         `/businesses/me/${encodeURIComponent(businessSlug)}/invoices/${encodeURIComponent(invoiceSlug)}`,
-        dto,
+        dto
     );
     return InvoiceSchema.parse(data.data);
 }
 
 export async function deleteInvoice(
     businessSlug: string,
-    invoiceSlug: string,
+    invoiceSlug: string
 ): Promise<void> {
     await apiClient.delete(
-        `/businesses/me/${encodeURIComponent(businessSlug)}/invoices/${encodeURIComponent(invoiceSlug)}`,
+        `/businesses/me/${encodeURIComponent(businessSlug)}/invoices/${encodeURIComponent(invoiceSlug)}`
     );
 }
 
@@ -117,10 +117,10 @@ export async function deleteInvoice(
  */
 export async function getPublicInvoiceView(
     businessSlug: string,
-    invoiceSlug: string,
+    invoiceSlug: string
 ): Promise<PublicInvoiceView> {
     const json = await publicFetchJson<{ data: unknown }>(
-        `/businesses/public/${encodeURIComponent(businessSlug)}/invoices/${encodeURIComponent(invoiceSlug)}`,
+        `/businesses/public/${encodeURIComponent(businessSlug)}/invoices/${encodeURIComponent(invoiceSlug)}`
     );
     return PublicInvoiceSchema.parse(json.data);
 }

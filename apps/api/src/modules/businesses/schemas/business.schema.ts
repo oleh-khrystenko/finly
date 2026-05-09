@@ -100,7 +100,12 @@ export class Business {
      * service-нормалізатора-everywhere; для fop/tov write-DTO discriminated
      * union вимагає поле явно (clear semantics).
      */
-    @Prop({ required: false, type: String, enum: TAXATION_SYSTEMS, default: null })
+    @Prop({
+        required: false,
+        type: String,
+        enum: TAXATION_SYSTEMS,
+        default: null,
+    })
     taxationSystem!: TaxationSystem | null;
 
     /**

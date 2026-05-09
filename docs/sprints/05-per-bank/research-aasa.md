@@ -16,15 +16,15 @@
 
 ## Перевірені URL (зафіксовано результати)
 
-| URL | Статус | Знайдено |
-|---|---|---|
-| `https://privat24.ua/.well-known/apple-app-site-association` | 200 OK | 540+ paths, два appID |
-| `https://www.monobank.ua/.well-known/apple-app-site-association` | 200 OK | 9+ paths, appID `com.ftband.mono` |
-| `https://send.monobank.ua/.well-known/apple-app-site-association` | 200 OK | 5 paths, той же appID |
-| `https://next.privat24.ua/.well-known/apple-app-site-association` | 200 OK | appID той самий, але `paths: []` (не активно) |
-| `https://www.pumb.ua/.well-known/apple-app-site-association` | 404 | — |
-| `https://pumb.ua/.well-known/apple-app-site-association` | 404 | — |
-| `https://retail.pumb.ua/.well-known/apple-app-site-association` | 301 → www.pumb.ua → 404 | — |
+| URL                                                               | Статус                  | Знайдено                                      |
+| ----------------------------------------------------------------- | ----------------------- | --------------------------------------------- |
+| `https://privat24.ua/.well-known/apple-app-site-association`      | 200 OK                  | 540+ paths, два appID                         |
+| `https://www.monobank.ua/.well-known/apple-app-site-association`  | 200 OK                  | 9+ paths, appID `com.ftband.mono`             |
+| `https://send.monobank.ua/.well-known/apple-app-site-association` | 200 OK                  | 5 paths, той же appID                         |
+| `https://next.privat24.ua/.well-known/apple-app-site-association` | 200 OK                  | appID той самий, але `paths: []` (не активно) |
+| `https://www.pumb.ua/.well-known/apple-app-site-association`      | 404                     | —                                             |
+| `https://pumb.ua/.well-known/apple-app-site-association`          | 404                     | —                                             |
+| `https://retail.pumb.ua/.well-known/apple-app-site-association`   | 301 → www.pumb.ua → 404 | —                                             |
 
 ---
 
@@ -130,9 +130,9 @@ NOT /market
 
 - Жоден з типових доменів (`pumb.ua`, `www.pumb.ua`, `retail.pumb.ua`) не повертає AASA-файл.
 - Це означає одне з:
-  - Універсальні посилання у ПУМБ налаштовані лише для своїх внутрішніх піддоменів, які ми ще не знайшли.
-  - ПУМБ не підтримує Universal Links взагалі (старіша архітектура).
-  - Партнерська інтеграція є, але виключно через закриту угоду.
+    - Універсальні посилання у ПУМБ налаштовані лише для своїх внутрішніх піддоменів, які ми ще не знайшли.
+    - ПУМБ не підтримує Universal Links взагалі (старіша архітектура).
+    - Партнерська інтеграція є, але виключно через закриту угоду.
 - **Дія:** розслідуємо окремо. Кандидати наступних доменів для перевірки: `online.pumb.ua`, `business.pumb.ua`, можливо APK-декомпіл для пошуку intent-filter-ів. У разі тотального fail — пишемо ПУМБ-у напряму у бізнес-підтримку.
 
 ---
@@ -155,6 +155,6 @@ NOT /market
 
 ## Журнал
 
-| Дата | Дія | Хто |
-|---|---|---|
+| Дата       | Дія                                                                                                             | Хто           |
+| ---------- | --------------------------------------------------------------------------------------------------------------- | ------------- |
 | 2026-05-05 | Створено артефакт з результатами AASA-перевірки 3 банків (Privat ✅ 540+ paths, Mono ✅ 9+ paths, PUMB ❌ 404). | Oleh + Claude |

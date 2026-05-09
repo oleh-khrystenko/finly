@@ -59,11 +59,11 @@ export default function InvoiceCard({
     const purpose = resolveInvoicePayeePurpose(
         invoice.payeeSnapshot,
         invoice.paymentPurpose,
-        businessPaymentPurposeTemplate,
+        businessPaymentPurposeTemplate
     );
     const isRuntimeInherited = isInvoicePurposeRuntimeInherited(
         invoice.payeeSnapshot,
-        invoice.paymentPurpose,
+        invoice.paymentPurpose
     );
 
     const handleCopy = async () => {
@@ -84,7 +84,7 @@ export default function InvoiceCard({
                         {formattedAmount ?? 'Без суми (клієнт вводить)'}
                     </p>
                     <p
-                        className="text-muted-foreground mt-1 text-xs font-mono truncate"
+                        className="text-muted-foreground mt-1 truncate font-mono text-xs"
                         title={invoice.slug}
                     >
                         {invoice.slug}
@@ -98,7 +98,7 @@ export default function InvoiceCard({
                     'line-clamp-2 text-sm',
                     isRuntimeInherited
                         ? 'text-muted-foreground/70 italic'
-                        : 'text-muted-foreground',
+                        : 'text-muted-foreground'
                 )}
                 title={
                     isRuntimeInherited
@@ -142,7 +142,7 @@ function StatusBadge({ status }: { status: 'active' | 'expired' }) {
                 'shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium',
                 status === 'active'
                     ? 'bg-secondary text-foreground'
-                    : 'bg-destructive/10 text-destructive',
+                    : 'bg-destructive/10 text-destructive'
             )}
         >
             {status === 'active' ? 'Активний' : 'Прострочено'}

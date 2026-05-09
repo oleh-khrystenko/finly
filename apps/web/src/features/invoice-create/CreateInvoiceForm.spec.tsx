@@ -24,9 +24,7 @@ jest.mock('next/navigation', () => ({
 
 jest.mock('@/entities/invoice', () => ({
     useSlugPresetWarningStore: (
-        selector: (state: {
-            open: typeof mockOpenWarning;
-        }) => unknown,
+        selector: (state: { open: typeof mockOpenWarning }) => unknown
     ) =>
         selector({
             open: mockOpenWarning,
@@ -96,9 +94,7 @@ describe('CreateInvoiceForm — slugInput happy paths (Sprint 4 §4.5 DoD a/b/c/
         const triggers = screen.getAllByRole('button');
         // Перший button — "Як назвати рахунок"; точніше — той, що має SLUG_OPTIONS-label.
         const slugTrigger = triggers.find((b) =>
-            /Автоматично|Ввести самому|Випадковий код/.test(
-                b.textContent ?? '',
-            ),
+            /Автоматично|Ввести самому|Випадковий код/.test(b.textContent ?? '')
         );
         if (!slugTrigger) throw new Error('slug dropdown not found');
         await act(async () => {
@@ -140,7 +136,7 @@ describe('CreateInvoiceForm — slugInput happy paths (Sprint 4 §4.5 DoD a/b/c/
                     ...baseBusiness,
                     invoiceSlugPresetDefault: 'with-month',
                 }}
-            />,
+            />
         );
         await clickSubmit();
         await waitFor(() => expect(mockCreateInvoice).toHaveBeenCalled());
@@ -158,7 +154,7 @@ describe('CreateInvoiceForm — slugInput happy paths (Sprint 4 §4.5 DoD a/b/c/
                     invoiceSlugPresetDefault: 'with-purpose',
                     paymentPurposeTemplate: 'Послуги',
                 }}
-            />,
+            />
         );
         // Жодного автоматичного warning не тригериться на mount.
         expect(mockOpenWarning).not.toHaveBeenCalled();
@@ -182,21 +178,17 @@ describe('CreateInvoiceForm — slugInput happy paths (Sprint 4 §4.5 DoD a/b/c/
             render(<CreateInvoiceForm business={baseBusiness} />);
             await selectSlugOption(label);
             await clickSubmit();
-            await waitFor(() =>
-                expect(mockCreateInvoice).toHaveBeenCalled(),
-            );
+            await waitFor(() => expect(mockCreateInvoice).toHaveBeenCalled());
             expect(mockCreateInvoice.mock.calls[0]![1].slugInput).toEqual(
-                expected,
+                expected
             );
-        },
+        }
     );
 
     it('"Ввести самому" + valid humanPart → POST {kind:"explicit", humanPart}', async () => {
         render(<CreateInvoiceForm business={baseBusiness} />);
         await selectSlugOption(/Ввести самому/);
-        const input = await screen.findByPlaceholderText(
-            /order-2026-may/,
-        );
+        const input = await screen.findByPlaceholderText(/order-2026-may/);
         await act(async () => {
             fireEvent.change(input, {
                 target: { value: 'order-2026-may' },
@@ -221,9 +213,7 @@ describe('CreateInvoiceForm — humanPart live-validation', () => {
         // Open dropdown
         const triggers = screen.getAllByRole('button');
         const slugTrigger = triggers.find((b) =>
-            /Автоматично|Ввести самому|Випадковий код/.test(
-                b.textContent ?? '',
-            ),
+            /Автоматично|Ввести самому|Випадковий код/.test(b.textContent ?? '')
         )!;
         await act(async () => {
             fireEvent.click(slugTrigger);
@@ -254,12 +244,12 @@ describe('CreateInvoiceForm — humanPart live-validation', () => {
                 fireEvent.click(
                     screen.getByRole('button', {
                         name: /Створити рахунок/,
-                    }),
+                    })
                 );
             });
             // Submit заблокований — createInvoice не викликається.
             expect(mockCreateInvoice).not.toHaveBeenCalled();
-        },
+        }
     );
 
     it('valid humanPart → submit unblocked', async () => {
@@ -273,7 +263,7 @@ describe('CreateInvoiceForm — humanPart live-validation', () => {
             fireEvent.click(
                 screen.getByRole('button', {
                     name: /Створити рахунок/,
-                }),
+                })
             );
         });
         await waitFor(() => expect(mockCreateInvoice).toHaveBeenCalled());
@@ -409,9 +399,7 @@ describe('CreateInvoiceForm — with-purpose warning modal', () => {
         render(<CreateInvoiceForm business={baseBusiness} />);
         const triggers = screen.getAllByRole('button');
         const slugTrigger = triggers.find((b) =>
-            /Автоматично|Ввести самому|Випадковий код/.test(
-                b.textContent ?? '',
-            ),
+            /Автоматично|Ввести самому|Випадковий код/.test(b.textContent ?? '')
         )!;
         await act(async () => {
             fireEvent.click(slugTrigger);
@@ -435,7 +423,7 @@ describe('CreateInvoiceForm — with-purpose warning modal', () => {
                     ...baseBusiness,
                     invoiceSlugPresetDefault: 'with-purpose',
                 }}
-            />,
+            />
         );
         expect(mockOpenWarning).not.toHaveBeenCalled();
     });
@@ -451,7 +439,7 @@ describe('CreateInvoiceForm — required-fields validation', () => {
         // Знаходимо dropdown "Термін дії"
         const triggers = screen.getAllByRole('button');
         const validUntilTrigger = triggers.find((b) =>
-            /Без терміну|До конкретної дати/.test(b.textContent ?? ''),
+            /Без терміну|До конкретної дати/.test(b.textContent ?? '')
         )!;
         await act(async () => {
             fireEvent.click(validUntilTrigger);
@@ -467,7 +455,7 @@ describe('CreateInvoiceForm — required-fields validation', () => {
             fireEvent.click(
                 screen.getByRole('button', {
                     name: /Створити рахунок/,
-                }),
+                })
             );
         });
         expect(mockCreateInvoice).not.toHaveBeenCalled();

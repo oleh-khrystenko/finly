@@ -63,7 +63,7 @@ export default function Step1TypeAndName() {
      * (Step3Taxation захоплює `taxationSystem` з store через own snapshot).
      */
     const [selectedType, setSelectedType] = useState<BusinessType | undefined>(
-        formData.type,
+        formData.type
     );
 
     const form = useForm<NameValues>({
