@@ -45,6 +45,61 @@ describe('PayloadInputSchema — required fields', () => {
         expect(result.success).toBe(false);
     });
 
+    // -------------------------------------------------------------------------
+    // Sprint 7 §SP-10 — `payerTaxIdZod` (union RNOKPP-10 ∪ ЄДРПОУ-8). Норматив
+    // НБУ §IV.10.5 явно дозволяє обидві довжини у полі "Код одержувача";
+    // Sprint 7 закриває асиметрію валідатора (раніше — лише 10-digit RNOKPP).
+    //
+    // Ризик 1 з sprint-плану: верифікувати, що Sprint 2 builder не зашиває
+    // 10-digit-only constraint у FIELD_LIMITS / payload-002/003. Ці тести
+    // перевіряють SAFE-PARSE, builder-rount-trip окремо у `qr.service.integration.spec`.
+    // -------------------------------------------------------------------------
+
+    describe('Sprint 7 — receiverTaxId приймає РНОКПП АБО ЄДРПОУ', () => {
+        it('приймає 10-digit РНОКПП (status quo, backward-compat)', () => {
+            const result = PayloadInputSchema.safeParse({
+                ...baseValidInput,
+                receiverTaxId: '1234567899',
+            });
+            expect(result.success).toBe(true);
+        });
+
+        it('приймає 8-digit ЄДРПОУ (нова поверхня Sprint 7)', () => {
+            const result = PayloadInputSchema.safeParse({
+                ...baseValidInput,
+                receiverTaxId: '12345678',
+            });
+            expect(result.success).toBe(true);
+        });
+
+        it.each(['1234567', '123456789', '12345678901'])(
+            'відхиляє taxId довжини, відсутньої у нормативі (%s)',
+            (taxId) => {
+                const result = PayloadInputSchema.safeParse({
+                    ...baseValidInput,
+                    receiverTaxId: taxId,
+                });
+                expect(result.success).toBe(false);
+            }
+        );
+
+        it('відхиляє 8-digit з не-цифрою (alpha)', () => {
+            const result = PayloadInputSchema.safeParse({
+                ...baseValidInput,
+                receiverTaxId: '1234567a',
+            });
+            expect(result.success).toBe(false);
+        });
+
+        it('відхиляє порожній рядок', () => {
+            const result = PayloadInputSchema.safeParse({
+                ...baseValidInput,
+                receiverTaxId: '',
+            });
+            expect(result.success).toBe(false);
+        });
+    });
+
     it('приймає amountKopecks = null (клієнт вводить суму)', () => {
         const result = PayloadInputSchema.safeParse({
             ...baseValidInput,

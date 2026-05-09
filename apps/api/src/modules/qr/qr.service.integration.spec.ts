@@ -173,6 +173,77 @@ describe('QrService — integration (real sharp + qrcode + jsqr)', () => {
         });
     });
 
+    // -------------------------------------------------------------------------
+    // Sprint 7 §7.6 + Ризик 1 — нормативна сумісність 8-цифрового ЄДРПОУ.
+    //
+    // Sprint 7 розширює `PayloadInputSchema.receiverTaxId` з лише-РНОКПП
+    // (`individualTaxIdZod`, 10 digits + checksum) на union {РНОКПП, ЄДРПОУ}
+    // (`payerTaxIdZod`). Норматив НБУ §IV.10.5 явно дозволяє 8 цифр для юр.осіб.
+    //
+    // **Mitigation Ризику 1:** plan §7.6 acceptance вимагає round-trip через
+    // jsqr з 8-digit ЄДРПОУ. Якщо builder зашиває 10-only constraint у raw-byte-
+    // limit чи charset-whitelist — цей тест впаде на render або на decode.
+    // -------------------------------------------------------------------------
+
+    describe('Sprint 7 — 8-digit ЄДРПОУ round-trip (юр.особа)', () => {
+        const VALID_EDRPOU = '12345678';
+        const TOV_INPUT: PayloadInput = {
+            ...VALID_INPUT,
+            receiverName: 'ТОВ Каса Здоровя',
+            receiverTaxId: VALID_EDRPOU,
+            purpose: 'Оплата комунальних послуг',
+        };
+
+        it('003 — 8-digit ЄДРПОУ кладеться у field 9 без модифікації', async () => {
+            const png = await service.renderForNbuPayload(TOV_INPUT, '003', {
+                host: NBU_HOST_PRIMARY,
+            });
+            const decoded = await decodeQr(png);
+            expect(decoded).not.toBeNull();
+
+            const b64Url = decoded!.slice('https://qr.bank.gov.ua/'.length);
+            const payload = Buffer.from(b64Url, 'base64url').toString('utf-8');
+            const fields = payload.split('\n');
+
+            expect(fields).toHaveLength(17);
+            // Field 9 (0-indexed 8) — "Код одержувача". Норматив §IV.10.5
+            // дозволяє 8 (ЄДРПОУ) або 10 (РНОКПП) цифр.
+            expect(fields[8]).toBe(VALID_EDRPOU);
+            // Sanity: ім'я та призначення коректні (cyrillic не зіпсувався).
+            expect(fields[5]).toBe('ТОВ Каса Здоровя');
+            expect(fields[11]).toBe('Оплата комунальних послуг');
+        });
+
+        it('002 — 8-digit ЄДРПОУ кладеться у field 9 без модифікації', async () => {
+            const png = await service.renderForNbuPayload(TOV_INPUT, '002');
+            const decoded = await decodeQr(png);
+            expect(decoded).not.toBeNull();
+
+            const b64Url = decoded!.slice('https://bank.gov.ua/qr/'.length);
+            const payload = Buffer.from(b64Url, 'base64url').toString('utf-8');
+            const fields = payload.split('\n');
+
+            expect(fields).toHaveLength(13);
+            expect(fields[8]).toBe(VALID_EDRPOU);
+        });
+
+        it('individual з 10-digit РНОКПП все ще round-trip-ить (backward-compat)', async () => {
+            // Status quo guard: розширення на ЄДРПОУ не повинне зламати наявний
+            // потік для type=fop / individual. Тест дублює формат-003 round-trip
+            // з input-фікстури, що використовувала RNOKPP до Sprint 7.
+            const png = await service.renderForNbuPayload(VALID_INPUT, '003', {
+                host: NBU_HOST_PRIMARY,
+            });
+            const decoded = await decodeQr(png);
+            const b64Url = decoded!.slice('https://qr.bank.gov.ua/'.length);
+            const payload = Buffer.from(b64Url, 'base64url').toString('utf-8');
+            const fields = payload.split('\n');
+
+            expect(fields[8]).toBe('1234567899');
+            expect(fields[8]).toHaveLength(10);
+        });
+    });
+
     describe('logo overlay viability', () => {
         it('logoMaxRatio = 0.20 (max-allowed) — QR все ще читається', async () => {
             const png = await service.renderForUrl(
