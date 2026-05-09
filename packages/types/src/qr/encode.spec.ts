@@ -62,12 +62,17 @@ describe('encodePayloadAsBase64Url', () => {
             ['ASCII single line', 'BCD'],
             ['ASCII multiline', 'BCD\n002\n1\nUCT'],
             ['cyrillic', 'ФОП Іваненко-Експрес'],
-            ['mixed cyrillic + ASCII + digits', 'ТОВ Кав\'ярня UAH123.45'],
-            ['quote characters', '«»№\''],
+            ['mixed cyrillic + ASCII + digits', "ТОВ Кав'ярня UAH123.45"],
+            ['quote characters', "«»№'"],
             ['emoji (4-byte UTF-8)', '☕️ ФОП Кафе ☕️'],
-            ['NBU sample 002 §V.16 (стоматологія)', 'BCD\n002\n2\nUCT\n\nТОВ "Стоматологія"\nUA7832266900000260050121073\n58\nUAH1034.28\n40723824\n\n\nСтоматологічні послуги\n'],
+            [
+                'NBU sample 002 §V.16 (стоматологія)',
+                'BCD\n002\n2\nUCT\n\nТОВ "Стоматологія"\nUA7832266900000260050121073\n58\nUAH1034.28\n40723824\n\n\nСтоматологічні послуги\n',
+            ],
         ])('%s', (_label, input) => {
-            expect(encodePayloadAsBase64Url(input)).toBe(encodeViaBuffer(input));
+            expect(encodePayloadAsBase64Url(input)).toBe(
+                encodeViaBuffer(input)
+            );
         });
     });
 });

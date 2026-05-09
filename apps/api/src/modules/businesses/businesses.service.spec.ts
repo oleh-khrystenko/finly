@@ -12,6 +12,7 @@ import type {
     UpdateBusinessRequest,
 } from '@finly/types';
 
+import { InvoiceSlugCounter } from '../invoices/schemas/invoice-slug-counter.schema';
 import { Invoice } from '../invoices/schemas/invoice.schema';
 import { BusinessesService } from './businesses.service';
 import type { BusinessDocument } from './schemas/business.schema';
@@ -30,6 +31,9 @@ describe('BusinessesService', () => {
     }>;
     let invoiceModel: jest.Mocked<{
         countDocuments: jest.Mock;
+        deleteMany: jest.Mock;
+    }>;
+    let counterModel: jest.Mocked<{
         deleteMany: jest.Mock;
     }>;
     let session: jest.Mocked<{
@@ -67,6 +71,9 @@ describe('BusinessesService', () => {
             countDocuments: jest.fn().mockResolvedValue(0),
             deleteMany: jest.fn().mockResolvedValue({ deletedCount: 0 }),
         };
+        counterModel = {
+            deleteMany: jest.fn().mockResolvedValue({ deletedCount: 0 }),
+        };
         // Default session: `withTransaction(cb)` запускає cb напряму (success),
         // повертає cb's resolved value. Тести cascade-delete можуть переоприділити
         // session.withTransaction для simulate failure / replica-set absence.
@@ -93,6 +100,10 @@ describe('BusinessesService', () => {
                 {
                     provide: getModelToken(Invoice.name),
                     useValue: invoiceModel,
+                },
+                {
+                    provide: getModelToken(InvoiceSlugCounter.name),
+                    useValue: counterModel,
                 },
                 {
                     provide: getConnectionToken(),
@@ -234,6 +245,27 @@ describe('BusinessesService', () => {
             );
         };
 
+        // Sprint 7 §7.5 — `update` робить prelim `findOne({slugLower}, {type:1}).lean().exec()`
+        // коли PATCH чіпляє taxation-fields або `requisites.taxId` (один read,
+        // обидва cross-check-и). Default mock — type='fop' (existing fixture);
+        // тести для individual/tov/organization перевизначають через
+        // `mockExistingType(...)`.
+        const mockExistingType = (
+            type: 'individual' | 'fop' | 'tov' | 'organization' | null
+        ) => {
+            businessModel.findOne.mockReturnValue({
+                lean: jest.fn().mockReturnValue({
+                    exec: jest
+                        .fn()
+                        .mockResolvedValue(type === null ? null : { type }),
+                }),
+            });
+        };
+
+        beforeEach(() => {
+            mockExistingType('fop');
+        });
+
         it('без coupled-полів — filter без $expr, findOne не викликається', async () => {
             mockUpdateReturn({ name: 'New' });
             await service.update('IvanEnko', { name: 'New' });
@@ -371,6 +403,152 @@ describe('BusinessesService', () => {
             await service.update('IvanEnko', { name: 'X' });
             const filter = businessModel.findOneAndUpdate.mock.calls[0]![0];
             expect(filter).toEqual({ slugLower: 'ivanenko' });
+        });
+
+        // ─── Sprint 7 §7.5 — type-aware cross-checks ───
+
+        describe('type-aware cross-checks (Sprint 7 §7.5)', () => {
+            it('non-taxation type + PATCH taxationSystem → 400 TAXATION_NOT_APPLICABLE_FOR_TYPE', async () => {
+                mockExistingType('individual');
+                await expect(
+                    service.update('IvanEnko', {
+                        taxationSystem: 'simplified-3',
+                    })
+                ).rejects.toMatchObject({
+                    response: {
+                        code: 'TAXATION_NOT_APPLICABLE_FOR_TYPE',
+                    },
+                });
+                expect(businessModel.findOneAndUpdate).not.toHaveBeenCalled();
+            });
+
+            it('non-taxation type (organization) + PATCH isVatPayer → 400', async () => {
+                mockExistingType('organization');
+                await expect(
+                    service.update('IvanEnko', { isVatPayer: false })
+                ).rejects.toMatchObject({
+                    response: {
+                        code: 'TAXATION_NOT_APPLICABLE_FOR_TYPE',
+                    },
+                });
+            });
+
+            it('taxation-required type + PATCH taxationSystem=null → 400 TAXATION_REQUIRED_FOR_TYPE (backward-direction, clear-out заборонено)', async () => {
+                mockExistingType('fop');
+                await expect(
+                    service.update('IvanEnko', { taxationSystem: null })
+                ).rejects.toMatchObject({
+                    response: {
+                        code: 'TAXATION_REQUIRED_FOR_TYPE',
+                    },
+                });
+            });
+
+            it('taxation-required type + PATCH isVatPayer=null → 400 TAXATION_REQUIRED_FOR_TYPE', async () => {
+                mockExistingType('tov');
+                await expect(
+                    service.update('IvanEnko', { isVatPayer: null })
+                ).rejects.toMatchObject({
+                    response: {
+                        code: 'TAXATION_REQUIRED_FOR_TYPE',
+                    },
+                });
+            });
+
+            it('fop + PATCH 8-digit ЄДРПОУ → 400 TAX_ID_FORMAT_MISMATCH_TYPE', async () => {
+                mockExistingType('fop');
+                await expect(
+                    service.update('IvanEnko', {
+                        requisites: {
+                            iban: 'UA213223130000026007233566001',
+                            taxId: '12345678', // ЄДРПОУ для tov, не для fop
+                        },
+                    })
+                ).rejects.toMatchObject({
+                    response: {
+                        code: 'TAX_ID_FORMAT_MISMATCH_TYPE',
+                    },
+                });
+            });
+
+            it('tov + PATCH 10-digit RNOKPP → 400 TAX_ID_FORMAT_MISMATCH_TYPE', async () => {
+                mockExistingType('tov');
+                await expect(
+                    service.update('IvanEnko', {
+                        requisites: {
+                            iban: 'UA213223130000026007233566001',
+                            taxId: '1234567899', // RNOKPP для fop, не для tov
+                        },
+                    })
+                ).rejects.toMatchObject({
+                    response: {
+                        code: 'TAX_ID_FORMAT_MISMATCH_TYPE',
+                    },
+                });
+            });
+
+            it('individual + PATCH valid 10-digit RNOKPP → проходить cross-check (далі $expr-update)', async () => {
+                mockExistingType('individual');
+                mockUpdateReturn({ name: 'X' });
+                await expect(
+                    service.update('IvanEnko', {
+                        requisites: {
+                            iban: 'UA213223130000026007233566001',
+                            taxId: '1234567899',
+                        },
+                    })
+                ).resolves.toBeDefined();
+            });
+
+            it('fop + valid PATCH (RNOKPP + taxation) → cross-check passes', async () => {
+                mockExistingType('fop');
+                mockUpdateReturn({
+                    requisites: {
+                        iban: 'UA213223130000026007233566001',
+                        taxId: '1234567899',
+                    },
+                    taxationSystem: 'simplified-3',
+                    isVatPayer: false,
+                });
+                await expect(
+                    service.update('IvanEnko', {
+                        requisites: {
+                            iban: 'UA213223130000026007233566001',
+                            taxId: '1234567899',
+                        },
+                        taxationSystem: 'simplified-3',
+                        isVatPayer: false,
+                    } as UpdateBusinessRequest)
+                ).resolves.toBeDefined();
+            });
+
+            it('PATCH name only — findOne не викликається (cross-check skip)', async () => {
+                mockUpdateReturn({ name: 'X' });
+                await service.update('IvanEnko', { name: 'X' });
+                // beforeEach мокає findOne, але .lean()/.exec() не повинні
+                // викликатись — перевіряємо це опосередковано через
+                // findOne.mock.calls (default mock попередньо викликається у
+                // beforeEach НЕ напряму на сервіс — у beforeEach лише
+                // configure mock-return, не calls). Service виклику не робить.
+                expect(businessModel.findOne).not.toHaveBeenCalled();
+            });
+
+            it('PATCH-payload без taxation/taxId, але slug не існує → 404 від $expr-flow (preserves old NotFound semantics)', async () => {
+                mockUpdateReturn(null);
+                await expect(
+                    service.update('Missing', { name: 'X' })
+                ).rejects.toBeInstanceOf(NotFoundException);
+                // Без taxation/taxId-payload preliminary findOne не викликається —
+                // 404 встановлюється $expr-flow-ом наприкінці update.
+                expect(businessModel.findOne).not.toHaveBeenCalled();
+            });
+
+            it('PATCH-taxation, але slug не існує → 404 з preliminary findOne', async () => {
+                mockExistingType(null);
+                await expect(
+                    service.update('Missing', { isVatPayer: true })
+                ).rejects.toBeInstanceOf(NotFoundException);
+            });
         });
     });
 

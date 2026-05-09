@@ -51,11 +51,11 @@ describe('loadPublicInvoiceView', () => {
 
         const result = await loadPublicInvoiceView(
             'IvanEnko',
-            'inv-001-aB3xQ9k7',
+            'inv-001-aB3xQ9k7'
         );
         expect(fetchMock).toHaveBeenCalledWith(
             'http://api:4000/api/businesses/public/IvanEnko/invoices/inv-001-aB3xQ9k7',
-            { next: { revalidate: 60 } },
+            { cache: 'no-store' }
         );
         expect(result).toEqual(sampleView);
     });
@@ -78,9 +78,9 @@ describe('loadPublicInvoiceView', () => {
             statusText: 'Internal Server Error',
         });
 
-        await expect(
-            loadPublicInvoiceView('biz', 'inv'),
-        ).rejects.toThrow(/500/);
+        await expect(loadPublicInvoiceView('biz', 'inv')).rejects.toThrow(
+            /500/
+        );
     });
 
     it('encodeURIComponent для обох сегментів — спецсимволи не ламають URL', async () => {
@@ -98,13 +98,13 @@ describe('loadPublicInvoiceView', () => {
 
     it('crash якщо API_INTERNAL_URL не виставлений — server-side env required', async () => {
         delete process.env.API_INTERNAL_URL;
-        await expect(
-            loadPublicInvoiceView('biz', 'inv'),
-        ).rejects.toThrow(/API_INTERNAL_URL/);
+        await expect(loadPublicInvoiceView('biz', 'inv')).rejects.toThrow(
+            /API_INTERNAL_URL/
+        );
         process.env.API_INTERNAL_URL = 'http://api:4000';
     });
 
-    it('використовує ISR revalidate: 60 (Sprint 3 §F4)', async () => {
+    it("використовує `cache: 'no-store'` — invoice mutable payment data (review fix)", async () => {
         fetchMock.mockResolvedValue({
             ok: true,
             status: 200,
@@ -112,6 +112,6 @@ describe('loadPublicInvoiceView', () => {
         });
         await loadPublicInvoiceView('biz', 'inv');
         const opts = fetchMock.mock.calls[0]![1];
-        expect(opts).toEqual({ next: { revalidate: 60 } });
+        expect(opts).toEqual({ cache: 'no-store' });
     });
 });

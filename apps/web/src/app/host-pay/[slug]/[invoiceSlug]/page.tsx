@@ -7,7 +7,7 @@ import {
     loadPublicInvoiceView,
 } from '@/features/invoice-public';
 import { isPublicHost } from '@/shared/config/publicHosts';
-import { formatKopecksAsHryvnia } from '@/features/invoices/formatKopecks';
+import { formatKopecksAsHryvnia } from '@/entities/invoice';
 
 /**
  * Sprint 4 §4.7 — публічна сторінка інвойсу
@@ -27,16 +27,36 @@ import { formatKopecksAsHryvnia } from '@/features/invoices/formatKopecks';
  * інформацію у purpose). `seoIndexEnabled` toggle для інвойсу свідомо
  * відсутній.
  *
- * **ISR `revalidate: 60`** — той самий, що Sprint 3.
+ * **`dynamic = 'force-dynamic'`** (Sprint 4 review fix) — invoice mutable
+ * payment data, ISR-кеш робив shipped fix-ив stale view: видалений рахунок
+ * ще видно клієнту після `cache: 'no-store'` на API-fetch не міг "пробити"
+ * Next ISR-snapshot. Force-dynamic примушує SSR на кожний request — це
+ * правильна модель для invoice-page (на відміну від business-page, що
+ * залишається ISR-кеш-friendly).
  */
 
-export const revalidate = 60;
+export const dynamic = 'force-dynamic';
 
 interface Props {
     params: Promise<{ slug: string; invoiceSlug: string }>;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
+    // Defense-in-depth host-check (review fix). Page handler нижче робить
+    // ту саму перевірку перед fetch, але `generateMetadata` — окрема
+    // SSR-stage функція з власним call-graph-ом. Без host-guard-а тут
+    // cabinet host (`finly.com.ua/host-pay/...`), що випадково потрапив
+    // у Next.js route-resolver через middleware-bypass / hot-reload race,
+    // тихо викликав би `loadPublicInvoiceView` і fetch-ив би invoice-data
+    // на cabinet-зоні. Page handler потім зробив би 404, але data leak у
+    // metadata-stage уже стався.
+    const headerList = await headers();
+    if (!isPublicHost(headerList.get('host'))) {
+        return {
+            title: 'Сторінку не знайдено — Finly',
+            robots: { index: false, follow: false },
+        };
+    }
     const { slug, invoiceSlug } = await params;
     const view = await loadPublicInvoiceView(slug, invoiceSlug);
     if (!view) {
@@ -45,6 +65,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
             robots: { index: false, follow: false },
         };
     }
+    // Sprint 4 §4.7 + Sprint 7 §SP-5 — invoice title узгоджений з actual
+    // `InvoicePublicView` UI:
+    //  - h1 нейтральний від Sprint 4 (`Рахунок на 1 500,00 ₴` / `Рахунок на
+    //    оплату`) — type-незалежний з рождення.
+    //  - sub-heading під h1 (`InvoicePublicView.tsx:101`) показує одержувача
+    //    type-aware: `{BUSINESS_TYPE_LABEL[business.type]} {business.name}`.
+    //
+    // SEO meta `<title>` об'єднує обидві частини: amount-line + business-line.
+    // Type-префікс одержувача узгоджений з UI-render-ом і з §SP-5 рішенням
+    // (type-aware зберігається саме для metadata, не h1).
     const businessLabel = `${BUSINESS_TYPE_LABEL[view.business.type]} ${view.business.name}`;
     const amountLabel = formatKopecksAsHryvnia(view.amount);
     const title = amountLabel
@@ -81,9 +111,11 @@ export default async function HostPayInvoicePage({ params }: Props) {
         permanentRedirect(`/${view.business.slug}/${invoiceSlug}`);
     }
 
-    // Expired-status sanity-block (validUntil < now) рендериться всередині
-    // `InvoicePublicView` — заміщає payment-flow на банер. Server Component
-    // тут не вирішує — пропускаємо view-state-decision у presentation layer.
+    // Expired-block — server-driven (review fix): API ставить
+    // `view.nbuLinks: null` коли `validUntil < now`, `InvoicePublicView`
+    // рендерить банер "Термін рахунку минув" замість payment-flow. Server
+    // Component тут просто прокидає payload — single source of truth для
+    // expiry живе на API.
 
     return (
         <InvoicePublicView

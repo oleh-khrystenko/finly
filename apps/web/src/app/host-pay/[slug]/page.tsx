@@ -2,10 +2,7 @@ import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { BUSINESS_TYPE_LABEL } from '@finly/types';
-import {
-    PublicBusinessView,
-    loadPublicView,
-} from '@/features/business-public';
+import { PublicBusinessView, loadPublicView } from '@/features/business-public';
 import { isPublicHost } from '@/shared/config/publicHosts';
 
 /**
@@ -37,6 +34,19 @@ interface Props {
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
+    // Defense-in-depth host-check (review fix) — той самий patern, що
+    // page-handler нижче. Без guard-а тут `generateMetadata` обходить host-
+    // isolation на metadata-stage: cabinet host, що випадково потрапив у
+    // Next.js route-resolver, fetch-ив би public-business-view і формував
+    // би metadata по чужому контуру. Page handler потім робить 404, але
+    // metadata-fetch уже стався.
+    const headerList = await headers();
+    if (!isPublicHost(headerList.get('host'))) {
+        return {
+            title: 'Сторінку не знайдено — Finly',
+            robots: { index: false, follow: false },
+        };
+    }
     const { slug } = await params;
     const view = await loadPublicView(slug);
     if (!view) {
@@ -45,6 +55,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
             robots: { index: false, follow: false },
         };
     }
+    // Sprint 7 §SP-5 + §7.9 — SEO `<title>` навмисно **type-aware**, на
+    // відміну від h1. Sprint 7 README:167 та §SP-5 явно фіксують: type-aware
+    // зберігається саме для `<title>` (для пошукової видачі — `'Оплата на
+    // ФОП Іваненко — Finly'` тощо). H1 на сторінці робить нейтральне
+    // формулювання ("Платіж на користь {name}") для UX-причин, але SEO meta
+    // — інший контекст: search-engine-snippet виграє від type-key-word-у
+    // ("ФОП", "ТОВ") поряд з назвою. Дублювання для типу, де назва вже
+    // містить юр-форму, прийнятне (Sprint 7 §SP-5 explicit trade-off).
     const heading = `${BUSINESS_TYPE_LABEL[view.type]} ${view.name}`;
     return {
         title: `Оплата на ${heading} — Finly`,

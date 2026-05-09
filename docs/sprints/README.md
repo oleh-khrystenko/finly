@@ -2,16 +2,16 @@
 
 > Короткий tree-overview спринтів MVP. Кожен спринт планується далі окремим документом у цій папці.
 >
-> **Статус:** оновлено 2026-05-05. Sprint 1, 2 закриті; Sprint 3 — функціональний flow закритий, **залишається 1 deliverable + UAT-прогон**; **Sprint 4 — функціональний flow закритий, залишається UAT-прогон INV-1..7**; Sprint 5–6 — заплановані.
+> **Статус:** оновлено 2026-05-09. Sprint 1, 2 закриті; Sprint 3 — функціональний flow закритий, **залишається 1 deliverable + UAT-прогон**; **Sprint 4 — функціональний flow закритий, залишається UAT-прогон INV-1..7**; **Sprint 7 — функціональний flow закритий, UAT pending**; **Sprint 8 — функціональний flow закритий, UAT pending LAND-1..8 + один follow-up CTA**; Sprint 5 — research-spike заплановано (паралельно з закриттям).
 
 ---
 
 ## [1. Архітектурний фундамент](01-foundation/README.md)
 
 - [x] Схеми БД (closed-end, без UI там, де "заготовка")
-  - [x] `User`: `lastName` required, `role` enum, `worksAsBookkeeper`
-  - [x] `Business`: `type`, nullable `ownerId`, `managers`, реквізити
-  - [x] `Invoice`: належить бізнесу, slug, lock-поля
+    - [x] `User`: `lastName` required, `role` enum, `worksAsBookkeeper`
+    - [x] `Business`: `type`, nullable `ownerId`, `managers`, реквізити
+    - [x] `Invoice`: належить бізнесу, slug, lock-поля
 - [x] Юридичні сторінки (TOS / Privacy під Finly)
 
 > Code-deliverables закриті. Open: `pnpm lint` без warnings (86 preexisting → винесено в [`tech-backlog.md`](../product/tech-backlog.md)); юридичне фінал-ревʼю — Sprint 6.
@@ -77,6 +77,37 @@
 - [ ] Free vs Paid гейти (ліміт бізнесів)
 - [ ] Paid-фічі (vanity slug, custom logo у QR)
 - [ ] Preview-режим у кабінеті + onboarding (2 landing)
+
+## [7. QR-код не тільки для бізнесу](07-payer-types/README.md)
+
+Зараз сайт думає, що QR-код потрібен тільки підприємцям. Але насправді він стане в нагоді й звичайній людині — скинутись з друзями на вечірку, зібрати на подарунок чи донати на благодійність. Тому додамо вибір з чотирьох варіантів: я особисто, ФОП, ТОВ або організація (як ОСББ чи благодійний фонд), і кожен буде заповнювати лише ті поля, які йому потрібні.
+
+Важливо пам'ятати: у фізособи і ФОП код 10-значний (РНОКПП), а у ТОВ і організацій — 8-значний (ЄДРПОУ), тому перевірка номера буде різна. Поля про систему оподаткування і ПДВ показуємо тільки ФОП і ТОВ — звичайній людині й ОСББ вони не потрібні. Усе інше (рахунок, назва, призначення платежу) однакове для всіх.
+
+## [8. Публічний QR-генератор для незареєстрованих + claim-flow](08-public-qr-preview/README.md)
+
+Лендінг `finly.com.ua` стає інтерактивним: будь-яка людина без реєстрації вводить IBAN + РНОКПП + призначення → за 2 секунди отримує валідний за нормативом НБУ QR-код 003 + universal-link, що відкривається в банк-додатку. Дані живуть у браузері через `localStorage` і не зникають при перезавантаженні. Один клік "Зберегти у кабінет" → реєстрація → бізнес автоматично створюється у БД і прив'язується до акаунта; banner на business-detail запрошує переглянути список банків.
+
+**Реалізовано:**
+
+- [x] §8.0 Shared contract `QrPreviewInputSchema` + `QrPreviewResponseSchema` (reuse `businessNameSchema` / `ibanZod` / `individualTaxIdZod` / `businessPaymentPurposeTemplateSchema`).
+- [x] §8.1 Backend: `QrController` з `POST /qr/preview` (без auth, без БД, throttle-bucket `'qr-preview'` 10/min/IP), reuse `QrService.renderForNbuPayload`.
+- [x] §8.2 Frontend persistence: entity `qr-landing-draft` (Zustand+persist+localStorage `finly:landing-draft`, version 1, intent state-machine).
+- [x] §8.3 Frontend feature `qr-landing-preview`: `QrLandingBlock` (orchestrator з form-lift + hydration-gate), `QrLandingForm` (4 поля + RHF + Zod), `QrLandingResult` (empty/filled state, copy + claim CTA), `publicPostJson` у `shared/api/client.ts`.
+- [x] §8.4 Claim-flow: `useClaimLandingDraft` hook у `(protected)/layout.tsx` як sibling до AuthGuard; race-protection через `inProgressRef`; чекає на onboarding completion для гілки B.
+- [x] §8.5 Banner `CompletedFromLandingBanner` на business-detail (`?completed-from=landing`), scroll-target `id="banks"` на `BanksSection`.
+- [x] §8.6 Hero: widget `landing-hero` з 3 content-complete benefit-tiles, перепис `app/page.tsx`.
+- [x] Cross-cutting fixes: NBU-charset refine на entity-Zod (закриває "save → render valid" інваріант для `businessNameSchema` / `businessPaymentPurposeTemplateSchema` / `invoicePaymentPurposeSchema`); `PayloadValidationError` → 400 у `AllExceptionsFilter` з `RESPONSE_CODE.PAYLOAD_TOO_LARGE`.
+
+**Open follow-up (Sprint 8.5):**
+
+- [ ] **`claim-failed` recovery CTA на `/business`-empty-state**: коли `useQrLandingDraftStore.intent === 'claim-failed'` (API повернула 4xx/5xx при попередньому claim), показати CTA "Продовжити чернетку з лендінгу" → reuse `claimLandingDraftAsBusiness` з retry. Sprint plan §8.5 явно позначає як `Sprint-8.5 додатково`. Без цього user з failed-claim залишається з `localStorage`-даними і нічого не запрошує його повернутись (recovery-path тільки через manual ввід wizard-у з нуля). Не блокер для функціонального flow Sprint 8 — backbone (anon-form + claim hook + banner) працює end-to-end.
+
+**Pending QA:**
+
+- [ ] **UAT-прогон LAND-1..8** (`docs/manual-checks/README.md` § "Лендінг без реєстрації"): live-телефон + банк-додаток для перевірки сканування anon-QR; reload форми після localStorage-persist; claim-flow гілки A (Google OAuth з повним профілем) і B (magic-link → /profile?mode=new → автоматичний claim після PATCH).
+
+> Status summary: types 517, api unit 642, web 504 — все зелене. Sprint вважається функціонально закритим; повне close після UAT-прогону LAND-1..8 + Sprint 8.5 follow-up CTA.
 
 ---
 

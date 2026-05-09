@@ -12,7 +12,7 @@ import {
     assertWithinUtf8Limits,
     type FieldLimit,
 } from './limits';
-import { findInvalidNbuCharIndex } from './_charset';
+import { findInvalidNbuCharIndex } from './charset';
 import { PayloadValidationError } from './errors';
 import type { PayloadVersion } from './format-version';
 import { PayloadInputSchema, type PayloadInput } from './input';

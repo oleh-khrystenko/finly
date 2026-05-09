@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { slugPresetSchema } from '../enums/slug-preset';
 import {
     bankCodeSchema,
     businessNameSchema,
@@ -9,7 +10,6 @@ import {
 import {
     invoicePaymentPurposeSchema,
     invoiceSlugSchema,
-    slugPresetSchema,
 } from '../entities/invoice';
 
 /**
@@ -177,7 +177,11 @@ export type UpdateInvoiceRequest = z.infer<typeof UpdateInvoiceSchema>;
  *  - `business` — nested view: `type`, `name`, `slug`, `acceptedBanks` (4 поля
  *    з Sprint 3 `PublicBusinessSchema`, **без `seoIndexEnabled`** — інвойси
  *    завжди `noindex`, hardcoded на frontend).
- *  - `nbuLinks` — pre-built NBU payload-link URLs (primary + legacy).
+ *  - `nbuLinks` — pre-built NBU payload-link URLs (primary + legacy);
+ *    **`null` коли invoice expired** (`validUntil < now`) — server-side
+ *    block оплати по простроченому рахунку (review fix). Поки backend не
+ *    віддає payment-vector, client рендерить heading + "Прострочено"-banner.
+ *    QR endpoints у такому стані повертають 410 Gone — defense-in-depth.
  *
  * **`paymentPurpose: string` (NOT nullable у public-view)** — Sprint 4 §4.7:
  * клієнт має бачити "Призначення: ..." у sub-info-блоці перед оплатою.
@@ -204,10 +208,12 @@ export const PublicInvoiceSchema = z.object({
         slug: businessSlugSchema,
         acceptedBanks: z.array(bankCodeSchema),
     }),
-    nbuLinks: z.object({
-        primary: z.string().url(),
-        legacy: z.string().url(),
-    }),
+    nbuLinks: z
+        .object({
+            primary: z.string().url(),
+            legacy: z.string().url(),
+        })
+        .nullable(),
 });
 
 export type PublicInvoiceView = z.infer<typeof PublicInvoiceSchema>;

@@ -21,9 +21,7 @@ const baseInvoice: Invoice = {
 
 describe('ValidUntilSection (Sprint 4 §4.6 — expired-badge invariant)', () => {
     it('validUntil=null → no badge (active state)', () => {
-        render(
-            <ValidUntilSection invoice={baseInvoice} onSave={jest.fn()} />,
-        );
+        render(<ValidUntilSection invoice={baseInvoice} onSave={jest.fn()} />);
         expect(screen.queryByText('Прострочено')).not.toBeInTheDocument();
     });
 
@@ -34,7 +32,7 @@ describe('ValidUntilSection (Sprint 4 §4.6 — expired-badge invariant)', () =>
             <ValidUntilSection
                 invoice={{ ...baseInvoice, validUntil: future }}
                 onSave={jest.fn()}
-            />,
+            />
         );
         expect(screen.queryByText('Прострочено')).not.toBeInTheDocument();
     });
@@ -45,15 +43,13 @@ describe('ValidUntilSection (Sprint 4 §4.6 — expired-badge invariant)', () =>
             <ValidUntilSection
                 invoice={{ ...baseInvoice, validUntil: past }}
                 onSave={jest.fn()}
-            />,
+            />
         );
         expect(screen.getByText('Прострочено')).toBeInTheDocument();
     });
 
     it('read-mode: validUntil=null показує "Без терміну"', () => {
-        render(
-            <ValidUntilSection invoice={baseInvoice} onSave={jest.fn()} />,
-        );
+        render(<ValidUntilSection invoice={baseInvoice} onSave={jest.fn()} />);
         expect(screen.getByText('Без терміну')).toBeInTheDocument();
     });
 
@@ -63,11 +59,11 @@ describe('ValidUntilSection (Sprint 4 §4.6 — expired-badge invariant)', () =>
             <ValidUntilSection
                 invoice={{ ...baseInvoice, validUntil: date }}
                 onSave={jest.fn()}
-            />,
+            />
         );
         // uk-UA дата формат — 31.12.2026 (як toLocaleDateString-output).
         expect(
-            screen.getByText(date.toLocaleDateString('uk-UA')),
+            screen.getByText(date.toLocaleDateString('uk-UA'))
         ).toBeInTheDocument();
     });
 });

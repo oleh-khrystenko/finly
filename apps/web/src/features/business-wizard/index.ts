@@ -1,6 +1,6 @@
 export { default as BusinessWizardForm } from './BusinessWizardForm';
 export {
     useBusinessWizardStore,
-    type WizardStep,
+    type BusinessWizardStep,
     type BusinessWizardState,
 } from './businessWizardStore';

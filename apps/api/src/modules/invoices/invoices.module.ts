@@ -2,12 +2,20 @@ import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 
 import { BusinessesModule } from '../businesses/businesses.module';
+import {
+    Business,
+    BusinessSchema,
+} from '../businesses/schemas/business.schema';
 import { QrModule } from '../qr/qr.module';
 import { InvoiceAccessGuard } from './invoice-access.guard';
 import { InvoiceSlugGeneratorService } from './invoice-slug-generator.service';
 import { InvoicesController } from './invoices.controller';
 import { InvoicesService } from './invoices.service';
 import { PublicInvoicesController } from './public-invoices.controller';
+import {
+    InvoiceSlugCounter,
+    InvoiceSlugCounterSchema,
+} from './schemas/invoice-slug-counter.schema';
 import { Invoice, InvoiceSchema } from './schemas/invoice.schema';
 
 /**
@@ -32,8 +40,18 @@ import { Invoice, InvoiceSchema } from './schemas/invoice.schema';
  */
 @Module({
     imports: [
+        // Sprint 4 review fix — реєструємо `Business` теж, щоб
+        // `InvoicesService.create` міг touch-нути business document у тій
+        // самій транзакції (orphan-prevention guard, див. service-doc).
+        // Mongoose `forFeature` з тим самим schema-ім'ям повертає той самий
+        // singleton model під одним connection-ом — реєстрація в обох
+        // модулях не дублює state.
         MongooseModule.forFeature([
             { name: Invoice.name, schema: InvoiceSchema },
+            { name: Business.name, schema: BusinessSchema },
+            // Sprint 4 review fix — окрема counter-колекція для slug-генератора
+            // (monotonic invariant per (businessId, scope) crossing deletes).
+            { name: InvoiceSlugCounter.name, schema: InvoiceSlugCounterSchema },
         ]),
         forwardRef(() => BusinessesModule),
         QrModule,

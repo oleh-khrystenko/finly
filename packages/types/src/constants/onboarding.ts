@@ -27,16 +27,14 @@ const ONBOARDING_FIELD_SCHEMAS: Record<OnboardingField, ZodTypeAny> = {
 };
 
 export function getIncompleteOnboardingFields(
-    profile: UserProfile['profile'],
+    profile: UserProfile['profile']
 ): OnboardingField[] {
     return ONBOARDING_REQUIRED_FIELDS.filter(
         (field) =>
-            !ONBOARDING_FIELD_SCHEMAS[field].safeParse(profile[field]).success,
+            !ONBOARDING_FIELD_SCHEMAS[field].safeParse(profile[field]).success
     );
 }
 
-export function isOnboardingComplete(
-    profile: UserProfile['profile'],
-): boolean {
+export function isOnboardingComplete(profile: UserProfile['profile']): boolean {
     return getIncompleteOnboardingFields(profile).length === 0;
 }

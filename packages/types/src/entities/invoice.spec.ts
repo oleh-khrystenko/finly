@@ -1,5 +1,5 @@
 import { effectiveLimit } from '../qr/limits';
-import { InvoiceSchema } from './invoice';
+import { InvoicePayeeSnapshotSchema, InvoiceSchema } from './invoice';
 
 const PURPOSE_LIMIT = effectiveLimit('purpose');
 
@@ -268,5 +268,97 @@ describe('InvoiceSchema', () => {
             });
             expect(result.success).toBe(true);
         });
+    });
+
+    // -------------------------------------------------------------------------
+    // Sprint 8 fix — NBU-charset refine. Симетрично з
+    // `businessPaymentPurposeTemplateSchema`: до Sprint 8 invoice-render QR
+    // падав з 500 на public-сторінці, якщо cabinet-форма пропускала emoji.
+    // -------------------------------------------------------------------------
+
+    describe('paymentPurpose — NBU charset refine', () => {
+        it('rejects paymentPurpose з emoji → INVALID_PURPOSE_CHARSET', () => {
+            const result = InvoiceSchema.safeParse({
+                ...VALID_INVOICE,
+                paymentPurpose: 'Оплата 🍵',
+            });
+            expect(result.success).toBe(false);
+            if (!result.success) {
+                expect(
+                    result.error.issues.some(
+                        (i) => i.message === 'INVALID_PURPOSE_CHARSET'
+                    )
+                ).toBe(true);
+            }
+        });
+
+        it('rejects paymentPurpose з LF (multi-line атака на field-separator)', () => {
+            const result = InvoiceSchema.safeParse({
+                ...VALID_INVOICE,
+                paymentPurpose: 'Оплата\nдодатково',
+            });
+            expect(result.success).toBe(false);
+        });
+    });
+});
+
+// -----------------------------------------------------------------------------
+// Sprint 8 fix — `InvoicePayeeSnapshotSchema.recipientName` reuse
+// `businessNameSchema` напряму (раніше — inline `payeeNameSchema`-дублікат).
+// Drift-захист: snapshot kładeться у NBU payload через invoice flow, тому
+// має ту саму charset/length-валідацію, що live business name. Без цих
+// тестів майбутнє розхрдження business vs snapshot пройде compile + unit
+// без сигналу.
+// -----------------------------------------------------------------------------
+
+describe('InvoicePayeeSnapshotSchema — drift-guard від businessNameSchema', () => {
+    const VALID_SNAPSHOT = {
+        recipientName: 'Іваненко Олена Петрівна',
+        iban: 'UA213223130000026007233566001',
+        taxId: '1234567899',
+        paymentPurpose: 'Оплата за послуги',
+    };
+
+    it('parses valid snapshot', () => {
+        const result = InvoicePayeeSnapshotSchema.safeParse(VALID_SNAPSHOT);
+        expect(result.success).toBe(true);
+    });
+
+    it('rejects emoji у recipientName → INVALID_NAME_CHARSET (reuse businessNameSchema)', () => {
+        const result = InvoicePayeeSnapshotSchema.safeParse({
+            ...VALID_SNAPSHOT,
+            recipientName: '☕ Кав\'ярня',
+        });
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            expect(
+                result.error.issues.some(
+                    (i) => i.message === 'INVALID_NAME_CHARSET'
+                )
+            ).toBe(true);
+        }
+    });
+
+    it('rejects LF у recipientName (multi-line атака — reuse businessNameSchema)', () => {
+        const result = InvoicePayeeSnapshotSchema.safeParse({
+            ...VALID_SNAPSHOT,
+            recipientName: 'Іваненко\nПетро',
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('rejects emoji у paymentPurpose → INVALID_PURPOSE_CHARSET', () => {
+        const result = InvoicePayeeSnapshotSchema.safeParse({
+            ...VALID_SNAPSHOT,
+            paymentPurpose: 'Оплата 🍵',
+        });
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            expect(
+                result.error.issues.some(
+                    (i) => i.message === 'INVALID_PURPOSE_CHARSET'
+                )
+            ).toBe(true);
+        }
     });
 });

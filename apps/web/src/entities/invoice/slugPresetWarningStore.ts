@@ -2,8 +2,11 @@ import { create } from 'zustand';
 
 /**
  * Sprint 4 §4.5 SP-1 + §4.4 — confirmation-modal store для `with-purpose`-
- * пресета. Власник: `invoices` slice (`docs/conventions/overlays.md` §2 —
- * in-slice ownership).
+ * пресета. Власник: `entities/invoice` — privacy-warning стосується
+ * domain-level правила слаг-пресета, тож живе на entity-шарі. І
+ * `features/invoice-create` (форма створення), і `features/invoices`
+ * (settings-section на сторінці бізнесу) консьюмлять це з нижчого FSD-
+ * шару — без feature→feature coupling-у.
  *
  * **API.** `open(onConfirm, onCancel)` — caller передає **дві окремі callback-и**.
  *  - `onConfirm` — викликається коли user натиснув "Розумію, обираю".
@@ -37,8 +40,7 @@ export const useSlugPresetWarningStore = create<State>((set, get) => ({
     isOpen: false,
     onConfirm: null,
     onCancel: null,
-    open: (onConfirm, onCancel) =>
-        set({ isOpen: true, onConfirm, onCancel }),
+    open: (onConfirm, onCancel) => set({ isOpen: true, onConfirm, onCancel }),
     confirm: () => {
         const cb = get().onConfirm;
         // Reset state BEFORE callback — щоб повторний open() усередині callback-а

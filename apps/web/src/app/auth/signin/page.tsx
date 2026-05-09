@@ -29,7 +29,7 @@ import {
 import {
     saveRedirect,
     consumeRedirect,
-    getFieldError,
+    getZodFieldError,
     INTL_LOCALE,
 } from '@/shared/lib';
 import { useAuthStore } from '@/entities/user';
@@ -78,7 +78,7 @@ function SigninContent() {
     });
 
     const [state, setState] = useState<SigninState>(
-        startWithPassword ? 'password' : 'email',
+        startWithPassword ? 'password' : 'email'
     );
     const [email, setEmail] = useState(startWithPassword ? initialEmail : '');
     const [errorMessage, setErrorMessage] = useState('');
@@ -160,7 +160,7 @@ function SigninContent() {
     const handleGoogleSignin = () => {
         if (!agreedToTerms) {
             setTermsError(
-                'Для продовження прийміть Умови використання та Політику конфіденційності',
+                'Для продовження прийміть Умови використання та Політику конфіденційності'
             );
             return;
         }
@@ -170,7 +170,7 @@ function SigninContent() {
     const onEmailSubmit = async (data: EmailFormValues) => {
         if (!agreedToTerms) {
             setTermsError(
-                'Для продовження прийміть Умови використання та Політику конфіденційності',
+                'Для продовження прийміть Умови використання та Політику конфіденційності'
             );
             return;
         }
@@ -186,11 +186,7 @@ function SigninContent() {
             } else {
                 const purpose = isNewUser ? 'register' : 'login';
                 lastPurposeRef.current = purpose;
-                await sendMagicLink(
-                    data.email,
-                    purpose,
-                    redirect ?? undefined,
-                );
+                await sendMagicLink(data.email, purpose, redirect ?? undefined);
                 startResendTimer();
                 setState('magic-link-sent');
             }
@@ -217,8 +213,8 @@ function SigninContent() {
                     0,
                     Math.ceil(
                         (gracePeriodEnd.getTime() - Date.now()) /
-                            (1000 * 60 * 60 * 24),
-                    ),
+                            (1000 * 60 * 60 * 24)
+                    )
                 );
 
                 setDeletedAt(deleted.toLocaleDateString(INTL_LOCALE));
@@ -324,9 +320,7 @@ function SigninContent() {
     const renderHeader = () => (
         <div className="text-center">
             <h1 className="text-foreground text-3xl font-bold">
-                {state === 'recovery'
-                    ? 'Акаунт деактивовано'
-                    : 'Вхід до Finly'}
+                {state === 'recovery' ? 'Акаунт деактивовано' : 'Вхід до Finly'}
             </h1>
             {state === 'email' && (
                 <p className="text-muted-foreground mt-2">
@@ -371,7 +365,7 @@ function SigninContent() {
             <UiButton
                 variant="text"
                 size="lg"
-                className="w-full justify-center gap-3 border border-border bg-card text-foreground hover:bg-secondary hover:text-foreground"
+                className="border-border bg-card text-foreground hover:bg-secondary hover:text-foreground w-full justify-center gap-3 border"
                 IconLeft={<GoogleIcon />}
                 onClick={handleGoogleSignin}
             >
@@ -379,9 +373,9 @@ function SigninContent() {
             </UiButton>
 
             <div className="flex items-center gap-4">
-                <div className="h-px flex-1 bg-border" />
+                <div className="bg-border h-px flex-1" />
                 <span className="text-muted-foreground text-sm">або</span>
-                <div className="h-px flex-1 bg-border" />
+                <div className="bg-border h-px flex-1" />
             </div>
 
             <form
@@ -392,10 +386,7 @@ function SigninContent() {
                     {...emailForm.register('email')}
                     type="email"
                     placeholder="your@email.com"
-                    error={getFieldError(emailForm.formState.errors.email, {
-                        required: 'Введіть вашу електронну адресу',
-                        invalid_string: 'Введіть коректну email-адресу',
-                    })}
+                    error={getZodFieldError(emailForm.formState.errors.email)}
                     required
                     IconLeft={<Mail />}
                     size="lg"
@@ -442,7 +433,7 @@ function SigninContent() {
                     variant="text"
                     size="sm"
                     onClick={goBackToEmail}
-                    className="text-primary absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium hover:underline"
+                    className="text-primary absolute top-1/2 right-3 -translate-y-1/2 text-sm font-medium hover:underline"
                 >
                     Змінити
                 </UiButton>
@@ -502,7 +493,7 @@ function SigninContent() {
                     type="button"
                     variant="filled"
                     size="lg"
-                    className="w-full justify-center border border-border bg-card text-foreground hover:bg-secondary"
+                    className="border-border bg-card text-foreground hover:bg-secondary w-full justify-center border"
                     disabled={isPasswordBusy}
                     onClick={handleSendMagicLinkFromPassword}
                     IconLeft={<Mail />}
@@ -516,8 +507,8 @@ function SigninContent() {
     // --- State: magic-link-sent ---
     const renderMagicLinkSentState = () => (
         <div className="space-y-6">
-            <div className="rounded-lg border border-success/30 bg-success/10 p-6 text-center">
-                <Mail className="mx-auto mb-3 h-10 w-10 text-success" />
+            <div className="border-success/30 bg-success/10 rounded-lg border p-6 text-center">
+                <Mail className="text-success mx-auto mb-3 h-10 w-10" />
                 <h2 className="text-foreground text-lg font-semibold">
                     Перевірте пошту
                 </h2>
@@ -592,7 +583,7 @@ function SigninContent() {
     // --- State: error ---
     const renderErrorState = () => (
         <div className="space-y-4">
-            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-6 text-center">
+            <div className="border-destructive/30 bg-destructive/10 rounded-lg border p-6 text-center">
                 <p className="text-destructive text-sm font-medium">
                     {errorMessage || ERROR_GENERIC}
                 </p>

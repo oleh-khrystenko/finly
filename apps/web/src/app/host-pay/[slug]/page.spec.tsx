@@ -79,7 +79,7 @@ describe('HostPayPage — host defense-in-depth (§3.9)', () => {
         mockLoadPublicView.mockResolvedValue(baseView);
 
         await expect(
-            HostPayPage({ params: Promise.resolve({ slug: 'IvanEnko' }) }),
+            HostPayPage({ params: Promise.resolve({ slug: 'IvanEnko' }) })
         ).rejects.toThrow('NEXT_NOT_FOUND');
 
         expect(mockNotFound).toHaveBeenCalledTimes(1);
@@ -90,7 +90,7 @@ describe('HostPayPage — host defense-in-depth (§3.9)', () => {
         mockLoadPublicView.mockResolvedValue(baseView);
 
         await expect(
-            HostPayPage({ params: Promise.resolve({ slug: 'IvanEnko' }) }),
+            HostPayPage({ params: Promise.resolve({ slug: 'IvanEnko' }) })
         ).rejects.toThrow('NEXT_NOT_FOUND');
     });
 
@@ -112,7 +112,7 @@ describe('HostPayPage — slug lookup (§3.1, §E1)', () => {
         mockLoadPublicView.mockResolvedValue(null);
 
         await expect(
-            HostPayPage({ params: Promise.resolve({ slug: 'no-such' }) }),
+            HostPayPage({ params: Promise.resolve({ slug: 'no-such' }) })
         ).rejects.toThrow('NEXT_NOT_FOUND');
         expect(mockNotFound).toHaveBeenCalled();
     });
@@ -127,7 +127,7 @@ describe('HostPayPage — slug lookup (§3.1, §E1)', () => {
 
         // URL-input lowercased — має redirect-итись.
         await expect(
-            HostPayPage({ params: Promise.resolve({ slug: 'ivanenko' }) }),
+            HostPayPage({ params: Promise.resolve({ slug: 'ivanenko' }) })
         ).rejects.toThrow('NEXT_REDIRECT:/IvanEnko');
         expect(mockPermanentRedirect).toHaveBeenCalledWith('/IvanEnko');
     });
@@ -158,11 +158,11 @@ describe('HostPayPage — render (§3.9 §E7)', () => {
 
         expect(screen.getByTestId('cta-primary')).toHaveAttribute(
             'href',
-            'https://qr.bank.gov.ua/abc',
+            'https://qr.bank.gov.ua/abc'
         );
         expect(screen.getByTestId('cta-legacy')).toHaveAttribute(
             'href',
-            'https://bank.gov.ua/qr/abc',
+            'https://bank.gov.ua/qr/abc'
         );
     });
 });
@@ -192,7 +192,12 @@ describe('generateMetadata — SEO robots (§E3)', () => {
         expect(meta.robots).toEqual({ index: false, follow: false });
     });
 
-    it('title містить тип + назву бізнесу', async () => {
+    it('Sprint 7 §SP-5 — title type-aware (на відміну від h1)', async () => {
+        // Sprint 7 README §SP-5:167 + §7.9 явно зберігають type-aware саме
+        // для SEO `<title>` (h1 уніфіковано до нейтрального "Платіж на
+        // користь {name}", але meta-tag — для пошукової видачі — тримає
+        // type-key-word-у поряд з назвою). Тест guard-ить, що ці два рендер-
+        // контексти **навмисно різні** і ніхто випадково не вирівняє SEO до h1.
         mockLoadPublicView.mockResolvedValue(baseView);
         const meta = await generateMetadata({
             params: Promise.resolve({ slug: 'IvanEnko' }),

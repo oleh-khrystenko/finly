@@ -5,7 +5,7 @@ const UiPageHeading = ({ children, className }: UiPageHeadingProps) => (
     <h1
         className={composeClasses(
             'text-foreground text-3xl font-bold tracking-tight',
-            className,
+            className
         )}
     >
         {children}

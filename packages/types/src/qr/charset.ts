@@ -15,7 +15,15 @@
  *     значення вони ламають кількість полів, що зчитує банк-парсер.
  *   - Усі control chars 0x00-0x1F + DEL 0x7F + 0x98 + 0xA0 (NBSP) — норматив явно.
  *
- * Implementation detail (private, не реекспортується з qr/index.ts).
+ * **Public API.** Експонується з `qr/index.ts` для reuse у entity-Zod схемах
+ * (`businessNameSchema`, `businessPaymentPurposeTemplateSchema`,
+ * `invoicePaymentPurposeSchema`) — закриває інваріант "будь-який валідно
+ * збережений Business / Invoice може згенерувати валідний QR" (Sprint 2 §2.2).
+ * До Sprint 8 цей валідатор жив internal-only у builder-і (через
+ * `_payload-internals.assertNbuCharset`), що порушувало write-side інваріант:
+ * невалідний-для-NBU символ проходив save → render QR падав з 500 на public-
+ * сторінці (PayloadValidationError → AllExceptionsFilter мапить як
+ * INTERNAL_ERROR, бо це не HttpException).
  */
 
 const ALLOWED_CODEPOINTS = new Set<number>();
@@ -77,4 +85,15 @@ export function findInvalidNbuCharIndex(value: string): number {
         i += cp > 0xffff ? 2 : 1;
     }
     return -1;
+}
+
+/**
+ * Boolean-варіант для Zod `.refine(...)` callsite-ів. Повертає `true`, якщо
+ * усі символи входять у NBU-whitelist (Win1251-mappable, без LF/CR/control).
+ *
+ * Узгоджений з `isWithinByteLimit` (limits.ts) — спільна форма primitive-
+ * level guards для entity-схем.
+ */
+export function isWithinNbuCharset(value: string): boolean {
+    return findInvalidNbuCharIndex(value) === -1;
 }

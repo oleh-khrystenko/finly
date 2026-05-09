@@ -70,8 +70,7 @@ export default function DeleteAccountDialog() {
             } else {
                 form.setError('password', {
                     type: 'server',
-                    message:
-                        'Не вдалося виконати операцію. Спробуйте пізніше',
+                    message: 'Не вдалося виконати операцію. Спробуйте пізніше',
                 });
             }
         }
@@ -85,8 +84,8 @@ export default function DeleteAccountDialog() {
                 </UiModalHeader>
                 <div className="px-4 pb-6">
                     <p className="text-muted-foreground text-sm">
-                        Ви впевнені? Ваш акаунт буде деактивовано. У вас буде
-                        30 днів для відновлення.
+                        Ви впевнені? Ваш акаунт буде деактивовано. У вас буде 30
+                        днів для відновлення.
                     </p>
 
                     <form

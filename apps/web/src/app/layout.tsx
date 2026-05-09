@@ -44,7 +44,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
             </head>
 
             <body
-                className={`${mulish.className} flex min-h-dvh flex-col bg-background text-foreground`}
+                className={`${mulish.className} bg-background text-foreground flex min-h-dvh flex-col`}
             >
                 <Providers>
                     <AuthInitializer />

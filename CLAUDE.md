@@ -6,19 +6,19 @@
 
 ## Tech Stack
 
-| Шар | Технологія | Версія |
-|-----|-----------|--------|
-| Core | TypeScript, Node.js, pnpm, Turborepo | TS 5.9, Node 20, pnpm 10.30 |
-| Frontend | Next.js (App Router + Turbopack), React, Zustand, TailwindCSS | Next 16.0, React 19.2, Zustand 5, Tailwind 4 |
-| Forms | React Hook Form + @hookform/resolvers (Zod) | RHF 7.72 |
-| Backend | NestJS, Mongoose, ioredis, Passport | NestJS 11.1, Mongoose 8 |
-| Validation | Zod (shared contracts) | Zod 4.3 |
-| AI | Anthropic SDK (Claude Haiku 4.5) | SDK 0.80 |
-| Payments | Stripe | 20.4 |
-| Email | Resend + React Email | 6.9 |
-| Storage | Cloudflare R2 (S3 SDK + presigner), `sharp`, `react-easy-crop` | SDK 3, sharp 0.34 |
-| QR | `qrcode`, `sharp` (logo overlay) | qrcode 1.5 |
-| Тести | Jest, Supertest, MongoMemoryServer, @testing-library/react | Jest 30.2 |
+| Шар        | Технологія                                                     | Версія                                       |
+| ---------- | -------------------------------------------------------------- | -------------------------------------------- |
+| Core       | TypeScript, Node.js, pnpm, Turborepo                           | TS 5.9, Node 20, pnpm 10.30                  |
+| Frontend   | Next.js (App Router + Turbopack), React, Zustand, TailwindCSS  | Next 16.0, React 19.2, Zustand 5, Tailwind 4 |
+| Forms      | React Hook Form + @hookform/resolvers (Zod)                    | RHF 7.72                                     |
+| Backend    | NestJS, Mongoose, ioredis, Passport                            | NestJS 11.1, Mongoose 8                      |
+| Validation | Zod (shared contracts)                                         | Zod 4.3                                      |
+| AI         | Anthropic SDK (Claude Haiku 4.5)                               | SDK 0.80                                     |
+| Payments   | Stripe                                                         | 20.4                                         |
+| Email      | Resend + React Email                                           | 6.9                                          |
+| Storage    | Cloudflare R2 (S3 SDK + presigner), `sharp`, `react-easy-crop` | SDK 3, sharp 0.34                            |
+| QR         | `qrcode`, `sharp` (logo overlay)                               | qrcode 1.5                                   |
+| Тести      | Jest, Supertest, MongoMemoryServer, @testing-library/react     | Jest 30.2                                    |
 
 ## Architecture Overview
 
@@ -38,11 +38,11 @@ apps/
 │       ├── generate-hryvnia-asset.ts
 │       └── migrations/      # one-shot DB migrations + spec (npm: migration:slug-lower)
 ├── web/src/
-│   ├── app/                 # pages: root, auth, (protected), host-pay/[slug], privacy, terms (single-locale, uk only)
-│   │   └── (protected)/     # ai-chat, billing, business, profile
-│   ├── entities/            # user (authStore), navigation (headerNavStore), brand (Logo)
-│   ├── features/            # auth, billing, profile, change-theme, business-edit, business-wizard, business-public
-│   ├── widgets/             # header (mobileMenuSheetStore)
+│   ├── app/                 # pages: root (anon QR-preview landing), auth, (protected), host-pay/[slug], privacy, terms (single-locale, uk only)
+│   │   └── (protected)/     # ai-chat, billing, business, profile (layout = Header + ClaimLandingDraftHook + AuthGuard)
+│   ├── entities/            # user (authStore), navigation (headerNavStore), brand (Logo), qr-landing-draft (Sprint 8 anon persist)
+│   ├── features/            # auth, billing, profile, change-theme, business-edit, business-wizard, business-public, qr-landing-preview (Sprint 8)
+│   ├── widgets/             # header (mobileMenuSheetStore), landing-hero (Sprint 8)
 │   ├── shared/              # api, ui, config (env, publicHosts), styles, icons, seo, lib, fonts, types
 │   └── middleware.ts        # host-aware routing (Branch A/B/C) + cabinet auth-cookie checks
 packages/
@@ -57,7 +57,9 @@ docs/
 ## Domain Model
 
 ### User
+
 Файл: `apps/api/src/modules/users/schemas/user.schema.ts` | Zod: `packages/types/src/entities/user.ts`
+
 - Soft-delete: `deletedAt` + `accountDeletionRequestedAt` (grace period, cron hard-delete)
 - Embedded `billing` subdocument (nullable; `lastProviderEventAt` для out-of-order webhook protection)
 - Embedded `executions` (`balance`, `freeReportUsed`, `activeReservation` з `compensationOps`) — atomic `$inc`
@@ -65,9 +67,13 @@ docs/
 - Sparse indexes: `provider.id`, `billing.providerCustomerId`, `billing.providerSubscriptionId`, `executions.activeReservation.expiresAt`
 
 ### Business
+
 Файл: `apps/api/src/modules/businesses/schemas/business.schema.ts` | Zod: `packages/types/src/entities/business.ts`
-- `type` (enum `'fop'`, ТОВ/ВАТ — Phase 1.5+), `name`, `requisites: { iban, taxId }`, `paymentPurposeTemplate`, `acceptedBanks: BankCode[]`
-- `taxationSystem` + `isVatPayer` — coupled rule: `isVatPayer === true ⇒ taxationSystem ∈ {simplified-3, general}`. Refine у Zod entity, write-DTO та service-layer cross-field check для partial PATCH (читає БД при потребі)
+
+- `type` (enum `'individual' | 'fop' | 'tov' | 'organization'` — Sprint 7 §SP-1; **immutable post-creation**, §SP-8). `BUSINESS_TYPE_LABEL` у `@finly/types/enums/business-type.ts` дає UA-label per type. Декартова крос-таблиця 2×2: `(taxId-формат: 10-РНОКПП \| 8-ЄДРПОУ) × (оподаткування: comm \| non-comm)` → 4 значення. Підтипи (ПрАТ, ОСББ-vs-фонд) — НЕ окремі enum-значення, а підмножини `'tov'` / `'organization'`
+- `name`, `requisites: { iban, taxId }`, `paymentPurposeTemplate`, `acceptedBanks: BankCode[]`
+- `requisites.taxId: string` — **single string у БД, format per-type на write-DTO** (Sprint 7 §SP-4): 10-цифровий РНОКПП + checksum для `individual` / `fop`, 8-цифровий ЄДРПОУ без checksum для `tov` / `organization`. Discriminator-таблиця у `validation/tax-id.ts` (`TAX_ID_VALIDATOR_BY_TYPE`); helper `taxIdLengthFor(type): 8 \| 10` для UI maxLength
+- `taxationSystem: TaxationSystem | null` + `isVatPayer: boolean | null` (Sprint 7 §SP-3 — nullable). Coupled-rule iff `requiresTaxation(type) ⇔ both-non-null`: `'fop'` / `'tov'` мусять мати обидва не-null; `'individual'` / `'organization'` — обидва null. Refine `TAXATION_FIELDS_MISMATCH_TYPE` у Zod entity (read-side); write-DTO `CreateBusinessSchema` — `z.discriminatedUnion('type', [...])` з 4 variants (taxation-поля присутні фізично лише у `fop` / `tov`); service-layer cross-check на UPDATE через document-resident `type`. Окремий VAT-coupled `isVatPayer === true ⇒ taxationSystem ∈ {simplified-3, general}` активується лише коли обидва поля non-null
 - `slug` (case-preserved display) + `slugLower` (lowercase). Unique-index на `slugLower`. Reserved-list — `packages/types/src/constants/reserved-slugs.ts`. Slug-генератор у `slug-generator.service.ts` (8-char A-Za-z0-9, max 10 retries, `crypto.randomBytes`); shared free-fn `generateRandomTail()` reuse-ається у `InvoiceSlugGeneratorService`
 - `seoIndexEnabled: boolean` (default false) — toggle публікації у пошуковики
 - `invoiceSlugPresetDefault: SlugPreset | null` (Sprint 4 §4.1; default `null` = "не визначено", форма створення інвойсу fallback-ить на global system default `simple`)
@@ -76,25 +82,35 @@ docs/
 - Indexes: unique `slugLower`, sparse `ownerId`, `managers`
 
 ### Invoice
+
 Файл: `apps/api/src/modules/invoices/schemas/invoice.schema.ts` | Zod: `packages/types/src/entities/invoice.ts`
+
 - `businessId` (required), `slug` (case-sensitive — Sprint 4 SP-8 asymmetry), `amount: number | null` (копійки; null = signage-mode "клієнт сам вводить"), `amountLocked` (coupled rule SP-6: `amount === null && amountLocked === true` блокується refine), `paymentPurpose: string | null` (null = inherit з `business.paymentPurposeTemplate` через `effectiveInvoicePurpose`), `validUntil: Date | null`, `slugPreset: SlugPreset | null` (analytics-поле — який пресет згенерував)
 - `slugCounterScope: string | null` + `slugCounter: number | null` (Sprint 4 §4.1) — paired counter-fields для preset-режимів з лічильником (`'simple'` | `YYYY` | `YYYY-MM`). `null` для explicit/random/with-purpose
 - Indexes: compound unique `(businessId, slug)`, compound `(businessId, createdAt -1)` для list-pagination, sparse `validUntil` (Phase 1.5+ expired-cleanup cron), **partial-unique compound** `(businessId, slugCounterScope, slugCounter)` з `partialFilterExpression: { slugCounterScope: $type 'string', slugCounter: $type 'int' }` — race-блок counter-collision у preset-режимах (Sprint 4 §4.1 risk #2 mitigation)
 
 ### ExecutionTransaction
+
 Файл: `apps/api/src/modules/users/schemas/execution-transaction.schema.ts`
+
 - Ledger для credit/debit; compound index `(userId, createdAt desc)`
 
 ### ChatMessage
+
 Файл: `apps/api/src/modules/ai/schemas/chat-message.schema.ts`
+
 - AI chat history; compound index `(userId, createdAt)`
 
 ### ProcessedWebhookEvent
+
 Файл: `apps/api/src/modules/payments/schemas/processed-webhook-event.schema.ts`
+
 - Unique `(provider, providerEventId)` — Stripe idempotency. Two-phase `pending → applied`; pending видаляється на failure (rollback)
 
 ### OrphanedProviderCustomer
+
 Файл: `apps/api/src/modules/payments/schemas/orphaned-provider-customer.schema.ts`
+
 - Унікальна `(provider, providerCustomerId)` черга невдалих delete-ів Stripe customers; max 5 retries через cron
 
 ## Module Dependency Map
@@ -109,22 +125,26 @@ docs/
 - `StorageModule` → `UsersModule`; провайдер `STORAGE_PROVIDER` (CloudflareR2Service); exports `StorageService` (consumed by `AuthModule`)
 - `BusinessesModule` → `MongooseModule.forFeature([Business, Invoice])` + `QrModule` + `UsersModule`; providers: `BusinessesService` (cascade-delete) + `SlugGeneratorService` + `BusinessAccessGuard` + `InvoiceSlugGeneratorService` + `InvoicesService` (повторна реєстрація для `BusinessesController.getBySlug` invoicesCount без cyclic-DI). Exports `MongooseModule` + `BusinessesService`
 - `InvoicesModule` (Sprint 4) → `MongooseModule.forFeature(Invoice)` + `forwardRef(() => BusinessesModule)` + `QrModule`; controllers: `InvoicesController` (cabinet) + `PublicInvoicesController` (public); providers: `InvoiceSlugGeneratorService`, `InvoicesService`, `InvoiceAccessGuard`. Exports `MongooseModule`, `InvoiceSlugGeneratorService`, `InvoicesService`
-- `QrModule` exports `QrService` (`buildNbuPayloadLinkForInput`, `renderForUrl`, `renderForNbuPayload`); консумується `BusinessesModule.PublicBusinessesController` і `InvoicesModule.PublicInvoicesController`
+- `QrModule` controllers: `QrController` (Sprint 8 — `POST /qr/preview` для anon-лендингу). Exports `QrService` (`buildNbuPayloadLinkForInput`, `renderForUrl`, `renderForNbuPayload`); консумується `BusinessesModule.PublicBusinessesController` і `InvoicesModule.PublicInvoicesController`
 - Cron: `CleanupService` (6h), `ReservationReconcileService` (5min), `PaymentsCleanupService` (4 AM)
 - Web: `shared/api/client.ts` → axios interceptors → refresh dedupe → `authStore`; protected routes → `AuthGuard` → `shared/api/auth.ts`
 
 ## Key Patterns
 
 ### Створення endpoint
+
 Guard + `@CurrentUser()` + DTO + Service, повертає `{ data: ... }` envelope. Приклад: `apps/api/src/modules/payments/payments.controller.ts`
 
 ### Валідація
+
 Zod schema у `packages/types/src/contracts/*` → `createZodDto()` в api dto → ті ж схеми на web через `@hookform/resolvers/zod`. Приклад: `apps/api/src/modules/payments/dto/create-checkout-session.dto.ts`
 
 ### Форми (Frontend)
+
 React Hook Form + Zod resolver. Приклад: `apps/web/src/features/profile/ProfileForm.tsx`
 
 ### Авторизація (Guards)
+
 - `JwtActiveGuard` — основний, JWT + блокує soft-deleted users
 - `JwtAuthGuard` — JWT без soft-delete check (для restore)
 - `SubscriptionGuard` — перевіряє `hasActiveSubscription`
@@ -133,24 +153,31 @@ React Hook Form + Zod resolver. Приклад: `apps/web/src/features/profile/P
 - Файли: `apps/api/src/common/guards/`, `apps/api/src/modules/{ai,businesses}/`
 
 ### Onboarding enforcement
+
 `OnboardingInterceptor` (APP_INTERCEPTOR) блокує роути з кодом `ONBOARDING_INCOMPLETE` поки профіль не заповнений. Опт-аут — `@SkipOnboarding()`. Файли: `apps/api/src/common/interceptors/onboarding.interceptor.ts`, `common/decorators/skip-onboarding.decorator.ts`
 
 ### Auth/session lifecycle
+
 Access JWT в пам'яті (web), refresh JWT у `bid_refresh` httpOnly cookie, Redis token families з ротацією + reuse detection. Axios дедуплікує concurrent refresh calls.
 
 ### Billing/webhook processing
+
 `PAYMENT_PROVIDER` → `StripeService`; two-phase idempotency через `ProcessedWebhookEvent`; out-of-order guard у MongoDB query (`lastProviderEventAt: $lt`). Feature flags для subscription/one-off. Orphaned customer cleanup через `OrphanedProviderCustomer` + daily cron.
 
 ### Billing catalog (Stripe as single source of truth)
+
 `CatalogService` (`apps/api/src/modules/payments/catalog.service.ts`) тягне Products/Prices зі Stripe API, кеш у Redis (TTL 5min). Власний Stripe SDK instance (уникає circular DI з `IPaymentProvider`). Warm fetch на startup (fail-fast). Public endpoint `GET /payments/catalog`. Plan/pack codes — TS union типи (структурні ID для UI labels/images/DB); бізнес-дані (ціни, executions, порядок, featured) — з Stripe Product metadata.
 
 ### AI chat streaming
+
 `AI_PROVIDER` → `AnthropicService`, SSE через `res.write()`. Durable reservation: `AiService.reserveChatRequest()` робить atomic `findOneAndUpdate` (balance + single-flight guard) → stream → commit/refund. 2-layer protection: IP rate limit + atomic single-document Mongo reservation. Refundable до першого токена, non-refundable після. Файл: `apps/api/src/modules/ai/ai.controller.ts`
 
 ### Reservation primitives (generic core API)
+
 `UsersService.commitReservation()` — MongoDB transaction з claim-first порядком (active claim перед side effects). `UsersService.refundReservation()` — single atomic `findOneAndUpdate`, що застосовує `compensationOps` зі збереженого reservation document. `ReservationReconcileService` — generic cron (5 хв), знаходить expired reservations і викликає той самий `refundReservation`. Будь-який feature, що мутує власні поля під час reserve, декларує compensation у `activeReservation.compensationOps`.
 
 ### QR generation pipeline
+
 Pure builder у `@finly/types/src/qr/` — host-agnostic, без Node-залежностей: `build002Payload`/`build003Payload` → `encodePayloadAsBase64Url` (isomorphic) → `buildNbuPayloadLink(version, b64, { host })`. Validates через `PayloadInputSchema` + per-field char/byte limits (`FIELD_LIMITS`) + NBU charset whitelist + payload ≤ 507 B + Base64URL ≤ 475 B. Sprint-1 Zod-схеми (`Business.name`, `paymentPurposeTemplate`, `Invoice.paymentPurpose`) деривують max-довжини через `effectiveLimit(...)` = MIN по `PAYLOAD_VERSIONS`.
 
 Image-render у `apps/api/src/modules/qr/`: `QrImageRenderer` (qrcode → PNG, error-correction `Q`) + `QrLogoCompositor` (sharp overlay нормативного asset-у ₴, `logoMaxRatio ≤ 0.20`) + `QrService` orchestrator з `renderForUrl(url)` (для public сторінки) і `renderForNbuPayload(input, version, options)` (повний build → encode → wrap → render).
@@ -158,27 +185,35 @@ Image-render у `apps/api/src/modules/qr/`: `QrImageRenderer` (qrcode → PNG, e
 **Host для format 003 — required `options.host`**: дві named-константи `NBU_HOST_PRIMARY = 'qr.bank.gov.ua'`, `NBU_HOST_LEGACY = 'bank.gov.ua/qr'` у `packages/types/src/qr/url-prefix.ts`. Public-сторінка показує дві кнопки + два QR. Format 002 host фіксований. TS-overload блокує `renderForNbuPayload(..., '003', ...)` без host. Round-trip тест через `jsqr`.
 
 ### Avatar upload pipeline (R2)
+
 `STORAGE_PROVIDER` → `CloudflareR2Service` (S3-compatible). Three-step client flow: presigned `POST /storage/avatar/upload-url` → direct PUT до R2 → `POST /storage/avatar/commit`. API ніколи не проксує файли. Presigned PUT підписує лише `Content-Type: image/webp`. Size enforcement на application layer (client pre-check + commit-time `HeadObject` з cleanup + throttler). Commit ідемпотентний. File key: `avatars/{userId}/{uuid}.webp`. Client: `react-easy-crop` → `canvas.toBlob('image/webp', 0.85)` → native `fetch`. HEIC не підтримується (LGPL libheif). Файл: `apps/api/src/modules/storage/storage.service.ts`
 
 ### Google OAuth avatar re-upload
+
 `AuthService.handleGoogleAuth` **синхронно** викликає `StorageService.reUploadExternalAvatar()` (fetch Google URL → `sharp.resize(512×512, cover).webp({ quality: 85 })` → `uploadBuffer`) перед `generateTokens`. Trade-off: +300-800ms до callback, але без URL-jump. Failure → `logger.warn` + fall through (наступний login повторить). R2 URL detection через prefix-check на `ENV.R2_PUBLIC_URL`.
 
 ### Error handling та message mapping
+
 API повертає machine-readable `code` через `AllExceptionsFilter`; web мапить codes на українські рядки через `shared/api/mapApiCode.ts` (`getApiMessage(code, module?, vars?)`). Single-locale (uk only) — рядки інлайн.
 
 ### Soft-delete lifecycle
+
 Запит на видалення → `accountDeletionRequestedAt` + `deletedAt` → grace period → `CleanupService` cron (6h) hard-delete + revoke tokens. Файл: `apps/api/src/modules/users/cleanup.service.ts`
 
 ### Frontend auth flow
+
 `AuthInitializer` (client effect) → `refreshToken()` → `getMe()` → hydrate `authStore`. Перевіряє terms version, modal при outdated. `AuthGuard` у protected layout перевіряє auth + onboarding. Middleware (`apps/web/src/middleware.ts`) перевіряє `bid_refresh` cookie для server-side redirects + host-aware routing для public-зони.
 
 ### Overlay management
+
 Zustand store → `UiModal`/`UiSheet`/`UiConfirmDialog` → реєстрація у `app/overlays.tsx` (єдиний global mount). Конвенція: `docs/conventions/overlays.md`. Кожен dialog store живе **усередині свого slice** (feature/widget) — глобального `src/stores/` шару не існує (enforced ESLint правилами в `apps/web/eslint.config.mjs`).
 
 ### FSD layer inversion via event bus
+
 `shared/lib/authEvents` — parameterless lifecycle events для інверсії залежностей. Нижчий шар (`shared/api`) публікує; вищий (`entities/user/authStore`) підписується. ESLint guardrail `SHARED_MUST_NOT_IMPORT_HIGHER_LAYERS` блокує прямі імпорти з `shared/` у вищі FSD-шари (static + dynamic).
 
 ### Execution ledger
+
 Atomic `$inc` на `user.executions.balance` + створення `ExecutionTransaction`. Spend-ендпоінт перевіряє баланс. AI chat теж створює transaction (action `AI_CHAT`). Файл: `apps/api/src/modules/users/users.service.ts`
 
 ## API Overview
@@ -186,63 +221,70 @@ Atomic `$inc` на `user.executions.balance` + створення `ExecutionTran
 Global prefix: `/api`. Rate limiting: `ThrottlerModule` (60 req/min global). Global pipes: `ZodValidationPipe`. Global filters: `AllExceptionsFilter`.
 
 ### AppController (`apps/api/src/app.controller.ts`)
-| Метод | Шлях | Guard | Опис |
-|-------|------|-------|------|
-| GET | `/` | — | Root |
-| GET | `/health` | — | Health check + timestamp + env |
+
+| Метод | Шлях      | Guard | Опис                           |
+| ----- | --------- | ----- | ------------------------------ |
+| GET   | `/`       | —     | Root                           |
+| GET   | `/health` | —     | Health check + timestamp + env |
 
 ### AuthController (`apps/api/src/modules/auth/auth.controller.ts`)
-| Метод | Шлях | Guard | Опис |
-|-------|------|-------|------|
-| GET | `/auth/google` | `AuthGuard('google')` + `@SkipOnboarding()` | Старт Google OAuth |
-| GET | `/auth/google/callback` | `AuthGuard('google')` + `@SkipOnboarding()` | OAuth callback, set refresh cookie |
-| POST | `/auth/check-email` | — | Перевірка існування акаунту (rate-limited) |
-| POST | `/auth/login/password` | — | Вхід з паролем |
-| POST | `/auth/magic-link/send` | — | Відправка magic link |
-| POST | `/auth/magic-link/verify` | — | Верифікація magic link |
-| POST | `/auth/password/set` | `JwtActiveGuard` + `@SkipOnboarding()` | Встановлення першого паролю |
-| POST | `/auth/password/change` | `JwtActiveGuard` + `@SkipOnboarding()` | Зміна паролю, revoke all tokens |
-| POST | `/auth/password/reset` | — | Скидання через magic link token |
-| POST | `/auth/password/verify` | `JwtActiveGuard` + `@SkipOnboarding()` | Перевірка для sensitive дій |
-| POST | `/auth/refresh` | — | Ротація refresh token |
-| POST | `/auth/logout` | — | Revoke refresh token |
+
+| Метод | Шлях                      | Guard                                       | Опис                                       |
+| ----- | ------------------------- | ------------------------------------------- | ------------------------------------------ |
+| GET   | `/auth/google`            | `AuthGuard('google')` + `@SkipOnboarding()` | Старт Google OAuth                         |
+| GET   | `/auth/google/callback`   | `AuthGuard('google')` + `@SkipOnboarding()` | OAuth callback, set refresh cookie         |
+| POST  | `/auth/check-email`       | —                                           | Перевірка існування акаунту (rate-limited) |
+| POST  | `/auth/login/password`    | —                                           | Вхід з паролем                             |
+| POST  | `/auth/magic-link/send`   | —                                           | Відправка magic link                       |
+| POST  | `/auth/magic-link/verify` | —                                           | Верифікація magic link                     |
+| POST  | `/auth/password/set`      | `JwtActiveGuard` + `@SkipOnboarding()`      | Встановлення першого паролю                |
+| POST  | `/auth/password/change`   | `JwtActiveGuard` + `@SkipOnboarding()`      | Зміна паролю, revoke all tokens            |
+| POST  | `/auth/password/reset`    | —                                           | Скидання через magic link token            |
+| POST  | `/auth/password/verify`   | `JwtActiveGuard` + `@SkipOnboarding()`      | Перевірка для sensitive дій                |
+| POST  | `/auth/refresh`           | —                                           | Ротація refresh token                      |
+| POST  | `/auth/logout`            | —                                           | Revoke refresh token                       |
 
 ### UsersController (`apps/api/src/modules/users/users.controller.ts`)
-| Метод | Шлях | Guard | Опис |
-|-------|------|-------|------|
-| GET | `/users/me` | `JwtActiveGuard` + `@SkipOnboarding()` | Профіль + billing snapshot |
-| PATCH | `/users/me` | `JwtActiveGuard` + `@SkipOnboarding()` | Оновлення профілю |
-| POST | `/users/me/accept-terms` | `JwtActiveGuard` + `@SkipOnboarding()` | Прийняття ToS версії |
-| POST | `/users/me/executions/spend` | `JwtActiveGuard` | Витрата executions |
-| GET | `/users/me/executions/transactions` | `JwtActiveGuard` | Історія транзакцій |
-| POST | `/users/account/delete` | `JwtActiveGuard` + `@SkipOnboarding()` | Запит на видалення |
-| POST | `/users/account/delete/confirm` | `JwtActiveGuard` + `@SkipOnboarding()` | Підтвердження паролем |
-| POST | `/users/account/restore` | `JwtAuthGuard` | Відновлення акаунту |
+
+| Метод | Шлях                                | Guard                                  | Опис                       |
+| ----- | ----------------------------------- | -------------------------------------- | -------------------------- |
+| GET   | `/users/me`                         | `JwtActiveGuard` + `@SkipOnboarding()` | Профіль + billing snapshot |
+| PATCH | `/users/me`                         | `JwtActiveGuard` + `@SkipOnboarding()` | Оновлення профілю          |
+| POST  | `/users/me/accept-terms`            | `JwtActiveGuard` + `@SkipOnboarding()` | Прийняття ToS версії       |
+| POST  | `/users/me/executions/spend`        | `JwtActiveGuard`                       | Витрата executions         |
+| GET   | `/users/me/executions/transactions` | `JwtActiveGuard`                       | Історія транзакцій         |
+| POST  | `/users/account/delete`             | `JwtActiveGuard` + `@SkipOnboarding()` | Запит на видалення         |
+| POST  | `/users/account/delete/confirm`     | `JwtActiveGuard` + `@SkipOnboarding()` | Підтвердження паролем      |
+| POST  | `/users/account/restore`            | `JwtAuthGuard`                         | Відновлення акаунту        |
 
 ### PaymentsController (`apps/api/src/modules/payments/payments.controller.ts`)
-| Метод | Шлях | Guard | Опис |
-|-------|------|-------|------|
-| GET | `/payments/catalog` | `@SkipThrottle()` + `@SkipOnboarding()` | Catalog from Stripe (cached) |
-| POST | `/payments/checkout-session` | `JwtActiveGuard` | Створення Stripe checkout |
-| POST | `/payments/portal-session` | `JwtActiveGuard` | Створення billing portal URL |
-| POST | `/payments/reset` | `JwtActiveGuard` | Скидання billing (видалення Stripe customer) |
-| POST | `/payments/webhook/:provider` | `@SkipThrottle()` | Stripe webhook ingestion |
+
+| Метод | Шлях                          | Guard                                   | Опис                                         |
+| ----- | ----------------------------- | --------------------------------------- | -------------------------------------------- |
+| GET   | `/payments/catalog`           | `@SkipThrottle()` + `@SkipOnboarding()` | Catalog from Stripe (cached)                 |
+| POST  | `/payments/checkout-session`  | `JwtActiveGuard`                        | Створення Stripe checkout                    |
+| POST  | `/payments/portal-session`    | `JwtActiveGuard`                        | Створення billing portal URL                 |
+| POST  | `/payments/reset`             | `JwtActiveGuard`                        | Скидання billing (видалення Stripe customer) |
+| POST  | `/payments/webhook/:provider` | `@SkipThrottle()`                       | Stripe webhook ingestion                     |
 
 ### AiController (`apps/api/src/modules/ai/ai.controller.ts`)
-| Метод | Шлях | Guard | Опис |
-|-------|------|-------|------|
-| POST | `/ai/chat` | `JwtActiveGuard` + `AiRateLimitGuard` | SSE streaming chat |
-| GET | `/ai/chat/history` | `JwtActiveGuard` | Історія повідомлень |
-| DELETE | `/ai/chat/history` | `JwtActiveGuard` | Очищення історії |
+
+| Метод  | Шлях               | Guard                                 | Опис                |
+| ------ | ------------------ | ------------------------------------- | ------------------- |
+| POST   | `/ai/chat`         | `JwtActiveGuard` + `AiRateLimitGuard` | SSE streaming chat  |
+| GET    | `/ai/chat/history` | `JwtActiveGuard`                      | Історія повідомлень |
+| DELETE | `/ai/chat/history` | `JwtActiveGuard`                      | Очищення історії    |
 
 ### StorageController (`apps/api/src/modules/storage/storage.controller.ts`)
-| Метод | Шлях | Guard | Опис |
-|-------|------|-------|------|
-| POST | `/storage/avatar/upload-url` | `JwtActiveGuard` | Presigned PUT URL (Content-Type signed, 5-min TTL) |
-| POST | `/storage/avatar/commit` | `JwtActiveGuard` | HeadObject verify + update profile.avatar + delete old |
-| DELETE | `/storage/avatar` | `JwtActiveGuard` | Clear profile.avatar + delete R2 file |
+
+| Метод  | Шлях                         | Guard            | Опис                                                   |
+| ------ | ---------------------------- | ---------------- | ------------------------------------------------------ |
+| POST   | `/storage/avatar/upload-url` | `JwtActiveGuard` | Presigned PUT URL (Content-Type signed, 5-min TTL)     |
+| POST   | `/storage/avatar/commit`     | `JwtActiveGuard` | HeadObject verify + update profile.avatar + delete old |
+| DELETE | `/storage/avatar`            | `JwtActiveGuard` | Clear profile.avatar + delete R2 file                  |
 
 ### BusinessesController (`apps/api/src/modules/businesses/businesses.controller.ts`)
+
 Cabinet zone — slug як primary route-param; resolved через `slugLower` unique-index.
 | Метод | Шлях | Guard | Опис |
 |-------|------|-------|------|
@@ -253,6 +295,7 @@ Cabinet zone — slug як primary route-param; resolved через `slugLower` 
 | DELETE | `/businesses/me/:slug` | `JwtActiveGuard` + `BusinessAccessGuard` | Cascade hard-delete (Sprint 4 §SP-5): atomic `withTransaction` видаляє business + всі його invoices. Response: `{ affectedInvoices: number }`. На non-replica-set Mongo → 500 `CASCADE_DELETE_REQUIRES_REPLICA_SET` |
 
 ### PublicBusinessesController (`apps/api/src/modules/businesses/public-businesses.controller.ts`)
+
 Public zone (`pay.finly.com.ua`) — без auth, без cookie. `Cache-Control: public, max-age=3600, stale-while-revalidate=86400`.
 | Метод | Шлях | Guard | Опис |
 |-------|------|-------|------|
@@ -261,6 +304,7 @@ Public zone (`pay.finly.com.ua`) — без auth, без cookie. `Cache-Control:
 | GET | `/businesses/public/:slug/qr/nbu.png?host=primary\|legacy` | `@SkipOnboarding()` | QR з NBU-payload-link (формат 003) на одну з двох allowed адрес |
 
 ### InvoicesController (`apps/api/src/modules/invoices/invoices.controller.ts`)
+
 Cabinet zone — Sprint 4 §4.2. Префікс `/businesses/me/:slug/invoices`. Class-level guards: `JwtActiveGuard` + `BusinessAccessGuard`; route-level `InvoiceAccessGuard` для read/update/delete.
 | Метод | Шлях | Guards | Опис |
 |-------|------|--------|------|
@@ -271,6 +315,7 @@ Cabinet zone — Sprint 4 §4.2. Префікс `/businesses/me/:slug/invoices`.
 | DELETE | `/businesses/me/:slug/invoices/:invoiceSlug` | `JwtActive` + `BusinessAccess` + `InvoiceAccess` | Hard-delete (5s frontend-Undo на web-стороні) |
 
 ### PublicInvoicesController (`apps/api/src/modules/invoices/public-invoices.controller.ts`)
+
 Public zone — Sprint 4 §4.3. Без auth, з `Cache-Control: public, max-age=3600, stale-while-revalidate=86400`.
 | Метод | Шлях | Guard | Опис |
 |-------|------|-------|------|
@@ -278,18 +323,28 @@ Public zone — Sprint 4 §4.3. Без auth, з `Cache-Control: public, max-age=
 | GET | `/businesses/public/:slug/invoices/:invoiceSlug/qr/business.png` | `@SkipOnboarding()` | QR на канонічну public-URL інвойсу |
 | GET | `/businesses/public/:slug/invoices/:invoiceSlug/qr/nbu.png?host=primary\|legacy` | `@SkipOnboarding()` | QR з NBU-payload-link (формат 003) — payload містить amount + lockMask + validUntil |
 
+### QrController (`apps/api/src/modules/qr/qr.controller.ts`)
+
+Sprint 8 §8.1 — публічний preview-ендпоінт для anon-лендингу. Без auth, без cookie, без БД. Throttle-bucket `'qr-preview'` (10/min/IP) — окремий від `'public-payment'` (600/min) і `'default'` (60/min) бо payload-перебір на anon-endpoint потенційно дешевший за full payment-page-hit.
+| Метод | Шлях | Guard | Опис |
+|-------|------|-------|------|
+| POST | `/qr/preview` | `@SkipThrottle({ default: true })` + `@Throttle({ 'qr-preview': 10/min })` + `@SkipOnboarding()` | Input `QrPreviewInputSchema` (receiverName/iban/taxId/purpose; жорстко `'individual'`); reuse `QrService.renderForNbuPayload` 1:1; Response `{ data: { link, qrPngBase64 } }` (формат 003, host = `NBU_HOST_PRIMARY`) |
+
 ### ReportsController
+
 Scaffold без ендпоінтів.
 
 ## Configuration & Environment
 
 **Loaders**
+
 - API: `apps/api/src/config/env.ts` (fail-fast, crash on missing)
 - Web: `apps/web/src/shared/config/env.ts` (direct `process.env.VAR` для Next.js inlining)
 - Шаблон: `.env.example`
 - Політика: `docs/conventions/fail-fast.md`
 
 **API — ALL required (crash if missing, no defaults)**
+
 - `NODE_ENV`, `PORT`, `WEB_URL` (cabinet origin), `PAY_PUBLIC_URL` (public payment-page origin — host для QR)
 - `MONGODB_URI`, `REDIS_URL`
 - `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`
@@ -302,15 +357,18 @@ Scaffold без ендпоінтів.
 - Storage (R2): `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_URL` (hostname мусить збігатись з `NEXT_PUBLIC_STORAGE_HOSTNAME` — див. Known Complexities)
 
 **Web — ALL required (crash if missing)**
+
 - `NEXT_PUBLIC_BASE_URL`, `NEXT_PUBLIC_API_URL`
 - `NEXT_PUBLIC_PAY_PUBLIC_URL` — public payment-page origin (cabinet UI: copy-link, "відкрити в новій вкладці"); має збігатись з API `PAY_PUBLIC_URL`
 - `NEXT_PUBLIC_PAYMENTS_SUBSCRIPTION_ENABLED`, `NEXT_PUBLIC_PAYMENTS_ONE_OFF_ENABLED`
 - `NEXT_PUBLIC_STORAGE_HOSTNAME` — R2 CDN hostname (для `next/image` `remotePatterns`; `next.config.ts` fail-fast'ить при відсутності)
 
 **Web — optional**
+
 - `API_INTERNAL_URL` — server-side reverse proxy target (rewrites у `next.config.ts`)
 
 **Infra**
+
 - `WEB_PORT`, `API_PORT` — Docker compose порти
 
 ## Common Commands
@@ -344,6 +402,7 @@ docker compose up --build -d                          # prod-like
 - Deploy: `.github/workflows/deploy.yml` (SSH → Docker build → health checks → auto-rollback)
 
 <!-- MANUAL:START -->
+
 # Rules
 
 - Before making ANY code changes, read the relevant module's files to understand current implementation
@@ -357,6 +416,7 @@ All AI agents MUST read and follow rules in `docs/conventions/`:
 - **[Fail Fast](docs/conventions/fail-fast.md)** — required env vars policy, no silent fallbacks
 
 Full index: [docs/conventions/README.md](docs/conventions/README.md)
+
   <!-- MANUAL:END -->
 
 ## Rules & Conventions
@@ -419,3 +479,33 @@ Full index: [docs/conventions/README.md](docs/conventions/README.md)
 - **Mongo `_id → id` JSON transform** (Sprint 4 §4.4 fix): глобальний helper `applyJsonTransform(schema)` у `apps/api/src/common/mongoose/json-transform.ts` додає `toJSON`/`toObject`-transform: `_id: ObjectId → id: string` через `.toString()`, strip `__v`. Застосовано на `BusinessSchema` + `InvoiceSchema`. Без цього frontend `Business.id` (Zod-entity-shape `id: string`) була б undefined, що ламало `key={item.id}` і dedup-логіки. Aggregation pipeline (`getOwnedAndManagedWithInvoicesCount`) не проходить через Mongoose-transform — `_id → id`-mapping робиться явно у `$addFields + $unset`-stage.
 
 - **Public invoice payload — `paymentPurpose` always-resolved** (Sprint 4 §4.7): backend `PublicInvoicesController.getPublic` викликає `effectiveInvoicePurpose(invoice.paymentPurpose, business.paymentPurposeTemplate)` перед serialization → `PublicInvoiceSchema.paymentPurpose: string` (NOT nullable). Inheritance-rule `null → business template` — impl-detail backend; client отримує ефективний рядок, що співпадає з NBU payload-purpose. Single source of truth: UI sub-info і банківська команда показують однаковий текст.
+
+- **`Business.type` immutable post-creation** (Sprint 7 §SP-8): фіксується при `POST /businesses/me`, далі НЕ змінюється. `UpdateBusinessSchema` навмисно не містить `type`-поля; `.strict()` reject-ить будь-яку спробу через DTO-pipe. Зміна `type` тягне 4 каскадні revalidation-и (taxId-формат 10 vs 8, taxation-presence, isVatPayer-presence, paymentPurposeTemplate-семантика); жоден з них не безпечний без user-input-у — тобто "правка через PATCH" неможлива. Якщо ФОП юридично став ТОВ — це новий бізнес у wizard-і, старий лишається архівом або hard-delete-ається. Інвойсний `payee.taxId`-snapshot (Sprint 4) гарантує, що історичні рахунки не торкаються type-mutation-у бізнесу.
+
+- **Public heading type-нейтральний** (Sprint 7 §SP-5): `'Платіж на користь {name}'` для всіх 4 типів. До Sprint 7 був `'Оплата на ${BUSINESS_TYPE_LABEL[type]} ${name}'`; розширення enum-у з 1 до 4 типів дало лінгвістично незграбні комбінації ("Оплата на фізособа Іваненко"), а назва бізнесу зазвичай вже містить юр-форму (дублювання). `BUSINESS_TYPE_LABEL` живе тільки у cabinet read-mode (`BasicSection`) і SEO `<title>`-метатегу; h1 на public-сторінці його НЕ використовує. `PublicBusinessSchema.type` зберігається у contract на майбутнє (aria-label, SEO).
+
+- **ЄДРПОУ без checksum на MVP** (Sprint 7 §SP-2): `legalEntityTaxIdZod` валідує лише `^\d{8}$`; ДКСУ-checksum НЕ перевіряємо. Причини: (1) 2-фазний алгоритм має edge-cases (legacy-коди до 1992, нерезидентські, філії); naive-impl false-negative-ить ~5-10% валідних реальних ЄДРПОУ — для MVP, що відкривається на нові сегменти, заблокований ОСББ зі старим легітимним кодом гірший провал, ніж пропущений typo. (2) ЄДРПОУ — публічний реєстр (opendatabot 5 секунд), РНОКПП ж особистий код з ручним введенням, тому checksum для нього критичний, а для ЄДРПОУ — opt-in. (3) Реальний контроль робить банк-додаток клієнта при списанні (Finly = "тупий генератор", Модель А — `qr-decisions.md` §1.12). Tech-backlog ticket "ЄДРПОУ-checksum (ДКСУ)" — low-priority.
+
+- **TaxationSection conditional unmount type-driven** (Sprint 7 §SP-7): `hasTaxationFields(business)` — composite type-guard: primary `requiresTaxation(b.type)` (truth у `BUSINESS_TYPES`-tuple) + secondary non-null обох taxation-полів (TS-narrow до `TaxationCapableBusiness`). Page-render `business/[slug]/page.tsx` рендерить секцію виключно через цей guard; для `individual` / `organization` секція **не входить у DOM** (а не disabled / прихована через CSS) — UX-rationale: не показуємо порожнє поле для типу, де поле не існує. Drift-protection: legacy-документ ФОП без taxation-полів (gap у міграції) → guard false → uncrash runtime; symmetric для drift'd individual з non-null taxation.
+
+- **Frontend type-aware taxId UI shared helper** (Sprint 7 §SP-4): `apps/web/src/entities/business/taxIdField.ts` — `taxIdFieldConfig(type): { label, placeholder, validator, maxLength }`. **Single source of truth** для wizard `Step2Requisites` і cabinet edit `RequisitesSection`. Static-частина (label/placeholder/validator) — `Record<BusinessType, ...>`; `maxLength` обчислюється factory через `taxIdLengthFor()` з `@finly/types`, не дублюється другим Record-ом. Discriminator-exhaustiveness — додавання нового `BusinessType` без оновлення мапінгу дає compile-error.
+
+- **`BusinessWizardStore` named-steps + dynamic step-list** (Sprint 7 §SP-6): `BusinessWizardStep = 'type-name' \| 'requisites' \| 'taxation' \| 'purpose-banks'` (раніше numeric `1\|2\|3\|4`). `computeStepsForType(type)` — pure function: `fop` / `tov` → 4 кроки, `individual` / `organization` → 3 кроки (skip `'taxation'`). Stable readonly-tuple references для `useMemo`-стабільності. `setType(type)` атомарно reset-ить taxation-fields у undefined при переході fop/tov → individual/organization (запобігає stale taxation-data у submit). Persist `version: 2` + `migrate(numeric → named)` + `partialize` (зберігає тільки `currentStep` + `formData`, actions з create()-callback).
+
+- **`CreateBusinessSchema` discriminated union → param-level pipe** (Sprint 7 §SP-3): `CreateBusinessSchema = z.discriminatedUnion('type', [individualVariant, fopVariant, tovVariant, organizationVariant])` з per-variant `.strict()`. `nestjs-zod` `createZodDto` НЕ підтримує discriminated-union output (TS2509: union-output не extends-able як class), тому `BusinessesController.create` використовує `@Body(new ZodValidationPipe(CreateBusinessSchema))` як param-level pipe — стандартний flow `nestjs-zod` без DTO-class wrapper-а. Глобальний pipe (main.ts) пропускає payload (немає `isZodDto`-marker), param-pipe виконує валідацію. Це **єдиний такий callsite у API** — якщо з'явиться другий, варто винести у helper.
+
+- **NBU `PayloadInputSchema.receiverTaxId` приймає union** (Sprint 7 §SP-10): `payerTaxIdZod = z.union([individualTaxIdZod, legalEntityTaxIdZod])` — рівно 2 нормативних формати (10-цифровий РНОКПП ∪ 8-цифровий ЄДРПОУ). Builder-и 002 / 003 кладуть `input.receiverTaxId` у field 9 без додаткової перевірки довжини — type-binding до конкретного `BusinessType` живе на write-DTO рівні + service-layer; QR-builder робить лише структурну перевірку. Round-trip jsqr-тест (`qr.service.integration.spec`) для 8-digit ЄДРПОУ закриває нормативний Risk #1 sprint-плану.
+
+- **NBU charset refine на entity-Zod** (Sprint 8 fix): `businessNameSchema`, `businessPaymentPurposeTemplateSchema`, `invoicePaymentPurposeSchema` у `@finly/types/entities/*` мають `.refine(isWithinNbuCharset, { message: 'INVALID_NAME_CHARSET' \| 'INVALID_PURPOSE_CHARSET' })` ПОВЕРХ char/byte-limits. До Sprint 8 NBU-charset-валідатор жив internal-only у `qr/_payload-internals.assertNbuCharset` і викликався лише builder-ом — невалідний-для-NBU символ (emoji ☕, multi-line LF/CR, Unicode-блок без Win1251-mapping) проходив save → render QR падав з 500 на public-сторінці (`PayloadValidationError → AllExceptionsFilter` мапив як `INTERNAL_ERROR`, бо це не `HttpException`). Public API expose-нутий через `qr/charset.ts` (`isWithinNbuCharset`, `findInvalidNbuCharIndex`). Закриває Sprint 2 §2.2 інваріант "будь-який валідно збережений Business / Invoice → валідний QR" для всіх consumer-ів (cabinet wizard, cabinet edit, anon Sprint 8 preview).
+
+- **`PayloadValidationError` → 400 у `AllExceptionsFilter`** (Sprint 8 fix): окремий `instanceof PayloadValidationError`-check у `catch()` мапить за `PayloadErrorCode`-family. Overall-size overflow (`PAYLOAD_OVERALL_SIZE_EXCEEDED`, `PAYLOAD_BASE64URL_SIZE_EXCEEDED`) → 400 + `RESPONSE_CODE.PAYLOAD_TOO_LARGE` (user-actionable: "скоротіть назву / призначення"). Field-format errors → 400 + `VALIDATION_ERROR` (defense-in-depth, Zod на write-DTO мав би їх зловити раніше). Host-config errors → 500 + `INTERNAL_ERROR` (server-misconfig). До Sprint 8 цей шлях віддавав 500 на легітимний user-input — наприклад, `purpose='А'.repeat(420)` cyrillic (валідні 420 chars per-field, але payload 840 B перевищує норматив 507 B, emergent property, не окремого поля).
+
+- **Sprint 8 anon QR-preview endpoint `POST /qr/preview`**: без auth, без cookie, без БД. Throttle-bucket `'qr-preview'` (10/min/IP) — окремий від `'public-payment'` (600/min) і `'default'` (60/min) у `app.module.ts`. Payload-перебір на anon-endpoint потенційно дешевший за full payment-page-hit (нема DB lookup-у бізнесу), тому restrictive за дизайном. Reuse `QrService.renderForNbuPayload` 1:1; format 003, host = `NBU_HOST_PRIMARY`. Контракт `QrPreviewInputSchema` жорстко прибитий до `'individual'` (без UI-перемикача типу — sprint plan §НЕ-скоуп); `.strict()` reject-ить будь-які додаткові ключі.
+
+- **`publicPostJson` symmetric до `publicFetchJson`** (Sprint 8 §8.3): native `fetch` з `credentials: 'omit'` + `Content-Type: application/json` + `JSON.stringify(body)`. Anon-flow живе під контрактом "без auth, без cookie" — axios `apiClient` з `withCredentials: true` + Bearer-interceptor суперечив би: якщо anon-користувач залогінений у іншій вкладці на cabinet host, його `bid_refresh`-cookie + `Bearer`-токен можуть просочитися у anon-запит. Native `fetch({ credentials: 'omit' })` гарантовано вирізає те і інше. Non-2xx → `PublicApiError` (reuse того самого error-class з `publicFetchJson`); body НЕ парситься на non-2xx, тому frontend error-mapping робить status-based guess (на `mode:onChange + disabled={!isValid}` 400 практично завжди = backend overall-size overflow).
+
+- **`useHasHydrated` через `useSyncExternalStore`** (Sprint 8 §8.3): Zustand `persist` гідратує асинхронно після першого render. Якщо компонент читає store-snapshot на mount (через `getState()`) і кешує у RHF `defaultValues` — snapshot frozen на момент init → перший render бачить порожні values, hydration не propagates. Sprint 8 UAT LAND-3 ("reload → форма відновлена з localStorage без миготіння") вимагає gate перед render-ом форми. Канонічний React `useSyncExternalStore` (а не `useState + useEffect`) дає (1) SSR-safe by design (`getServerSnapshot = false` детерміністично без читання `store.persist`, який undefined у Next.js prerender bundle), (2) React-pure без `react-hooks/set-state-in-effect`-warning (React 19.1+).
+
+- **Claim-flow intent state-machine + sibling-hook у protected layout** (Sprint 8 §8.4): `qrLandingDraftStore` має `intent: 'idle' \| 'claim-pending' \| 'claimed' \| 'claim-failed'`. Anon click "Зберегти у кабінет" → `setIntent('claim-pending')` + `router.push('/auth/signin')`. Після auth `useClaimLandingDraft` (у `(protected)/layout.tsx` як **sibling до AuthGuard**, не дитина) детектить `intent === 'claim-pending'` → call `POST /businesses/me` → `clearAll` + redirect. Race-protection через `inProgressRef` (без нього `formData` у deps re-fires effect → дублікат бізнесу). Гілка B (incomplete profile після magic-link signup): AuthGuard редіректить на `/profile?mode=new`, hook **залишається змонтований** (sibling, не дитина), чекає на `onboardingComplete` → fires автоматично після PATCH `/users/me`. Failure НЕ очищає formData — користувач не втрачає введене; intent='claim-failed' для post-failure recovery UX (Sprint 8.5+).
+
+- **Sprint 8 form-lift у `QrLandingBlock`**: `useForm`-instance створюється у Block (після hydration-gate) і передається prop у `QrLandingForm` + `QrLandingResult`. Без lift-у "Очистити" у Result не міг би reset-нути `<input>`-и у Form (RHF uncontrolled, `defaultValues` frozen на mount), а hydration не міг би заповнити форму persisted-snapshot-ом. Цей pattern єдиний такий callsite у Sprint 8 — інші форми у проекті прості без cross-component-state-sharing.

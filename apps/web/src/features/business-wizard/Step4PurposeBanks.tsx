@@ -13,11 +13,15 @@ import {
 } from '@finly/types';
 import { z } from 'zod';
 import { createBusiness, getApiMessage } from '@/shared/api';
+import { mapValidationCode } from '@/shared/lib';
 import UiTextarea from '@/shared/ui/UiTextarea';
 import UiCheckbox from '@/shared/ui/UiCheckbox';
 import UiButton from '@/shared/ui/UiButton';
 import UiSpinner from '@/shared/ui/UiSpinner';
-import { useBusinessWizardStore } from './businessWizardStore';
+import {
+    buildCreateRequestFromDraft,
+    useBusinessWizardStore,
+} from './businessWizardStore';
 
 const PurposeSchema = businessPaymentPurposeTemplateSchema;
 const PurposeWrap = z.object({ paymentPurposeTemplate: PurposeSchema });
@@ -27,14 +31,15 @@ export default function Step4PurposeBanks() {
     const formData = useBusinessWizardStore((s) => s.formData);
     const patch = useBusinessWizardStore((s) => s.patchFormData);
     const setStep = useBusinessWizardStore((s) => s.setStep);
+    const prevStep = useBusinessWizardStore((s) => s.prevStep);
     const reset = useBusinessWizardStore((s) => s.reset);
 
     const [purpose, setPurpose] = useState<string>(
-        formData.paymentPurposeTemplate ?? '',
+        formData.paymentPurposeTemplate ?? ''
     );
     const [purposeError, setPurposeError] = useState<string | undefined>();
     const [acceptedBanks, setAcceptedBanks] = useState<BankCode[]>(
-        formData.acceptedBanks ?? [...MVP_BANKS],
+        formData.acceptedBanks ?? [...MVP_BANKS]
     );
     const [submitting, setSubmitting] = useState(false);
 
@@ -51,13 +56,15 @@ export default function Step4PurposeBanks() {
                 ? prev.includes(bank)
                     ? prev
                     : [...prev, bank]
-                : prev.filter((b) => b !== bank),
+                : prev.filter((b) => b !== bank)
         );
     };
 
     const onPurposeBlur = () => {
         if (!purposeParse.success) {
-            setPurposeError(purposeParse.error.issues[0]?.message);
+            setPurposeError(
+                mapValidationCode(purposeParse.error.issues[0]?.message)
+            );
         } else {
             setPurposeError(undefined);
         }
@@ -66,25 +73,32 @@ export default function Step4PurposeBanks() {
     const onSubmit = async () => {
         if (!canSubmit) return;
 
-        // Sprint 3 §3.7 — фінальна валідація через `CreateBusinessSchema`
-        // перед submit. Захист від stale sessionStorage / drift у store
-        // (наприклад, persist-блок на step 1 устарів, формат полів змінився
-        // між версіями). Без safeParse тут TypeScript-cast `as` приховав
-        // би неповний DTO, і API повернув би 400 з generic VALIDATION_ERROR
-        // без вказання, який саме крок треба переробити.
-        const draft = {
-            ...formData,
-            paymentPurposeTemplate: purpose,
-            acceptedBanks,
-        };
-        const parsed = CreateBusinessSchema.safeParse(draft);
-        if (!parsed.success) {
-            // Дані з попередніх кроків неконсистентні. Reset wizard на step 1
-            // щоб ФОП пройшов flow заново (forms підхоплять відсутні поля).
+        // Sprint 3 §3.7 + Sprint 7 §7.7 — фінальна валідація через
+        // `CreateBusinessSchema` перед submit. Захист від stale sessionStorage
+        // / drift у store. Sprint 7 додав discriminated-union dispatch:
+        // `buildCreateRequestFromDraft` маппить flat draft у потрібний
+        // variant per `type`, відсікаючи stale taxation-поля для
+        // individual/organization (інакше `.strict()` reject-нув би).
+        let request;
+        try {
+            request = buildCreateRequestFromDraft({
+                ...formData,
+                paymentPurposeTemplate: purpose,
+                acceptedBanks,
+            });
+        } catch {
             toast.error(
-                'Дані форми застаріли. Будь ласка, заповніть кроки заново.',
+                'Дані форми застаріли. Будь ласка, заповніть кроки заново.'
             );
-            setStep(1);
+            setStep('type-name');
+            return;
+        }
+        const parsed = CreateBusinessSchema.safeParse(request);
+        if (!parsed.success) {
+            toast.error(
+                'Дані форми застаріли. Будь ласка, заповніть кроки заново.'
+            );
+            setStep('type-name');
             return;
         }
 
@@ -97,9 +111,11 @@ export default function Step4PurposeBanks() {
         } catch (err) {
             const code =
                 err instanceof AxiosError
-                    ? (err.response?.data as
-                          | { error?: { code?: string } }
-                          | undefined)?.error?.code
+                    ? (
+                          err.response?.data as
+                              | { error?: { code?: string } }
+                              | undefined
+                      )?.error?.code
                     : undefined;
             toast.error(getApiMessage(code ?? 'unknown', 'businesses'));
             setSubmitting(false);
@@ -161,7 +177,7 @@ export default function Step4PurposeBanks() {
                     variant="outline"
                     size="md"
                     disabled={submitting}
-                    onClick={() => setStep(3)}
+                    onClick={() => prevStep()}
                 >
                     Назад
                 </UiButton>

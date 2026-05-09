@@ -56,7 +56,9 @@ describe('migration 2026-05-03-businesses-slug-lower (upgrade-path)', () => {
 
     afterEach(async () => {
         const db = mongoose.connection.db!;
-        const cols = await db.listCollections({ name: COLLECTION_NAME }).toArray();
+        const cols = await db
+            .listCollections({ name: COLLECTION_NAME })
+            .toArray();
         if (cols.length > 0) {
             await db.collection(COLLECTION_NAME).drop();
         }

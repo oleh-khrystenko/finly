@@ -28,11 +28,13 @@ Sprint 3 (`docs/sprints/03-cabinet-public/`) у блоці §3.0 (хвости S
 У продукті існують **два різні URL**, що історично плутаються в обговореннях. План явно їх розводить:
 
 **(1) Pretty page URL** — адреса публічної сторінки бізнесу/інвойсу. Те, що ФОП вставляє у візитку чи Telegram.
+
 - **Хост:** `pay.finly.com.ua` (фіксований, qr-decisions §1.2 + §4.3).
 - **Формат:** `pay.finly.com.ua/{slug}` або `pay.finly.com.ua/{business-slug}/{invoice-slug}`.
 - **Хто рендерить:** Sprint 3 (slug-генератор + публічна сторінка). Sprint 2 лише пакує цей URL у QR-картинку, **не** будує його сам.
 
 **(2) NBU-payload link** — технічний URL з NBU-payload у Base64URL, що його ОС/банк-додаток розпарсить і відкриє оплату. Активується кнопкою "Інший банк" на публічній сторінці і потенційно per-bank кнопками (Sprint 5 research).
+
 - **Хост:** дозволені нормативом два значення (Додаток 4 §I таблиця 1) — `qr.bank.gov.ua` (`NBU_HOST_PRIMARY`) і `bank.gov.ua/qr` (`NBU_HOST_LEGACY`). Sprint 3 рішення A2: public-сторінка показує **обидва одночасно** через дві кнопки + дві QR-картинки, без env-перемикача (див. секцію «Ревізії від Sprint 3» вище). Деталі — `docs/product/qr-spec/README.md`.
 - **Формат:** `{host}/{base64url(payload-002 або payload-003)}`.
 - **Хто рендерить:** Sprint 2 — payload-builder і `buildNbuPayloadLink`; Sprint 3 §3.3 — public-endpoint, що викликає `QrService.renderForNbuPayload` двічі (по одному виклику з кожною host-константою).
@@ -67,7 +69,7 @@ Sprint 3 (`docs/sprints/03-cabinet-public/`) у блоці §3.0 (хвости S
 
 ### 2.0 Spec acquisition (БЛОКЕР №0)
 
-Без цього кроку builder 003 — fan-fic. `docs/example/generate.ts` ілюстративний, формат 002, синтетичні поля; за qr-decisions §1.1 source of truth — **постанова НБУ №97 від 19.08.2025 + специфікаційний PDF на bank.gov.ua**. Sprint не починається з імплементації — починається з документа.
+Без цього кроку builder 003 — fan-fic. За qr-decisions §1.1 source of truth — **постанова НБУ №97 від 19.08.2025 + специфікаційний PDF на bank.gov.ua**. Sprint не починається з імплементації — починається з документа.
 
 - 🔲 Завантажити PDF з bank.gov.ua у `docs/product/qr-spec/nbu-003-spec.pdf` (commit-able, бо публічний документ; лицензійні обмеження НБУ дозволяють reference).
 - 🔲 `docs/product/qr-spec/README.md` — нормалізована таблиця **Field × 002 × 003 × max-len-chars × max-len-bytes × encoding × notes**, з прив'язкою до конкретних сторінок PDF. Ціль — щоб TypeScript-константи у §2.1 мали посилання `// see qr-spec/README.md §FIELD_NAME` на одному джерелі правди.
@@ -162,8 +164,8 @@ apps/api/src/modules/qr/
 - 🔲 `QrImageRenderer` — `@Injectable()`, метод `render(text: string, opts: { sizePx: number; errorCorrection: 'L'|'M'|'Q'|'H' }): Promise<Buffer>`. Внутрішньо `QRCode.toBuffer(text, { width, errorCorrectionLevel, margin: 2 })`. **Дефолт `H`** — обов'язково для logo-overlay (~30% надлишковості; нижчі рівні дають центральні артефакти при overlay).
 - 🔲 `QrLogoCompositor` — `@Injectable()`, метод `compose(qrPng: Buffer, logoPath: string, opts: { qrSizePx: number; logoMaxRatio: number }): Promise<Buffer>`. Sharp-pipeline: resize logo з `fit: 'contain'` + білий background → composite over QR з `gravity: 'center'`. **`logoMaxRatio` ≤ 0.25** (за прикладом 25-30%); жорсткий guard у коді — `if (ratio > 0.30) throw new QrRenderError('LOGO_TOO_LARGE')` з посиланням на error-correction H 30%-ну межу. **(Sprint 3 ревізія C5):** asset за дефолтом — нормативний `hryvnia-symbol.png` (білий круг зі знаком ₴), не Finly-лого; параметризація `logoPath` зберігається для Sprint 6 (custom-logo upload).
 - 🔲 `QrService` — `@Injectable()`, два методи:
-  - `renderForUrl(url: string, opts): Promise<Buffer>` — для **публічної сторінки**, QR що відкриває `pay.finly.com.ua/{slug}`. Чистий URL, без NBU-payload.
-  - `renderForNbuPayload(input: PayloadInput, version: PayloadVersion, opts): Promise<Buffer>` — для **"Інший банк"** fallback і **per-bank** генерації (коли research §3.1 закриється і ми взнаємо, які банки приймають NBU URL напряму): build → encode → wrap у universal-link → render image.
+    - `renderForUrl(url: string, opts): Promise<Buffer>` — для **публічної сторінки**, QR що відкриває `pay.finly.com.ua/{slug}`. Чистий URL, без NBU-payload.
+    - `renderForNbuPayload(input: PayloadInput, version: PayloadVersion, opts): Promise<Buffer>` — для **"Інший банк"** fallback і **per-bank** генерації (коли research §3.1 закриється і ми взнаємо, які банки приймають NBU URL напряму): build → encode → wrap у universal-link → render image.
 - 🔲 `assets/hryvnia-symbol.png` — нормативний 1024×1024 PNG (білий круг зі знаком ₴, за §II.11–12 PDF постанови НБУ № 97). Sprint 3 ревізія C5/G2 заміняє оригінально-запланований `finly-logo-qr.png` на цей asset; Finly-брендинг переноситься у верстку публічної сторінки під QR. Statically імпортується через `path.join(__dirname, 'assets/hryvnia-symbol.png')` — НЕ через bundler-magic (NestJS swc compiler не копіює asset-и автоматично; glob `modules/qr/assets/**/*` у `nest-cli.json` `assets`). Reproducibility-генератор asset-а — `apps/api/scripts/generate-hryvnia-asset.ts` (одноразовий).
 - 🔲 `QrServiceSpec` — інжектить через `Test.createTestingModule`, мокає файлову систему для logo (через `path` injection token, щоб уникнути disk-I/O в unit-тестах). Інтеграційний тест (без моків) живе в `apps/api/src/modules/qr/qr.service.integration.spec.ts` — реальне читання asset, реальний sharp, реальний `jsqr` round-trip.
 
@@ -204,10 +206,10 @@ apps/api/src/modules/qr/
 - **Регресія Sprint 1:** після §2.2 derive-from-spec — перезапуск `pnpm test` mustn't ламати existing 99 + 390 тестів.
 - E2E: **не додаємо** — endpoints з'являться у Sprint 3.
 - **Manual UAT (живі банк-додатки):** автотести закривають payload-формат і round-trip через `jsqr` decoder, але **не закривають** питання "чи дійсно реальний банк-додаток прийме наш payload без скарг" — це визначається приватними `apple-app-site-association`/`assetlinks.json` конфігами кожного банку, які поза нашим контролем і поза НБУ-нормативом. Принципово людська перевірка з телефонами у руці. Список зафіксований у [`docs/manual-checks/README.md`](../../manual-checks/README.md), розділ **QR**:
-  - **QR-1** (українські букви в назві) — валідує UTF-8 byte counting на боці реальних банків.
-  - **QR-2** (QR з мінімумом полів) — валідує trailing-empty fields і загалом коректність формату; не закриває проблему сама — лише виявляє симптом, точна довжина звіряється з PDF спеки.
-  - **QR-4** (QR зі знаком гривні в центрі сканується) — валідує розмір/контраст нормативного asset-а (Sprint 3 ревізія G3), не ламає error-correction Q.
-  - **QR-6** (Sprint 3 ревізія A2 — більше **не gate перед launch**, а post-launch metric "яка з двох кнопок частіше спрацьовує"). Sprint 3 §3.9 ввів дві кнопки + два QR на public-сторінці; рішення про прибирання запасної робиться через 2+ тижні після запуску, не до нього.
+    - **QR-1** (українські букви в назві) — валідує UTF-8 byte counting на боці реальних банків.
+    - **QR-2** (QR з мінімумом полів) — валідує trailing-empty fields і загалом коректність формату; не закриває проблему сама — лише виявляє симптом, точна довжина звіряється з PDF спеки.
+    - **QR-4** (QR зі знаком гривні в центрі сканується) — валідує розмір/контраст нормативного asset-а (Sprint 3 ревізія G3), не ламає error-correction Q.
+    - **QR-6** (Sprint 3 ревізія A2 — більше **не gate перед launch**, а post-launch metric "яка з двох кнопок частіше спрацьовує"). Sprint 3 §3.9 ввів дві кнопки + два QR на public-сторінці; рішення про прибирання запасної робиться через 2+ тижні після запуску, не до нього.
 - **Gate перед launch публічного flow:** QR-1, QR-2, QR-4 — мають бути ✅ або ❌ (не ⬜). QR-6 з gate **знято** (Sprint 3 ревізія A2). `NBU_PAYLOAD_LINK_HOST` env видалено повністю — fail-fast інваріант "API не стартує без host" більше не існує.
 
 ### Залежності

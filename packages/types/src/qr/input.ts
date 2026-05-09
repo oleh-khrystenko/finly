@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { ibanZod } from '../validation/iban';
-import { individualTaxIdZod } from '../validation/tax-id';
+import { payerTaxIdZod } from '../validation/tax-id';
 
 /**
  * Допустимі значення поля «Функція» у форматі 003 (Додаток 4 §II.4.4 ст. 27):
@@ -90,9 +90,27 @@ const yymmddhhmmssSchema = z.string().regex(/^\d{12}$/, {
  *   - Max 99_999_999_999 копійок = 999_999_999.99 грн (нормативний максимум).
  */
 export const PayloadInputSchema = z.object({
-    receiverName: z.string().trim().min(1, { message: 'INVALID_RECEIVER_NAME' }),
+    receiverName: z
+        .string()
+        .trim()
+        .min(1, { message: 'INVALID_RECEIVER_NAME' }),
     iban: ibanZod,
-    receiverTaxId: individualTaxIdZod,
+    /**
+     * Sprint 7 §SP-10 — `payerTaxIdZod` (union RNOKPP-10 ∪ ЄДРПОУ-8) замість
+     * `individualTaxIdZod`. Норматив НБУ постанови № 97, додатки 3/4 §IV.10.5
+     * "Код одержувача" дозволяє рівно дві довжини: 10 цифр (РНОКПП — фізособа /
+     * ФОП) АБО 8 цифр (ЄДРПОУ — юр.особа). Builder-и 002 / 003 кладуть значення
+     * у payload без додаткової перевірки довжини — type-binding до конкретного
+     * `BusinessType` живе на write-DTO рівні (`CreateBusinessSchema`
+     * discriminated union per-variant) і у `BusinessesService.update` cross-
+     * check (читає document-resident `type`). Тут — лише структурна перевірка
+     * "10-digit з checksum АБО 8-digit без checksum", узгоджена з нормативом.
+     *
+     * **Чому не залишаємо два окремих optional**: норматив дозволяє рівно один
+     * з двох форматів у конкретному QR; union дає чисту semantic, без stale
+     * options.
+     */
+    receiverTaxId: payerTaxIdZod,
     amountKopecks: z
         .number()
         .int()

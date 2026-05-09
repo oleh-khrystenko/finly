@@ -10,9 +10,7 @@ const UiFullPageLoader = ({ message, className }: UiFullPageLoaderProps) => (
         )}
     >
         <UiSpinner size="lg" />
-        {message && (
-            <p className="text-muted-foreground text-lg">{message}</p>
-        )}
+        {message && <p className="text-muted-foreground text-lg">{message}</p>}
     </div>
 );
 

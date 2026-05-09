@@ -8,6 +8,7 @@ import {
 import UiInput from '@/shared/ui/UiInput';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiEditableField from '@/shared/ui/UiEditableField';
+import { mapValidationCode } from '@/shared/lib';
 
 interface Props {
     business: Business;
@@ -41,7 +42,8 @@ export default function BasicSection({ business, onSave }: Props) {
                         const r = businessNameSchema.safeParse(v);
                         return r.success
                             ? null
-                            : (r.error.issues[0]?.message ?? 'Невірне значення');
+                            : (mapValidationCode(r.error.issues[0]?.message) ??
+                                  null);
                     }}
                     onSave={(v) => onSave({ name: v })}
                 />

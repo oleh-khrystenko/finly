@@ -8,13 +8,13 @@ Web (`apps/web`) дотримується Feature-Sliced Design layering. Усі
 shared → entities → features → widgets → app
 ```
 
-| Шар | Призначення | Шлях |
-|-----|-------------|------|
-| `shared` | Базові примітиви: API client, UI kit, конфіг, lib helpers, ікони, шрифти | `apps/web/src/shared/` |
-| `entities` | Модельні стори/типи окремих доменних об'єктів (наприклад, поточний користувач) | `apps/web/src/entities/` |
+| Шар        | Призначення                                                                              | Шлях                     |
+| ---------- | ---------------------------------------------------------------------------------------- | ------------------------ |
+| `shared`   | Базові примітиви: API client, UI kit, конфіг, lib helpers, ікони, шрифти                 | `apps/web/src/shared/`   |
+| `entities` | Модельні стори/типи окремих доменних об'єктів (наприклад, поточний користувач)           | `apps/web/src/entities/` |
 | `features` | Юзкейси, що володіють своїм UI/state (auth flows, billing dialogs, profile actions тощо) | `apps/web/src/features/` |
-| `widgets` | Композитні UI-блоки, що збираються з features (header, sheet menu) | `apps/web/src/widgets/` |
-| `app` | Next.js App Router, root providers, overlay registry | `apps/web/src/app/` |
+| `widgets`  | Композитні UI-блоки, що збираються з features (header, sheet menu)                       | `apps/web/src/widgets/`  |
+| `app`      | Next.js App Router, root providers, overlay registry                                     | `apps/web/src/app/`      |
 
 ## Правила
 

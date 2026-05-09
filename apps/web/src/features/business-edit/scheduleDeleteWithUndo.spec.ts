@@ -31,7 +31,7 @@ jest.mock('sonner', () => ({
             dismiss: (...args: unknown[]) => mockToastDismiss(...args),
             message: (...args: unknown[]) => mockToastMessage(...args),
             error: (...args: unknown[]) => mockToastError(...args),
-        },
+        }
     ),
 }));
 
@@ -78,7 +78,7 @@ describe('scheduleDeleteWithUndo', () => {
             expect.objectContaining({
                 duration: UNDO_TIMEOUT_MS,
                 action: expect.objectContaining({ label: 'Скасувати' }),
-            }),
+            })
         );
     });
 
@@ -121,9 +121,7 @@ describe('scheduleDeleteWithUndo', () => {
 
         // toast.dismiss + повідомлення про скасування
         expect(mockToastDismiss).toHaveBeenCalledWith('toast-id');
-        expect(mockToastMessage).toHaveBeenCalledWith(
-            'Видалення скасовано',
-        );
+        expect(mockToastMessage).toHaveBeenCalledWith('Видалення скасовано');
     });
 
     it('cancel у межах 5s — clearTimeout працює навіть якщо ref-ів немає', () => {
@@ -177,7 +175,7 @@ describe('scheduleDeleteWithUndo', () => {
             onCancelled: jest.fn(),
         });
         expect(usePendingDeletesStore.getState().slugs.has('IvanEnko')).toBe(
-            true,
+            true
         );
     });
 
@@ -189,11 +187,11 @@ describe('scheduleDeleteWithUndo', () => {
             onCancelled: jest.fn(),
         });
         expect(usePendingDeletesStore.getState().slugs.has('IvanEnko')).toBe(
-            true,
+            true
         );
         lastToastAction!.onClick();
         expect(usePendingDeletesStore.getState().slugs.has('IvanEnko')).toBe(
-            false,
+            false
         );
     });
 
@@ -218,7 +216,7 @@ describe('scheduleDeleteWithUndo', () => {
         await Promise.resolve();
         // Slug залишається у pending — UI продовжує filter-ити stale entry.
         expect(usePendingDeletesStore.getState().slugs.has('IvanEnko')).toBe(
-            true,
+            true
         );
         // Sanity: deleteBusiness реально викликаний.
         expect(mockDeleteBusiness).toHaveBeenCalledWith('IvanEnko');
@@ -240,7 +238,7 @@ describe('scheduleDeleteWithUndo', () => {
         await Promise.resolve();
         await Promise.resolve();
         expect(usePendingDeletesStore.getState().slugs.has('IvanEnko')).toBe(
-            false,
+            false
         );
     });
 });

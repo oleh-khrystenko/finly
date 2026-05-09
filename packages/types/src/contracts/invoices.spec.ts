@@ -12,16 +12,12 @@ void VALID_IBAN;
 void VALID_TAX_ID;
 
 describe('humanSlugPartSchema', () => {
-    it.each([
-        'invoice',
-        'inv-001',
-        'order-2026-may',
-        'a',
-        '12345',
-        'a-b-c-d',
-    ])('parses valid kebab-case "%s"', (slug) => {
-        expect(humanSlugPartSchema.safeParse(slug).success).toBe(true);
-    });
+    it.each(['invoice', 'inv-001', 'order-2026-may', 'a', '12345', 'a-b-c-d'])(
+        'parses valid kebab-case "%s"',
+        (slug) => {
+            expect(humanSlugPartSchema.safeParse(slug).success).toBe(true);
+        }
+    );
 
     it.each([
         ['', 'INVALID_HUMAN_SLUG_PART_LENGTH'],
@@ -354,5 +350,15 @@ describe('PublicInvoiceSchema (whitelist invariant)', () => {
             nbuLinks: { primary: 'not-a-url', legacy: 'also-bad' },
         });
         expect(r.success).toBe(false);
+    });
+
+    it('accepts nbuLinks=null (server-side expiry block)', () => {
+        // Sprint 4 review fix: backend ставить `nbuLinks: null` коли
+        // `validUntil < now` — payment-vector не віддається після терміну.
+        const r = PublicInvoiceSchema.safeParse({
+            ...VALID_PUBLIC,
+            nbuLinks: null,
+        });
+        expect(r.success).toBe(true);
     });
 });

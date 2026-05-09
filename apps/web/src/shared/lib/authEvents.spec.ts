@@ -11,10 +11,7 @@ describe('authEvents', () => {
         }
     });
 
-    const subscribe = (
-        event: 'session-lost',
-        listener: () => void
-    ): void => {
+    const subscribe = (event: 'session-lost', listener: () => void): void => {
         cleanups.push(authEvents.on(event, listener));
     };
 

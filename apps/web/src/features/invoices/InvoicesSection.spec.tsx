@@ -24,8 +24,9 @@ describe('InvoicesSection (Sprint 4 §4.4)', () => {
         const { container } = render(
             <InvoicesSection
                 businessSlug="IvanEnko"
+                businessPaymentPurposeTemplate="Оплата послуг ФОП"
                 payPublicOrigin={PAY_ORIGIN}
-            />,
+            />
         );
         // UiSpinner — окрема Element; перевіряємо presence через querySelector.
         expect(container.querySelector('[role="status"], svg')).toBeTruthy();
@@ -41,23 +42,21 @@ describe('InvoicesSection (Sprint 4 §4.4)', () => {
         render(
             <InvoicesSection
                 businessSlug="IvanEnko"
+                businessPaymentPurposeTemplate="Оплата послуг ФОП"
                 payPublicOrigin={PAY_ORIGIN}
-            />,
+            />
         );
 
         await waitFor(() => {
             expect(
-                screen.getByText(/Поки немає виставлених рахунків/),
+                screen.getByText(/Поки немає виставлених рахунків/)
             ).toBeInTheDocument();
         });
         // CTA веде на форму створення
         const cta = screen.getByRole('link', {
             name: /Виставити рахунок/,
         });
-        expect(cta).toHaveAttribute(
-            'href',
-            '/business/IvanEnko/invoice/new',
-        );
+        expect(cta).toHaveAttribute('href', '/business/IvanEnko/invoice/new');
     });
 
     it('рендерить cards коли є items', async () => {
@@ -86,13 +85,14 @@ describe('InvoicesSection (Sprint 4 §4.4)', () => {
         render(
             <InvoicesSection
                 businessSlug="IvanEnko"
+                businessPaymentPurposeTemplate="Оплата послуг ФОП"
                 payPublicOrigin={PAY_ORIGIN}
-            />,
+            />
         );
 
         await waitFor(() => {
             expect(
-                screen.getByText('Оплата за консультацію'),
+                screen.getByText('Оплата за консультацію')
             ).toBeInTheDocument();
         });
         // Amount-formatted (1500,00 ₴ — uk-UA, з NBSP як thousands)
@@ -110,8 +110,9 @@ describe('InvoicesSection (Sprint 4 §4.4)', () => {
         const { container } = render(
             <InvoicesSection
                 businessSlug="IvanEnko"
+                businessPaymentPurposeTemplate="Оплата послуг ФОП"
                 payPublicOrigin={PAY_ORIGIN}
-            />,
+            />
         );
         await waitFor(() => {
             expect(container.querySelector('#invoices')).toBeTruthy();
@@ -144,14 +145,15 @@ describe('InvoicesSection (Sprint 4 §4.4)', () => {
         render(
             <InvoicesSection
                 businessSlug="IvanEnko"
+                businessPaymentPurposeTemplate="Оплата послуг ФОП"
                 payPublicOrigin={PAY_ORIGIN}
-            />,
+            />
         );
         await waitFor(() => {
             expect(
                 screen.getByRole('button', {
                     name: /Завантажити ще/,
-                }),
+                })
             ).toBeInTheDocument();
         });
     });

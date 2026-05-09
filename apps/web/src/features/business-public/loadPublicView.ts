@@ -19,12 +19,12 @@ import type { PublicBusinessView } from '@finly/types';
  * (60s тут агресивніший — публікація змін ФОП-а видна швидше).
  */
 export async function loadPublicView(
-    slug: string,
+    slug: string
 ): Promise<PublicBusinessView | null> {
     const apiBase = process.env.API_INTERNAL_URL;
     if (!apiBase) {
         throw new Error(
-            '❌ API_INTERNAL_URL is not defined (server-side env required for public page rendering)',
+            '❌ API_INTERNAL_URL is not defined (server-side env required for public page rendering)'
         );
     }
     const url = `${apiBase}/api/businesses/public/${encodeURIComponent(slug)}`;
@@ -32,7 +32,7 @@ export async function loadPublicView(
     if (res.status === 404) return null;
     if (!res.ok) {
         throw new Error(
-            `Public business fetch failed: ${res.status} ${res.statusText}`,
+            `Public business fetch failed: ${res.status} ${res.statusText}`
         );
     }
     const json = (await res.json()) as { data: PublicBusinessView };

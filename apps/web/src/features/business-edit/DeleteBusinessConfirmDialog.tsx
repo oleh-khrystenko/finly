@@ -1,6 +1,6 @@
 'use client';
 
-import { pluralizeUa } from '@/shared/lib';
+import { pluralizeUa, useAutoCancelOnRouteChange } from '@/shared/lib';
 import { UiConfirmDialog } from '@/shared/ui/UiConfirmDialog';
 import { useDeleteBusinessConfirmStore } from './deleteBusinessConfirmStore';
 
@@ -13,16 +13,28 @@ import { useDeleteBusinessConfirmStore } from './deleteBusinessConfirmStore';
  * видалить усі invoices разом з business у одній transaction; ФОП має
  * знати цифру **до** натискання "Видалити". UA-плюрал ("1 рахунок" /
  * "2 рахунки" / "5 рахунків") — той самий patern, що `BusinessCard`-counter.
+ *
+ * **Без слова "активних"** — counter рахує **усі** invoice-документи, включно
+ * з expired (узгоджено з `BusinessCard`-комент `apps/web/src/app/(protected)/
+ * business/page.tsx`). "Активний" вводив би в оману у destructive-confirmation.
  */
 
+/**
+ * **Lifecycle cleanup на route-change (review fix)** — `useAutoCancelOnRoute-
+ * Change`. Той самий клас проблеми, що `DeleteInvoiceConfirmDialog` /
+ * `SlugPresetWarningDialog`: глобальний store + route-local closure
+ * (`onConfirm` замикає `business.slug` cabinet-page-у). Без guard-а ФОП
+ * міг би відкрити confirm на бізнесі A, перейти на бізнес B, натиснути
+ * Confirm — і запустити 5s-undo cascade-delete на бізнес A.
+ */
 export default function DeleteBusinessConfirmDialog() {
     const isOpen = useDeleteBusinessConfirmStore((s) => s.isOpen);
     const business = useDeleteBusinessConfirmStore((s) => s.business);
-    const invoicesCount = useDeleteBusinessConfirmStore(
-        (s) => s.invoicesCount,
-    );
+    const invoicesCount = useDeleteBusinessConfirmStore((s) => s.invoicesCount);
     const onConfirm = useDeleteBusinessConfirmStore((s) => s.onConfirm);
     const close = useDeleteBusinessConfirmStore((s) => s.close);
+
+    useAutoCancelOnRouteChange(isOpen, close);
 
     let description = '';
     if (business) {
@@ -30,9 +42,9 @@ export default function DeleteBusinessConfirmDialog() {
         if (invoicesCount > 0) {
             const counter = pluralizeUa(
                 invoicesCount,
-                'активний рахунок',
-                'активних рахунки',
-                'активних рахунків',
+                'рахунок',
+                'рахунки',
+                'рахунків'
             );
             description += ` У бізнесу ${counter} — вони теж зникнуть.`;
         }

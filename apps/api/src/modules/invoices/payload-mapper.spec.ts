@@ -35,19 +35,89 @@ function makeInvoice(
 }
 
 describe('buildPayloadInputFromInvoice (Sprint 4 §4.3)', () => {
-    it('маппить receiver-fields з business (name, iban, taxId)', () => {
-        const business = makeBusiness({
-            name: 'ФОП Петренко',
-            requisites: {
-                iban: 'UA903052992990004149123456789',
-                taxId: '9876543210',
-            },
-        } as Partial<BusinessDocument>);
-        const result = buildPayloadInputFromInvoice(business, makeInvoice());
+    describe('payeeSnapshot пріоритет над live business (Sprint 4 review fix)', () => {
+        it('snapshot-fields перекривають current business — receiver name/iban/taxId не drift-ять при редагуванні business', () => {
+            // КРИТИЧНИЙ INVARIANT: ФОП виставив рахунок на ім'я "ФОП Іваненко"
+            // з IBAN-1, потім перейменувався і поміняв IBAN. Старе посилання
+            // ОБОВʼЯЗКОВО має вести на оригінальні реквізити (snapshot),
+            // інакше клієнт сплачує на нові реквізити, які вже не відповідають
+            // фактичному рахунку.
+            const business = makeBusiness({
+                name: 'ФОП Петренко (renamed)',
+                requisites: {
+                    iban: 'UA903052992990004149999999999', // new IBAN
+                    taxId: '9876543210',
+                },
+            } as Partial<BusinessDocument>);
+            const invoice = makeInvoice({
+                payeeSnapshot: {
+                    recipientName: 'ФОП Іваненко (frozen)',
+                    iban: 'UA213223130000026007233566001', // original IBAN
+                    taxId: '1234567899',
+                    paymentPurpose: 'Frozen purpose',
+                },
+            } as Partial<InvoiceDocument>);
+            const result = buildPayloadInputFromInvoice(business, invoice);
 
-        expect(result.receiverName).toBe('ФОП Петренко');
-        expect(result.iban).toBe('UA903052992990004149123456789');
-        expect(result.receiverTaxId).toBe('9876543210');
+            expect(result.receiverName).toBe('ФОП Іваненко (frozen)');
+            expect(result.iban).toBe('UA213223130000026007233566001');
+            expect(result.receiverTaxId).toBe('1234567899');
+            expect(result.purpose).toBe('Frozen purpose');
+        });
+
+        it('snapshot.paymentPurpose пріоритет — runtime-template-edit не торкає payload', () => {
+            // Особливо поганий кейс з review feedback-у: with-purpose slug
+            // генерується на момент create з effectivePurpose, але payload
+            // потім читав live business.paymentPurposeTemplate. URL fixed на
+            // старе призначення, payload — нове. Snapshot фрозить purpose
+            // у тому самому місці, де slug-генератор його використав.
+            const business = makeBusiness({
+                paymentPurposeTemplate: 'New template after edit',
+            });
+            const invoice = makeInvoice({
+                paymentPurpose: null, // user не задав, мав inherit
+                payeeSnapshot: {
+                    recipientName: 'ФОП Іваненко',
+                    iban: 'UA213223130000026007233566001',
+                    taxId: '1234567899',
+                    paymentPurpose: 'Original template at create',
+                },
+            } as Partial<InvoiceDocument>);
+            const result = buildPayloadInputFromInvoice(business, invoice);
+            expect(result.purpose).toBe('Original template at create');
+        });
+    });
+
+    describe('legacy fallback на live business (payeeSnapshot=null/missing)', () => {
+        it('маппить receiver-fields з business для legacy invoices', () => {
+            // Existing-pre-Sprint-4-review-fix invoices не мають snapshot —
+            // fallback на business поки migration не backfill-ить.
+            const business = makeBusiness({
+                name: 'ФОП Петренко',
+                requisites: {
+                    iban: 'UA903052992990004149123456789',
+                    taxId: '9876543210',
+                },
+            } as Partial<BusinessDocument>);
+            const result = buildPayloadInputFromInvoice(
+                business,
+                makeInvoice() // payeeSnapshot undefined
+            );
+
+            expect(result.receiverName).toBe('ФОП Петренко');
+            expect(result.iban).toBe('UA903052992990004149123456789');
+            expect(result.receiverTaxId).toBe('9876543210');
+        });
+
+        it('explicit payeeSnapshot=null теж тригерить fallback', () => {
+            const result = buildPayloadInputFromInvoice(
+                makeBusiness(),
+                makeInvoice({
+                    payeeSnapshot: null,
+                } as Partial<InvoiceDocument>)
+            );
+            expect(result.receiverName).toBe('ФОП Іваненко');
+        });
     });
 
     it('amountKopecks: бере з invoice.amount (число у копійках)', () => {

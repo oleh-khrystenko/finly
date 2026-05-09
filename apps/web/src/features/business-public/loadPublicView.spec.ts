@@ -44,7 +44,7 @@ describe('loadPublicView', () => {
         const result = await loadPublicView('IvanEnko');
         expect(fetchMock).toHaveBeenCalledWith(
             'http://api:4000/api/businesses/public/IvanEnko',
-            { next: { revalidate: 60 } },
+            { next: { revalidate: 60 } }
         );
         expect(result).toEqual(view);
     });
@@ -80,15 +80,13 @@ describe('loadPublicView', () => {
         await loadPublicView('a b/c');
         expect(fetchMock).toHaveBeenCalledWith(
             expect.stringContaining('a%20b%2Fc'),
-            expect.anything(),
+            expect.anything()
         );
     });
 
     it('crash якщо API_INTERNAL_URL не виставлений — server-side env required', async () => {
         delete process.env.API_INTERNAL_URL;
-        await expect(loadPublicView('x')).rejects.toThrow(
-            /API_INTERNAL_URL/,
-        );
+        await expect(loadPublicView('x')).rejects.toThrow(/API_INTERNAL_URL/);
         process.env.API_INTERNAL_URL = 'http://api:4000';
     });
 

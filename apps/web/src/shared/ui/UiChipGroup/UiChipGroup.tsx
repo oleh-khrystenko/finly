@@ -31,11 +31,11 @@ const UiChipGroup = (props: UiChipGroupProps) => {
             {label && (
                 <label
                     id={generatedId}
-                    className="mb-1 block text-sm font-medium text-foreground"
+                    className="text-foreground mb-1 block text-sm font-medium"
                 >
                     {label}
                     {required && (
-                        <span className="ml-1 text-destructive">*</span>
+                        <span className="text-destructive ml-1">*</span>
                     )}
                 </label>
             )}
@@ -51,21 +51,19 @@ const UiChipGroup = (props: UiChipGroupProps) => {
                         key={option.value}
                         value={option.value}
                         className={composeClasses(
-                            'cursor-pointer select-none rounded-md border transition-colors',
+                            'cursor-pointer rounded-md border transition-colors select-none',
                             'border-border text-muted-foreground hover:border-muted-foreground',
-                            'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                            'focus-visible:ring-ring focus:outline-none focus-visible:ring-2',
                             'data-checked:border-primary data-checked:bg-primary/10 data-checked:text-primary data-checked:hover:border-primary',
                             disabled && 'cursor-not-allowed opacity-50',
-                            chipSizeStyles[size],
+                            chipSizeStyles[size]
                         )}
                     >
                         {option.label}
                     </Radio>
                 ))}
             </RadioGroup>
-            {error && (
-                <p className="mt-1 text-sm text-destructive">{error}</p>
-            )}
+            {error && <p className="text-destructive mt-1 text-sm">{error}</p>}
         </div>
     );
 };

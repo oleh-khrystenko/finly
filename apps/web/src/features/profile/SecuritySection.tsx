@@ -14,6 +14,7 @@ import UiPasswordInput from '@/shared/ui/UiPasswordInput';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
 import { setPassword, getMe } from '@/shared/api';
+import { mapValidationCode } from '@/shared/lib';
 import { useAuthStore } from '@/entities/user';
 import ChangePasswordForm from './ChangePasswordForm';
 
@@ -64,7 +65,9 @@ const SecuritySection = ({ user, mode }: SecuritySectionProps) => {
         if (!result.success) {
             form.setError('password', {
                 type: 'validate',
-                message: 'Пароль повинен містити мінімум 8 символів',
+                message:
+                    result.error.issues[0]?.message ??
+                    'INVALID_PASSWORD_TOO_SHORT',
             });
             return;
         }
@@ -84,9 +87,7 @@ const SecuritySection = ({ user, mode }: SecuritySectionProps) => {
             if (code === 'RATE_LIMIT_EXCEEDED') {
                 toast.error('Забагато запитів. Спробуйте через 15 хвилин');
             } else {
-                toast.error(
-                    'Не вдалося виконати операцію. Спробуйте пізніше',
-                );
+                toast.error('Не вдалося виконати операцію. Спробуйте пізніше');
             }
         }
     };
@@ -123,7 +124,7 @@ const SecuritySection = ({ user, mode }: SecuritySectionProps) => {
                             Пароль
                         </dt>
                         <dd className="flex items-center gap-1.5">
-                            <ShieldCheck className="size-4 text-success" />
+                            <ShieldCheck className="text-success size-4" />
                             <span className="text-success text-sm font-medium">
                                 Встановлено
                             </span>
@@ -139,7 +140,7 @@ const SecuritySection = ({ user, mode }: SecuritySectionProps) => {
                     className="mt-5 space-y-4"
                 >
                     <div className="flex items-center gap-2">
-                        <ShieldOff className="size-4 text-muted-foreground" />
+                        <ShieldOff className="text-muted-foreground size-4" />
                         <span className="text-muted-foreground text-sm">
                             Пароль не встановлено
                         </span>
@@ -153,7 +154,7 @@ const SecuritySection = ({ user, mode }: SecuritySectionProps) => {
                             },
                         })}
                         placeholder="Мінімум 8 символів"
-                        error={errors.password?.message}
+                        error={mapValidationCode(errors.password?.message)}
                         required={!isPasswordOptional}
                         size="lg"
                         showLabel="Показати пароль"
@@ -164,8 +165,7 @@ const SecuritySection = ({ user, mode }: SecuritySectionProps) => {
                         variant="filled"
                         size="md"
                         disabled={
-                            isSubmitting ||
-                            (!isPasswordOptional && !password)
+                            isSubmitting || (!isPasswordOptional && !password)
                         }
                     >
                         {isSubmitting ? (

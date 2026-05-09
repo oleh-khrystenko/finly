@@ -74,7 +74,7 @@ export default function AiChatPage() {
                         id: m.id,
                         role: m.role,
                         content: m.content,
-                    })),
+                    }))
                 );
             } catch {
                 // silently fail — empty chat is fine
@@ -131,8 +131,8 @@ export default function AiChatPage() {
         const rollback = () => {
             setMessages((prev) =>
                 prev.filter(
-                    (m) => m.id !== userMsgId && m.id !== assistantMsgId,
-                ),
+                    (m) => m.id !== userMsgId && m.id !== assistantMsgId
+                )
             );
             setInput(trimmed);
         };
@@ -148,10 +148,11 @@ export default function AiChatPage() {
                                     m.id === assistantMsgId
                                         ? {
                                               ...m,
-                                              content: m.content + event.content,
+                                              content:
+                                                  m.content + event.content,
                                           }
-                                        : m,
-                                ),
+                                        : m
+                                )
                             );
                             break;
 
@@ -176,7 +177,7 @@ export default function AiChatPage() {
                             break;
                     }
                 },
-                controller.signal,
+                controller.signal
             );
         } catch (err) {
             if (err instanceof AiChatError) {
@@ -227,7 +228,7 @@ export default function AiChatPage() {
                 handleSubmit();
             }
         },
-        [handleSubmit],
+        [handleSubmit]
     );
 
     return (
@@ -249,9 +250,9 @@ export default function AiChatPage() {
             </div>
 
             {/* ── Info Bar ── */}
-            <div className="flex items-center justify-between border-b border-border pb-3 text-xs text-muted-foreground">
+            <div className="border-border text-muted-foreground flex items-center justify-between border-b pb-3 text-xs">
                 <div>
-                    <span className="font-medium text-foreground">
+                    <span className="text-foreground font-medium">
                         {formattedBalance}
                     </span>{' '}
                     виконань
@@ -259,18 +260,14 @@ export default function AiChatPage() {
                 {canAfford ? (
                     <span>{formattedCost} виконань за повідомлення</span>
                 ) : (
-                    <UiLink
-                        as="link"
-                        href="/billing"
-                        className="font-medium"
-                    >
+                    <UiLink as="link" href="/billing" className="font-medium">
                         Поповнити баланс
                     </UiLink>
                 )}
             </div>
 
             {/* ── Messages ── */}
-            <div className="flex-1 overflow-y-auto pr-2 pt-4">
+            <div className="flex-1 overflow-y-auto pt-4 pr-2">
                 {isLoadingHistory ? (
                     <div className="flex h-full items-center justify-center">
                         <UiSpinner size="lg" />
@@ -278,13 +275,13 @@ export default function AiChatPage() {
                 ) : messages.length === 0 ? (
                     <div className="flex h-full flex-col items-center justify-center gap-6">
                         <div className="text-center">
-                            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
-                                <MessageSquare className="h-7 w-7 text-muted-foreground" />
+                            <div className="bg-muted mx-auto flex h-14 w-14 items-center justify-center rounded-2xl">
+                                <MessageSquare className="text-muted-foreground h-7 w-7" />
                             </div>
                             <h2 className="mt-4 text-lg font-semibold tracking-tight">
                                 Чим можу допомогти?
                             </h2>
-                            <p className="mt-1.5 text-sm text-muted-foreground">
+                            <p className="text-muted-foreground mt-1.5 text-sm">
                                 Надішліть повідомлення, щоб почати розмову з AI.
                             </p>
                         </div>
@@ -348,7 +345,7 @@ export default function AiChatPage() {
             </div>
 
             {/* ── Footer ── */}
-            <div className="border-t border-border py-3">
+            <div className="border-border border-t py-3">
                 <UiTextarea
                     ref={inputRef}
                     value={input}
@@ -372,8 +369,7 @@ export default function AiChatPage() {
                                               : 'text-muted-foreground'
                                     }`}
                                 >
-                                    {input.length}/
-                                    {AI_CHAT_MESSAGE_MAX_LENGTH}
+                                    {input.length}/{AI_CHAT_MESSAGE_MAX_LENGTH}
                                     {input.length >
                                         AI_CHAT_MESSAGE_MAX_LENGTH &&
                                         ` (-${input.length - AI_CHAT_MESSAGE_MAX_LENGTH})`}
@@ -402,7 +398,7 @@ export default function AiChatPage() {
                         </div>
                     }
                 />
-                <div className="mt-1.5 space-y-0.5 text-center text-xs text-muted-foreground">
+                <div className="text-muted-foreground mt-1.5 space-y-0.5 text-center text-xs">
                     <p>AI може помилятися. Перевіряйте відповіді.</p>
                     <p className="text-muted-foreground/60">
                         Якщо AI почав відповідати, кошти не повертаються при

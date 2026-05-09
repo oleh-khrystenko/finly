@@ -7,11 +7,7 @@ import UiFullPageLoader from '@/shared/ui/UiFullPageLoader';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
 import UiPageHeading from '@/shared/ui/UiPageHeading';
 import { useAuthStore } from '@/entities/user';
-import {
-    ProfileForm,
-    SecuritySection,
-    DangerZone,
-} from '@/features/profile';
+import { ProfileForm, SecuritySection, DangerZone } from '@/features/profile';
 import type { ProfileMode } from '@/features/profile';
 
 function ProfileContent() {
@@ -47,9 +43,7 @@ function ProfileContent() {
                     onSaved={handleProfileSaved}
                 />
 
-                {mode !== 'new' && (
-                    <SecuritySection user={user} mode={mode} />
-                )}
+                {mode !== 'new' && <SecuritySection user={user} mode={mode} />}
 
                 {mode === null && <DangerZone />}
             </div>

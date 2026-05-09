@@ -36,14 +36,20 @@ RUN pnpm deploy --filter ./apps/api --prod --legacy /out
 # deps і scripts/ ще присутні (на відміну від обрізаного через
 # `pnpm deploy --prod` runtime). Запускається перед `docker compose up -d api`
 # через окремий compose-profile (`migrations`); failure блокує deploy.
-# Кожна нова міграція додається власним npm-script-ом у `apps/api/package.json`
-# (див. `scripts/migrations/README.md`); CMD за замовчуванням виконує поточну
-# Sprint 3 міграцію — наступні sprint-и можуть або змінити CMD, або викликати
-# свій script через `docker compose run api-migrations <cmd>` override.
+#
+# **CMD = `migration:all`-orchestrator** (Sprint 4 review fix). Раніше CMD
+# хардкоджено на одну міграцію (slug-lower); кожна нова міграція потребувала
+# update Dockerfile + deploy.yml + risk забути одне з двох. Тепер
+# `migration:all` chain-ить усі міграції chronologically (ідемпотентні —
+# re-run cheap no-op). Додавання нової міграції зводиться до:
+#   1) новий `*.ts` script + `*.spec.ts`
+#   2) npm-script `migration:<slug>` + додаток у `migration:all` chain
+#   3) запис у `scripts/migrations/README.md` registry
+# Дeploy.yml не міняється.
 FROM build AS migrations
 WORKDIR /app/apps/api
 ENV NODE_ENV=production
-CMD ["pnpm", "exec", "ts-node", "scripts/migrations/2026-05-03-businesses-slug-lower.ts"]
+CMD ["pnpm", "run", "migration:all"]
 
 # ---------- runtime ----------
 FROM node:20-alpine AS runtime

@@ -1,39 +1,95 @@
 'use client';
 
+import type { ReactNode } from 'react';
+import UiButton from '@/shared/ui/UiButton';
 import { composeClasses } from '@/shared/lib';
-import type { WizardStep } from './businessWizardStore';
+import { STEP_TITLES, type BusinessWizardStep } from './businessWizardStore';
 
-const STEP_TITLES: Record<WizardStep, string> = {
-    1: 'Тип і назва',
-    2: 'Реквізити',
-    3: 'Оподаткування',
-    4: 'Призначення і банки',
-};
+type StepState = 'passed' | 'current' | 'future';
 
 interface Props {
-    current: WizardStep;
-    maxReached: WizardStep;
-    onJumpBack: (step: WizardStep) => void;
+    /** Поточний step. */
+    current: BusinessWizardStep;
+    /**
+     * Sprint 7 §SP-6 — список кроків wizard-у залежно від обраного `type`.
+     * Передається parent-ом (`BusinessWizardForm`), що читає
+     * `computeStepsForType(formData.type)`. Тут не обчислюємо повторно —
+     * presentation-component без store-доступу.
+     */
+    steps: readonly BusinessWizardStep[];
+    /**
+     * Виклик при click на past-step (clickable назад без втрати state).
+     */
+    onJumpBack: (step: BusinessWizardStep) => void;
 }
 
 /**
- * Sprint 3 §3.7 — горизонтальний на ≥sm, вертикальний "Крок N з 4" на mobile.
- * Майбутні кроки не клікабельні (валідація поточного має пройти); пройдені —
- * клікабельні (повернення без втрати state, бо все persistить у store).
+ * Number-indicator (1, 2, 3, ...) для одного step-а. Кольори різні per state:
+ *  - `passed` — success-token (пройдений крок)
+ *  - `current` — primary-token (active step)
+ *  - `future` — muted, тільки border (ще-не-пройдений)
+ *
+ * Винесено окремо, бо як `passed`-варіант його приймає `UiButton.IconLeft`,
+ * а як `current`/`future` — статичний `<span>`-wrapper.
  */
-export default function StepNavigator({
-    current,
-    maxReached,
-    onJumpBack,
-}: Props) {
-    const steps: WizardStep[] = [1, 2, 3, 4];
+function StepIndicator({
+    index,
+    state,
+}: {
+    index: number;
+    state: StepState;
+}): ReactNode {
+    return (
+        <span
+            className={composeClasses(
+                'flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
+                state === 'current' && 'bg-primary text-primary-foreground',
+                state === 'passed' && 'bg-success text-success-foreground',
+                state === 'future' &&
+                    'border-border text-muted-foreground bg-background border'
+            )}
+        >
+            {index + 1}
+        </span>
+    );
+}
+
+/**
+ * Sprint 3 §3.7 + Sprint 7 §SP-6 — горизонтальний на ≥sm, вертикальний
+ * "Крок N з {steps.length}" на mobile.
+ *
+ * **Dynamic step-count**: для individual / organization wizard має 3 кроки
+ * (без `'taxation'`), для fop / tov — 4. Лінійний індекс (`Крок N з M`)
+ * обчислюється від `steps.indexOf(current)`.
+ *
+ * **Interactivity model**:
+ *  - Past steps — clickable, рендеряться через `UiButton variant="text"
+ *    size="sm"` з number-circle у `IconLeft`. **Жодних override-ів базових
+ *    стилів примітиву** (`docs/conventions/ui-primitives.md` §2): padding /
+ *    justify / cursor — від primitive-у as-is.
+ *  - Current step — статичний `<span>`, не tabbable; виділяється primary-
+ *    кольором + bold.
+ *  - Future steps — статичні `<span>`, opacity-50; не interactive (нічого
+ *    клікати — користувач туди ще не дійшов). Це знімає accessibility-
+ *    шум "disabled-button у tab-flow".
+ *
+ * **Static spans мають свій padding/layout** — це не порушення §2, бо вони
+ * native HTML elements без primitive-обгортки. Padding `px-3 py-1.5` свідомо
+ * співпадає з `UiButton size="sm"` для візуальної узгодженості items у row.
+ */
+export default function StepNavigator({ current, steps, onJumpBack }: Props) {
+    const currentIndex = steps.indexOf(current);
+    // Defensive: якщо `current` випав з обчисленого list-у (зміна `type`
+    // зробила step irrelevant — наприклад, користувач був на 'taxation' і
+    // змінив type на 'individual') — рендеримо як перший.
+    const safeIndex = currentIndex === -1 ? 0 : currentIndex;
 
     return (
         <div>
             {/* Mobile compact */}
             <div className="sm:hidden">
                 <p className="text-muted-foreground text-sm">
-                    Крок {current} з 4
+                    Крок {safeIndex + 1} з {steps.length}
                 </p>
                 <p className="text-foreground text-base font-semibold">
                     {STEP_TITLES[current]}
@@ -42,53 +98,55 @@ export default function StepNavigator({
 
             {/* Desktop horizontal */}
             <ol className="hidden items-center justify-between gap-2 sm:flex">
-                {steps.map((s, idx) => {
-                    const isCurrent = s === current;
-                    const isPassed = s < current;
-                    const isFuture = s > maxReached;
-                    const clickable = s < current;
+                {steps.map((step, idx) => {
+                    const stepState: StepState =
+                        idx < safeIndex
+                            ? 'passed'
+                            : idx === safeIndex
+                              ? 'current'
+                              : 'future';
+
                     return (
                         <li
-                            key={s}
+                            key={step}
                             className="flex flex-1 items-center gap-2"
                         >
-                            <button
-                                type="button"
-                                onClick={() => clickable && onJumpBack(s)}
-                                disabled={!clickable && !isCurrent}
-                                aria-current={isCurrent ? 'step' : undefined}
-                                className={composeClasses(
-                                    'flex flex-1 flex-col items-start gap-1 rounded-md p-2 text-left transition-colors',
-                                    clickable &&
-                                        'hover:bg-accent cursor-pointer',
-                                    !clickable && !isCurrent && 'opacity-50',
-                                )}
-                            >
-                                <div className="flex items-center gap-2">
-                                    <span
-                                        className={composeClasses(
-                                            'flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
-                                            isCurrent &&
-                                                'bg-primary text-primary-foreground',
-                                            isPassed &&
-                                                'bg-success text-success-foreground',
-                                            isFuture &&
-                                                'border-border text-muted-foreground border bg-background',
-                                        )}
-                                    >
-                                        {s}
-                                    </span>
-                                    <span
-                                        className={composeClasses(
-                                            'text-sm',
-                                            isCurrent && 'text-foreground font-semibold',
-                                            !isCurrent && 'text-muted-foreground',
-                                        )}
-                                    >
-                                        {STEP_TITLES[s]}
-                                    </span>
-                                </div>
-                            </button>
+                            {stepState === 'passed' ? (
+                                <UiButton
+                                    variant="text"
+                                    size="sm"
+                                    onClick={() => onJumpBack(step)}
+                                    IconLeft={
+                                        <StepIndicator
+                                            index={idx}
+                                            state="passed"
+                                        />
+                                    }
+                                >
+                                    {STEP_TITLES[step]}
+                                </UiButton>
+                            ) : (
+                                <span
+                                    aria-current={
+                                        stepState === 'current'
+                                            ? 'step'
+                                            : undefined
+                                    }
+                                    className={composeClasses(
+                                        'inline-flex items-center gap-2 px-3 py-1.5 text-sm',
+                                        stepState === 'current' &&
+                                            'text-foreground font-semibold',
+                                        stepState === 'future' &&
+                                            'text-muted-foreground opacity-50'
+                                    )}
+                                >
+                                    <StepIndicator
+                                        index={idx}
+                                        state={stepState}
+                                    />
+                                    <span>{STEP_TITLES[step]}</span>
+                                </span>
+                            )}
                             {idx < steps.length - 1 && (
                                 <div className="bg-border h-px flex-1" />
                             )}

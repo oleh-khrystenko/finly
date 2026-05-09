@@ -2,12 +2,14 @@ import {
     BadRequestException,
     Controller,
     Get,
+    GoneException,
     Header,
     NotFoundException,
     Param,
     Query,
     Res,
 } from '@nestjs/common';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { Response } from 'express';
 import {
     NBU_HOST_LEGACY,
@@ -23,6 +25,7 @@ import { ENV } from '../../config/env';
 import { BusinessesService } from '../businesses/businesses.service';
 import type { BusinessDocument } from '../businesses/schemas/business.schema';
 import { QrService } from '../qr/qr.service';
+import { isInvoiceExpired } from './expiry';
 import { InvoicesService } from './invoices.service';
 import { buildPayloadInputFromInvoice } from './payload-mapper';
 import { effectiveInvoicePurpose } from './purpose-resolver';
@@ -33,7 +36,9 @@ import type { InvoiceDocument } from './schemas/invoice.schema';
  *
  * **Окремий controller від `InvoicesController` (cabinet).** Розділення зон
  * by design (той самий патерн, що Sprint 3 `PublicBusinessesController`):
- *  - public — без guard-ів, без cookie / Authorization, з агресивним CDN-cache.
+ *  - public — без guard-ів, без cookie / Authorization. На відміну від
+ *    business-public, тут **без CDN-cache** (`Cache-Control: no-store`,
+ *    обґрунтування нижче) — invoice mutable payment data.
  *  - cabinet — за `JwtActiveGuard` + `BusinessAccessGuard`, без CDN-cache.
  *  Спільні primitives (`BusinessesService.getBySlug` case-insensitive,
  *  `InvoicesService.getBySlug` case-sensitive) — single read-path для обох
@@ -62,11 +67,28 @@ import type { InvoiceDocument } from './schemas/invoice.schema';
  * не-залогіненими). Глобальний `OnboardingInterceptor` пропустимо явно через
  * decorator.
  *
- * **`Cache-Control: public, max-age=3600, stale-while-revalidate=86400`** —
- * безпечно тут (немає `Authorization`/cookie; shared cache не отримає response
- * специфічний для user-а). Кеш — інвалідовується через 1 годину; SWR-вікно
- * 24 години для CDN-graceful-revalidation.
+ * **`Cache-Control: no-store`** — invoice — це mutable payment command:
+ * `amount`, `paymentPurpose`, `validUntil`, lockMask і delete-state можуть
+ * змінитися ФОПом у будь-який момент. Aggressive shared-cache (`public,
+ * max-age=3600, SWR=86400`) у Sprint 4 створював correctness-ризик: клієнт
+ * по збереженому посиланню міг отримати застарілу суму/QR після редагування
+ * або взагалі бачити рахунок після видалення. Для payment flow це
+ * неприйнятно. CDN-relief, якщо знадобиться у майбутньому, реалізуємо через
+ * ETag-валідацію або cache-busting query (`?v={updatedAt}`), не через
+ * time-based stale window. Business endpoints (vanity вивіска, immutable-ish)
+ * залишаються з агресивним кешем — у `PublicBusinessesController`.
  */
+/**
+ * **Throttle policy.** Public payment endpoints живуть під окремим named
+ * throttler-ом `'public-payment'` (`app.module.ts`): public invoice page робить
+ * 3 виклики на render (JSON view + 2 QR PNG), а CDN-cache тут свідомо
+ * вимкнений (`Cache-Control: no-store`, mutable payment data) — тож шквал
+ * клієнтів через NAT/proxy швидко перевершив би дефолтний 60/min на IP.
+ * `@SkipThrottle({ default: true })` вимикає default; `@Throttle({
+ * 'public-payment': ... })` ставить вищу policy. Захист зберігається.
+ */
+@SkipThrottle({ default: true })
+@Throttle({ 'public-payment': { limit: 600, ttl: 60000 } })
 @Controller('businesses/public/:slug/invoices')
 export class PublicInvoicesController {
     constructor(
@@ -77,10 +99,7 @@ export class PublicInvoicesController {
 
     @SkipOnboarding()
     @Get(':invoiceSlug')
-    @Header(
-        'Cache-Control',
-        'public, max-age=3600, stale-while-revalidate=86400'
-    )
+    @Header('Cache-Control', 'no-store')
     async getPublic(
         @Param('slug') slug: string,
         @Param('invoiceSlug') invoiceSlug: string
@@ -89,39 +108,63 @@ export class PublicInvoicesController {
             slug,
             invoiceSlug
         );
-        const payloadInput = buildPayloadInputFromInvoice(business, invoice);
+        const expired = isInvoiceExpired(invoice.validUntil);
+        // Sprint 4 review fix — server-side expiry block. Раніше expired-
+        // banner існував тільки на клієнті (client-side `getInvoiceStatus`),
+        // але `nbuLinks` все одно віддавалися у JSON. Зараз: коли
+        // `validUntil < now` — `nbuLinks: null`; client рендерить heading
+        // + "Прострочено"-banner без жодного payment-vector-у. QR endpoints
+        // у такому стані повертають 410 (defense-in-depth).
+        const nbuLinks = expired
+            ? null
+            : (() => {
+                  const payloadInput = buildPayloadInputFromInvoice(
+                      business,
+                      invoice
+                  );
+                  return {
+                      primary: this.qrService.buildNbuPayloadLinkForInput(
+                          payloadInput,
+                          NBU_HOST_PRIMARY
+                      ),
+                      legacy: this.qrService.buildNbuPayloadLinkForInput(
+                          payloadInput,
+                          NBU_HOST_LEGACY
+                      ),
+                  };
+              })();
         // PublicInvoiceSchema.parse — це whitelist-фільтр: усе, що не у
         // схемі, відкидається. Якщо колись Mongoose-doc отримає leak-поле
         // — це місце відрубає його перед серіалізацією.
+        // Sprint 4 review fix — snapshot fields пріоритет, fallback на
+        // live business для legacy invoices (pre-snapshot створених).
+        // `paymentPurpose` і `business.name` у public-view МУСЯТЬ матчити
+        // payload (NBU QR/link) — інакше клієнт бачить одне, банк-додаток
+        // отримує інше. payload-mapper уже використовує snapshot першим;
+        // тут робимо те саме для view-shape consistency.
+        const snapshot = invoice.payeeSnapshot;
         const view = PublicInvoiceSchema.parse({
             amount: invoice.amount,
             amountLocked: invoice.amountLocked,
-            // Sprint 4 §4.7 — resolve `paymentPurpose` через
-            // `effectiveInvoicePurpose` (inheritance-rule, той самий шлях що
-            // `payloadInput.purpose`). Single source of truth: UI sub-info
-            // блок і NBU payload показують однаковий текст.
-            paymentPurpose: effectiveInvoicePurpose(
-                invoice.paymentPurpose,
-                business.paymentPurposeTemplate
-            ),
+            paymentPurpose:
+                snapshot?.paymentPurpose ??
+                effectiveInvoicePurpose(
+                    invoice.paymentPurpose,
+                    business.paymentPurposeTemplate
+                ),
             validUntil: invoice.validUntil,
             slug: invoice.slug,
             business: {
                 type: business.type,
-                name: business.name,
+                // Snapshot recipient name — той самий, що у NBU payload.
+                // Якщо ФОП перейменував business після виставлення інвойсу,
+                // клієнт бачить original ім'я, що відповідає платіжній
+                // команді у банку.
+                name: snapshot?.recipientName ?? business.name,
                 slug: business.slug,
                 acceptedBanks: business.acceptedBanks,
             },
-            nbuLinks: {
-                primary: this.qrService.buildNbuPayloadLinkForInput(
-                    payloadInput,
-                    NBU_HOST_PRIMARY
-                ),
-                legacy: this.qrService.buildNbuPayloadLinkForInput(
-                    payloadInput,
-                    NBU_HOST_LEGACY
-                ),
-            },
+            nbuLinks,
         });
         return { data: view };
     }
@@ -133,11 +176,7 @@ export class PublicInvoicesController {
      */
     @SkipOnboarding()
     @Get(':invoiceSlug/qr/business.png')
-    @Header('Content-Type', 'image/png')
-    @Header(
-        'Cache-Control',
-        'public, max-age=3600, stale-while-revalidate=86400'
-    )
+    @Header('Cache-Control', 'no-store')
     async getBusinessQr(
         @Param('slug') slug: string,
         @Param('invoiceSlug') invoiceSlug: string,
@@ -147,9 +186,22 @@ export class PublicInvoicesController {
             slug,
             invoiceSlug
         );
+        if (isInvoiceExpired(invoice.validUntil)) {
+            // Defense-in-depth: client уже не показує QR-image коли nbuLinks=null,
+            // але прямий запит до endpoint (cached link, scraping) має відрубатися.
+            throw new GoneException({
+                code: RESPONSE_CODE.INVOICE_EXPIRED,
+                message: 'Invoice expired',
+            });
+        }
         // Канонічний URL — case-preserved business slug + invoice slug.
         const url = `${ENV.PAY_PUBLIC_URL.replace(/\/$/, '')}/${business.slug}/${invoice.slug}`;
         const png = await this.qrService.renderForUrl(url);
+        // Content-Type ставимо ВРУЧНУ після expiry-check — `@Header()`-декоратор
+        // pre-apply-ить header до запуску handler-а, тож при `GoneException`
+        // exception-filter пише JSON, а Content-Type залишається image/png і
+        // клієнт не парсить body. Manual setHeader тут — це на success-шляху.
+        res.setHeader('Content-Type', 'image/png');
         res.send(png);
     }
 
@@ -160,11 +212,7 @@ export class PublicInvoicesController {
      */
     @SkipOnboarding()
     @Get(':invoiceSlug/qr/nbu.png')
-    @Header('Content-Type', 'image/png')
-    @Header(
-        'Cache-Control',
-        'public, max-age=3600, stale-while-revalidate=86400'
-    )
+    @Header('Cache-Control', 'no-store')
     async getNbuQr(
         @Param('slug') slug: string,
         @Param('invoiceSlug') invoiceSlug: string,
@@ -176,10 +224,18 @@ export class PublicInvoicesController {
             slug,
             invoiceSlug
         );
+        if (isInvoiceExpired(invoice.validUntil)) {
+            throw new GoneException({
+                code: RESPONSE_CODE.INVOICE_EXPIRED,
+                message: 'Invoice expired',
+            });
+        }
         const input = buildPayloadInputFromInvoice(business, invoice);
         const png = await this.qrService.renderForNbuPayload(input, '003', {
             host,
         });
+        // Content-Type — manual після expiry-check (див. коментар у `getBusinessQr`).
+        res.setHeader('Content-Type', 'image/png');
         res.send(png);
     }
 

@@ -27,18 +27,17 @@ import UiSwitch from '@/shared/ui/UiSwitch';
 import {
     BasicSection,
     BanksSection,
+    CompletedFromLandingBanner,
     PublicSection,
     QrSection,
     RequisitesSection,
     TaxationSection,
+    hasTaxationFields,
     scheduleDeleteWithUndo,
     useDeleteBusinessConfirmStore,
 } from '@/features/business-edit';
 import { PublicBusinessView } from '@/features/business-public';
-import {
-    InvoicesSection,
-    InvoicesSettingsSection,
-} from '@/features/invoices';
+import { InvoicesSection, InvoicesSettingsSection } from '@/features/invoices';
 
 // Discriminated union для prefetch-у public view. `slug` як discriminator
 // дозволяє відрізнити "поточна версія" від stale-state, що приходить з
@@ -54,7 +53,7 @@ export default function BusinessSlugPage() {
     const openDeleteConfirm = useDeleteBusinessConfirmStore((s) => s.open);
 
     const [business, setBusiness] = useState<BusinessWithInvoicesCount | null>(
-        null,
+        null
     );
     const [error, setError] = useState<{ code: string } | null>(null);
     const [previewMode, setPreviewMode] = useState(false);
@@ -236,13 +235,46 @@ export default function BusinessSlugPage() {
                 />
             ) : (
                 <div className="space-y-4">
+                    {/*
+                     * Sprint 8 §8.5 — banner-нагадування після claim-flow з
+                     * лендінгу. Сам читає `?completed-from=landing`-param і
+                     * рендериться як null без нього. У preview-mode ховаємо
+                     * (banner — для editor-а, не для public-перегляду).
+                     */}
+                    <CompletedFromLandingBanner />
                     <BasicSection business={business} onSave={handlePatch} />
                     <RequisitesSection
                         business={business}
                         onSave={handlePatch}
                     />
-                    <TaxationSection business={business} onSave={handlePatch} />
-                    <BanksSection business={business} onSave={handlePatch} />
+                    {/*
+                     * Sprint 7 §7.8 — TaxationSection рендериться лише для
+                     * `fop` / `tov`. `hasTaxationFields` — composite guard:
+                     *  1. **Type-driven primary**: `requiresTaxation(b.type)`
+                     *     (truth у `BUSINESS_TYPES`-tuple) — єдиний drive для
+                     *     render-decision. individual / organization не
+                     *     render-яться навіть якщо документ має non-null
+                     *     taxation (drift / data-corruption).
+                     *  2. **Data-driven secondary**: non-null both fields —
+                     *     TS-narrow до `TaxationCapableBusiness`-shape, що
+                     *     потребує `Props`. Drift-fallthrough guard для legacy-
+                     *     документів ФОП без taxation-полів.
+                     *
+                     * Conditional **unmount** (а не disabled) — UX-rationale
+                     * §SP-7: для individual / organization не показуємо
+                     * порожнє поле, а взагалі не рендеримо секцію.
+                     */}
+                    {hasTaxationFields(business) && (
+                        <TaxationSection
+                            business={business}
+                            onSave={handlePatch}
+                        />
+                    )}
+                    <BanksSection
+                        id="banks"
+                        business={business}
+                        onSave={handlePatch}
+                    />
                     <PublicSection
                         business={business}
                         payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
@@ -264,6 +296,9 @@ export default function BusinessSlugPage() {
                     />
                     <InvoicesSection
                         businessSlug={business.slug}
+                        businessPaymentPurposeTemplate={
+                            business.paymentPurposeTemplate
+                        }
                         payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
                     />
 

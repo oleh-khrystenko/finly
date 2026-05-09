@@ -30,7 +30,7 @@ jest.mock('next/server', () => ({
             redirect: (url: URL, status?: number) => mockRedirect(url, status),
             rewrite: (url: URL) => mockRewrite(url),
             next: () => ({ status: 200, headers: new Map() }),
-        },
+        }
     ),
 }));
 
@@ -42,7 +42,7 @@ function createMockRequest(
         cookies?: Record<string, string>;
         host?: string;
         search?: string;
-    } = {},
+    } = {}
 ) {
     const cookies = options.cookies ?? {};
     const host = options.host ?? 'localhost:3000';

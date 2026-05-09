@@ -1,9 +1,14 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import type { Business } from '@finly/types';
-import TaxationSection from './TaxationSection';
+import TaxationSection, {
+    type TaxationCapableBusiness,
+} from './TaxationSection';
 
-const baseBusiness: Business = {
+// Sprint 7 §7.8 — фікстура використовує `TaxationCapableBusiness` (intersection
+// `Business & { taxationSystem: TaxationSystem; isVatPayer: boolean }`), бо
+// саме цей narrow-тип очікує `TaxationSection.Props`. Parent у production
+// гарантує цю форму через `hasTaxationFields`-type-guard перед рендером.
+const baseBusiness: TaxationCapableBusiness = {
     id: '507f1f77bcf86cd799439011',
     type: 'fop',
     ownerId: '507f1f77bcf86cd799439012',
@@ -17,6 +22,7 @@ const baseBusiness: Business = {
     paymentPurposeTemplate: 'Оплата',
     acceptedBanks: ['privatbank'],
     seoIndexEnabled: false,
+    invoiceSlugPresetDefault: null,
     deletedAt: null,
     createdAt: new Date('2026-05-01'),
     updatedAt: new Date('2026-05-01'),
@@ -31,9 +37,7 @@ describe('TaxationSection — coupled rule (Sprint 3 §C1)', () => {
 
     it('VAT switch checked + enabled з existing simplified-3 + isVatPayer=true', () => {
         render(<TaxationSection business={baseBusiness} onSave={jest.fn()} />);
-        fireEvent.click(
-            screen.getByLabelText('Редагувати: оподаткування'),
-        );
+        fireEvent.click(screen.getByLabelText('Редагувати: оподаткування'));
         const vatSwitch = screen.getByRole('switch', {
             name: /платник пдв/i,
         });
@@ -42,28 +46,21 @@ describe('TaxationSection — coupled rule (Sprint 3 §C1)', () => {
     });
 
     it('VAT switch disabled з existing simplified-1 (coupled-rule UI guard)', () => {
-        const businessWithSimp1: Business = {
+        const businessWithSimp1: TaxationCapableBusiness = {
             ...baseBusiness,
             taxationSystem: 'simplified-1',
             isVatPayer: false,
         };
         render(
-            <TaxationSection
-                business={businessWithSimp1}
-                onSave={jest.fn()}
-            />,
+            <TaxationSection business={businessWithSimp1} onSave={jest.fn()} />
         );
-        fireEvent.click(
-            screen.getByLabelText('Редагувати: оподаткування'),
-        );
+        fireEvent.click(screen.getByLabelText('Редагувати: оподаткування'));
         const vatSwitch = screen.getByRole('switch', {
             name: /платник пдв/i,
         });
         expect(vatSwitch).toBeDisabled();
         expect(
-            screen.getByText(
-                /пдв доступний для спрощеної-3 і загальної/i,
-            ),
+            screen.getByText(/пдв доступний для спрощеної-3 і загальної/i)
         ).toBeInTheDocument();
     });
 
@@ -71,9 +68,7 @@ describe('TaxationSection — coupled rule (Sprint 3 §C1)', () => {
         const onSave = jest.fn().mockResolvedValue(undefined);
         render(<TaxationSection business={baseBusiness} onSave={onSave} />);
 
-        fireEvent.click(
-            screen.getByLabelText('Редагувати: оподаткування'),
-        );
+        fireEvent.click(screen.getByLabelText('Редагувати: оподаткування'));
         fireEvent.click(screen.getByText('Зберегти'));
         await Promise.resolve();
 
@@ -90,9 +85,7 @@ describe('TaxationSection — coupled rule (Sprint 3 §C1)', () => {
         const onSave = jest.fn().mockResolvedValue(undefined);
         render(<TaxationSection business={baseBusiness} onSave={onSave} />);
 
-        fireEvent.click(
-            screen.getByLabelText('Редагувати: оподаткування'),
-        );
+        fireEvent.click(screen.getByLabelText('Редагувати: оподаткування'));
 
         // VAT switch checked + enabled (existing simplified-3 + isVatPayer=true)
         const vatSwitch = screen.getByRole('switch', {
@@ -123,7 +116,7 @@ describe('TaxationSection — coupled rule (Sprint 3 §C1)', () => {
             expect(onSave).toHaveBeenCalledWith({
                 taxationSystem: 'simplified-1',
                 isVatPayer: false,
-            }),
+            })
         );
     });
 });

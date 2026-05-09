@@ -1,15 +1,17 @@
 'use client';
 
 import { type Business, type SlugPreset } from '@finly/types';
-import UiEditableField from '@/shared/ui/UiEditableField';
+import UiEditableField, {
+    EditableFieldCancelledError,
+} from '@/shared/ui/UiEditableField';
 import UiSelect from '@/shared/ui/UiSelect';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
-import { useSlugPresetWarningStore } from './slugPresetWarningStore';
+import { useSlugPresetWarningStore } from '@/entities/invoice';
 
 interface Props {
     business: Business;
     onSave: (
-        patch: Pick<Business, 'invoiceSlugPresetDefault'>,
+        patch: Pick<Business, 'invoiceSlugPresetDefault'>
     ) => Promise<void>;
 }
 
@@ -17,10 +19,11 @@ interface Props {
  * Sprint 4 §4.4 — секція "Налаштування рахунків" на сторінці бізнесу.
  *
  * **Власник: `features/invoices` slice** — секція керує invoice-related
- * налаштуванням (хоча зберігається у Business-документі); тримати її поряд із
- * `slugPresetWarningStore` уникає cross-slice-import-у з business-edit.
- * `UiEditableField` — generic primitive у `shared/ui/`, доступний усім
- * feature-слайсам без feature→feature coupling-у.
+ * налаштуванням (хоча зберігається у Business-документі). `slug-preset-
+ * warning store` живе на нижчому FSD-шарі (`entities/invoice`), щоб
+ * `features/invoice-create` (форма) і ця feature consume-или однаково
+ * без cross-slice import-у. `UiEditableField` — generic primitive у
+ * `shared/ui/`, доступний усім feature-слайсам без feature→feature coupling-у.
  *
  * **Один dropdown — `invoiceSlugPresetDefault`.** 5 опцій (qr-decisions §4.3.1
  * + §4.5 SP-1):
@@ -61,7 +64,7 @@ const OPTIONS: { value: FormValue; label: string }[] = [
 ];
 
 const LABEL_BY_VALUE = new Map<string, string>(
-    OPTIONS.map((o) => [o.value, o.label]),
+    OPTIONS.map((o) => [o.value, o.label])
 );
 
 function toFormValue(preset: SlugPreset | null): FormValue {
@@ -96,9 +99,13 @@ export default function InvoicesSettingsSection({ business, onSave }: Props) {
     /**
      * Save-handler з confirmation-flow для `with-purpose`. Store API
      * `open(onConfirm, onCancel)` — обидва callback-и точкові, без
-     * subscribe-race-у. Confirm → resolve → потім actual save (PATCH).
-     * Cancel → reject з нейтральним error → EditableField лишається у
-     * edit-mode з draft-значенням.
+     * subscribe-race-у.
+     *  - Confirm → resolve → actual save (PATCH).
+     *  - Cancel → throw `EditableFieldCancelledError` → UiEditableField
+     *    розпізнає sentinel і лишає field у edit-mode з draft-значенням,
+     *    БЕЗ inline-помилки. Раніше тут кидався generic `new Error('Скасовано')`,
+     *    що показувався як red-stripe error під полем — review fix
+     *    нормалізував UX (cancel — не error).
      */
     const handleSave = async (next: SlugPreset | null): Promise<void> => {
         // Однакове значення → no-op (`EditableField` уже фільтрує, але
@@ -106,12 +113,15 @@ export default function InvoicesSettingsSection({ business, onSave }: Props) {
         if (next === business.invoiceSlugPresetDefault) return;
 
         if (next === 'with-purpose') {
-            await new Promise<void>((resolve, reject) => {
+            const confirmed = await new Promise<boolean>((resolve) => {
                 openWarning(
-                    () => resolve(),
-                    () => reject(new Error('Скасовано')),
+                    () => resolve(true),
+                    () => resolve(false)
                 );
             });
+            if (!confirmed) {
+                throw new EditableFieldCancelledError();
+            }
         }
 
         await onSave({ invoiceSlugPresetDefault: next });

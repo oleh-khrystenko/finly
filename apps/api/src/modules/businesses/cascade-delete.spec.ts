@@ -4,6 +4,11 @@ import { Model, Types } from 'mongoose';
 
 import { createReplSetMongo } from '../../test-utils/mongo';
 import {
+    InvoiceSlugCounter,
+    InvoiceSlugCounterDocument,
+    InvoiceSlugCounterSchema,
+} from '../invoices/schemas/invoice-slug-counter.schema';
+import {
     Invoice,
     InvoiceDocument,
     InvoiceSchema,
@@ -34,6 +39,7 @@ describe('BusinessesService cascade-delete (Sprint 4 §SP-5, MongoMemoryReplSet)
     let service: BusinessesService;
     let businessModel: Model<BusinessDocument>;
     let invoiceModel: Model<InvoiceDocument>;
+    let counterModel: Model<InvoiceSlugCounterDocument>;
 
     beforeAll(async () => {
         mongo = await createReplSetMongo();
@@ -43,6 +49,10 @@ describe('BusinessesService cascade-delete (Sprint 4 §SP-5, MongoMemoryReplSet)
                 MongooseModule.forFeature([
                     { name: Business.name, schema: BusinessSchema },
                     { name: Invoice.name, schema: InvoiceSchema },
+                    {
+                        name: InvoiceSlugCounter.name,
+                        schema: InvoiceSlugCounterSchema,
+                    },
                 ]),
             ],
             providers: [
@@ -56,6 +66,7 @@ describe('BusinessesService cascade-delete (Sprint 4 §SP-5, MongoMemoryReplSet)
         service = moduleRef.get(BusinessesService);
         businessModel = moduleRef.get(getModelToken(Business.name));
         invoiceModel = moduleRef.get(getModelToken(Invoice.name));
+        counterModel = moduleRef.get(getModelToken(InvoiceSlugCounter.name));
     }, 30_000);
 
     afterAll(async () => {
@@ -66,6 +77,7 @@ describe('BusinessesService cascade-delete (Sprint 4 §SP-5, MongoMemoryReplSet)
     beforeEach(async () => {
         await businessModel.deleteMany({});
         await invoiceModel.deleteMany({});
+        await counterModel.deleteMany({});
     });
 
     /** Helper: створює business + N invoices під ним. */

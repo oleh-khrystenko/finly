@@ -88,7 +88,7 @@ export class InvoicesController {
         @Body() dto: UpdateInvoiceDto
     ): Promise<{ data: InvoiceDocument }> {
         const updated = await this.invoicesService.update(
-            business._id,
+            business,
             invoice.slug,
             dto
         );

@@ -426,6 +426,157 @@ describe('Businesses E2E', () => {
                 .send(VALID_CREATE_PAYLOAD)
                 .expect(401);
         });
+
+        // ─── Sprint 7 §7.5 — 4 типи платників ───
+
+        describe('Sprint 7 — type-aware create', () => {
+            const VALID_RNOKPP = '1234567899';
+            const VALID_EDRPOU = '12345678';
+            const baseFields = {
+                name: 'Іваненко',
+                paymentPurposeTemplate: 'Оплата за послуги',
+                acceptedBanks: ['privatbank'],
+            };
+
+            it('individual — без taxation, RNOKPP 10-digit → 201', async () => {
+                const user = await createUser();
+                const res = await supertest(app.getHttpServer())
+                    .post('/api/businesses/me')
+                    .set('Authorization', bearerFor(user))
+                    .send({
+                        ...baseFields,
+                        type: 'individual',
+                        requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+                    })
+                    .expect(201);
+
+                const body = res.body as {
+                    data: {
+                        type: string;
+                        taxationSystem: string | null;
+                        isVatPayer: boolean | null;
+                    };
+                };
+                expect(body.data.type).toBe('individual');
+                expect(body.data.taxationSystem).toBeNull();
+                expect(body.data.isVatPayer).toBeNull();
+            });
+
+            it('tov — taxation + ЄДРПОУ 8-digit → 201', async () => {
+                const user = await createUser();
+                const res = await supertest(app.getHttpServer())
+                    .post('/api/businesses/me')
+                    .set('Authorization', bearerFor(user))
+                    .send({
+                        ...baseFields,
+                        type: 'tov',
+                        requisites: { iban: VALID_IBAN, taxId: VALID_EDRPOU },
+                        taxationSystem: 'general',
+                        isVatPayer: true,
+                    })
+                    .expect(201);
+
+                const body = res.body as {
+                    data: {
+                        type: string;
+                        taxationSystem: string;
+                        isVatPayer: boolean;
+                    };
+                };
+                expect(body.data.type).toBe('tov');
+                expect(body.data.taxationSystem).toBe('general');
+                expect(body.data.isVatPayer).toBe(true);
+            });
+
+            it('organization — без taxation, ЄДРПОУ 8-digit → 201', async () => {
+                const user = await createUser();
+                const res = await supertest(app.getHttpServer())
+                    .post('/api/businesses/me')
+                    .set('Authorization', bearerFor(user))
+                    .send({
+                        ...baseFields,
+                        type: 'organization',
+                        requisites: { iban: VALID_IBAN, taxId: VALID_EDRPOU },
+                    })
+                    .expect(201);
+
+                const body = res.body as {
+                    data: {
+                        type: string;
+                        taxationSystem: string | null;
+                    };
+                };
+                expect(body.data.type).toBe('organization');
+                expect(body.data.taxationSystem).toBeNull();
+            });
+
+            it('reject taxation-fields на individual — 400 (.strict() unknown key)', async () => {
+                const user = await createUser();
+                await supertest(app.getHttpServer())
+                    .post('/api/businesses/me')
+                    .set('Authorization', bearerFor(user))
+                    .send({
+                        ...baseFields,
+                        type: 'individual',
+                        requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+                        taxationSystem: 'simplified-3',
+                        isVatPayer: false,
+                    })
+                    .expect(400);
+            });
+
+            it('reject 8-digit ЄДРПОУ для type=fop — 400 (per-variant validator)', async () => {
+                const user = await createUser();
+                await supertest(app.getHttpServer())
+                    .post('/api/businesses/me')
+                    .set('Authorization', bearerFor(user))
+                    .send({
+                        ...VALID_CREATE_PAYLOAD,
+                        requisites: { iban: VALID_IBAN, taxId: VALID_EDRPOU },
+                    })
+                    .expect(400);
+            });
+
+            it('reject 10-digit RNOKPP для type=organization — 400', async () => {
+                const user = await createUser();
+                await supertest(app.getHttpServer())
+                    .post('/api/businesses/me')
+                    .set('Authorization', bearerFor(user))
+                    .send({
+                        ...baseFields,
+                        type: 'organization',
+                        requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+                    })
+                    .expect(400);
+            });
+
+            it('reject missing taxationSystem для type=tov — 400', async () => {
+                const user = await createUser();
+                await supertest(app.getHttpServer())
+                    .post('/api/businesses/me')
+                    .set('Authorization', bearerFor(user))
+                    .send({
+                        ...baseFields,
+                        type: 'tov',
+                        requisites: { iban: VALID_IBAN, taxId: VALID_EDRPOU },
+                        isVatPayer: false,
+                    })
+                    .expect(400);
+            });
+
+            it('reject невідомий type-літерал — 400', async () => {
+                const user = await createUser();
+                await supertest(app.getHttpServer())
+                    .post('/api/businesses/me')
+                    .set('Authorization', bearerFor(user))
+                    .send({
+                        ...baseFields,
+                        type: 'startup',
+                        requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+                    })
+                    .expect(400);
+            });
+        });
     });
 
     // ─── Cabinet: GET /businesses/me ───
@@ -589,6 +740,67 @@ describe('Businesses E2E', () => {
             }
         });
 
+        /**
+         * Sprint 4 review fix — legacy documents без `invoiceSlugPresetDefault`-
+         * поля (створені до May 6) повинні в aggregate-output отримати
+         * `null`, а не undefined. Mongoose `default: null` не спрацьовує
+         * на read existing docs; aggregation pipeline bypass-ить Mongoose
+         * повністю — без `$ifNull` контракт `BusinessWithInvoicesCount`
+         * (`SlugPreset | null`) ламається на legacy state.
+         */
+        it('list normalizes missing invoiceSlugPresetDefault до null (review fix)', async () => {
+            const user = await createUser();
+            // Створюємо бізнес напряму через `Model.collection.insertOne` —
+            // це обходить Mongoose schema defaults і дає той самий shape, що
+            // мав би legacy документ (поле `invoiceSlugPresetDefault` зовсім
+            // відсутнє у БД).
+            await businessModel.collection.insertOne({
+                type: 'fop',
+                ownerId: user._id,
+                managers: [],
+                slug: 'LegacyDoc',
+                slugLower: 'legacydoc',
+                name: 'Legacy ФОП',
+                requisites: {
+                    iban: 'UA213223130000026007233566001',
+                    taxId: '3490307813',
+                },
+                taxationSystem: 'simplified-3',
+                isVatPayer: false,
+                paymentPurposeTemplate: 'Послуги',
+                acceptedBanks: ['privat', 'mono'],
+                seoIndexEnabled: false,
+                deletedAt: null,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                // `invoiceSlugPresetDefault` навмисно відсутній.
+            });
+
+            const res = await supertest(app.getHttpServer())
+                .get('/api/businesses/me')
+                .set('Authorization', bearerFor(user))
+                .expect(200);
+
+            const items = (
+                res.body as {
+                    data: Array<{
+                        slug: string;
+                        invoiceSlugPresetDefault: unknown;
+                    }>;
+                }
+            ).data;
+            const legacy = items.find((i) => i.slug === 'LegacyDoc');
+            expect(legacy).toBeDefined();
+            // Контракт BusinessWithInvoicesCount — null, а не undefined.
+            expect(legacy!.invoiceSlugPresetDefault).toBeNull();
+            expect(
+                Object.prototype.hasOwnProperty.call(
+                    legacy!,
+                    'invoiceSlugPresetDefault'
+                )
+            ).toBe(true);
+        });
+
         it('Sprint 4 §4.4 contract — getBySlug response має `id: string` + `invoicesCount`', async () => {
             const user = await createUser();
             const created = await supertest(app.getHttpServer())
@@ -726,6 +938,79 @@ describe('Businesses E2E', () => {
                 .set('Authorization', bearerFor(user))
                 .send({ invoiceSlugPresetDefault: 'unknown-preset' })
                 .expect(400);
+        });
+
+        // ─── Sprint 7 §7.5 — PATCH type-aware cross-checks (real DB) ───
+
+        it('Sprint 7 — reject taxation-PATCH на individual бізнесі — 400 TAXATION_NOT_APPLICABLE_FOR_TYPE', async () => {
+            const user = await createUser();
+            const created = await supertest(app.getHttpServer())
+                .post('/api/businesses/me')
+                .set('Authorization', bearerFor(user))
+                .send({
+                    type: 'individual',
+                    name: 'Збір',
+                    requisites: {
+                        iban: VALID_IBAN,
+                        taxId: VALID_TAX_ID,
+                    },
+                    paymentPurposeTemplate: 'Збір',
+                    acceptedBanks: ['privatbank'],
+                })
+                .expect(201);
+            const { slug } = (created.body as { data: { slug: string } }).data;
+
+            const res = await supertest(app.getHttpServer())
+                .patch(`/api/businesses/me/${slug}`)
+                .set('Authorization', bearerFor(user))
+                .send({ taxationSystem: 'simplified-3' })
+                .expect(400);
+
+            const body = res.body as { error: { code: string } };
+            expect(body.error.code).toBe('TAXATION_NOT_APPLICABLE_FOR_TYPE');
+        });
+
+        it('Sprint 7 — reject 8-digit ЄДРПОУ-PATCH на fop бізнесі — 400 TAX_ID_FORMAT_MISMATCH_TYPE', async () => {
+            const user = await createUser();
+            const created = await supertest(app.getHttpServer())
+                .post('/api/businesses/me')
+                .set('Authorization', bearerFor(user))
+                .send(VALID_CREATE_PAYLOAD);
+            const { slug } = (created.body as { data: { slug: string } }).data;
+
+            const res = await supertest(app.getHttpServer())
+                .patch(`/api/businesses/me/${slug}`)
+                .set('Authorization', bearerFor(user))
+                .send({
+                    requisites: {
+                        iban: VALID_IBAN,
+                        taxId: '12345678', // 8-digit ЄДРПОУ
+                    },
+                })
+                .expect(400);
+
+            const body = res.body as { error: { code: string } };
+            expect(body.error.code).toBe('TAX_ID_FORMAT_MISMATCH_TYPE');
+        });
+
+        it('Sprint 7 — reject taxation-clear-out (PATCH null) на fop — 400 TAXATION_REQUIRED_FOR_TYPE (backward-direction)', async () => {
+            const user = await createUser();
+            const created = await supertest(app.getHttpServer())
+                .post('/api/businesses/me')
+                .set('Authorization', bearerFor(user))
+                .send(VALID_CREATE_PAYLOAD);
+            const { slug } = (created.body as { data: { slug: string } }).data;
+
+            const res = await supertest(app.getHttpServer())
+                .patch(`/api/businesses/me/${slug}`)
+                .set('Authorization', bearerFor(user))
+                .send({ taxationSystem: null })
+                .expect(400);
+
+            const body = res.body as { error: { code: string } };
+            // backward-direction: окремий код від forward (individual+taxation),
+            // бо UX-recovery різний — "оберіть систему" vs "приберіть поле".
+            expect(body.error.code).toBe('TAXATION_REQUIRED_FOR_TYPE');
         });
 
         it('coupled cross-field VAT (PATCH тільки isVatPayer=true з existing simplified-1) — 400', async () => {

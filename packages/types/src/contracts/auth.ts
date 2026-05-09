@@ -113,7 +113,9 @@ export type AuthResponse = z.infer<typeof AuthResponseSchema>;
 export type DeleteAccountVerifyResponse = z.infer<
     typeof DeleteAccountVerifyResponseSchema
 >;
-export type VerifyMagicLinkResponse = AuthResponse | DeleteAccountVerifyResponse;
+export type VerifyMagicLinkResponse =
+    | AuthResponse
+    | DeleteAccountVerifyResponse;
 export type CheckEmailDto = z.infer<typeof CheckEmailSchema>;
 export type CheckEmailResponse = z.infer<typeof CheckEmailResponseSchema>;
 export type LoginPasswordDto = z.infer<typeof LoginPasswordSchema>;

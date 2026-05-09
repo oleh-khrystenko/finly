@@ -42,12 +42,7 @@ export function build002Payload(rawInput: unknown): string {
         FIELD_LIMITS['002'].receiverName,
         '002'
     );
-    assertField(
-        'purpose',
-        input.purpose,
-        FIELD_LIMITS['002'].purpose,
-        '002'
-    );
+    assertField('purpose', input.purpose, FIELD_LIMITS['002'].purpose, '002');
 
     const amountCurrency = formatAmountCurrency(input.amountKopecks);
 

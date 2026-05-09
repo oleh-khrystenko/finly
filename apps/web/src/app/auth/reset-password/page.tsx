@@ -13,7 +13,7 @@ import UiButton from '@/shared/ui/UiButton';
 import UiPasswordInput from '@/shared/ui/UiPasswordInput';
 import UiSpinner from '@/shared/ui/UiSpinner';
 import UiFullPageLoader from '@/shared/ui/UiFullPageLoader';
-import { getFieldError } from '@/shared/lib';
+import { getZodFieldError } from '@/shared/lib';
 import { resetPassword } from '@/shared/api';
 
 const ResetPasswordFormSchema = z.object({
@@ -42,7 +42,7 @@ function ResetPasswordContent() {
 
     const [status, setStatus] = useState<PageStatus>(token ? 'form' : 'error');
     const [errorMessage, setErrorMessage] = useState(
-        token ? '' : ERROR_INVALID_TOKEN,
+        token ? '' : ERROR_INVALID_TOKEN
     );
 
     const onSubmit = async (data: ResetPasswordFormValues) => {
@@ -94,7 +94,6 @@ function ResetPasswordContent() {
     }
 
     const { errors, isSubmitting } = form.formState;
-    const [newPwd, confirmPwd] = form.watch(['newPassword', 'confirmPassword']);
 
     return (
         <div className="w-full max-w-md space-y-8">
@@ -117,15 +116,7 @@ function ResetPasswordContent() {
                         },
                     })}
                     placeholder="Новий пароль"
-                    error={getFieldError(
-                        errors.newPassword,
-                        {
-                            required: 'Введіть пароль',
-                            too_small:
-                                'Пароль повинен містити мінімум 8 символів',
-                        },
-                        newPwd,
-                    )}
+                    error={getZodFieldError(errors.newPassword)}
                     disabled={isSubmitting}
                     autoFocus
                     size="lg"
@@ -143,15 +134,7 @@ function ResetPasswordContent() {
                     error={
                         errors.confirmPassword?.type === 'mismatch'
                             ? errors.confirmPassword.message
-                            : getFieldError(
-                                  errors.confirmPassword,
-                                  {
-                                      required: 'Введіть пароль',
-                                      too_small:
-                                          'Пароль повинен містити мінімум 8 символів',
-                                  },
-                                  confirmPwd,
-                              )
+                            : getZodFieldError(errors.confirmPassword)
                     }
                     disabled={isSubmitting}
                     size="lg"

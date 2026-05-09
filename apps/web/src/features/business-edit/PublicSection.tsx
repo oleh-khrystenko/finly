@@ -80,7 +80,7 @@ export default function PublicSection({
                 </div>
                 <label
                     htmlFor="seo-toggle"
-                    className="flex cursor-pointer items-start justify-between gap-3 rounded-md border border-border p-3"
+                    className="border-border flex cursor-pointer items-start justify-between gap-3 rounded-md border p-3"
                 >
                     <div className="flex flex-1 flex-col gap-1">
                         <span className="text-foreground text-sm font-medium">

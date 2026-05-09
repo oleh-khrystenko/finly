@@ -5,6 +5,7 @@ import { Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { type Invoice } from '@finly/types';
 import UiButton from '@/shared/ui/UiButton';
+import UiQrImage from '@/shared/ui/UiQrImage';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 
 interface Props {
@@ -27,7 +28,7 @@ export default function InvoiceQrSection({
 }: Props) {
     const [downloading, setDownloading] = useState(false);
     const url = `${apiBase}/businesses/public/${encodeURIComponent(
-        businessSlug,
+        businessSlug
     )}/invoices/${encodeURIComponent(invoice.slug)}/qr/business.png`;
 
     const handleDownload = async () => {
@@ -68,11 +69,10 @@ export default function InvoiceQrSection({
             }
         >
             <div className="mt-3 flex justify-center">
-                <img
+                <UiQrImage
                     src={url}
                     alt={`QR на сторінку оплати рахунку ${invoice.slug}`}
-                    className="border-border aspect-square w-full max-w-[280px] rounded-md border bg-white p-3"
-                    loading="lazy"
+                    className="border-border w-full max-w-[280px] rounded-md border bg-white p-3"
                 />
             </div>
             <p className="text-muted-foreground mt-3 text-center text-xs">

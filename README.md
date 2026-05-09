@@ -49,15 +49,15 @@ finly/
 
 ## Технології
 
-| Шар        | Технологія                                                                      |
-| ---------- | ------------------------------------------------------------------------------- |
-| Monorepo   | Turborepo + pnpm workspaces                                                    |
-| Frontend   | Next.js 16 (App Router), React 19, Zustand, TailwindCSS 4, next-intl, next-themes |
-| Backend    | NestJS 11, Mongoose (MongoDB), Passport (JWT + Google OAuth), ioredis (Redis)   |
-| Payments   | Stripe (subscriptions + one-off credit packs, webhook idempotency)              |
-| Shared     | Zod 4 (single source of truth), TypeScript 5.9 (strict)                        |
-| Email      | Resend                                                                          |
-| Тести      | Jest 30, Supertest, MongoMemoryServer                                           |
+| Шар      | Технологія                                                                        |
+| -------- | --------------------------------------------------------------------------------- |
+| Monorepo | Turborepo + pnpm workspaces                                                       |
+| Frontend | Next.js 16 (App Router), React 19, Zustand, TailwindCSS 4, next-intl, next-themes |
+| Backend  | NestJS 11, Mongoose (MongoDB), Passport (JWT + Google OAuth), ioredis (Redis)     |
+| Payments | Stripe (subscriptions + one-off credit packs, webhook idempotency)                |
+| Shared   | Zod 4 (single source of truth), TypeScript 5.9 (strict)                           |
+| Email    | Resend                                                                            |
+| Тести    | Jest 30, Supertest, MongoMemoryServer                                             |
 
 ---
 
@@ -128,18 +128,30 @@ NEXT_PUBLIC_API_URL=http://localhost:4000/api
 
 Повний список змінних: [apps/api/src/config/env.ts](apps/api/src/config/env.ts), [apps/web/src/shared/config/env.ts](apps/web/src/shared/config/env.ts).
 
-### 2. Запуск для розробки
+### 2. Додай запис у `/etc/hosts` для public-домену
+
+Public payment-page (`pay.finly.com.ua` у prod) у dev слухає `pay.finly.local:3000` — той самий Next.js container, що cabinet, але інший host-header (host-aware routing у `apps/web/src/middleware.ts`, whitelist у `apps/web/src/shared/config/publicHosts.ts`). Без локального DNS-запису браузер падає з `DNS_PROBE_FINISHED_NXDOMAIN` ще до того, як Next.js отримає запит.
+
+```bash
+echo '127.0.0.1 pay.finly.local' | sudo tee -a /etc/hosts
+```
+
+Після цього `http://pay.finly.local:3000/{slug}` резолвиться у localhost, middleware ідентифікує host як public і робить rewrite на internal `/host-pay/{slug}`.
+
+> **Prod.** Запис у `/etc/hosts` не потрібен — `pay.finly.com.ua` має мати DNS-A/CNAME-record на той самий сервер, що `finly.com.ua`, і reverse-proxy (nginx/Caddy) проксує обидва host-header-и на один Next.js container.
+
+### 3. Запуск для розробки
 
 ```bash
 docker compose -f docker-compose.dev.yml up --build
 ```
 
-| Сервіс   | URL / Порт                                  |
-| -------- | ------------------------------------------- |
-| Frontend | http://localhost:3000                        |
-| Backend  | http://localhost:4000                        |
-| MongoDB  | external (Atlas / Docker / local mongod)     |
-| Redis    | localhost:6379                               |
+| Сервіс   | URL / Порт                               |
+| -------- | ---------------------------------------- |
+| Frontend | http://localhost:3000                    |
+| Backend  | http://localhost:4000                    |
+| MongoDB  | external (Atlas / Docker / local mongod) |
+| Redis    | localhost:6379                           |
 
 Зупинити:
 
@@ -147,7 +159,7 @@ docker compose -f docker-compose.dev.yml up --build
 docker compose -f docker-compose.dev.yml down
 ```
 
-### 3. Запуск для production
+### 4. Запуск для production
 
 1. У `.env` вкажи реальний MongoDB Atlas URI та інші production credentials.
 2. Запусти:
@@ -160,18 +172,18 @@ docker compose up --build -d
 
 ## Скрипти
 
-| Команда                                   | Опис                        |
-| ----------------------------------------- | --------------------------- |
-| `pnpm dev`                                | Dev-сервери через Turborepo |
-| `pnpm build`                              | Build all                   |
-| `pnpm lint`                               | Lint all                    |
-| `pnpm format`                             | Prettier format             |
-| `pnpm test`                               | Test all via Turborepo      |
-| `pnpm --filter api test`                  | API unit тести              |
-| `pnpm --filter api test:e2e`              | API E2E тести               |
-| `pnpm --filter api test:cov`              | API coverage                |
-| `pnpm --filter web test`                  | Web unit тести              |
-| `pnpm --filter @finly/types build`    | Build shared types          |
+| Команда                            | Опис                        |
+| ---------------------------------- | --------------------------- |
+| `pnpm dev`                         | Dev-сервери через Turborepo |
+| `pnpm build`                       | Build all                   |
+| `pnpm lint`                        | Lint all                    |
+| `pnpm format`                      | Prettier format             |
+| `pnpm test`                        | Test all via Turborepo      |
+| `pnpm --filter api test`           | API unit тести              |
+| `pnpm --filter api test:e2e`       | API E2E тести               |
+| `pnpm --filter api test:cov`       | API coverage                |
+| `pnpm --filter web test`           | Web unit тести              |
+| `pnpm --filter @finly/types build` | Build shared types          |
 
 ---
 
@@ -230,6 +242,7 @@ MONGODB_URI=mongodb://host.docker.internal:27017/finly_dev?replicaSet=rs0
 ```
 
 **Linux-specific.** `host.docker.internal` НЕ резолвиться ні в API-контейнері, ні в Mongo-контейнері без явного `host-gateway` alias-у. Тому:
+
 - `--add-host host.docker.internal:host-gateway` у `docker run` для Mongo (вище) — щоб heartbeat replica-set self-discovery не деградував.
 - `extra_hosts: ["host.docker.internal:host-gateway"]` у `api`-блоці `docker-compose.dev.yml` — уже додано Sprint 4 §4.0.
 

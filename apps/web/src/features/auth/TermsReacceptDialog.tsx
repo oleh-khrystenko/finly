@@ -16,8 +16,7 @@ import { acceptTerms } from '@/shared/api';
 import { useAuthStore } from '@/entities/user';
 import { useTermsReacceptDialogStore } from './termsReacceptDialogStore';
 
-const REQUIRED_ERROR =
-    'Необхідно прийняти оновлені умови для продовження.';
+const REQUIRED_ERROR = 'Необхідно прийняти оновлені умови для продовження.';
 const GENERIC_ERROR = 'Щось пішло не так. Спробуйте ще раз.';
 
 function TermsReacceptForm({ onClose }: { onClose: () => void }) {

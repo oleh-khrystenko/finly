@@ -40,14 +40,14 @@ const UiCheckbox = (props: UiCheckboxProps) => {
                     name={name}
                     className={composeClasses(
                         'flex shrink-0 cursor-pointer items-center justify-center rounded border-2 transition-colors duration-150',
-                        'mt-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                        'focus-visible:ring-ring mt-0.5 focus:outline-none focus-visible:ring-2',
                         disabled && 'cursor-not-allowed opacity-50',
                         checked
                             ? 'border-primary bg-primary'
                             : error
                               ? 'border-destructive'
                               : 'border-border',
-                        boxSizeStyles[size],
+                        boxSizeStyles[size]
                     )}
                 >
                     {checked && (
@@ -59,13 +59,13 @@ const UiCheckbox = (props: UiCheckboxProps) => {
                     )}
                 </Checkbox>
                 {children && (
-                    <Label className="cursor-pointer select-none text-sm text-muted-foreground">
+                    <Label className="text-muted-foreground cursor-pointer text-sm select-none">
                         {children}
                     </Label>
                 )}
             </div>
             {error && (
-                <p className="ml-8 mt-1 text-sm text-destructive">{error}</p>
+                <p className="text-destructive mt-1 ml-8 text-sm">{error}</p>
             )}
         </Field>
     );

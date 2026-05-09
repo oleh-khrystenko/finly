@@ -53,7 +53,8 @@ const UiTextarea = forwardRef<HTMLTextAreaElement, UiTextareaProps>(
             if (!el || !autoGrow) return;
 
             el.style.height = 'auto';
-            const lineHeight = parseFloat(getComputedStyle(el).lineHeight) || 20;
+            const lineHeight =
+                parseFloat(getComputedStyle(el).lineHeight) || 20;
             const maxHeight = lineHeight * maxRows;
             el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`;
             el.style.overflowY =
@@ -70,14 +71,14 @@ const UiTextarea = forwardRef<HTMLTextAreaElement, UiTextareaProps>(
                 if (typeof ref === 'function') ref(el);
                 else if (ref) ref.current = el;
             },
-            [ref],
+            [ref]
         );
 
         const handleChange = useCallback(
             (e: React.ChangeEvent<HTMLTextAreaElement>) => {
                 onChange?.(e);
             },
-            [onChange],
+            [onChange]
         );
 
         const wrapperClasses = composeClasses(
@@ -86,7 +87,7 @@ const UiTextarea = forwardRef<HTMLTextAreaElement, UiTextareaProps>(
             variantStyles[variant],
             error && errorStyles,
             disabled && 'opacity-50 cursor-not-allowed',
-            className,
+            className
         );
 
         const noResize = autoGrow || !!suffix;
@@ -96,11 +97,11 @@ const UiTextarea = forwardRef<HTMLTextAreaElement, UiTextareaProps>(
                 {label && (
                     <label
                         htmlFor={textareaId}
-                        className="mb-1 block text-sm font-medium text-foreground"
+                        className="text-foreground mb-1 block text-sm font-medium"
                     >
                         {label}
                         {required && (
-                            <span className="ml-1 text-destructive">*</span>
+                            <span className="text-destructive ml-1">*</span>
                         )}
                     </label>
                 )}
@@ -117,16 +118,16 @@ const UiTextarea = forwardRef<HTMLTextAreaElement, UiTextareaProps>(
                         onChange={handleChange}
                         disabled={disabled}
                         required={required}
-                        className={`w-full bg-transparent outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed ${noResize ? 'resize-none' : 'resize-y'}`}
+                        className={`placeholder:text-muted-foreground w-full bg-transparent outline-none disabled:cursor-not-allowed ${noResize ? 'resize-none' : 'resize-y'}`}
                     />
                     {suffix}
                 </div>
                 {error && (
-                    <p className="mt-1 text-sm text-destructive">{error}</p>
+                    <p className="text-destructive mt-1 text-sm">{error}</p>
                 )}
             </div>
         );
-    },
+    }
 );
 
 UiTextarea.displayName = 'UiTextarea';

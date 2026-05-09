@@ -38,8 +38,7 @@ const ACCEPT_MIME = AVATAR.ALLOWED_MIME_TYPES.join(',');
 
 const UPLOAD_ERROR_MESSAGES: Record<string, string> = {
     avatar_upload_failed: 'Не вдалося завантажити фото. Спробуйте пізніше',
-    avatar_file_key_invalid:
-        'Сесія завантаження закінчилась. Спробуйте ще раз',
+    avatar_file_key_invalid: 'Сесія завантаження закінчилась. Спробуйте ще раз',
     avatar_upload_not_found:
         'Не вдалося знайти завантажене фото. Спробуйте ще раз',
     avatar_upload_invalid:
@@ -114,9 +113,7 @@ export default function AvatarUploadDialog() {
 
     const processFile = async (file: File): Promise<void> => {
         if (file.size > AVATAR.MAX_FILE_SIZE) {
-            toast.error(
-                'Файл занадто великий. Максимальний розмір — 5 МБ',
-            );
+            toast.error('Файл занадто великий. Максимальний розмір — 5 МБ');
             return;
         }
 
@@ -126,7 +123,7 @@ export default function AvatarUploadDialog() {
 
         if (!mimeOk) {
             toast.error(
-                'Непідтримуваний формат. Використовуйте JPEG, PNG або WebP',
+                'Непідтримуваний формат. Використовуйте JPEG, PNG або WebP'
             );
             return;
         }
@@ -228,7 +225,7 @@ export default function AvatarUploadDialog() {
                                     'flex flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed px-6 py-10 text-center transition-colors',
                                     dragOver
                                         ? 'border-primary bg-primary/5'
-                                        : 'border-border',
+                                        : 'border-border'
                                 )}
                             >
                                 <p className="text-muted-foreground text-sm">

@@ -39,7 +39,7 @@ export default function BusinessListPage() {
     const isBookkeeper = user?.worksAsBookkeeper ?? false;
 
     const [items, setItems] = useState<BusinessWithInvoicesCount[] | null>(
-        null,
+        null
     );
     const [error, setError] = useState<string | null>(null);
     // Optimistic delete-removal (Sprint 3 §3.8 §C2). pendingDeletes-store
@@ -229,7 +229,12 @@ function BusinessCard({
                          * кабінеті, доступні для редагування/видалення,
                          * тож їх логічно рахувати.
                          */}
-                        {pluralizeUa(invoicesCount, 'рахунок', 'рахунки', 'рахунків')}
+                        {pluralizeUa(
+                            invoicesCount,
+                            'рахунок',
+                            'рахунки',
+                            'рахунків'
+                        )}
                     </p>
                 )}
             </div>

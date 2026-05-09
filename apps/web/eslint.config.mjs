@@ -66,7 +66,12 @@ const eslintConfig = [
         },
     },
     {
-        files: ['**/*.spec.ts', '**/*.spec.tsx', '**/*.test.ts', '**/*.test.tsx'],
+        files: [
+            '**/*.spec.ts',
+            '**/*.spec.tsx',
+            '**/*.test.ts',
+            '**/*.test.tsx',
+        ],
         rules: {
             '@typescript-eslint/no-explicit-any': 'off',
             '@typescript-eslint/no-unused-vars': 'off',

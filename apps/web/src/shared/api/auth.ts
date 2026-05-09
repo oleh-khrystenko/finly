@@ -108,9 +108,7 @@ export async function deleteAccount(): Promise<{
     return data.data;
 }
 
-export async function confirmDeleteAccount(
-    password: string
-): Promise<void> {
+export async function confirmDeleteAccount(password: string): Promise<void> {
     await apiClient.post('/users/account/delete/confirm', { password });
 }
 

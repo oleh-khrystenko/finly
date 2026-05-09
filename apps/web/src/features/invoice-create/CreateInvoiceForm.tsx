@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
     useForm,
     Controller,
+    type FieldError,
     type FieldErrors,
     type Resolver,
 } from 'react-hook-form';
@@ -20,13 +21,19 @@ import {
     type SlugPreset,
 } from '@finly/types';
 import { createInvoice, getApiMessage } from '@/shared/api';
+import {
+    getZodFieldError,
+    kyivEndOfDayInstant,
+    mapValidationCode,
+    parseUaMoney,
+} from '@/shared/lib';
 import UiButton from '@/shared/ui/UiButton';
 import UiInput from '@/shared/ui/UiInput';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSelect from '@/shared/ui/UiSelect';
 import UiSwitch from '@/shared/ui/UiSwitch';
 import UiTextarea from '@/shared/ui/UiTextarea';
-import { useSlugPresetWarningStore } from '@/features/invoices';
+import { useSlugPresetWarningStore } from '@/entities/invoice';
 
 interface Props {
     business: Business;
@@ -52,8 +59,15 @@ interface Props {
  *
  * **Coupled `amount × amountLocked` (SP-6).** Switch "Дозволити клієнту
  * правити суму" — інверсна семантика від API-поля (ON ⇔ `amountLocked=false`).
- * Switch disabled коли `amount === null`; при зміні `amount=number → null`
- * — auto-reset `amountLocked=false` через `useEffect`-watch.
+ * Default OFF (≡ `amountLocked=true`) коли user задав суму — fix по плану
+ * §SP-6 "default `false` для switch-а, тобто amountLocked=true". Disabled
+ * коли `amount === null`; у signage-режимі стан switch-а derived **без
+ * мутації** form-state-у (`checked={isSignage ? true : !amountLocked}`),
+ * а submit-normalizer перед Zod-refine форсить `amountLocked=false` для
+ * signage. Це уникає race-у з useEffect-reset на transient invalid input
+ * (типу `1500abc`) і зберігає user's intent через signage-cycle: якщо
+ * ФОП один раз дозволив правити, то після порожнього input-а та повторного
+ * вводу суми lock-стан зберігається.
  *
  * **Live-validation `humanPart`** (mode `onChange`): humanSlugPartSchema
  * перевіряє формат при кожному typing-event, error binded до конкретного
@@ -103,8 +117,15 @@ const VALID_UNTIL_OPTIONS: { value: ValidUntilMode; label: string }[] = [
 ];
 
 interface FormValues {
-    /** Сума у копійках, або null (signage mode). */
-    amount: number | null;
+    /**
+     * Raw сума з input-а (UA-формат: кома або крапка, optional NBSP-thousands).
+     * Парситься через `parseUaMoney` → копійки. `''` = signage-mode.
+     *
+     * Зберігаємо raw string (а не parsed copies), бо `<input type="number">`
+     * не підтримує UA-кому, і `Number.parseFloat('1500,50')` дає 1500 — silent
+     * втрата 50 копійок. parseUaMoney закриває цей boundary.
+     */
+    amountInput: string;
     /** `true` = ФОП фіксує, клієнт не може правити. */
     amountLocked: boolean;
     paymentPurpose: string | null;
@@ -135,21 +156,38 @@ function buildSlugInput(values: FormValues): SlugInput {
         return { kind: 'random' };
     }
     // 'preset:*'
-    const preset = values.slugOption.slice(
-        'preset:'.length,
-    ) as SlugPreset;
+    const preset = values.slugOption.slice('preset:'.length) as SlugPreset;
     return { kind: 'preset', preset };
 }
 
+/**
+ * Перетворює form-state на API-shape. Викликається лише після того, як
+ * resolver упевнився, що `amountInput` валідний — тут parser-fail трактується
+ * як bug (assert через помилку, не silent fallback).
+ */
 function formValuesToCreateRequest(values: FormValues): CreateInvoiceRequest {
+    const money = parseUaMoney(values.amountInput);
+    if (!money.ok) {
+        throw new Error(
+            `formValuesToCreateRequest invariant: amountInput "${values.amountInput}" expected pre-validated, got ${money.error}`
+        );
+    }
+    // SP-6: signage-режим завжди надсилає amountLocked=false (Zod-refine
+    // блокує amount=null + amountLocked=true). Form state може зберігати
+    // user's intent (`true`), щоб при поверненні до has-amount mode lock
+    // не скидався — submit нормалізує лише для wire-format-у.
+    const isSignage = money.kopecks === null;
     return {
-        amount: values.amount,
-        amountLocked: values.amountLocked,
+        amount: money.kopecks,
+        amountLocked: isSignage ? false : values.amountLocked,
         paymentPurpose: values.paymentPurpose,
         validUntil:
             values.validUntilMode === 'date' && values.validUntilDate
-                ? // 23:59:59 локальний UA-час — Sprint 4 SP-7.
-                  new Date(`${values.validUntilDate}T23:59:59`)
+                ? // SP-7 — фіксуємо 23:59:59 у Europe/Kyiv tz, незалежно
+                  // від tz браузера (`new Date('YYYY-MM-DDTHH:MM:SS')` без
+                  // `Z` interpret-ується як local time клієнта — зсунуло б
+                  // backend Kyiv-tz parsing на сусідній день).
+                  kyivEndOfDayInstant(values.validUntilDate)
                 : null,
         slugInput: buildSlugInput(values),
     };
@@ -167,30 +205,44 @@ function formValuesToCreateRequest(values: FormValues): CreateInvoiceRequest {
 const createInvoiceResolver: Resolver<FormValues> = async (values) => {
     const errors: FieldErrors<FormValues> = {};
 
-    // 1. Pre-validate humanPart (live-feedback).
+    // 1. Pre-validate humanPart (live-feedback). `error.message` зберігаємо як
+    //    SCREAMING_SNAKE-код — UI рендерить через `getZodFieldError(...)`
+    //    (`mapValidationCode`).
     if (values.slugOption === 'explicit') {
         const r = humanSlugPartSchema.safeParse(values.humanPart);
         if (!r.success) {
             errors.humanPart = {
                 type: 'manual',
                 message:
-                    r.error.issues[0]?.message ?? 'Невалідний формат',
+                    r.error.issues[0]?.message ??
+                    'INVALID_HUMAN_SLUG_PART_FORMAT',
             };
         }
     }
 
     // 2. validUntilMode='date' + empty validUntilDate → submit-blocking error.
+    //    Власний код у словнику `mapValidationCode` (`VALID_UNTIL_DATE_REQUIRED`).
     if (
         values.validUntilMode === 'date' &&
         values.validUntilDate.trim() === ''
     ) {
         errors.validUntilDate = {
             type: 'manual',
-            message: 'Оберіть дату',
+            message: 'VALID_UNTIL_DATE_REQUIRED',
         };
     }
 
-    // 3. Build API-shape і валідуємо через CreateInvoiceSchema.
+    // 3. Parse amountInput. Помилка формату — submit-blocking error на власному
+    //    UI-полі. Якщо ok — `kopecks` далі прокинеться у CreateInvoiceSchema
+    //    (overflow перевіриться там).
+    const money = parseUaMoney(values.amountInput);
+    if (!money.ok) {
+        errors.amountInput = { type: 'manual', message: money.error };
+    }
+
+    // 4. Build API-shape і валідуємо через CreateInvoiceSchema. Лише якщо
+    //    попередні етапи не дали format-помилок — інакше `formValuesToCreateRequest`
+    //    кине invariant-error.
     if (Object.keys(errors).length === 0) {
         const apiShape = formValuesToCreateRequest(values);
         const r = CreateInvoiceSchema.safeParse(apiShape);
@@ -198,9 +250,18 @@ const createInvoiceResolver: Resolver<FormValues> = async (values) => {
             for (const issue of r.error.issues) {
                 const path = issue.path[0];
                 if (path === 'amount') {
-                    errors.amount = { type: 'zod', message: issue.message };
+                    errors.amountInput = {
+                        type: 'zod',
+                        message: issue.message,
+                    };
                 } else if (path === 'amountLocked') {
-                    errors.amountLocked = {
+                    // Coupled-rule (`AMOUNT_LOCKED_REQUIRES_AMOUNT`) Zod
+                    // ставить `path: ['amountLocked']`, але UiSwitch не має
+                    // error-slot-у. Bubble на `amountInput` — той самий
+                    // amount-блок візуально показує помилку поряд з
+                    // toggle-ом. SP-6 normalizer на submit мав би
+                    // запобігти цьому шляху, але defense-in-depth.
+                    errors.amountInput = {
                         type: 'zod',
                         message: issue.message,
                     };
@@ -223,6 +284,17 @@ const createInvoiceResolver: Resolver<FormValues> = async (values) => {
                         type: 'zod',
                         message: issue.message,
                     };
+                } else {
+                    // Unmatched-path → bubble на root-помилку. Без цього
+                    // нові schema-paths (наприклад refine на slugInput.preset)
+                    // тихо губилися б — submit заблокований без feedback-у.
+                    // Code mapping проходить через mapValidationCode у render-i.
+                    // RHF-quirk: `errors.root` має intersection-type, що не
+                    // приймає прямий `FieldError`-shape — explicit cast.
+                    errors.root = {
+                        type: 'zod',
+                        message: issue.message,
+                    } as FieldError;
                 }
             }
         }
@@ -241,14 +313,18 @@ export default function CreateInvoiceForm({ business }: Props) {
 
     const initialOption = useMemo(
         () => defaultSlugOption(business),
-        [business],
+        [business]
     );
 
     const form = useForm<FormValues>({
         resolver: createInvoiceResolver,
         defaultValues: {
-            amount: null,
-            amountLocked: false,
+            amountInput: '',
+            // SP-6 §plan: default `true` (≡ switch OFF "Дозволити правити").
+            // Якщо user стартує у signage-режимі — submit-normalizer
+            // переведе у `false` для wire-format-у; UI рендерить derived
+            // state без мутації form-store (див. `lockSwitchChecked`).
+            amountLocked: true,
             // `null` (не `''`) для consistency з API-shape: empty input у
             // textarea = "ФОП не задав, наслідуємо з business" → API `null`.
             // `''`-default fail-ить Zod refine `invoicePaymentPurposeSchema.min(1)`
@@ -266,19 +342,50 @@ export default function CreateInvoiceForm({ business }: Props) {
     });
 
     const { control, handleSubmit, watch, setValue, formState } = form;
-    const amount = watch('amount');
+    const amountInput = watch('amountInput');
     const amountLocked = watch('amountLocked');
     const paymentPurpose = watch('paymentPurpose');
     const validUntilMode = watch('validUntilMode');
     const slugOption = watch('slugOption');
     const humanPart = watch('humanPart');
 
-    // SP-6 — auto-reset amountLocked → false при amount → null.
-    useEffect(() => {
-        if (amount === null && amountLocked) {
-            setValue('amountLocked', false, { shouldDirty: true });
-        }
-    }, [amount, amountLocked, setValue]);
+    /**
+     * Derived parse-state amountInput. Розмежовуємо три режими:
+     *   - `valid-amount` — parse-ok, kopecks є числом → switch enabled, lock
+     *     toggling allowed.
+     *   - `valid-signage` — parse-ok, kopecks=null (empty input) → switch
+     *     disabled, **семантичний** signage-mode → SP-6 auto-reset amountLocked.
+     *   - `invalid` — parse-fail (transient невалідний ввід типу `1500abc`)
+     *     → switch disabled, але amountLocked **зберігається**. Transient
+     *     validation state НЕ міняє семантичний прапорець.
+     *
+     * Без цього розмежування `parsedAmount === null` одночасно означав і
+     * signage, і parse-fail; useEffect reset-ив amountLocked на transient
+     * invalid input — payment-correctness баг (lock зникав під час набору
+     * суми, потім submit йшов з allow-edit вже всупереч намірам ФОПа).
+     */
+    type AmountUiState =
+        | { kind: 'valid-amount'; kopecks: number }
+        | { kind: 'valid-signage' }
+        | { kind: 'invalid' };
+    const amountUiState = useMemo<AmountUiState>(() => {
+        const r = parseUaMoney(amountInput);
+        if (!r.ok) return { kind: 'invalid' };
+        if (r.kopecks === null) return { kind: 'valid-signage' };
+        return { kind: 'valid-amount', kopecks: r.kopecks };
+    }, [amountInput]);
+    const isAmountInvalid = amountUiState.kind === 'invalid';
+    const isSignage = amountUiState.kind === 'valid-signage';
+    const lockSwitchDisabled = amountUiState.kind !== 'valid-amount';
+
+    // SP-6 — UI-стан switch-а "Дозволити правити" derived з form-store-у:
+    // у signage-режимі завжди показуємо ON (allow-edit), не торкаючись
+    // store-значення. На transient invalid (typing) — рендеримо stored
+    // intent. Submit-normalizer (formValuesToCreateRequest) форсить
+    // wire-shape `amountLocked=false` для signage. Без useEffect-reset
+    // — це закриває race на transient input-ах (`1500abc`) і зберігає
+    // user-intent через signage-cycle.
+    const lockSwitchChecked = isSignage ? true : !amountLocked;
 
     /**
      * §4.5 — warning-modal на manual select `'preset:with-purpose'` (не на
@@ -286,16 +393,13 @@ export default function CreateInvoiceForm({ business }: Props) {
      * Cancel → revert до previous option.
      */
     const [acknowledged, setAcknowledged] = useState<Set<SlugInputOption>>(
-        new Set(),
+        new Set()
     );
     const handleSlugOptionChange = (
         next: SlugInputOption,
-        prev: SlugInputOption,
+        prev: SlugInputOption
     ): void => {
-        if (
-            next === 'preset:with-purpose' &&
-            !acknowledged.has(next)
-        ) {
+        if (next === 'preset:with-purpose' && !acknowledged.has(next)) {
             openWarning(
                 () => {
                     setAcknowledged((s) => new Set(s).add(next));
@@ -303,7 +407,7 @@ export default function CreateInvoiceForm({ business }: Props) {
                 },
                 () => {
                     setValue('slugOption', prev, { shouldDirty: false });
-                },
+                }
             );
             return;
         }
@@ -317,7 +421,7 @@ export default function CreateInvoiceForm({ business }: Props) {
             const created = await createInvoice(business.slug, payload);
             toast.success('Рахунок створено');
             router.replace(
-                `/business/${business.slug}/invoice/${created.slug}`,
+                `/business/${business.slug}/invoice/${created.slug}`
             );
         } catch (err: unknown) {
             const code =
@@ -349,31 +453,22 @@ export default function CreateInvoiceForm({ business }: Props) {
             <UiSectionCard title="Сума">
                 <div className="space-y-3">
                     <Controller
-                        name="amount"
+                        name="amountInput"
                         control={control}
                         render={({ field, fieldState }) => (
                             <UiInput
-                                type="number"
+                                // `type="text"`, не `number` — щоб приймати UA-кому
+                                // (кома у HTML5 `number` interpret-ується locale-
+                                // dependent і часто rejected). `inputMode="decimal"`
+                                // дає mobile numeric keypad з комою.
+                                type="text"
                                 inputMode="decimal"
-                                placeholder="1500.00"
+                                placeholder="1500,50"
                                 label="Сума, ₴"
-                                value={
-                                    field.value === null
-                                        ? ''
-                                        : (field.value / 100).toString()
-                                }
-                                onChange={(e) => {
-                                    const raw = e.target.value;
-                                    if (raw === '') {
-                                        field.onChange(null);
-                                        return;
-                                    }
-                                    const parsed = Number.parseFloat(raw);
-                                    if (Number.isNaN(parsed)) return;
-                                    // Конвертуємо у копійки (int).
-                                    field.onChange(Math.round(parsed * 100));
-                                }}
-                                error={fieldState.error?.message}
+                                value={field.value}
+                                onChange={(e) => field.onChange(e.target.value)}
+                                onBlur={field.onBlur}
+                                error={getZodFieldError(fieldState.error)}
                             />
                         )}
                     />
@@ -383,7 +478,7 @@ export default function CreateInvoiceForm({ business }: Props) {
                     <label
                         htmlFor="amount-lock-switch"
                         className={`border-border flex items-start justify-between gap-3 rounded-md border p-3 ${
-                            amount === null
+                            lockSwitchDisabled
                                 ? 'cursor-not-allowed opacity-60'
                                 : 'cursor-pointer'
                         }`}
@@ -393,16 +488,26 @@ export default function CreateInvoiceForm({ business }: Props) {
                                 Дозволити клієнту правити суму
                             </span>
                             <span className="text-muted-foreground text-xs">
-                                {amount === null
+                                {/*
+                                 * Hint розрізняє три стани:
+                                 *  - signage: пояснюємо чому disabled.
+                                 *  - invalid: коротко натякаємо, що сума ще
+                                 *    не валідна (не reset-имо lock — див.
+                                 *    SP-6 useEffect).
+                                 *  - valid: lock-effect explanation.
+                                 */}
+                                {isSignage
                                     ? 'Заблокувати редагування можна лише при заданій сумі'
-                                    : 'Якщо вимкнено — клієнт сплатить точно зазначену суму'}
+                                    : isAmountInvalid
+                                      ? 'Введіть коректну суму, щоб керувати блокуванням'
+                                      : 'Якщо вимкнено — клієнт сплатить точно зазначену суму'}
                             </span>
                         </div>
                         <UiSwitch
                             id="amount-lock-switch"
                             // Інверсна семантика: switch ON = "дозволити правити" = amountLocked=false.
-                            checked={!amountLocked}
-                            disabled={amount === null}
+                            checked={lockSwitchChecked}
+                            disabled={lockSwitchDisabled}
                             onChange={(allowEdit) =>
                                 setValue('amountLocked', !allowEdit, {
                                     shouldDirty: true,
@@ -427,7 +532,7 @@ export default function CreateInvoiceForm({ business }: Props) {
                                     field.onChange(v === '' ? null : v);
                                 }}
                                 placeholder={`Якщо порожньо — використано: «${business.paymentPurposeTemplate}»`}
-                                error={fieldState.error?.message}
+                                error={getZodFieldError(fieldState.error)}
                                 autoGrow
                                 maxRows={4}
                             />
@@ -481,7 +586,7 @@ export default function CreateInvoiceForm({ business }: Props) {
                                     onChange={(e) =>
                                         field.onChange(e.target.value)
                                     }
-                                    error={fieldState.error?.message}
+                                    error={getZodFieldError(fieldState.error)}
                                 />
                             )}
                         />
@@ -498,7 +603,7 @@ export default function CreateInvoiceForm({ business }: Props) {
                         onChange={(v) =>
                             handleSlugOptionChange(
                                 v as SlugInputOption,
-                                slugOption,
+                                slugOption
                             )
                         }
                     />
@@ -520,12 +625,14 @@ export default function CreateInvoiceForm({ business }: Props) {
                                         }
                                         placeholder="наприклад: order-2026-may"
                                         maxLength={60}
-                                        error={fieldState.error?.message}
+                                        error={getZodFieldError(
+                                            fieldState.error
+                                        )}
                                     />
                                     <p className="text-muted-foreground text-xs">
                                         Сервер додасть унікальний хвіст
                                         автоматично:{' '}
-                                        <span className="font-mono">
+                                        <span className="font-mono break-all">
                                             {humanPart || 'ваш-варіант'}
                                             -aB3xQ9k7
                                         </span>{' '}
@@ -553,7 +660,10 @@ export default function CreateInvoiceForm({ business }: Props) {
 
             {formState.errors.root?.message && (
                 <p className="text-destructive text-sm">
-                    {formState.errors.root.message}
+                    {/* mapValidationCode гарантує UA-fallback — раніше тут
+                        потенційно міг рендеритися raw `INVALID_*`-код. */}
+                    {mapValidationCode(formState.errors.root.message) ??
+                        'Перевірте правильність значень'}
                 </p>
             )}
 
@@ -572,9 +682,7 @@ export default function CreateInvoiceForm({ business }: Props) {
                     variant="filled"
                     size="md"
                     disabled={
-                        submitting ||
-                        formState.isSubmitting ||
-                        purposeOverflow
+                        submitting || formState.isSubmitting || purposeOverflow
                     }
                 >
                     {submitting ? 'Створюю...' : 'Створити рахунок'}

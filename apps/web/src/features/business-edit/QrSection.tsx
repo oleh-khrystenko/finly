@@ -5,6 +5,7 @@ import { Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { type Business } from '@finly/types';
 import UiButton from '@/shared/ui/UiButton';
+import UiQrImage from '@/shared/ui/UiQrImage';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 
 interface Props {
@@ -66,11 +67,10 @@ export default function QrSection({
             }
         >
             <div className="mt-3 flex justify-center">
-                <img
+                <UiQrImage
                     src={url}
                     alt={`QR на публічну сторінку ${business.name}`}
-                    className="border-border aspect-square w-full max-w-[280px] rounded-md border bg-white p-3"
-                    loading="lazy"
+                    className="border-border w-full max-w-[280px] rounded-md border bg-white p-3"
                 />
             </div>
             <p className="text-muted-foreground mt-3 text-center text-xs">

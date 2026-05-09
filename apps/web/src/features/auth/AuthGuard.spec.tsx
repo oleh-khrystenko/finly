@@ -44,7 +44,7 @@ describe('AuthGuard', () => {
         render(
             <AuthGuard>
                 <div>Protected content</div>
-            </AuthGuard>,
+            </AuthGuard>
         );
 
         expect(screen.getByTestId('spinner')).toBeInTheDocument();
@@ -60,7 +60,7 @@ describe('AuthGuard', () => {
         render(
             <AuthGuard>
                 <div>Protected content</div>
-            </AuthGuard>,
+            </AuthGuard>
         );
 
         expect(screen.queryByText('Protected content')).not.toBeInTheDocument();
@@ -76,7 +76,7 @@ describe('AuthGuard', () => {
         render(
             <AuthGuard>
                 <div>Protected content</div>
-            </AuthGuard>,
+            </AuthGuard>
         );
 
         expect(screen.getByText('Protected content')).toBeInTheDocument();

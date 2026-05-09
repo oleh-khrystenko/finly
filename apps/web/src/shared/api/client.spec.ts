@@ -9,7 +9,13 @@ jest.mock('@/shared/config', () => ({
 
 import { authEvents } from '@/shared/lib';
 
-import { apiClient, getAccessToken, setAccessToken } from './client';
+import {
+    apiClient,
+    getAccessToken,
+    PublicApiError,
+    publicPostJson,
+    setAccessToken,
+} from './client';
 
 /**
  * Helper: install a one-shot mock adapter that captures the outgoing request
@@ -99,9 +105,7 @@ describe('client', () => {
 
             const config = await captureNextRequest();
 
-            expect(config.headers.get('Authorization')).toBe(
-                'Bearer my-token'
-            );
+            expect(config.headers.get('Authorization')).toBe('Bearer my-token');
         });
 
         it('does NOT add Authorization header when no token', async () => {
@@ -141,18 +145,14 @@ describe('client', () => {
         it('does NOT retry if already retried (_retry flag)', async () => {
             rejectNextRequest('/some-endpoint', 401, { _retry: true });
 
-            await expect(
-                apiClient.get('/some-endpoint')
-            ).rejects.toBeDefined();
+            await expect(apiClient.get('/some-endpoint')).rejects.toBeDefined();
             expect(mockAxiosPost).not.toHaveBeenCalled();
         });
 
         it('does NOT retry for non-401 errors', async () => {
             rejectNextRequest('/some-endpoint', 500);
 
-            await expect(
-                apiClient.get('/some-endpoint')
-            ).rejects.toBeDefined();
+            await expect(apiClient.get('/some-endpoint')).rejects.toBeDefined();
             expect(mockAxiosPost).not.toHaveBeenCalled();
         });
 
@@ -207,9 +207,7 @@ describe('client', () => {
         });
 
         it('on refresh failure → clears token and emits session-lost', async () => {
-            mockAxiosPost.mockRejectedValueOnce(
-                new Error('Refresh failed')
-            );
+            mockAxiosPost.mockRejectedValueOnce(new Error('Refresh failed'));
 
             const sessionLostListener = jest.fn();
             const unsubscribe = authEvents.on(
@@ -275,5 +273,134 @@ describe('client', () => {
             apiClient.defaults.adapter = originalAdapter;
             unsubscribe();
         });
+    });
+});
+
+// ─── Sprint 8 §8.3 ─────────────────────────────────────────────────────────
+// publicPostJson — anon-сторонa POST для `/api/qr/preview`. Контракт безпеки:
+//   - native fetch (не axios), щоб обійти Bearer-interceptor `apiClient`
+//   - credentials: 'omit' — ніяких cookies (якщо anon-користувач залогінений
+//     у іншій вкладці на cabinet host, його `bid_refresh` НЕ повинен потрапити
+//     у anon-flow)
+//   - Content-Type: application/json + body = JSON.stringify(...)
+//   - non-2xx → PublicApiError зі збереженням status
+
+describe('publicPostJson', () => {
+    const ORIGINAL_FETCH = globalThis.fetch;
+    let fetchMock: jest.Mock;
+
+    /**
+     * Mock-helper: будує fetch-response shape з полями, які `publicPostJson`
+     * реально читає (`.ok`, `.status`, `.statusText`, `.json()`).
+     * Не використовуємо global `Response`, бо jsdom 26+ не вшиває цей клас.
+     */
+    const mockFetchResponse = (params: {
+        ok: boolean;
+        status: number;
+        statusText?: string;
+        body?: unknown;
+    }): unknown => ({
+        ok: params.ok,
+        status: params.status,
+        statusText: params.statusText ?? '',
+        json: async () => params.body ?? {},
+    });
+
+    beforeEach(() => {
+        fetchMock = jest.fn();
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+    });
+
+    afterEach(() => {
+        globalThis.fetch = ORIGINAL_FETCH;
+    });
+
+    it('викликає fetch з POST + credentials:omit + JSON content-type + serialized body', async () => {
+        fetchMock.mockResolvedValue(
+            mockFetchResponse({
+                ok: true,
+                status: 200,
+                body: { data: { ok: true } },
+            })
+        );
+
+        const body = { foo: 'bar' };
+        await publicPostJson<typeof body, { data: { ok: boolean } }>(
+            '/qr/preview',
+            body
+        );
+
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        const [url, init] = fetchMock.mock.calls[0]!;
+        expect(url).toBe('http://localhost:4000/api/qr/preview');
+        expect(init).toMatchObject({
+            method: 'POST',
+            credentials: 'omit',
+            body: JSON.stringify(body),
+        });
+        expect(init.headers).toMatchObject({
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+        });
+        // Захист від cabinet-cookie leak: жодного Authorization-header.
+        expect(init.headers).not.toHaveProperty('Authorization');
+    });
+
+    it('повертає parsed JSON-response на 2xx', async () => {
+        const responseBody = {
+            data: { link: 'https://qr.bank.gov.ua/x', qrPngBase64: 'abc' },
+        };
+        fetchMock.mockResolvedValue(
+            mockFetchResponse({ ok: true, status: 200, body: responseBody })
+        );
+
+        const result = await publicPostJson<unknown, typeof responseBody>(
+            '/qr/preview',
+            {}
+        );
+
+        expect(result).toEqual(responseBody);
+    });
+
+    it('кидає PublicApiError з преciзним status на non-2xx', async () => {
+        fetchMock.mockResolvedValueOnce(
+            mockFetchResponse({
+                ok: false,
+                status: 400,
+                statusText: 'Bad Request',
+            })
+        );
+
+        await expect(
+            publicPostJson('/qr/preview', { invalid: true })
+        ).rejects.toBeInstanceOf(PublicApiError);
+
+        fetchMock.mockResolvedValueOnce(
+            mockFetchResponse({
+                ok: false,
+                status: 429,
+                statusText: 'Too Many Requests',
+            })
+        );
+
+        try {
+            await publicPostJson('/qr/preview', {});
+            throw new Error('should have thrown');
+        } catch (err) {
+            expect(err).toBeInstanceOf(PublicApiError);
+            expect((err as PublicApiError).status).toBe(429);
+        }
+    });
+
+    it('нормалізує path без leading slash', async () => {
+        fetchMock.mockResolvedValue(
+            mockFetchResponse({ ok: true, status: 200, body: {} })
+        );
+
+        await publicPostJson('qr/preview', {});
+
+        expect(fetchMock.mock.calls[0]![0]).toBe(
+            'http://localhost:4000/api/qr/preview'
+        );
     });
 });

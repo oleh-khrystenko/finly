@@ -58,6 +58,63 @@ export const RESPONSE_CODE = {
      * Recoverable client-side: ФОП обирає валідну пару і повторно save-ить.
      */
     INVALID_VAT_FOR_TAXATION_SYSTEM: 'INVALID_VAT_FOR_TAXATION_SYSTEM',
+    /**
+     * Sprint 7 §7.1 — структурна перевірка ЄДРПОУ (`^\d{8}$`) для типів
+     * `tov` / `organization`. Окремий код від `INVALID_TAX_ID` (РНОКПП), щоб
+     * `mapApiCode` міг видати специфічне повідомлення "ЄДРПОУ має містити
+     * 8 цифр" замість загального "Неправильний податковий код".
+     *
+     * Розгалуження валідатора живе у Zod write-DTO (`CreateBusinessSchema`
+     * discriminated union per `type`) і у `BusinessesService.update`
+     * (читає document-resident `type` для PATCH без `type`-context).
+     *
+     * **MVP не валідує ДКСУ-checksum** (Sprint 7 §SP-2): naive-impl false-
+     * negative-ить ~5-10% валідних реальних ЄДРПОУ; checksum — окремий
+     * tech-backlog ticket.
+     */
+    INVALID_LEGAL_TAX_ID: 'INVALID_LEGAL_TAX_ID',
+    /**
+     * Sprint 7 §7.5 — service-layer cross-check на UPDATE: PATCH містить
+     * `taxationSystem` чи `isVatPayer`, але document-resident `type` —
+     * `individual` чи `organization`, де taxation-поля семантично не
+     * застосовуються (не існує "ОСББ на спрощеній-3").
+     *
+     * **Виключно forward-direction garbage** ("поля недоступні для цього
+     * типу"). Зворотний випадок (null-clear на fop/tov, де поля обов'язкові)
+     * — окремий код `TAXATION_REQUIRED_FOR_TYPE`, бо UX-recovery різний:
+     *  - тут: видалити поле з PATCH-payload-у;
+     *  - там: передати non-null значення.
+     *
+     * Чому окремий код від `TAXATION_FIELDS_MISMATCH_TYPE` (read-side
+     * entity-refine): user-action — PATCH; recoverable client-side. Generic
+     * refine-error описує symmetric data-state-violation, інтерпретується для
+     * UI як "бекенд-bug"; цей же код — UX-actionable.
+     */
+    TAXATION_NOT_APPLICABLE_FOR_TYPE: 'TAXATION_NOT_APPLICABLE_FOR_TYPE',
+    /**
+     * Sprint 7 §7.5 — backward-сторона того ж cross-check-у: PATCH намагається
+     * очистити (`null`) `taxationSystem` чи `isVatPayer` на бізнесі типу
+     * `fop` / `tov`, де таксейшн-поля обов'язкові. Семантично це "ви не
+     * можете видалити обов'язкове поле", не "поле недоступне".
+     *
+     * Recovery-path для UI: передати non-null значення (підказка "оберіть
+     * систему оподаткування"). Реальний flow зміни на null — створення нового
+     * бізнесу типу `individual` / `organization`, бо `type` immutable
+     * post-creation (§SP-8).
+     */
+    TAXATION_REQUIRED_FOR_TYPE: 'TAXATION_REQUIRED_FOR_TYPE',
+    /**
+     * Sprint 7 §7.5 — service-layer cross-check на UPDATE: PATCH містить
+     * `requisites.taxId` неправильного формату для document-resident `type`
+     * (наприклад, 8-digit ЄДРПОУ при type=fop, або 10-digit РНОКПП при
+     * type=tov).
+     *
+     * Окремий код від `INVALID_TAX_ID` / `INVALID_LEGAL_TAX_ID` — ці два
+     * описують **структурну** помилку (regex/checksum), цей — **type-binding**
+     * (формат сам валідний, але не для цього `type`). UI підказує "ваш бізнес
+     * — ФОП, потрібен 10-цифровий РНОКПП", не "введіть валідний код".
+     */
+    TAX_ID_FORMAT_MISMATCH_TYPE: 'TAX_ID_FORMAT_MISMATCH_TYPE',
 
     // --- invoices error (Sprint 4 §4.2 §4.8) ---
     /** Invoice не знайдено в межах business-у. `InvoiceAccessGuard` / `InvoicesService.getBySlug`. UA: "Рахунок не знайдено". */
@@ -67,6 +124,21 @@ export const RESPONSE_CODE = {
     /** Coupled-rule на write-side: `amount=null + amountLocked=true`. Sprint 1 entity Zod дублює; service окремий код для UX-friendly inline error. UA: "Заблокувати редагування суми можна лише при заданій сумі". */
     INVOICE_AMOUNT_LOCKED_REQUIRES_AMOUNT:
         'INVOICE_AMOUNT_LOCKED_REQUIRES_AMOUNT',
+    /**
+     * Sprint 4 review fix — invoice expired (`validUntil < now`). Public QR
+     * endpoints повертають 410 Gone з цим кодом. JSON-view продовжує працювати
+     * (heading + "Прострочено"-banner), але `nbuLinks: null` — payment-vector
+     * не віддається. UA: "Термін рахунку минув".
+     */
+    INVOICE_EXPIRED: 'INVOICE_EXPIRED',
+    /**
+     * Sprint 4 review fix — write-side service блокує `validUntil < now` на
+     * create/update. Раніше комментарі схеми проголошували, що app-layer
+     * service блокує цей інваріант, але enforcement не існував. Тепер code
+     * приходить з 400 BadRequest на cabinet write. UA: "Термін дії не може
+     * бути у минулому".
+     */
+    INVOICE_VALID_UNTIL_IN_PAST: 'INVOICE_VALID_UNTIL_IN_PAST',
     /**
      * Sprint 4 §4.0 + SP-5 — cascade-delete вимагає Mongo replica-set
      * (`session.withTransaction`). Standalone mongod кидає
@@ -78,6 +150,26 @@ export const RESPONSE_CODE = {
      */
     CASCADE_DELETE_REQUIRES_REPLICA_SET: 'CASCADE_DELETE_REQUIRES_REPLICA_SET',
 
+    // --- qr error (Sprint 2 §2.1 + Sprint 8 fix) ---
+    /**
+     * Sprint 8 fix — overall payload-size overflow після build NBU-payload.
+     * Per-field валідація проходить, але сума полів перевищує норматив 507 B
+     * (Додатки 3 §IV.11, 4 §IV.8) АБО Base64URL-форма перевищує 475 B
+     * (таблиця 1 у Додатках 3 і 4).
+     *
+     * Це **emergent property** комбінації полів, не окреме поле — Zod на
+     * write-DTO технічно не може валідувати без виклику builder-а. Тому
+     * `AllExceptionsFilter` ловить `PayloadValidationError` з кодами
+     * `PAYLOAD_OVERALL_SIZE_EXCEEDED` / `PAYLOAD_BASE64URL_SIZE_EXCEEDED` і
+     * мапить на цей код як 400 BAD_REQUEST. До Sprint 8 цей шлях віддавав
+     * 500 INTERNAL_ERROR на legitimate user-input (наприклад
+     * `purpose='А'.repeat(420)` cyrillic — валідні 420 chars, але payload 840 B).
+     *
+     * UA: "Ваші дані не вміщуються в платіжний QR-код. Скоротіть назву або
+     * призначення платежу" — actionable рекомендація.
+     */
+    PAYLOAD_TOO_LARGE: 'PAYLOAD_TOO_LARGE',
+
     // --- errors ---
     UNAUTHORIZED: 'UNAUTHORIZED',
     VALIDATION_ERROR: 'VALIDATION_ERROR',
@@ -88,8 +180,7 @@ export const RESPONSE_CODE = {
     INTERNAL_ERROR: 'INTERNAL_ERROR',
 } as const;
 
-export type ResponseCode =
-    (typeof RESPONSE_CODE)[keyof typeof RESPONSE_CODE];
+export type ResponseCode = (typeof RESPONSE_CODE)[keyof typeof RESPONSE_CODE];
 
 /** Маппінг код → тип для фронту (колір нотифікації тощо) */
 export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
@@ -118,10 +209,17 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.BUSINESS_ACCESS_DENIED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.SLUG_GENERATION_FAILED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVALID_VAT_FOR_TAXATION_SYSTEM]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.INVALID_LEGAL_TAX_ID]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.TAXATION_NOT_APPLICABLE_FOR_TYPE]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.TAXATION_REQUIRED_FOR_TYPE]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.TAX_ID_FORMAT_MISMATCH_TYPE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVOICE_NOT_FOUND]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVOICE_SLUG_GENERATION_FAILED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVOICE_AMOUNT_LOCKED_REQUIRES_AMOUNT]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.INVOICE_EXPIRED]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.INVOICE_VALID_UNTIL_IN_PAST]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.CASCADE_DELETE_REQUIRES_REPLICA_SET]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.PAYLOAD_TOO_LARGE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.ONBOARDING_INCOMPLETE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.UNAUTHORIZED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.VALIDATION_ERROR]: RESPONSE_TYPE.ERROR,

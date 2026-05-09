@@ -10,11 +10,18 @@ import { Connection, Model, Types, type FilterQuery } from 'mongoose';
 import {
     RESPONSE_CODE,
     VAT_ALLOWED_TAXATION_SYSTEMS,
+    isTaxIdValidForType,
+    requiresTaxation,
     type BusinessWithInvoicesCount,
     type CreateBusinessRequest,
     type UpdateBusinessRequest,
 } from '@finly/types';
 
+import { isTransactionsUnsupportedError } from '../../common/mongoose/transactions-unsupported';
+import {
+    InvoiceSlugCounter,
+    type InvoiceSlugCounterDocument,
+} from '../invoices/schemas/invoice-slug-counter.schema';
 import {
     Invoice,
     type InvoiceDocument,
@@ -61,6 +68,8 @@ export class BusinessesService {
         private readonly businessModel: Model<BusinessDocument>,
         @InjectModel(Invoice.name)
         private readonly invoiceModel: Model<InvoiceDocument>,
+        @InjectModel(InvoiceSlugCounter.name)
+        private readonly counterModel: Model<InvoiceSlugCounterDocument>,
         @InjectConnection()
         private readonly connection: Connection,
         private readonly slugGenerator: SlugGeneratorService
@@ -78,9 +87,28 @@ export class BusinessesService {
             ? { ownerId: null, managers: [userObjectId] }
             : { ownerId: userObjectId, managers: [] as Types.ObjectId[] };
 
+        // Sprint 7 §SP-3 — discriminated-union variants `individual` /
+        // `organization` фізично не містять taxation-полів у DTO-shape. Mongoose
+        // schema має `default: null`, але для type-safety і явності контракту
+        // (Mongoose default спрацьовує на рівні документа, не на spread-у dto)
+        // нормалізуємо тут: для не-taxation типів — non-undefined `null`, що
+        // robustно проходить через будь-який middleware/transform.
+        //
+        // Discriminator-narrowing через literal-comparison: TS звужує
+        // `CreateBusinessRequest` до fop/tov-variant-у і дає доступ до
+        // `taxationSystem` / `isVatPayer` без cast-ів.
+        const taxationFields =
+            dto.type === 'fop' || dto.type === 'tov'
+                ? {
+                      taxationSystem: dto.taxationSystem,
+                      isVatPayer: dto.isVatPayer,
+                  }
+                : { taxationSystem: null, isVatPayer: null };
+
         try {
             return await this.businessModel.create({
                 ...dto,
+                ...taxationFields,
                 slug,
                 slugLower: slug.toLowerCase(),
                 ...ownership,
@@ -182,6 +210,20 @@ export class BusinessesService {
                         // aggregate-output. Робимо `_id → id`-mapping
                         // explicitly у pipeline.
                         id: { $toString: '$_id' },
+                        // Sprint 4 §4.1 — `invoiceSlugPresetDefault` додане
+                        // після первинної BusinessSchema (May 6). Mongoose
+                        // `default: null` спрацьовує лише на insert; legacy-
+                        // документи (створені до May 6) мають це поле
+                        // відсутнім у БД. `findOne`-path викликає Mongoose
+                        // doc-init, який attach-ить default; aggregation
+                        // bypass-ить Mongoose повністю → undefined leak до
+                        // frontend-у. `BusinessWithInvoicesCount` контракт
+                        // вимагає `SlugPreset | null` (NOT undefined) —
+                        // нормалізуємо тут, щоб aggregation і `getBySlug`
+                        // повертали той самий shape.
+                        invoiceSlugPresetDefault: {
+                            $ifNull: ['$invoiceSlugPresetDefault', null],
+                        },
                     },
                 },
                 { $unset: ['__invoicesCount', '_id', '__v'] },
@@ -206,13 +248,78 @@ export class BusinessesService {
         slug: string,
         dto: UpdateBusinessRequest
     ): Promise<BusinessDocument> {
+        const slugLower = slug.toLowerCase();
+
+        // Sprint 7 §7.5 — type-aware cross-checks на UPDATE. PATCH не несе
+        // `type` (immutable post-creation, §SP-8); service читає document-
+        // resident `type` коли payload містить type-залежні поля. Один read
+        // покриває обидва cross-check-и (taxation-applicability + taxId-format-
+        // binding) — single round-trip перед write.
+        const dtoTouchesTaxation =
+            dto.taxationSystem !== undefined || dto.isVatPayer !== undefined;
+        const dtoTouchesTaxId = dto.requisites?.taxId !== undefined;
+
+        if (dtoTouchesTaxation || dtoTouchesTaxId) {
+            const existing = await this.businessModel
+                .findOne({ slugLower }, { type: 1 })
+                .lean<{ type: CreateBusinessRequest['type'] }>()
+                .exec();
+            if (!existing) {
+                throw new NotFoundException({
+                    code: RESPONSE_CODE.BUSINESS_NOT_FOUND,
+                    message: 'Business not found',
+                });
+            }
+            const existingType = existing.type;
+
+            if (dtoTouchesTaxation && !requiresTaxation(existingType)) {
+                // Forward-direction: individual / organization — taxation-поля
+                // не застосовуються (включно з `null`-clear, що для immutable-
+                // null-стану — bug у клієнті). UX-recovery: видалити поле з
+                // PATCH-payload-у.
+                throw new BadRequestException({
+                    code: RESPONSE_CODE.TAXATION_NOT_APPLICABLE_FOR_TYPE,
+                    message:
+                        'Taxation fields not applicable for this business type',
+                });
+            }
+
+            if (
+                dtoTouchesTaxation &&
+                requiresTaxation(existingType) &&
+                (dto.taxationSystem === null || dto.isVatPayer === null)
+            ) {
+                // Backward-direction: fop / tov — заборонено clear-out (передача
+                // null) обов'язкового taxation-поля. null-clear на taxation-
+                // required-type створив би invalid stored state
+                // (TAXATION_FIELDS_MISMATCH_TYPE у entity-Zod на read). UX-
+                // recovery різний від forward-direction-у — окремий код
+                // `TAXATION_REQUIRED_FOR_TYPE` ("оберіть систему оподаткування").
+                throw new BadRequestException({
+                    code: RESPONSE_CODE.TAXATION_REQUIRED_FOR_TYPE,
+                    message:
+                        'Taxation fields are required for this business type',
+                });
+            }
+
+            if (dtoTouchesTaxId) {
+                const newTaxId = dto.requisites!.taxId;
+                if (!isTaxIdValidForType(existingType, newTaxId)) {
+                    throw new BadRequestException({
+                        code: RESPONSE_CODE.TAX_ID_FORMAT_MISMATCH_TYPE,
+                        message:
+                            'Tax id format does not match the business type',
+                    });
+                }
+            }
+        }
+
         // Atomic update + coupled VAT × taxationSystem check у `$expr`-filter
         // — single round-trip у happy path. `$expr` обчислює пару
         // (incoming-or-existing isVatPayer, incoming-or-existing taxationSystem)
         // і блокує update, якщо пара (true, ∉ VAT_ALLOWED_TAXATION_SYSTEMS).
         // Mongo aggregation expression: literal-значення з dto замінює
         // `'$<fieldname>'`-reference на існуюче поле документа.
-        const slugLower = slug.toLowerCase();
         const hasCoupledFields =
             dto.isVatPayer !== undefined || dto.taxationSystem !== undefined;
 
@@ -268,7 +375,21 @@ export class BusinessesService {
      *
      * **Інваріант atomic-or-nothing.** Mongo transaction гарантує, що або
      * (а) видалено і бізнес, і всі його інвойси, або (б) нічого не видалено.
-     * Orphan-state (інвойси без батьківського бізнесу) свідомо неможливий.
+     *
+     * **Орфан-prevention з concurrent-create-ом** (Sprint 4 review fix).
+     * Раніше тут стверджувалось, що orphan-state "неможливий" — це було
+     * завищена гарантія: cascade-delete рaн всередині транзакції, але
+     * `InvoicesService.create` йшов поза транзакцією і не координувався з
+     * delete-ом. Сценарій: TX-Delete видаляє invoices та business; concurrent
+     * `create` уже пройшов guard-read (бізнес ще був), а insert вставляється
+     * після `deleteMany(invoices)` і до commit-у delete-у — orphan invoice.
+     *
+     * Фікс: `InvoicesService.create` тепер теж тримає транзакцію і **touches**
+     * business (`updateOne $currentDate: updatedAt`) у ній. Mongo write-write
+     * conflict serialize-ить два TX: або create-touch виграє і delete-у
+     * retry'неться (deleteMany побачить новий invoice і видалить його), або
+     * delete-у виграє і create-touch на retry побачить matchedCount=0 →
+     * 404 BUSINESS_NOT_FOUND, без orphan-insert-у.
      *
      * **Mongo replica-set requirement.** `withTransaction` працює лише на
      * replica-set; на standalone mongod кидає `MongoServerError` з message
@@ -302,6 +423,13 @@ export class BusinessesService {
         try {
             await session.withTransaction(async () => {
                 await this.invoiceModel.deleteMany({ businessId }, { session });
+                // Sprint 4 review fix — cascade-видалення counter-doc-ів того
+                // самого business-у. Без цього counter-доки залишалися б
+                // orphan-ами per business _id з-під видаленого бізнесу
+                // (нешкідливо для коректності, бо _id unique і не reuse-ається,
+                // але засмічує колекцію). Атомарно у тій самій TX-сесії —
+                // якщо TX abort-ить, counters лишаються разом з invoices.
+                await this.counterModel.deleteMany({ businessId }, { session });
                 await this.businessModel.deleteOne(
                     { _id: businessId },
                     { session }
@@ -327,18 +455,4 @@ export class BusinessesService {
 
         return { affectedInvoices };
     }
-}
-
-/**
- * Sprint 4 §SP-5 — детектор `withTransaction`-incompatibility error-у з Mongo
- * driver-у. Standalone mongod кидає message що містить
- * "Transaction numbers are only allowed on a replica set member or mongos"
- * (codeName: `IllegalOperation`, code: 20). Перевірка на message — robust
- * проти версій Mongo (codes можуть дрейфнути).
- */
-function isTransactionsUnsupportedError(err: unknown): boolean {
-    if (!(err instanceof Error)) return false;
-    return /transaction.*replica set|replica set.*transaction/i.test(
-        err.message
-    );
 }

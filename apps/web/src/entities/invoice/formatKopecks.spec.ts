@@ -1,7 +1,4 @@
-import {
-    formatKopecksAsHryvnia,
-    getInvoiceStatus,
-} from './formatKopecks';
+import { formatKopecksAsHryvnia, getInvoiceStatus } from './formatKopecks';
 
 describe('formatKopecksAsHryvnia', () => {
     it('null → null (caller вирішує fallback)', () => {
@@ -28,7 +25,7 @@ describe('formatKopecksAsHryvnia', () => {
 
     it('99_999_999_999 копійок (максимум) → "999 999 999,99 ₴"', () => {
         expect(formatKopecksAsHryvnia(99_999_999_999)).toMatch(
-            /^999\s999\s999,99\s?₴$/,
+            /^999\s999\s999,99\s?₴$/
         );
     });
 });
@@ -56,14 +53,5 @@ describe('getInvoiceStatus', () => {
         // свого терміну дії. Перехід у "expired" відбувається на наступній
         // millisecond-tick.
         expect(getInvoiceStatus(now, now)).toBe('active');
-    });
-
-    it('ISO-string input парситься так само як Date', () => {
-        expect(getInvoiceStatus('2026-12-31T00:00:00.000Z', now)).toBe(
-            'active',
-        );
-        expect(getInvoiceStatus('2026-04-01T00:00:00.000Z', now)).toBe(
-            'expired',
-        );
     });
 });

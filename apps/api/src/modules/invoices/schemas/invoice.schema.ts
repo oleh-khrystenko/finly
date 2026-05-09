@@ -7,6 +7,43 @@ import { applyJsonTransform } from '../../../common/mongoose/json-transform';
 export type InvoiceDocument = HydratedDocument<Invoice>;
 
 /**
+ * Sprint 4 review fix — embedded subdoc, що фрозить платіжні реквізити на
+ * момент створення інвойсу. NBU/QR payload public-зони будується з цього
+ * snapshot-у, а не з runtime-mutable Business — фікс для дефекту "ФОП
+ * редагує бізнес-IBAN, старе invoice-посилання тихо начинає вести на новий
+ * payload".
+ *
+ * **Поля snapshot-у:**
+ *  - `recipientName` — `business.name` на момент create
+ *  - `iban` — `business.requisites.iban` на момент create
+ *  - `taxId` — `business.requisites.taxId` на момент create
+ *  - `paymentPurpose` — effective purpose, resolved через
+ *    `effectiveInvoicePurpose(dto.paymentPurpose, business.paymentPurposeTemplate)`
+ *    на момент create. Раніше runtime-resolve лідилав до URL/payload-drift
+ *    у `with-purpose`-slug-flow.
+ *
+ * **`_id: false`** — embedded subdoc-у власний `_id` не потрібен, ці дані
+ * не запит-ються незалежно від parent invoice.
+ */
+@Schema({ _id: false })
+export class InvoicePayeeSnapshot {
+    @Prop({ required: true, type: String, trim: true })
+    recipientName!: string;
+
+    @Prop({ required: true, type: String, trim: true })
+    iban!: string;
+
+    @Prop({ required: true, type: String, trim: true })
+    taxId!: string;
+
+    @Prop({ required: true, type: String, trim: true })
+    paymentPurpose!: string;
+}
+
+const InvoicePayeeSnapshotSchema =
+    SchemaFactory.createForClass(InvoicePayeeSnapshot);
+
+/**
  * Інвойс — одноразова платіжка під конкретний бізнес ("Модель А", див.
  * `docs/product/qr-decisions.md` §1.12). У MVP схема навмисне НЕ містить полів
  * трекінгу оплат (`paidAt`, `transactions[]`, `paymentStatus`) — додавання
@@ -89,6 +126,17 @@ export class Invoice {
     @Prop({ type: Number, default: null })
     slugCounter!: number | null;
 
+    /**
+     * Sprint 4 review fix — embedded snapshot платіжних реквізитів. На нових
+     * invoices завжди non-null (`InvoicesService.create` populate-ить).
+     * `null` лишається валідним станом для legacy invoices, створених до
+     * Sprint 4 review fix; payload-mapper має fallback на live business у
+     * цьому випадку. Migration `2026-05-08-invoices-payee-snapshot.ts`
+     * backfill-ить snapshot для existing invoices з current business state.
+     */
+    @Prop({ type: InvoicePayeeSnapshotSchema, default: null })
+    payeeSnapshot!: InvoicePayeeSnapshot | null;
+
     @Prop({ type: Date, default: null })
     deletedAt!: Date | null;
 
@@ -103,7 +151,24 @@ export const InvoiceSchema = SchemaFactory.createForClass(Invoice);
 applyJsonTransform(InvoiceSchema);
 
 InvoiceSchema.index({ businessId: 1, slug: 1 }, { unique: true });
-InvoiceSchema.index({ businessId: 1, createdAt: -1 });
+/**
+ * List-pagination index. **`_id: -1` як tail для tie-break-у** —
+ * `(createdAt, _id)` total order гарантує detермінований offset-paging для
+ * `InvoicesService.getByBusinessId` (`sort: { createdAt: -1, _id: -1 }`).
+ * Без `_id`-tail Mongo тримав би тіе-групи у in-memory-tie-break після
+ * scan-у — на масштабі 100+ tie-group дoc-ів робить sort-fan-out поза
+ * index-scan-режимом. Prefix-match `(businessId)` і `(businessId, createdAt)`
+ * залишається доступний для `countDocuments`/aggregate-`$lookup`-stage
+ * через index-prefix rule.
+ *
+ * **Operational note.** Prod-кластери, що пройшли деплой ДО цієї зміни,
+ * мають старий `{ businessId: 1, createdAt: -1 }` index як residual artifact.
+ * Mongoose `autoIndex` створює новий 3-field index, але старий не дропає.
+ * Cleanup — окремий ops-крок: `db.invoices.dropIndex('businessId_1_createdAt_-1')`
+ * або наступна migration; функціонально безпечно лишити обидва (planner
+ * обере новий 3-field).
+ */
+InvoiceSchema.index({ businessId: 1, createdAt: -1, _id: -1 });
 InvoiceSchema.index({ validUntil: 1 }, { sparse: true });
 
 /**

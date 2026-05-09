@@ -8,13 +8,12 @@ import {
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiTextarea from '@/shared/ui/UiTextarea';
 import UiEditableField from '@/shared/ui/UiEditableField';
+import { mapValidationCode } from '@/shared/lib';
 
 interface Props {
     invoice: Invoice;
     business: Business;
-    onSave: (
-        patch: Partial<Pick<Invoice, 'paymentPurpose'>>,
-    ) => Promise<void>;
+    onSave: (patch: Partial<Pick<Invoice, 'paymentPurpose'>>) => Promise<void>;
 }
 
 /**
@@ -33,8 +32,8 @@ export default function PurposeSection({ invoice, business, onSave }: Props) {
                 renderRead={(v) =>
                     v === null ? (
                         <span className="text-muted-foreground italic">
-                            Використано з налаштувань бізнесу:
-                            «{business.paymentPurposeTemplate}»
+                            Використано з налаштувань бізнесу: «
+                            {business.paymentPurposeTemplate}»
                         </span>
                     ) : (
                         v
@@ -56,10 +55,16 @@ export default function PurposeSection({ invoice, business, onSave }: Props) {
                 validate={(v) => {
                     if (v === null) return null;
                     const r = invoicePaymentPurposeSchema.safeParse(v);
-                    return r.success
-                        ? null
-                        : (r.error.issues[0]?.message ??
-                              'Невалідний текст');
+                    if (r.success) return null;
+                    // Якщо validate повертає null — UiEditableField пропускає
+                    // save. Тож на Zod-fail повертаємо ОБОВ'ЯЗКОВО non-null
+                    // UA-рядок (raw `INVALID_*` код ніколи не доходить до
+                    // користувача, default Zod-помилка без `.message()` теж
+                    // не пропустить save через `??`-fallback).
+                    return (
+                        mapValidationCode(r.error.issues[0]?.message) ??
+                        'Перевірте правильність значення'
+                    );
                 }}
                 onSave={(paymentPurpose) => onSave({ paymentPurpose })}
             />

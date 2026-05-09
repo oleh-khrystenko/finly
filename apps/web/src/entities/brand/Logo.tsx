@@ -19,9 +19,7 @@ const Logo = () => {
                 height={LOGO_ICON_SIZE}
                 className="hidden dark:block"
             />
-            <span className="text-foreground text-2xl font-bold">
-                Finly
-            </span>
+            <span className="text-foreground text-2xl font-bold">Finly</span>
         </div>
     );
 };

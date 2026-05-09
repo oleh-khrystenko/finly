@@ -1,10 +1,7 @@
 import { z } from 'zod';
 
 import { UserBillingSchema } from '../contracts/payments';
-import {
-    DEFAULT_USER_ROLE,
-    USER_ROLES,
-} from '../enums/user-role';
+import { DEFAULT_USER_ROLE, USER_ROLES } from '../enums/user-role';
 import { objectIdSchema } from '../validation/common';
 
 export const UserProviderSchema = z.object({

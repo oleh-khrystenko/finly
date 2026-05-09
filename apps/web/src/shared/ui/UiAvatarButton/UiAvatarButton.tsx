@@ -48,19 +48,24 @@ const UiAvatarButton = forwardRef<HTMLButtonElement, UiAvatarButtonProps>(
                 className={composeClasses(
                     'group relative inline-flex shrink-0 items-center justify-center rounded-full',
                     'cursor-pointer transition-opacity',
-                    'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                    'focus-visible:ring-ring focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
                     'disabled:cursor-not-allowed disabled:opacity-50',
                     className
                 )}
             >
                 <span aria-hidden="true" className="contents">
-                    <UiAvatar src={src} alt="" fallback={fallback} size={size} />
+                    <UiAvatar
+                        src={src}
+                        alt=""
+                        fallback={fallback}
+                        size={size}
+                    />
                     {overlay && (
                         <span
                             data-slot="avatar-button-overlay"
                             className={composeClasses(
                                 'pointer-events-none absolute inset-0 flex items-center justify-center',
-                                'rounded-full bg-foreground/45 text-primary-foreground',
+                                'bg-foreground/45 text-primary-foreground rounded-full',
                                 'opacity-0 transition-opacity',
                                 'group-hover:opacity-100 group-focus-visible:opacity-100'
                             )}

@@ -25,10 +25,7 @@ export default function AvatarEditButton({
     ariaLabel,
     onPress,
 }: AvatarEditButtonProps) {
-    const fullName = getFullName(
-        user.profile.firstName,
-        user.profile.lastName
-    );
+    const fullName = getFullName(user.profile.firstName, user.profile.lastName);
     const initials = getInitials(fullName, user.email);
 
     return (

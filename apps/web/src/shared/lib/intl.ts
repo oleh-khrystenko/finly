@@ -20,7 +20,7 @@ export function pluralizeUa(
     count: number,
     one: string,
     few: string,
-    many: string,
+    many: string
 ): string {
     const mod10 = count % 10;
     const mod100 = count % 100;

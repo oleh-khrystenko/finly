@@ -19,6 +19,7 @@ import { BusinessesModule } from '../src/modules/businesses/businesses.module';
 import { EmailModule } from '../src/modules/email/email.module';
 import { EmailService } from '../src/modules/email/email.service';
 import { InvoicesModule } from '../src/modules/invoices/invoices.module';
+import { InvoicesService } from '../src/modules/invoices/invoices.service';
 import { QrModule } from '../src/modules/qr/qr.module';
 import { StorageModule } from '../src/modules/storage/storage.module';
 import { UsersModule } from '../src/modules/users/users.module';
@@ -335,7 +336,10 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             expect(body.data.slug).toMatch(/^[A-Za-z0-9]{8}$/);
         });
 
-        it('reject coupled violation (amount=null + amountLocked=true) — 400', async () => {
+        it('reject coupled violation (amount=null + amountLocked=true) — 400 з доменним кодом', async () => {
+            // Sprint 4 review fix — Zod refine `AMOUNT_LOCKED_REQUIRES_AMOUNT`
+            // мапиться у `INVOICE_AMOUNT_LOCKED_REQUIRES_AMOUNT` через
+            // `AllExceptionsFilter` (раніше падало як generic `VALIDATION_ERROR`).
             const user = await createUser();
             const slug = await createBusinessFor(user);
 
@@ -351,7 +355,29 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                 })
                 .expect(400);
             expect((res.body as { error: { code: string } }).error.code).toBe(
-                'VALIDATION_ERROR'
+                'INVOICE_AMOUNT_LOCKED_REQUIRES_AMOUNT'
+            );
+        });
+
+        it('reject validUntil у минулому — 400 INVOICE_VALID_UNTIL_IN_PAST', async () => {
+            // Sprint 4 review fix — write-side enforcement у InvoicesService.create.
+            const user = await createUser();
+            const slug = await createBusinessFor(user);
+            const past = new Date(Date.now() - 86_400_000).toISOString(); // вчора
+
+            const res = await supertest(app.getHttpServer())
+                .post(`/api/businesses/me/${slug}/invoices`)
+                .set('Authorization', bearerFor(user))
+                .send({
+                    amount: 100000,
+                    amountLocked: true,
+                    paymentPurpose: null,
+                    validUntil: past,
+                    slugInput: { kind: 'random' },
+                })
+                .expect(400);
+            expect((res.body as { error: { code: string } }).error.code).toBe(
+                'INVOICE_VALID_UNTIL_IN_PAST'
             );
         });
 
@@ -493,6 +519,66 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             expect(body.data.page).toBe(1);
             expect(body.data.limit).toBe(10);
         });
+
+        /**
+         * Sprint 4 review fix — пагінація з tie-breaker по `_id`. 6 інвойсів
+         * з ідентичним `createdAt` (insertMany з фіксованим Date) — без
+         * `_id`-tail сортування ламалося б non-determinist-ично і split на
+         * сторінки міг повторити чи пропустити елементи. Перевіряємо, що
+         * union(page1, page2, page3) === повний sorted-set без overlap-ів.
+         */
+        it('deterministic pagination на ідентичних timestamp (review fix)', async () => {
+            const user = await createUser();
+            const slug = await createBusinessFor(user);
+            const businessDoc = await businessModel.findOne({
+                slugLower: slug.toLowerCase(),
+            });
+            const businessId = businessDoc!._id;
+
+            // 6 invoices з тим самим timestamp. Йдемо через `Model.collection.
+            // insertMany` (raw MongoDB driver), що не застосовує Mongoose
+            // `timestamps: true` — це дозволяє явно зафіксувати ідентичні
+            // `createdAt` для імітації tie-group.
+            const fixed = new Date('2026-05-07T12:00:00.000Z');
+            const docs = Array.from({ length: 6 }, (_, i) => ({
+                businessId,
+                slug: `tie-${i}-aaaaaaaa`,
+                amount: 100 + i,
+                amountLocked: false,
+                paymentPurpose: null,
+                validUntil: null,
+                slugPreset: null,
+                slugCounterScope: null,
+                slugCounter: null,
+                deletedAt: null,
+                createdAt: fixed,
+                updatedAt: fixed,
+            }));
+            await invoiceModel.collection.insertMany(docs);
+
+            const collected = new Map<string, number>();
+            for (const page of [1, 2, 3]) {
+                const res = await supertest(app.getHttpServer())
+                    .get(
+                        `/api/businesses/me/${slug}/invoices?page=${page}&limit=2`
+                    )
+                    .set('Authorization', bearerFor(user))
+                    .expect(200);
+                const items = (
+                    res.body as {
+                        data: { items: Array<{ id: string; slug: string }> };
+                    }
+                ).data.items;
+                for (const inv of items) {
+                    collected.set(inv.id, (collected.get(inv.id) ?? 0) + 1);
+                }
+            }
+            // 6 унікальних інвойсів — кожен зустрівся рівно один раз.
+            expect(collected.size).toBe(6);
+            for (const count of collected.values()) {
+                expect(count).toBe(1);
+            }
+        });
     });
 
     // ─── GET single ───
@@ -594,6 +680,88 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             ).toBe('New purpose');
         });
 
+        it('PATCH paymentPurpose → public view відразу віддає новий purpose (snapshot mirror)', async () => {
+            // Sprint 4 review fix regression: snapshot.paymentPurpose тепер
+            // mirror-иться на PATCH. Без mirror-у клієнт по public-link бачив
+            // би старий purpose назавжди — прямо суперечить контракту
+            // "invoice mutable payment data" (public-invoices controller doc).
+            const user = await createUser();
+            const slug = await createBusinessFor(user);
+            const create = await supertest(app.getHttpServer())
+                .post(`/api/businesses/me/${slug}/invoices`)
+                .set('Authorization', bearerFor(user))
+                .send({
+                    amount: 100,
+                    amountLocked: false,
+                    paymentPurpose: 'Original',
+                    validUntil: null,
+                    slugInput: { kind: 'random' },
+                });
+            const invoiceSlug = (create.body as { data: { slug: string } }).data
+                .slug;
+
+            // Sanity: public-view спочатку показує "Original".
+            const before = await supertest(app.getHttpServer())
+                .get(`/api/businesses/public/${slug}/invoices/${invoiceSlug}`)
+                .expect(200);
+            expect(
+                (before.body as { data: { paymentPurpose: string } }).data
+                    .paymentPurpose
+            ).toBe('Original');
+
+            // Cabinet PATCH purpose → "Updated".
+            await supertest(app.getHttpServer())
+                .patch(`/api/businesses/me/${slug}/invoices/${invoiceSlug}`)
+                .set('Authorization', bearerFor(user))
+                .send({ paymentPurpose: 'Updated' })
+                .expect(200);
+
+            // Public-view відразу віддає "Updated" — snapshot mirror спрацював.
+            const after = await supertest(app.getHttpServer())
+                .get(`/api/businesses/public/${slug}/invoices/${invoiceSlug}`)
+                .expect(200);
+            expect(
+                (after.body as { data: { paymentPurpose: string } }).data
+                    .paymentPurpose
+            ).toBe('Updated');
+        });
+
+        it('PATCH paymentPurpose=null → public view показує business template (snapshot resolved)', async () => {
+            // null-inheritance на PATCH: service.update resolve-ить null →
+            // business.paymentPurposeTemplate і mirror-ить у snapshot. Public
+            // payload завжди має конкретний рядок (не null).
+            const user = await createUser();
+            const slug = await createBusinessFor(user);
+            const create = await supertest(app.getHttpServer())
+                .post(`/api/businesses/me/${slug}/invoices`)
+                .set('Authorization', bearerFor(user))
+                .send({
+                    amount: 100,
+                    amountLocked: false,
+                    paymentPurpose: 'Set explicitly',
+                    validUntil: null,
+                    slugInput: { kind: 'random' },
+                });
+            const invoiceSlug = (create.body as { data: { slug: string } }).data
+                .slug;
+
+            // PATCH paymentPurpose=null → resolve до template.
+            await supertest(app.getHttpServer())
+                .patch(`/api/businesses/me/${slug}/invoices/${invoiceSlug}`)
+                .set('Authorization', bearerFor(user))
+                .send({ paymentPurpose: null })
+                .expect(200);
+
+            const view = await supertest(app.getHttpServer())
+                .get(`/api/businesses/public/${slug}/invoices/${invoiceSlug}`)
+                .expect(200);
+            // Public-purpose === business.paymentPurposeTemplate seeded у helper.
+            expect(
+                (view.body as { data: { paymentPurpose: string } }).data
+                    .paymentPurpose
+            ).toBe('Оплата за послуги');
+        });
+
         it('reject спробу змінити slug через PATCH — 400 (slug-immutability via .strict())', async () => {
             const user = await createUser();
             const slug = await createBusinessFor(user);
@@ -666,6 +834,63 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                 .expect(400);
             expect((res.body as { error: { code: string } }).error.code).toBe(
                 'INVOICE_AMOUNT_LOCKED_REQUIRES_AMOUNT'
+            );
+        });
+
+        it('coupled cross-field PATCH ОБОХ amount + amountLocked → 400 INVOICE_AMOUNT_LOCKED_REQUIRES_AMOUNT (Zod-refine path)', async () => {
+            // Sprint 4 review fix — раніше цей шлях падав як `VALIDATION_ERROR`
+            // (Zod-refine catches both fields, AllExceptionsFilter мапив 400 →
+            // generic). Тепер `ZOD_ISSUE_CODE_TO_RESPONSE_CODE` мапить
+            // `AMOUNT_LOCKED_REQUIRES_AMOUNT` → доменний код.
+            const user = await createUser();
+            const slug = await createBusinessFor(user);
+            const create = await supertest(app.getHttpServer())
+                .post(`/api/businesses/me/${slug}/invoices`)
+                .set('Authorization', bearerFor(user))
+                .send({
+                    amount: 100,
+                    amountLocked: false,
+                    paymentPurpose: null,
+                    validUntil: null,
+                    slugInput: { kind: 'random' },
+                });
+            const invoiceSlug = (create.body as { data: { slug: string } }).data
+                .slug;
+
+            const res = await supertest(app.getHttpServer())
+                .patch(`/api/businesses/me/${slug}/invoices/${invoiceSlug}`)
+                .set('Authorization', bearerFor(user))
+                .send({ amount: null, amountLocked: true })
+                .expect(400);
+            expect((res.body as { error: { code: string } }).error.code).toBe(
+                'INVOICE_AMOUNT_LOCKED_REQUIRES_AMOUNT'
+            );
+        });
+
+        it('reject validUntil у минулому через PATCH — 400 INVOICE_VALID_UNTIL_IN_PAST', async () => {
+            const user = await createUser();
+            const slug = await createBusinessFor(user);
+            const create = await supertest(app.getHttpServer())
+                .post(`/api/businesses/me/${slug}/invoices`)
+                .set('Authorization', bearerFor(user))
+                .send({
+                    amount: 100,
+                    amountLocked: false,
+                    paymentPurpose: null,
+                    validUntil: null,
+                    slugInput: { kind: 'random' },
+                });
+            const invoiceSlug = (create.body as { data: { slug: string } }).data
+                .slug;
+            const past = new Date(Date.now() - 86_400_000).toISOString();
+
+            const res = await supertest(app.getHttpServer())
+                .patch(`/api/businesses/me/${slug}/invoices/${invoiceSlug}`)
+                .set('Authorization', bearerFor(user))
+                .send({ validUntil: past })
+                .expect(400);
+            expect((res.body as { error: { code: string } }).error.code).toBe(
+                'INVOICE_VALID_UNTIL_IN_PAST'
             );
         });
     });
@@ -822,6 +1047,53 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             const remaining = await invoiceModel.countDocuments({});
             expect(remaining).toBe(1);
         });
+
+        // Sprint 4 review fix — orphan-prevention при concurrent
+        // cascade-delete vs invoice-create. Без write-conflict serialization
+        // у транзакції create-у можна було б створити invoice проти
+        // вже видаленого business-id-у. Тут перевіряємо детермінований
+        // sequential-сценарій: business deleted → invoice insert proти
+        // того ж businessId (через прямий model-call, бо HTTP-flow
+        // блокує `BusinessAccessGuard`-ом ще раніше). Повний race-test
+        // вимагає paralleled timing, що нестабільно у jest; sequential-test
+        // покриває the same orphan-failure-mode на rate-fix-side.
+        it('sequential delete → create same businessId → 404 BUSINESS_NOT_FOUND, no orphan', async () => {
+            const user = await createUser();
+            const slug = await createBusinessFor(user);
+            const business = await businessModel.findOne({
+                slugLower: slug.toLowerCase(),
+            });
+            expect(business).not.toBeNull();
+            const businessId = business!._id;
+
+            // Delete cascade (success path).
+            await supertest(app.getHttpServer())
+                .delete(`/api/businesses/me/${slug}`)
+                .set('Authorization', bearerFor(user))
+                .expect(200);
+
+            // Прямий service-call — обходимо BusinessAccessGuard, аби
+            // перевірити саме service-layer orphan-block. Симулює state,
+            // у якому concurrent guard-read побачив business, а до моменту
+            // create-touch його вже не було.
+            const invoicesService = app.get(InvoicesService);
+            await expect(
+                invoicesService.create(business as BusinessDocument, {
+                    amount: 1000,
+                    amountLocked: true,
+                    paymentPurpose: 'Late insert',
+                    validUntil: null,
+                    slugInput: { kind: 'random' },
+                })
+            ).rejects.toMatchObject({
+                response: { code: 'BUSINESS_NOT_FOUND' },
+            });
+
+            // Інваріант atomic-or-nothing: жодного invoice проти видаленого
+            // businessId.
+            const orphans = await invoiceModel.countDocuments({ businessId });
+            expect(orphans).toBe(0);
+        });
     });
 
     // ─── §4.3 Public flow ───────────────────────────────────────────────
@@ -963,7 +1235,7 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                 expect(links.legacy).toMatch(/^https:\/\/bank\.gov\.ua\/qr\//);
             });
 
-            it('Cache-Control header присутній', async () => {
+            it('Cache-Control: no-store — invoice mutable payment data (review fix)', async () => {
                 const user = await createUser();
                 const businessSlug = await createBusinessFor(user);
                 const invoiceSlug = await seedInvoice({
@@ -976,9 +1248,7 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                         `/api/businesses/public/${businessSlug}/invoices/${invoiceSlug}`
                     )
                     .expect(200);
-                expect(res.headers['cache-control']).toBe(
-                    'public, max-age=3600, stale-while-revalidate=86400'
-                );
+                expect(res.headers['cache-control']).toBe('no-store');
             });
 
             it('case-insensitive lookup business / case-sensitive lookup invoice', async () => {
@@ -1022,6 +1292,130 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                 expect(
                     (res.body as { error: { code: string } }).error.code
                 ).toBe('INVOICE_NOT_FOUND');
+            });
+        });
+
+        // Sprint 4 review fix — server-side expiry block. Раніше client сам
+        // ховав payment-CTA-и при `validUntil < now`, але `nbuLinks` все одно
+        // приходили у JSON-payload, а QR endpoints віддавали PNG. Тепер:
+        //  - JSON-view → `nbuLinks: null` коли expired.
+        //  - QR endpoints → 410 Gone з кодом `INVOICE_EXPIRED`.
+        //
+        // **Seeding past validUntil.** Service-create блокує `validUntil < now`
+        // на write-path (`INVOICE_VALID_UNTIL_IN_PAST`), що моделює реальну
+        // вимогу. Тести expired-flow моделюють реальний сценарій "створили
+        // у майбутньому, час минув" — seedExpiredInvoice створює invoice з
+        // future-датою через HTTP, а потім mongo-update-ить validUntil на past.
+        describe('Expired invoice (validUntil < now) — server-side payment block', () => {
+            const PAST_VALID_UNTIL = '2024-01-01T00:00:00.000Z';
+
+            async function seedExpiredInvoice(opts: {
+                user: UserDocument;
+                businessSlug: string;
+            }): Promise<string> {
+                const slug = await seedInvoice({
+                    user: opts.user,
+                    businessSlug: opts.businessSlug,
+                });
+                await invoiceModel.updateOne(
+                    { slug },
+                    { $set: { validUntil: new Date(PAST_VALID_UNTIL) } }
+                );
+                return slug;
+            }
+
+            it('JSON view → nbuLinks=null', async () => {
+                const user = await createUser();
+                const businessSlug = await createBusinessFor(user);
+                const invoiceSlug = await seedExpiredInvoice({
+                    user,
+                    businessSlug,
+                });
+
+                const res = await supertest(app.getHttpServer())
+                    .get(
+                        `/api/businesses/public/${businessSlug}/invoices/${invoiceSlug}`
+                    )
+                    .expect(200);
+
+                const data = (
+                    res.body as {
+                        data: {
+                            nbuLinks: unknown;
+                            amount: number;
+                            slug: string;
+                        };
+                    }
+                ).data;
+                // Whitelist invariant: рахунок все одно віддається (heading +
+                // banner на client), але payment-vector cut.
+                expect(data.amount).toBe(150000);
+                expect(data.slug).toBe(invoiceSlug);
+                expect(data.nbuLinks).toBeNull();
+            });
+
+            it('GET /qr/nbu.png?host=primary → 410 Gone, code=INVOICE_EXPIRED', async () => {
+                const user = await createUser();
+                const businessSlug = await createBusinessFor(user);
+                const invoiceSlug = await seedExpiredInvoice({
+                    user,
+                    businessSlug,
+                });
+
+                const res = await supertest(app.getHttpServer())
+                    .get(
+                        `/api/businesses/public/${businessSlug}/invoices/${invoiceSlug}/qr/nbu.png?host=primary`
+                    )
+                    .expect(410);
+                expect(
+                    (res.body as { error: { code: string } }).error.code
+                ).toBe('INVOICE_EXPIRED');
+            });
+
+            it('GET /qr/business.png → 410 Gone, code=INVOICE_EXPIRED', async () => {
+                const user = await createUser();
+                const businessSlug = await createBusinessFor(user);
+                const invoiceSlug = await seedExpiredInvoice({
+                    user,
+                    businessSlug,
+                });
+
+                const res = await supertest(app.getHttpServer())
+                    .get(
+                        `/api/businesses/public/${businessSlug}/invoices/${invoiceSlug}/qr/business.png`
+                    )
+                    .expect(410);
+                expect(
+                    (res.body as { error: { code: string } }).error.code
+                ).toBe('INVOICE_EXPIRED');
+            });
+
+            it('validUntil=null → НЕ expired (nbuLinks віддаються, QR 200)', async () => {
+                // Sanity-counterpart: інвойс без терміну дії продовжує
+                // працювати безкінечно.
+                const user = await createUser();
+                const businessSlug = await createBusinessFor(user);
+                const invoiceSlug = await seedInvoice({
+                    user,
+                    businessSlug,
+                    validUntil: null,
+                });
+
+                const jsonRes = await supertest(app.getHttpServer())
+                    .get(
+                        `/api/businesses/public/${businessSlug}/invoices/${invoiceSlug}`
+                    )
+                    .expect(200);
+                expect(
+                    (jsonRes.body as { data: { nbuLinks: unknown } }).data
+                        .nbuLinks
+                ).not.toBeNull();
+
+                await supertest(app.getHttpServer())
+                    .get(
+                        `/api/businesses/public/${businessSlug}/invoices/${invoiceSlug}/qr/nbu.png?host=primary`
+                    )
+                    .expect(200);
             });
         });
 

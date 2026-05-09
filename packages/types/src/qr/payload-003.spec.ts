@@ -1,8 +1,5 @@
 import { PayloadValidationError } from './errors';
-import {
-    PAYLOAD_003_FIELD_COUNT,
-    build003Payload,
-} from './payload-003';
+import { PAYLOAD_003_FIELD_COUNT, build003Payload } from './payload-003';
 
 const VALID_IBAN = 'UA213223130000026007233566001';
 const VALID_IPN = '1234567899';
@@ -120,7 +117,7 @@ describe('build003Payload — golden vectors (8+ кейсів)', () => {
     });
 
     it('9. special chars у purpose («», №, апостроф)', () => {
-        const purpose = 'Оплата за товари «Кав\'ярня» №147';
+        const purpose = "Оплата за товари «Кав'ярня» №147";
         const payload = build003Payload({ ...baseInput, purpose });
         expect(payload.split('\n')[11]).toBe(purpose);
     });

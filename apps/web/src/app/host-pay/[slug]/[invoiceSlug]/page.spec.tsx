@@ -94,10 +94,10 @@ describe('host-pay/[slug]/[invoiceSlug]/page (Sprint 4 §4.7)', () => {
         render(ui);
         expect(screen.getByTestId('invoice-public-view')).toBeInTheDocument();
         expect(screen.getByTestId('invoice-slug')).toHaveTextContent(
-            'inv-001-aB3xQ9k7',
+            'inv-001-aB3xQ9k7'
         );
         expect(screen.getByTestId('business-slug')).toHaveTextContent(
-            'IvanEnko',
+            'IvanEnko'
         );
     });
 
@@ -110,27 +110,40 @@ describe('host-pay/[slug]/[invoiceSlug]/page (Sprint 4 §4.7)', () => {
                     slug: 'ivanenko',
                     invoiceSlug: 'inv-001-aB3xQ9k7',
                 }),
-            }),
+            })
         ).rejects.toThrow(/NEXT_REDIRECT:\/IvanEnko\/inv-001-aB3xQ9k7/);
         expect(mockPermanentRedirect).toHaveBeenCalledWith(
-            '/IvanEnko/inv-001-aB3xQ9k7',
+            '/IvanEnko/inv-001-aB3xQ9k7'
         );
     });
 
     it('invoice-slug case-sensitive: same business + diff invoice case → НЕ redirect (SP-8)', async () => {
-        // Business slug exact-match. Invoice case-mismatch — backend
-        // повернув би 404 раніше (case-sensitive lookup), але якщо все ж
-        // повертає (defensive code-path) — ми НЕ redirect-нути invoice-slug.
-        // Тому Server Component рендерить InvoicePublicView як є.
+        // Sprint 4 review fix — раніше тут передавався той самий canonical
+        // slug `inv-001-aB3xQ9k7`, тож тест пропускав: assertion справджувалась
+        // бо case match-ив, а не бо canonical-redirect-логіка ігнорує invoice-
+        // slug-case-mismatch. Зараз справді передаємо case-mismatched slug.
+        //
+        // SP-8 invariant: business-slug case-insensitive (canonical-redirect),
+        // invoice-slug case-sensitive (exact-match-or-404 на backend; navigator
+        // case-mismatch ніколи не доходить до Server Component, бо API повертає
+        // 404 і `loadPublicInvoiceView` віддає `null`). Цей тест замикає
+        // defensive code-path на випадок, якщо backend змінить case-семантику
+        // у Phase 1.5+ — Server Component все одно НЕ робить redirect для
+        // invoice-slug-mismatch.
         const ui = await HostPayInvoicePage({
             params: Promise.resolve({
                 slug: 'IvanEnko',
-                invoiceSlug: 'inv-001-aB3xQ9k7', // exact-match canonical
+                invoiceSlug: 'INV-001-AB3XQ9K7', // case-mismatch vs canonical
             }),
         });
         render(ui);
         expect(mockPermanentRedirect).not.toHaveBeenCalled();
         expect(screen.getByTestId('invoice-public-view')).toBeInTheDocument();
+        // Page render-ить view.slug (canonical), не user-input — single source
+        // of truth для slug у render-i — backend response.
+        expect(screen.getByTestId('invoice-slug')).toHaveTextContent(
+            'inv-001-aB3xQ9k7'
+        );
     });
 
     it('missing invoice: backend → null → notFound()', async () => {
@@ -141,7 +154,7 @@ describe('host-pay/[slug]/[invoiceSlug]/page (Sprint 4 §4.7)', () => {
                     slug: 'biz',
                     invoiceSlug: 'missing',
                 }),
-            }),
+            })
         ).rejects.toThrow('NEXT_NOT_FOUND');
     });
 
@@ -155,7 +168,7 @@ describe('host-pay/[slug]/[invoiceSlug]/page (Sprint 4 §4.7)', () => {
                     slug: 'IvanEnko',
                     invoiceSlug: 'inv-001-aB3xQ9k7',
                 }),
-            }),
+            })
         ).rejects.toThrow('NEXT_NOT_FOUND');
         // loadPublicInvoiceView НЕ викликався — host-check блокує до fetch-у.
         expect(mockLoadPublicInvoiceView).not.toHaveBeenCalled();
@@ -178,7 +191,13 @@ describe('generateMetadata (Sprint 4 §4.7 — invoices завжди noindex)', 
         expect(meta.robots).toEqual({ index: false, follow: false });
     });
 
-    it('title з amount: "Рахунок на {amount} — {Тип Назва}"', async () => {
+    it('title з amount: "Рахунок на {amount} — {Тип Назва}" (узгоджено з InvoicePublicView sub-heading)', async () => {
+        // Sprint 4 §4.7 + Sprint 7 §SP-5 — invoice h1 нейтральний (`Рахунок
+        // на 1 500,00 ₴` від Sprint 4), але sub-heading під ним рендерить
+        // одержувача type-aware: `{BUSINESS_TYPE_LABEL[type]} {name}`
+        // (`InvoicePublicView.tsx:101`). SEO `<title>` об'єднує обидва і
+        // тримає type-aware businessLabel — той самий рядок, що бачить
+        // користувач у DOM.
         const meta = await generateMetadata({
             params: Promise.resolve({
                 slug: 'IvanEnko',
@@ -203,6 +222,7 @@ describe('generateMetadata (Sprint 4 §4.7 — invoices завжди noindex)', 
         });
         expect(String(meta.title)).toContain('Рахунок на оплату');
         expect(String(meta.title)).not.toMatch(/₴/);
+        expect(String(meta.title)).toContain('ФОП Іваненко');
     });
 
     it('missing invoice: title "Рахунок не знайдено" + noindex', async () => {
