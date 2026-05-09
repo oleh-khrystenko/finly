@@ -1,3 +1,4 @@
+import { BusinessSchema as BusinessZodSchema } from '@finly/types';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import mongoose, { Model, Types } from 'mongoose';
 
@@ -280,5 +281,129 @@ describe('Business schema (Mongoose integration)', () => {
         );
         expect(doc.slug).toBe('IvanEnko');
         expect(doc.slugLower).toBe('someone-else');
+    });
+
+    // -------------------------------------------------------------------------
+    // Sprint 7 §7.3 smoke-test — round-trip Mongoose ↔ Zod entity-схема.
+    //
+    // Acceptance §7.3: existing ФОП-документи lifecycle-смуок: збережений у
+    // pre-Sprint-7-форматі doc вантажиться через нову Zod-entity-схему без
+    // validation-error. Перевіряємо саме `JSON.parse(JSON.stringify(doc))` —
+    // те, що бачить frontend через HTTP (`applyJsonTransform` віддає той самий
+    // shape за `business.toJSON()` у controller-і).
+    //
+    // Цей блок навмисно на стику двох packages: Mongoose persistence layer
+    // (`apps/api`) і Zod read-side contract (`@finly/types`). Якщо Sprint 7+
+    // refine у `BusinessSchema` (entity) почне відсікати валідні існуючі
+    // документи — цей тест впаде до того, як код піде на staging.
+    // -------------------------------------------------------------------------
+    describe('Sprint 7 §7.3 — Mongoose ↔ Zod entity round-trip', () => {
+        const httpify = (doc: unknown): unknown =>
+            JSON.parse(JSON.stringify(doc));
+
+        it('legacy ФОП-документ (type=fop, taxation non-null) проходить Zod-load після нової Mongoose-схеми', async () => {
+            // Pre-Sprint-7 фікстура: type='fop', taxationSystem/isVatPayer
+            // заповнені (Sprint 3 baseline). Нова Mongoose-схема робить ці
+            // поля nullable з default null — existing non-null значення
+            // лишаються валідні (backward-compat acceptance).
+            const saved = await BusinessModel.create(
+                buildFixture({
+                    isVatPayer: false,
+                    taxationSystem: 'simplified-3',
+                })
+            );
+
+            const reloaded = await BusinessModel.findById(saved._id).orFail();
+            const result = BusinessZodSchema.safeParse(httpify(reloaded));
+
+            // Будь-який issue тут означає, що Zod-entity-refine відкидає
+            // валідний legacy-документ — блокер для Sprint 7 deploy.
+            if (!result.success) {
+                throw new Error(
+                    `Legacy fop doc failed Zod-load: ${JSON.stringify(result.error.issues)}`
+                );
+            }
+            expect(result.data.type).toBe('fop');
+            expect(result.data.taxationSystem).toBe('simplified-3');
+            expect(result.data.isVatPayer).toBe(false);
+        });
+
+        it('individual-документ з null taxation проходить round-trip (новий Sprint 7-шлях)', async () => {
+            const saved = await BusinessModel.create(
+                buildFixture({
+                    type: 'individual',
+                    slug: 'Ivan-Solo',
+                    slugLower: 'ivan-solo',
+                    taxationSystem: null as unknown as 'simplified-3',
+                    isVatPayer: null as unknown as boolean,
+                })
+            );
+
+            const reloaded = await BusinessModel.findById(saved._id).orFail();
+            const result = BusinessZodSchema.safeParse(httpify(reloaded));
+
+            if (!result.success) {
+                throw new Error(
+                    `Individual doc failed Zod-load: ${JSON.stringify(result.error.issues)}`
+                );
+            }
+            expect(result.data.type).toBe('individual');
+            expect(result.data.taxationSystem).toBeNull();
+            expect(result.data.isVatPayer).toBeNull();
+        });
+
+        it('tov-документ з 8-digit ЄДРПОУ + non-null taxation проходить round-trip', async () => {
+            const saved = await BusinessModel.create(
+                buildFixture({
+                    type: 'tov',
+                    slug: 'Kasa-Zdorovya',
+                    slugLower: 'kasa-zdorovya',
+                    name: 'ТОВ Каса Здоровя',
+                    requisites: { iban: VALID_IBAN, taxId: '12345678' },
+                    taxationSystem: 'general',
+                    isVatPayer: true,
+                })
+            );
+
+            const reloaded = await BusinessModel.findById(saved._id).orFail();
+            const result = BusinessZodSchema.safeParse(httpify(reloaded));
+
+            if (!result.success) {
+                throw new Error(
+                    `TOV doc failed Zod-load: ${JSON.stringify(result.error.issues)}`
+                );
+            }
+            expect(result.data.type).toBe('tov');
+            expect(result.data.requisites.taxId).toBe('12345678');
+        });
+
+        it('Mongoose-рівень дозволяє drift-state (fop + null taxation), але Zod-entity-схема цей стан reject-ить', async () => {
+            // Сильний guard: Mongoose не виразить coupled-rule
+            // `requiresTaxation(type) ⇔ both-non-null`, тому БД технічно
+            // дозволяє неконсистентний документ. Zod entity-refine
+            // `TAXATION_FIELDS_MISMATCH_TYPE` — той рівень, на якому
+            // інваріант enforce-иться. Якщо хтось випадково забере refine
+            // або змінить його семантику — цей тест впаде, не дасть
+            // тихо просочитись data-corruption-state-у.
+            const saved = await BusinessModel.create(
+                buildFixture({
+                    type: 'fop',
+                    taxationSystem: null as unknown as 'simplified-3',
+                    isVatPayer: null as unknown as boolean,
+                })
+            );
+
+            const reloaded = await BusinessModel.findById(saved._id).orFail();
+            const result = BusinessZodSchema.safeParse(httpify(reloaded));
+
+            expect(result.success).toBe(false);
+            if (!result.success) {
+                expect(
+                    result.error.issues.some(
+                        (i) => i.message === 'TAXATION_FIELDS_MISMATCH_TYPE'
+                    )
+                ).toBe(true);
+            }
+        });
     });
 });
