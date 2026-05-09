@@ -124,6 +124,15 @@ const ERRORS: Record<string, MessageDict> = {
     qr: {
         payload_too_large:
             'Ваші дані не вміщуються в платіжний QR-код. Скоротіть назву або призначення платежу',
+        // Sprint 8 §8.3 — anon QR-preview throttle 10/min/IP. Окрема копія
+        // (не fallback на `errors.generic.rate_limit_exceeded`), бо generic
+        // використовує `{minutes}`-placeholder, а frontend `QrLandingForm`
+        // не має джерела значення TTL для interpolate-у — без vars literal
+        // `{minutes}` залишився б у toast (regression LAND-7). Symmetric з
+        // `ai.ai_rate_limit_exceeded` (теж placeholder-free, бо TTL відомий
+        // контексту).
+        rate_limit_exceeded:
+            'Забагато запитів. Зачекайте хвилину і спробуйте ще раз',
     },
 };
 

@@ -27,6 +27,7 @@ import UiSwitch from '@/shared/ui/UiSwitch';
 import {
     BasicSection,
     BanksSection,
+    CompletedFromLandingBanner,
     PublicSection,
     QrSection,
     RequisitesSection,
@@ -234,6 +235,13 @@ export default function BusinessSlugPage() {
                 />
             ) : (
                 <div className="space-y-4">
+                    {/*
+                     * Sprint 8 §8.5 — banner-нагадування після claim-flow з
+                     * лендінгу. Сам читає `?completed-from=landing`-param і
+                     * рендериться як null без нього. У preview-mode ховаємо
+                     * (banner — для editor-а, не для public-перегляду).
+                     */}
+                    <CompletedFromLandingBanner />
                     <BasicSection business={business} onSave={handlePatch} />
                     <RequisitesSection
                         business={business}
@@ -262,7 +270,11 @@ export default function BusinessSlugPage() {
                             onSave={handlePatch}
                         />
                     )}
-                    <BanksSection business={business} onSave={handlePatch} />
+                    <BanksSection
+                        id="banks"
+                        business={business}
+                        onSave={handlePatch}
+                    />
                     <PublicSection
                         business={business}
                         payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}

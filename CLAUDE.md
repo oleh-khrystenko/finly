@@ -38,11 +38,11 @@ apps/
 │       ├── generate-hryvnia-asset.ts
 │       └── migrations/      # one-shot DB migrations + spec (npm: migration:slug-lower)
 ├── web/src/
-│   ├── app/                 # pages: root, auth, (protected), host-pay/[slug], privacy, terms (single-locale, uk only)
-│   │   └── (protected)/     # ai-chat, billing, business, profile
-│   ├── entities/            # user (authStore), navigation (headerNavStore), brand (Logo)
-│   ├── features/            # auth, billing, profile, change-theme, business-edit, business-wizard, business-public
-│   ├── widgets/             # header (mobileMenuSheetStore)
+│   ├── app/                 # pages: root (anon QR-preview landing), auth, (protected), host-pay/[slug], privacy, terms (single-locale, uk only)
+│   │   └── (protected)/     # ai-chat, billing, business, profile (layout = Header + ClaimLandingDraftHook + AuthGuard)
+│   ├── entities/            # user (authStore), navigation (headerNavStore), brand (Logo), qr-landing-draft (Sprint 8 anon persist)
+│   ├── features/            # auth, billing, profile, change-theme, business-edit, business-wizard, business-public, qr-landing-preview (Sprint 8)
+│   ├── widgets/             # header (mobileMenuSheetStore), landing-hero (Sprint 8)
 │   ├── shared/              # api, ui, config (env, publicHosts), styles, icons, seo, lib, fonts, types
 │   └── middleware.ts        # host-aware routing (Branch A/B/C) + cabinet auth-cookie checks
 packages/
@@ -125,7 +125,7 @@ docs/
 - `StorageModule` → `UsersModule`; провайдер `STORAGE_PROVIDER` (CloudflareR2Service); exports `StorageService` (consumed by `AuthModule`)
 - `BusinessesModule` → `MongooseModule.forFeature([Business, Invoice])` + `QrModule` + `UsersModule`; providers: `BusinessesService` (cascade-delete) + `SlugGeneratorService` + `BusinessAccessGuard` + `InvoiceSlugGeneratorService` + `InvoicesService` (повторна реєстрація для `BusinessesController.getBySlug` invoicesCount без cyclic-DI). Exports `MongooseModule` + `BusinessesService`
 - `InvoicesModule` (Sprint 4) → `MongooseModule.forFeature(Invoice)` + `forwardRef(() => BusinessesModule)` + `QrModule`; controllers: `InvoicesController` (cabinet) + `PublicInvoicesController` (public); providers: `InvoiceSlugGeneratorService`, `InvoicesService`, `InvoiceAccessGuard`. Exports `MongooseModule`, `InvoiceSlugGeneratorService`, `InvoicesService`
-- `QrModule` exports `QrService` (`buildNbuPayloadLinkForInput`, `renderForUrl`, `renderForNbuPayload`); консумується `BusinessesModule.PublicBusinessesController` і `InvoicesModule.PublicInvoicesController`
+- `QrModule` controllers: `QrController` (Sprint 8 — `POST /qr/preview` для anon-лендингу). Exports `QrService` (`buildNbuPayloadLinkForInput`, `renderForUrl`, `renderForNbuPayload`); консумується `BusinessesModule.PublicBusinessesController` і `InvoicesModule.PublicInvoicesController`
 - Cron: `CleanupService` (6h), `ReservationReconcileService` (5min), `PaymentsCleanupService` (4 AM)
 - Web: `shared/api/client.ts` → axios interceptors → refresh dedupe → `authStore`; protected routes → `AuthGuard` → `shared/api/auth.ts`
 
@@ -323,6 +323,13 @@ Public zone — Sprint 4 §4.3. Без auth, з `Cache-Control: public, max-age=
 | GET | `/businesses/public/:slug/invoices/:invoiceSlug/qr/business.png` | `@SkipOnboarding()` | QR на канонічну public-URL інвойсу |
 | GET | `/businesses/public/:slug/invoices/:invoiceSlug/qr/nbu.png?host=primary\|legacy` | `@SkipOnboarding()` | QR з NBU-payload-link (формат 003) — payload містить amount + lockMask + validUntil |
 
+### QrController (`apps/api/src/modules/qr/qr.controller.ts`)
+
+Sprint 8 §8.1 — публічний preview-ендпоінт для anon-лендингу. Без auth, без cookie, без БД. Throttle-bucket `'qr-preview'` (10/min/IP) — окремий від `'public-payment'` (600/min) і `'default'` (60/min) бо payload-перебір на anon-endpoint потенційно дешевший за full payment-page-hit.
+| Метод | Шлях | Guard | Опис |
+|-------|------|-------|------|
+| POST | `/qr/preview` | `@SkipThrottle({ default: true })` + `@Throttle({ 'qr-preview': 10/min })` + `@SkipOnboarding()` | Input `QrPreviewInputSchema` (receiverName/iban/taxId/purpose; жорстко `'individual'`); reuse `QrService.renderForNbuPayload` 1:1; Response `{ data: { link, qrPngBase64 } }` (формат 003, host = `NBU_HOST_PRIMARY`) |
+
 ### ReportsController
 
 Scaffold без ендпоінтів.
@@ -488,3 +495,17 @@ Full index: [docs/conventions/README.md](docs/conventions/README.md)
 - **`CreateBusinessSchema` discriminated union → param-level pipe** (Sprint 7 §SP-3): `CreateBusinessSchema = z.discriminatedUnion('type', [individualVariant, fopVariant, tovVariant, organizationVariant])` з per-variant `.strict()`. `nestjs-zod` `createZodDto` НЕ підтримує discriminated-union output (TS2509: union-output не extends-able як class), тому `BusinessesController.create` використовує `@Body(new ZodValidationPipe(CreateBusinessSchema))` як param-level pipe — стандартний flow `nestjs-zod` без DTO-class wrapper-а. Глобальний pipe (main.ts) пропускає payload (немає `isZodDto`-marker), param-pipe виконує валідацію. Це **єдиний такий callsite у API** — якщо з'явиться другий, варто винести у helper.
 
 - **NBU `PayloadInputSchema.receiverTaxId` приймає union** (Sprint 7 §SP-10): `payerTaxIdZod = z.union([individualTaxIdZod, legalEntityTaxIdZod])` — рівно 2 нормативних формати (10-цифровий РНОКПП ∪ 8-цифровий ЄДРПОУ). Builder-и 002 / 003 кладуть `input.receiverTaxId` у field 9 без додаткової перевірки довжини — type-binding до конкретного `BusinessType` живе на write-DTO рівні + service-layer; QR-builder робить лише структурну перевірку. Round-trip jsqr-тест (`qr.service.integration.spec`) для 8-digit ЄДРПОУ закриває нормативний Risk #1 sprint-плану.
+
+- **NBU charset refine на entity-Zod** (Sprint 8 fix): `businessNameSchema`, `businessPaymentPurposeTemplateSchema`, `invoicePaymentPurposeSchema` у `@finly/types/entities/*` мають `.refine(isWithinNbuCharset, { message: 'INVALID_NAME_CHARSET' \| 'INVALID_PURPOSE_CHARSET' })` ПОВЕРХ char/byte-limits. До Sprint 8 NBU-charset-валідатор жив internal-only у `qr/_payload-internals.assertNbuCharset` і викликався лише builder-ом — невалідний-для-NBU символ (emoji ☕, multi-line LF/CR, Unicode-блок без Win1251-mapping) проходив save → render QR падав з 500 на public-сторінці (`PayloadValidationError → AllExceptionsFilter` мапив як `INTERNAL_ERROR`, бо це не `HttpException`). Public API expose-нутий через `qr/charset.ts` (`isWithinNbuCharset`, `findInvalidNbuCharIndex`). Закриває Sprint 2 §2.2 інваріант "будь-який валідно збережений Business / Invoice → валідний QR" для всіх consumer-ів (cabinet wizard, cabinet edit, anon Sprint 8 preview).
+
+- **`PayloadValidationError` → 400 у `AllExceptionsFilter`** (Sprint 8 fix): окремий `instanceof PayloadValidationError`-check у `catch()` мапить за `PayloadErrorCode`-family. Overall-size overflow (`PAYLOAD_OVERALL_SIZE_EXCEEDED`, `PAYLOAD_BASE64URL_SIZE_EXCEEDED`) → 400 + `RESPONSE_CODE.PAYLOAD_TOO_LARGE` (user-actionable: "скоротіть назву / призначення"). Field-format errors → 400 + `VALIDATION_ERROR` (defense-in-depth, Zod на write-DTO мав би їх зловити раніше). Host-config errors → 500 + `INTERNAL_ERROR` (server-misconfig). До Sprint 8 цей шлях віддавав 500 на легітимний user-input — наприклад, `purpose='А'.repeat(420)` cyrillic (валідні 420 chars per-field, але payload 840 B перевищує норматив 507 B, emergent property, не окремого поля).
+
+- **Sprint 8 anon QR-preview endpoint `POST /qr/preview`**: без auth, без cookie, без БД. Throttle-bucket `'qr-preview'` (10/min/IP) — окремий від `'public-payment'` (600/min) і `'default'` (60/min) у `app.module.ts`. Payload-перебір на anon-endpoint потенційно дешевший за full payment-page-hit (нема DB lookup-у бізнесу), тому restrictive за дизайном. Reuse `QrService.renderForNbuPayload` 1:1; format 003, host = `NBU_HOST_PRIMARY`. Контракт `QrPreviewInputSchema` жорстко прибитий до `'individual'` (без UI-перемикача типу — sprint plan §НЕ-скоуп); `.strict()` reject-ить будь-які додаткові ключі.
+
+- **`publicPostJson` symmetric до `publicFetchJson`** (Sprint 8 §8.3): native `fetch` з `credentials: 'omit'` + `Content-Type: application/json` + `JSON.stringify(body)`. Anon-flow живе під контрактом "без auth, без cookie" — axios `apiClient` з `withCredentials: true` + Bearer-interceptor суперечив би: якщо anon-користувач залогінений у іншій вкладці на cabinet host, його `bid_refresh`-cookie + `Bearer`-токен можуть просочитися у anon-запит. Native `fetch({ credentials: 'omit' })` гарантовано вирізає те і інше. Non-2xx → `PublicApiError` (reuse того самого error-class з `publicFetchJson`); body НЕ парситься на non-2xx, тому frontend error-mapping робить status-based guess (на `mode:onChange + disabled={!isValid}` 400 практично завжди = backend overall-size overflow).
+
+- **`useHasHydrated` через `useSyncExternalStore`** (Sprint 8 §8.3): Zustand `persist` гідратує асинхронно після першого render. Якщо компонент читає store-snapshot на mount (через `getState()`) і кешує у RHF `defaultValues` — snapshot frozen на момент init → перший render бачить порожні values, hydration не propagates. Sprint 8 UAT LAND-3 ("reload → форма відновлена з localStorage без миготіння") вимагає gate перед render-ом форми. Канонічний React `useSyncExternalStore` (а не `useState + useEffect`) дає (1) SSR-safe by design (`getServerSnapshot = false` детерміністично без читання `store.persist`, який undefined у Next.js prerender bundle), (2) React-pure без `react-hooks/set-state-in-effect`-warning (React 19.1+).
+
+- **Claim-flow intent state-machine + sibling-hook у protected layout** (Sprint 8 §8.4): `qrLandingDraftStore` має `intent: 'idle' \| 'claim-pending' \| 'claimed' \| 'claim-failed'`. Anon click "Зберегти у кабінет" → `setIntent('claim-pending')` + `router.push('/auth/signin')`. Після auth `useClaimLandingDraft` (у `(protected)/layout.tsx` як **sibling до AuthGuard**, не дитина) детектить `intent === 'claim-pending'` → call `POST /businesses/me` → `clearAll` + redirect. Race-protection через `inProgressRef` (без нього `formData` у deps re-fires effect → дублікат бізнесу). Гілка B (incomplete profile після magic-link signup): AuthGuard редіректить на `/profile?mode=new`, hook **залишається змонтований** (sibling, не дитина), чекає на `onboardingComplete` → fires автоматично після PATCH `/users/me`. Failure НЕ очищає formData — користувач не втрачає введене; intent='claim-failed' для post-failure recovery UX (Sprint 8.5+).
+
+- **Sprint 8 form-lift у `QrLandingBlock`**: `useForm`-instance створюється у Block (після hydration-gate) і передається prop у `QrLandingForm` + `QrLandingResult`. Без lift-у "Очистити" у Result не міг би reset-нути `<input>`-и у Form (RHF uncontrolled, `defaultValues` frozen на mount), а hydration не міг би заповнити форму persisted-snapshot-ом. Цей pattern єдиний такий callsite у Sprint 8 — інші форми у проекті прості без cross-component-state-sharing.

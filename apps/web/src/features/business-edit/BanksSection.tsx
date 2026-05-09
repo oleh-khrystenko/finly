@@ -20,11 +20,17 @@ interface Props {
             | { paymentPurposeTemplate: string }
             | { acceptedBanks: BankCode[] }
     ) => Promise<void>;
+    /**
+     * Sprint 8 §8.5 — hash-anchor target для scroll-into-view з
+     * `CompletedFromLandingBanner` ("Перейти до банків" CTA після claim-flow).
+     * Прокидується у `UiSectionCard.id` без зміни візуальної структури.
+     */
+    id?: string;
 }
 
-export default function BanksSection({ business, onSave }: Props) {
+export default function BanksSection({ business, onSave, id }: Props) {
     return (
-        <UiSectionCard title="Призначення і банки">
+        <UiSectionCard id={id} title="Призначення і банки">
             <div className="space-y-4">
                 <UiEditableField<string>
                     label="Призначення платежу"

@@ -116,4 +116,36 @@ describe('getApiMessage', () => {
             expect(msg).toMatch(/[А-Яа-яҐґЄєІіЇї]/);
         });
     });
+
+    // Sprint 8 §8.3 — anon QR-preview throttle 10/min/IP. Окрема копія для
+    // qr-module, бо generic копія використовує `{minutes}`-placeholder,
+    // який frontend не має джерела для interpolate-у — без явної копії
+    // користувач LAND-7 побачив би literal `{minutes}` у toast (regression).
+    describe('Sprint 8 — qr.rate_limit_exceeded (placeholder-free)', () => {
+        it('RATE_LIMIT_EXCEEDED у "qr"-module — повна копія без placeholder', () => {
+            const msg = getApiMessage('RATE_LIMIT_EXCEEDED', 'qr');
+            expect(msg).toBe(
+                'Забагато запитів. Зачекайте хвилину і спробуйте ще раз'
+            );
+        });
+
+        it('RATE_LIMIT_EXCEEDED у "qr"-module НЕ містить literal {minutes}-placeholder', () => {
+            // Regression-guard для LAND-7. Без `errors.qr.rate_limit_exceeded`
+            // mapping fall-through на `errors.generic.rate_limit_exceeded`,
+            // де `'... через {minutes} хвилин'`. Frontend не передає vars
+            // (TTL не доступний контексту), тож placeholder залишився б
+            // literal у toast.
+            const msg = getApiMessage('RATE_LIMIT_EXCEEDED', 'qr');
+            expect(msg).not.toMatch(/\{minutes\}/);
+        });
+
+        it('RATE_LIMIT_EXCEEDED у "generic"-module все одно має placeholder (не break-имо інші callsite)', () => {
+            // Якщо інший callsite (наприклад, generic-module fallback)
+            // передає vars — interpolation працює як було.
+            const msg = getApiMessage('RATE_LIMIT_EXCEEDED', 'generic', {
+                minutes: 5,
+            });
+            expect(msg).toBe('Забагато запитів. Спробуйте через 5 хвилин');
+        });
+    });
 });

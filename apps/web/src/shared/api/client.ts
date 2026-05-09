@@ -72,6 +72,43 @@ export async function publicFetchJson<T>(path: string): Promise<T> {
     return (await res.json()) as T;
 }
 
+/**
+ * Sprint 8 §8.3 — POST-варіант `publicFetchJson`. Той самий контракт безпеки
+ * (`credentials: 'omit'`, без `Authorization`-header, без refresh-flow), плюс
+ * `Content-Type: application/json` та `JSON.stringify(body)`.
+ *
+ * Використовується anon `POST /api/qr/preview` (Sprint 8 §8.1) — публічний
+ * QR-preview-ендпоінт без auth. axios `apiClient` з `withCredentials: true`
+ * + Bearer-interceptor суперечив би заявленому контракту "без auth, без
+ * cookie" (interceptor підставив би Bearer, якщо anon-користувач залогінений
+ * у тій же вкладці на cabinet host — leak ідентичності у anon-flow).
+ *
+ * Non-2xx → `PublicApiError` (reuse того самого error-class). Парсить
+ * успішний body як JSON; виклик-сторона валідує shape через Zod-схему
+ * (defense-in-depth проти silent backend-shape-drift).
+ */
+export async function publicPostJson<TBody, TRes>(
+    path: string,
+    body: TBody
+): Promise<TRes> {
+    const baseURL = ENV.NEXT_PUBLIC_API_URL;
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+    const url = `${baseURL}${normalizedPath}`;
+    const res = await fetch(url, {
+        method: 'POST',
+        credentials: 'omit',
+        headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+        throw new PublicApiError(res.status, res.statusText);
+    }
+    return (await res.json()) as TRes;
+}
+
 // Request interceptor: attach Bearer token
 apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
     const token = getAccessToken();
