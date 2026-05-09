@@ -55,6 +55,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
             robots: { index: false, follow: false },
         };
     }
+    // Sprint 7 §SP-5 + §7.9 — SEO `<title>` навмисно **type-aware**, на
+    // відміну від h1. Sprint 7 README:167 та §SP-5 явно фіксують: type-aware
+    // зберігається саме для `<title>` (для пошукової видачі — `'Оплата на
+    // ФОП Іваненко — Finly'` тощо). H1 на сторінці робить нейтральне
+    // формулювання ("Платіж на користь {name}") для UX-причин, але SEO meta
+    // — інший контекст: search-engine-snippet виграє від type-key-word-у
+    // ("ФОП", "ТОВ") поряд з назвою. Дублювання для типу, де назва вже
+    // містить юр-форму, прийнятне (Sprint 7 §SP-5 explicit trade-off).
     const heading = `${BUSINESS_TYPE_LABEL[view.type]} ${view.name}`;
     return {
         title: `Оплата на ${heading} — Finly`,

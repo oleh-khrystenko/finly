@@ -52,4 +52,49 @@ describe('getApiMessage', () => {
             'ЄДРПОУ має містити 8 цифр'
         );
     });
+
+    // Sprint 7 §7.5 — service-layer cross-checks на UPDATE кидають
+    // type-aware error-коди, що мусять мати UA-message-mapping. Без них
+    // toast показав би raw machine-code (`TAXATION_NOT_APPLICABLE_FOR_TYPE`)
+    // або UNKNOWN_FALLBACK, що блокує UAT PUB-6..9 + CAB-6 і порушує
+    // `tone.md` "ніколи не показуй raw error-code".
+    describe('Sprint 7 §7.5 — type-aware backend errors', () => {
+        it('TAXATION_NOT_APPLICABLE_FOR_TYPE — forward-direction (поле зайве для типу)', () => {
+            expect(
+                getApiMessage('TAXATION_NOT_APPLICABLE_FOR_TYPE', 'businesses')
+            ).toBe('Поля оподаткування недоступні для цього типу платника');
+        });
+
+        it("TAXATION_REQUIRED_FOR_TYPE — backward-direction (поле обов'язкове, не дозволяємо null-clear)", () => {
+            expect(
+                getApiMessage('TAXATION_REQUIRED_FOR_TYPE', 'businesses')
+            ).toBe(
+                'Оберіть систему оподаткування — вона обов’язкова для цього типу платника'
+            );
+        });
+
+        it('TAX_ID_FORMAT_MISMATCH_TYPE — type-binding на PATCH requisites.taxId', () => {
+            expect(
+                getApiMessage('TAX_ID_FORMAT_MISMATCH_TYPE', 'businesses')
+            ).toBe(
+                'Код одержувача не відповідає формату для цього типу платника'
+            );
+        });
+
+        it.each([
+            'TAXATION_NOT_APPLICABLE_FOR_TYPE',
+            'TAXATION_REQUIRED_FOR_TYPE',
+            'TAX_ID_FORMAT_MISMATCH_TYPE',
+            'INVALID_LEGAL_TAX_ID',
+        ])(
+            'код %s НЕ повертає UNKNOWN_FALLBACK (raw-code-leak guard)',
+            (code) => {
+                const msg = getApiMessage(code, 'businesses');
+                expect(msg).not.toBe('Сталася помилка. Спробуйте пізніше');
+                // А також не порожній і не raw machine-code:
+                expect(msg.length).toBeGreaterThan(0);
+                expect(msg).not.toBe(code);
+            }
+        );
+    });
 });

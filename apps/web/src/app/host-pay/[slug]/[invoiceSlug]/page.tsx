@@ -65,6 +65,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
             robots: { index: false, follow: false },
         };
     }
+    // Sprint 4 §4.7 + Sprint 7 §SP-5 — invoice title узгоджений з actual
+    // `InvoicePublicView` UI:
+    //  - h1 нейтральний від Sprint 4 (`Рахунок на 1 500,00 ₴` / `Рахунок на
+    //    оплату`) — type-незалежний з рождення.
+    //  - sub-heading під h1 (`InvoicePublicView.tsx:101`) показує одержувача
+    //    type-aware: `{BUSINESS_TYPE_LABEL[business.type]} {business.name}`.
+    //
+    // SEO meta `<title>` об'єднує обидві частини: amount-line + business-line.
+    // Type-префікс одержувача узгоджений з UI-render-ом і з §SP-5 рішенням
+    // (type-aware зберігається саме для metadata, не h1).
     const businessLabel = `${BUSINESS_TYPE_LABEL[view.business.type]} ${view.business.name}`;
     const amountLabel = formatKopecksAsHryvnia(view.amount);
     const title = amountLabel

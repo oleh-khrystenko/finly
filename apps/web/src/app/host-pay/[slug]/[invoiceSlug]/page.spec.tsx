@@ -191,7 +191,13 @@ describe('generateMetadata (Sprint 4 §4.7 — invoices завжди noindex)', 
         expect(meta.robots).toEqual({ index: false, follow: false });
     });
 
-    it('title з amount: "Рахунок на {amount} — {Тип Назва}"', async () => {
+    it('title з amount: "Рахунок на {amount} — {Тип Назва}" (узгоджено з InvoicePublicView sub-heading)', async () => {
+        // Sprint 4 §4.7 + Sprint 7 §SP-5 — invoice h1 нейтральний (`Рахунок
+        // на 1 500,00 ₴` від Sprint 4), але sub-heading під ним рендерить
+        // одержувача type-aware: `{BUSINESS_TYPE_LABEL[type]} {name}`
+        // (`InvoicePublicView.tsx:101`). SEO `<title>` об'єднує обидва і
+        // тримає type-aware businessLabel — той самий рядок, що бачить
+        // користувач у DOM.
         const meta = await generateMetadata({
             params: Promise.resolve({
                 slug: 'IvanEnko',
@@ -216,6 +222,7 @@ describe('generateMetadata (Sprint 4 §4.7 — invoices завжди noindex)', 
         });
         expect(String(meta.title)).toContain('Рахунок на оплату');
         expect(String(meta.title)).not.toMatch(/₴/);
+        expect(String(meta.title)).toContain('ФОП Іваненко');
     });
 
     it('missing invoice: title "Рахунок не знайдено" + noindex', async () => {
