@@ -150,6 +150,26 @@ export const RESPONSE_CODE = {
      */
     CASCADE_DELETE_REQUIRES_REPLICA_SET: 'CASCADE_DELETE_REQUIRES_REPLICA_SET',
 
+    // --- qr error (Sprint 2 §2.1 + Sprint 8 fix) ---
+    /**
+     * Sprint 8 fix — overall payload-size overflow після build NBU-payload.
+     * Per-field валідація проходить, але сума полів перевищує норматив 507 B
+     * (Додатки 3 §IV.11, 4 §IV.8) АБО Base64URL-форма перевищує 475 B
+     * (таблиця 1 у Додатках 3 і 4).
+     *
+     * Це **emergent property** комбінації полів, не окреме поле — Zod на
+     * write-DTO технічно не може валідувати без виклику builder-а. Тому
+     * `AllExceptionsFilter` ловить `PayloadValidationError` з кодами
+     * `PAYLOAD_OVERALL_SIZE_EXCEEDED` / `PAYLOAD_BASE64URL_SIZE_EXCEEDED` і
+     * мапить на цей код як 400 BAD_REQUEST. До Sprint 8 цей шлях віддавав
+     * 500 INTERNAL_ERROR на legitimate user-input (наприклад
+     * `purpose='А'.repeat(420)` cyrillic — валідні 420 chars, але payload 840 B).
+     *
+     * UA: "Ваші дані не вміщуються в платіжний QR-код. Скоротіть назву або
+     * призначення платежу" — actionable рекомендація.
+     */
+    PAYLOAD_TOO_LARGE: 'PAYLOAD_TOO_LARGE',
+
     // --- errors ---
     UNAUTHORIZED: 'UNAUTHORIZED',
     VALIDATION_ERROR: 'VALIDATION_ERROR',
@@ -199,6 +219,7 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.INVOICE_EXPIRED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVOICE_VALID_UNTIL_IN_PAST]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.CASCADE_DELETE_REQUIRES_REPLICA_SET]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.PAYLOAD_TOO_LARGE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.ONBOARDING_INCOMPLETE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.UNAUTHORIZED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.VALIDATION_ERROR]: RESPONSE_TYPE.ERROR,

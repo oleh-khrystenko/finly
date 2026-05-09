@@ -303,7 +303,7 @@ export class BusinessesService {
             }
 
             if (dtoTouchesTaxId) {
-                const newTaxId = dto.requisites!.taxId!;
+                const newTaxId = dto.requisites!.taxId;
                 if (!isTaxIdValidForType(existingType, newTaxId)) {
                     throw new BadRequestException({
                         code: RESPONSE_CODE.TAX_ID_FORMAT_MISMATCH_TYPE,

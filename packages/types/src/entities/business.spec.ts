@@ -260,6 +260,65 @@ describe('BusinessSchema', () => {
     });
 
     // -------------------------------------------------------------------------
+    // Sprint 8 fix — NBU-charset refine (Win1251-mapping). Закриває інваріант
+    // "будь-який валідно збережений Business → валідний QR" (Sprint 2 §2.2):
+    // до Sprint 8 emoji / non-Win1251-Unicode проходив save → render QR
+    // падав з 500 на public-сторінці (`PayloadValidationError` → `INTERNAL_ERROR`).
+    // -------------------------------------------------------------------------
+
+    describe('name / paymentPurposeTemplate — NBU charset refine', () => {
+        it('rejects name з emoji → INVALID_NAME_CHARSET', () => {
+            const result = BusinessSchema.safeParse({
+                ...VALID_BUSINESS,
+                name: '☕ Кав\'ярня',
+            });
+            expect(result.success).toBe(false);
+            if (!result.success) {
+                expect(
+                    result.error.issues.some(
+                        (i) => i.message === 'INVALID_NAME_CHARSET'
+                    )
+                ).toBe(true);
+            }
+        });
+
+        it('rejects paymentPurposeTemplate з emoji → INVALID_PURPOSE_CHARSET', () => {
+            const result = BusinessSchema.safeParse({
+                ...VALID_BUSINESS,
+                paymentPurposeTemplate: 'Оплата 🍵',
+            });
+            expect(result.success).toBe(false);
+            if (!result.success) {
+                expect(
+                    result.error.issues.some(
+                        (i) => i.message === 'INVALID_PURPOSE_CHARSET'
+                    )
+                ).toBe(true);
+            }
+        });
+
+        it('rejects name з LF (multi-line атака на field-separator)', () => {
+            // LF/CR розділяють поля payload; всередині значення вони ламають
+            // кількість полів, що зчитує банк-парсер.
+            const result = BusinessSchema.safeParse({
+                ...VALID_BUSINESS,
+                name: 'Іваненко\nПетро',
+            });
+            expect(result.success).toBe(false);
+        });
+
+        it('accepts name з допустимою typography (апостроф U+2019, dash U+2014)', () => {
+            // Win1251 mapping містить General Punctuation 0x80-0x97;
+            // апостроф ’ (U+2019) і dash — (U+2014) дозволені.
+            const result = BusinessSchema.safeParse({
+                ...VALID_BUSINESS,
+                name: 'ТОВ «Кав’ярня — Майдан»',
+            });
+            expect(result.success).toBe(true);
+        });
+    });
+
+    // -------------------------------------------------------------------------
     // Sprint 3 §3.1 — coupled-rule taxationSystem × isVatPayer (рішення C1).
     // ПДВ legitимний лише на спрощеній-3 / загальній.
     // -------------------------------------------------------------------------

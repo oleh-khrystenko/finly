@@ -115,6 +115,16 @@ const ERRORS: Record<string, MessageDict> = {
         invoice_expired: 'Термін рахунку минув',
         invoice_valid_until_in_past: 'Термін дії не може бути у минулому',
     },
+    // Sprint 8 fix — overall payload-size overflow після build NBU-payload.
+    // Поле reєструється для API-side error mapping (`getApiMessage(code,
+    // 'qr')`); викликає, наприклад, anon `POST /api/qr/preview` form
+    // submit-handler через `mapApiCode`. Frontend Sprint 8 §8.3 буде ловити
+    // axios 400-response з цим кодом і показувати toast з actionable-
+    // рекомендацією.
+    qr: {
+        payload_too_large:
+            'Ваші дані не вміщуються в платіжний QR-код. Скоротіть назву або призначення платежу',
+    },
 };
 
 const UNKNOWN_FALLBACK = ERRORS.generic.unknown;

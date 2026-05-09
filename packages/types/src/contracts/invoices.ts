@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { slugPresetSchema } from '../enums/slug-preset';
 import {
     bankCodeSchema,
     businessNameSchema,
@@ -9,7 +10,6 @@ import {
 import {
     invoicePaymentPurposeSchema,
     invoiceSlugSchema,
-    slugPresetSchema,
 } from '../entities/invoice';
 
 /**

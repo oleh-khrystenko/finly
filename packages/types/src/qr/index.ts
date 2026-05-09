@@ -5,6 +5,7 @@
 export * from './format-version';
 export * from './errors';
 export * from './limits';
+export * from './charset';
 export * from './input';
 export * from './encode';
 export * from './payload-002';

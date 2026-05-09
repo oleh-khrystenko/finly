@@ -36,9 +36,18 @@ import { AiModule } from './modules/ai/ai.module';
             // зберігається — limit просто вищий під специфіку зони. Apply через
             // `@Throttle({ 'public-payment': ... })` + `@SkipThrottle({ default:
             // true })` на public-контролерах.
+            //
+            // Sprint 8 §8.1 — окремий `'qr-preview'` bucket (10/min/IP) для
+            // anon `POST /qr/preview`. Restrictive за дизайном: payload-
+            // перебір тут потенційно дешевший за full payment-page-hit (нема
+            // БД-lookup-у), і легітимний UX (анонім заповнює форму один раз)
+            // вкладається в 10/min навіть з NAT-агрегацією. Apply через
+            // `@Throttle({ 'qr-preview': ... })` + `@SkipThrottle({ default:
+            // true })` на `QrController`.
             throttlers: [
                 { name: 'default', ttl: 60000, limit: 60 },
                 { name: 'public-payment', ttl: 60000, limit: 600 },
+                { name: 'qr-preview', ttl: 60000, limit: 10 },
             ],
         }),
         ScheduleModule.forRoot(),

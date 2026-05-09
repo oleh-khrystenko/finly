@@ -54,6 +54,35 @@ describe('mapValidationCode', () => {
         });
     });
 
+    describe('Sprint 8 — NBU-charset refine коди', () => {
+        it('INVALID_NAME_CHARSET — UX-рекомендація прибрати спеціальні символи', () => {
+            const msg = mapValidationCode('INVALID_NAME_CHARSET');
+            expect(msg).toBeDefined();
+            // Повідомлення не дублює CHAR_LENGTH/BYTE_LENGTH ("скоротіть"),
+            // а спрямовує на прибирання символів — рекомендація, що відрізняє
+            // charset-помилку від length-overflow на UX-рівні.
+            expect(msg).toMatch(/символ/i);
+            expect(msg).not.toBe('Перевірте правильність значення');
+        });
+
+        it('INVALID_PURPOSE_CHARSET — UX-рекомендація прибрати спеціальні символи', () => {
+            const msg = mapValidationCode('INVALID_PURPOSE_CHARSET');
+            expect(msg).toBeDefined();
+            expect(msg).toMatch(/символ/i);
+            expect(msg).not.toBe('Перевірте правильність значення');
+        });
+
+        it.each(['INVALID_NAME_CHARSET', 'INVALID_PURPOSE_CHARSET'])(
+            '%s НЕ повертає raw machine-code (UI leak guard)',
+            (code) => {
+                const msg = mapValidationCode(code);
+                expect(msg).toBeDefined();
+                expect(msg).not.toBe(code);
+                expect(msg).toMatch(/[А-Яа-яҐґЄєІіЇї]/);
+            }
+        );
+    });
+
     describe('Sprint 1+3 — baseline-коди (regression guard)', () => {
         it.each([
             ['INVALID_IBAN', 'Перевірте IBAN: 29 символів, починається з UA'],

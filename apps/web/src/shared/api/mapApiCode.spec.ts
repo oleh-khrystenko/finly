@@ -97,4 +97,23 @@ describe('getApiMessage', () => {
             }
         );
     });
+
+    // Sprint 8 fix — overall payload-size overflow при build NBU-payload.
+    // Backend `AllExceptionsFilter` мапить `PayloadValidationError` на 400
+    // з `RESPONSE_CODE.PAYLOAD_TOO_LARGE`; frontend має actionable UA-message.
+    describe('Sprint 8 — qr.payload_too_large', () => {
+        it('PAYLOAD_TOO_LARGE — actionable UA-рекомендація', () => {
+            const msg = getApiMessage('PAYLOAD_TOO_LARGE', 'qr');
+            expect(msg).toBe(
+                'Ваші дані не вміщуються в платіжний QR-код. Скоротіть назву або призначення платежу'
+            );
+        });
+
+        it('PAYLOAD_TOO_LARGE НЕ повертає UNKNOWN_FALLBACK (raw-code-leak guard)', () => {
+            const msg = getApiMessage('PAYLOAD_TOO_LARGE', 'qr');
+            expect(msg).not.toBe('Сталася помилка. Спробуйте пізніше');
+            expect(msg).not.toBe('PAYLOAD_TOO_LARGE');
+            expect(msg).toMatch(/[А-Яа-яҐґЄєІіЇї]/);
+        });
+    });
 });

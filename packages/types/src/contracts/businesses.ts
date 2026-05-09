@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { slugPresetSchema } from '../enums/slug-preset';
 import { isVatAllowedTaxationSystem } from '../enums/taxation-system';
 import {
     BusinessRequisitesSchema,
@@ -11,7 +12,6 @@ import {
     taxationSystemSchema,
     type Business,
 } from '../entities/business';
-import { slugPresetSchema } from '../entities/invoice';
 import { ibanZod } from '../validation/iban';
 import { individualTaxIdZod, legalEntityTaxIdZod } from '../validation/tax-id';
 

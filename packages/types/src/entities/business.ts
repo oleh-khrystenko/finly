@@ -2,15 +2,16 @@ import { z } from 'zod';
 
 import { MVP_BANKS } from '../constants/banks';
 import { BUSINESS_TYPES, requiresTaxation } from '../enums/business-type';
+import { slugPresetSchema } from '../enums/slug-preset';
 import {
     TAXATION_SYSTEMS,
     isVatAllowedTaxationSystem,
 } from '../enums/taxation-system';
+import { isWithinNbuCharset } from '../qr/charset';
 import { effectiveLimit, isWithinByteLimit } from '../qr/limits';
 import { objectIdSchema } from '../validation/common';
 import { ibanZod } from '../validation/iban';
 import { isTaxIdValidForType, payerTaxIdZod } from '../validation/tax-id';
-import { slugPresetSchema } from './invoice';
 
 /**
  * Бізнес — постійна сутність з унікальною публічною сторінкою
@@ -108,6 +109,21 @@ export const BusinessRequisitesSchema = z.object({
     taxId: payerTaxIdZod,
 });
 
+/**
+ * NBU-charset refine — закриває інваріант "будь-який валідно збережений
+ * Business може згенерувати валідний QR" (Sprint 2 §2.2). До Sprint 8 цей
+ * валідатор жив internal-only у payload-builder-і; невалідний-для-NBU символ
+ * (emoji ☕, multi-line LF/CR, Unicode-блок без Win1251-mapping) проходив
+ * write-валідацію → save success → render QR падав з 500 на public-сторінці
+ * (`PayloadValidationError` → `AllExceptionsFilter` мапить як INTERNAL_ERROR,
+ * бо це не HttpException). Refine на entity-level робить це 400
+ * `VALIDATION_ERROR` на write-path для всіх consumer-ів (cabinet wizard,
+ * cabinet edit, anon QR-preview).
+ *
+ * Окремий `INVALID_NAME_CHARSET` / `INVALID_PURPOSE_CHARSET` код, не reuse
+ * `INVALID_*_BYTE_LENGTH` — error-mapping на frontend-і дає різні
+ * UX-рекомендації: "коротша назва" vs "приберіть emoji/підкреслення/iconки".
+ */
 export const businessNameSchema = z
     .string()
     .trim()
@@ -115,7 +131,8 @@ export const businessNameSchema = z
     .max(NAME_LIMIT.chars, { message: 'INVALID_NAME_CHAR_LENGTH' })
     .refine((v) => isWithinByteLimit(v, NAME_LIMIT.bytes), {
         message: 'INVALID_NAME_BYTE_LENGTH',
-    });
+    })
+    .refine(isWithinNbuCharset, { message: 'INVALID_NAME_CHARSET' });
 
 export const businessPaymentPurposeTemplateSchema = z
     .string()
@@ -124,7 +141,8 @@ export const businessPaymentPurposeTemplateSchema = z
     .max(PURPOSE_LIMIT.chars, { message: 'INVALID_PURPOSE_CHAR_LENGTH' })
     .refine((v) => isWithinByteLimit(v, PURPOSE_LIMIT.bytes), {
         message: 'INVALID_PURPOSE_BYTE_LENGTH',
-    });
+    })
+    .refine(isWithinNbuCharset, { message: 'INVALID_PURPOSE_CHARSET' });
 
 export const BusinessSchema = z
     .object({

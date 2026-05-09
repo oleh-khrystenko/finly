@@ -49,6 +49,14 @@ const VALIDATION_MESSAGES: Record<string, string> = {
     INVALID_NAME_CHAR_LENGTH: 'Назва занадто довга. Максимум 140 символів',
     INVALID_NAME_BYTE_LENGTH:
         'Назва занадто довга для платіжного QR-коду. Скоротіть її',
+    // Sprint 8 fix — entity-Zod NBU-charset refine. Окреме повідомлення
+    // (не reuse BYTE_LENGTH-копії), бо UX-рекомендація різна: тут користувач
+    // не повинен скорочувати назву, а використати лише дозволені символи
+    // (Win1251-таблиця НБУ, без графічних значків і нестандартної typography).
+    // Single-locale (uk) — без англомовних термінів у public copy
+    // (`docs/conventions/tone.md`).
+    INVALID_NAME_CHARSET:
+        'Назва містить символи, які не підтримує платіжний QR-код. Використовуйте лише букви, цифри та звичайну пунктуацію',
 
     // --- Призначення платежу ---
     INVALID_PURPOSE_REQUIRED: 'Введіть призначення платежу',
@@ -56,6 +64,9 @@ const VALIDATION_MESSAGES: Record<string, string> = {
         'Призначення занадто довге. Максимум 420 символів',
     INVALID_PURPOSE_BYTE_LENGTH:
         'Призначення занадто довге для платіжного QR-коду. Скоротіть його',
+    // Sprint 8 fix — symmetric з INVALID_NAME_CHARSET для purpose-поля.
+    INVALID_PURPOSE_CHARSET:
+        'Призначення містить символи, які не підтримує платіжний QR-код. Використовуйте лише букви, цифри та звичайну пунктуацію',
 
     // --- Сума інвойсу ---
     INVALID_AMOUNT_OVERFLOW: 'Сума занадто велика. Максимум 999 999 999.99 ₴',

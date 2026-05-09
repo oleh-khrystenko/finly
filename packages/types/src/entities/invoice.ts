@@ -1,10 +1,12 @@
 import { z } from 'zod';
 
-import { SLUG_PRESETS } from '../enums/slug-preset';
+import { slugPresetSchema } from '../enums/slug-preset';
+import { isWithinNbuCharset } from '../qr/charset';
 import { effectiveLimit, isWithinByteLimit } from '../qr/limits';
 import { objectIdSchema } from '../validation/common';
 import { ibanZod } from '../validation/iban';
 import { individualTaxIdZod } from '../validation/tax-id';
+import { businessNameSchema } from './business';
 
 /**
  * Інвойс — одноразова платіжка під конкретний бізнес.
@@ -37,25 +39,6 @@ import { individualTaxIdZod } from '../validation/tax-id';
  */
 
 const PURPOSE_LIMIT = effectiveLimit('purpose');
-const NAME_LIMIT = effectiveLimit('receiverName');
-
-export const slugPresetSchema = z.enum(SLUG_PRESETS);
-
-/**
- * Sprint 4 review fix — schema для `recipientName` у `payeeSnapshot` (snapshot
- * `business.name` на момент створення інвойсу). Limits ідентичні
- * `businessNameSchema` (NBU payload-spec § "name"-поле). Inline-визначення
- * замість re-export з `business.ts` через зворотній circular import:
- * `business.ts` уже залежить від `slugPresetSchema` цього модуля.
- */
-const payeeNameSchema = z
-    .string()
-    .trim()
-    .min(1, { message: 'INVALID_NAME_REQUIRED' })
-    .max(NAME_LIMIT.chars, { message: 'INVALID_NAME_CHAR_LENGTH' })
-    .refine((v) => isWithinByteLimit(v, NAME_LIMIT.bytes), {
-        message: 'INVALID_NAME_BYTE_LENGTH',
-    });
 
 /**
  * Slug інвойсу: `{людська-частина}-{8-char-tail}` АБО просто `{8-char-tail}`.
@@ -73,6 +56,13 @@ export const invoiceSlugSchema = z
         message: 'INVALID_SLUG_FORMAT',
     });
 
+/**
+ * Sprint 8 fix — `INVALID_PURPOSE_CHARSET` refine симетрично з
+ * `businessPaymentPurposeTemplateSchema`. Без нього invoice-render QR падав
+ * з 500 на public-сторінці (PayloadValidationError → INTERNAL_ERROR), якщо
+ * cabinet-форма пропускала emoji / non-Win1251 символ. Source-of-truth тепер
+ * Zod на write-path.
+ */
 export const invoicePaymentPurposeSchema = z
     .string()
     .trim()
@@ -80,7 +70,8 @@ export const invoicePaymentPurposeSchema = z
     .max(PURPOSE_LIMIT.chars, { message: 'INVALID_PURPOSE_CHAR_LENGTH' })
     .refine((v) => isWithinByteLimit(v, PURPOSE_LIMIT.bytes), {
         message: 'INVALID_PURPOSE_BYTE_LENGTH',
-    });
+    })
+    .refine(isWithinNbuCharset, { message: 'INVALID_PURPOSE_CHARSET' });
 
 /**
  * Sprint 4 review fix — `payeeSnapshot` фрозить платіжні реквізити на момент
@@ -106,8 +97,21 @@ export const invoicePaymentPurposeSchema = z
  * existing invoices з current business state (best-effort на migration
  * boundary; всі post-deploy invoices мають snapshot з-під service-create).
  */
+/**
+ * Sprint 8 fix — `recipientName` тепер reuse `businessNameSchema` напряму
+ * (раніше — inline `payeeNameSchema`-дублікат). Snapshot kładeться у NBU
+ * payload через invoice flow, тому **мусить** мати ту саму charset/length-
+ * валідацію, що live business name. Inline-дублікат drift-нув від business
+ * після додавання NBU-charset refine: snapshot пропускав emoji у NBU payload,
+ * викликаючи 500 на render. Reuse через single-source гарантує, що всі
+ * майбутні зміни businessNameSchema автоматично propagat-ять у snapshot.
+ *
+ * Циркулярна залежність `business ↔ invoice` усунена через перенесення
+ * `slugPresetSchema` у `enums/slug-preset.ts` — тепер `invoice.ts` може
+ * імпортувати з `business.ts` без зворотного імпорту.
+ */
 export const InvoicePayeeSnapshotSchema = z.object({
-    recipientName: payeeNameSchema,
+    recipientName: businessNameSchema,
     iban: ibanZod,
     taxId: individualTaxIdZod,
     paymentPurpose: invoicePaymentPurposeSchema,
