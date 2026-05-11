@@ -2,7 +2,7 @@
 
 > Короткий tree-overview спринтів MVP. Кожен спринт планується далі окремим документом у цій папці.
 >
-> **Статус:** оновлено 2026-05-09. Sprint 1, 2 закриті; Sprint 3 — функціональний flow закритий, **залишається 1 deliverable + UAT-прогон**; **Sprint 4 — функціональний flow закритий, залишається UAT-прогон INV-1..7**; **Sprint 7 — функціональний flow закритий, UAT pending**; **Sprint 8 — функціональний flow закритий, UAT pending LAND-1..8 + один follow-up CTA**; Sprint 5 — research-spike заплановано (паралельно з закриттям).
+> **Статус:** оновлено 2026-05-11. Sprint 1, 2 закриті; Sprint 3 — функціональний flow закритий, **залишається 1 deliverable + UAT-прогон**; **Sprint 4 — функціональний flow закритий, залишається UAT-прогон INV-1..7**; **Sprint 7 — функціональний flow закритий, UAT pending**; **Sprint 8 — функціональний flow закритий, UAT pending LAND-1..8** (раніше згаданий 8.5 follow-up CTA superseded by Sprint 10 SP-7); Sprint 5 — research-spike заплановано (паралельно з закриттям). **Sprint 9 розщеплено 2026-05-11 на 4 окремі спринти (9, 10, 11, 12)** через надмірний обсяг оригінального плану — деталі у відповідних README.
 
 ---
 
@@ -101,13 +101,37 @@
 
 **Open follow-up (Sprint 8.5):**
 
-- [ ] **`claim-failed` recovery CTA на `/business`-empty-state**: коли `useQrLandingDraftStore.intent === 'claim-failed'` (API повернула 4xx/5xx при попередньому claim), показати CTA "Продовжити чернетку з лендінгу" → reuse `claimLandingDraftAsBusiness` з retry. Sprint plan §8.5 явно позначає як `Sprint-8.5 додатково`. Без цього user з failed-claim залишається з `localStorage`-даними і нічого не запрошує його повернутись (recovery-path тільки через manual ввід wizard-у з нуля). Не блокер для функціонального flow Sprint 8 — backbone (anon-form + claim hook + banner) працює end-to-end.
+- [x] **~~`claim-failed` recovery CTA на `/business`-empty-state~~** — **superseded by Sprint 9 §SP-7** (form-recovery flow). Sprint 9 переписує claim-flow на 2 sequential POST (Business → Account); failure будь-якого з POST-ів робить `router.push('/business/new?from=landing')` або `'/business/{slug}/account/new?from=landing'` з pre-fill з `qrLandingDraftStore.formData`. Це покриває recovery-path детермінoвано і одразу, без ручної навігації user-а на `/business`-empty-state і без потреби в окремому CTA. Додатково Sprint 9 §9.4 видаляє helper `claimLandingDraftAsBusiness`, на якому планував reuse цей CTA, і migrate-ить legacy `intent === 'claim-failed'` → `'idle'` (нові granular states `'claim-failed-business'` / `'claim-failed-account'` обробляються form-recovery flow напряму). Original рядок ticket-у був написаний до Sprint 9 architecture-decision і втратив підставу.
 
 **Pending QA:**
 
 - [ ] **UAT-прогон LAND-1..8** (`docs/manual-checks/README.md` § "Лендінг без реєстрації"): live-телефон + банк-додаток для перевірки сканування anon-QR; reload форми після localStorage-persist; claim-flow гілки A (Google OAuth з повним профілем) і B (magic-link → /profile?mode=new → автоматичний claim після PATCH).
 
-> Status summary: types 517, api unit 642, web 504 — все зелене. Sprint вважається функціонально закритим; повне close після UAT-прогону LAND-1..8 + Sprint 8.5 follow-up CTA.
+> Status summary: types 517, api unit 642, web 504 — все зелене. Sprint вважається функціонально закритим; повне close після UAT-прогону LAND-1..8. Sprint 8.5 follow-up CTA закрито як superseded by Sprint 9 §SP-7.
+
+## [9. Banking Accounts: розщеплення Business на Business + Account](09-accounts/README.md)
+
+Поточна модель плутає юр-особу (тип, ІПН, оподаткування) і банківський рахунок (IBAN). ФОП з двома рахунками (Privat + Mono) мусить дублювати юр-особу як два бізнеси з ідентичним ІПН — некоректно. Sprint 9 розщеплює `Business` на дві сутності: `Business` (юр-особа) + `Account` (банківський рахунок). `Invoice` отримує `accountId`. Public URL стає матрьошковим (`/{biz}/{accountSlug}/{invoiceSlug}`); cabinet-навігація — теж nested. Інвойсна нумерація — per-account. IBAN immutable; account можна видалити тільки з 0 інвойсів. **CTA "Зберегти у кабінет" на лендінгу тимчасово вимикається** на час між Sprint 9 і Sprint 10 deploy (anon-claim flow ламається на schema-change). Production-міграція не потрібна — даних ще немає, dropDatabase + чистий старт.
+
+**Status:** заплановано (2026-05-11), не стартував. Передумови — Sprint 1, 3, 4, 7, 8 функціонально закриті.
+
+## [10. Anon-claim refactor під Business + Account модель](10-anon-claim-refactor/README.md)
+
+Sprint 9 schema-change ламає Sprint 8 anon-claim flow на backend-рівні (чинний body `{ requisites.iban }` reject-ається). Sprint 10 повертає CTA "Зберегти у кабінет" з новою архітектурою: 2 sequential POST (Business → Account) з granular state-machine + form-recovery patern на failure; magic-link через Redis-draft sub-поле для cross-device flow з KEEPTTL-overwrite на anti-spam dedup-hit; idempotency-key захист від duplicate-Business на retry-after-tab-close через partial-unique-index; terms-pre-stamp на backend (закриває acceptTerms ordering window). Новий `LandingClaimModule` як separation of concerns від `AuthService`. Verify-page-handler resolve-ить `claimState`-discriminator (success / business-failed / account-failed) і робить router.replace на канонічний target.
+
+**Status:** заплановано (2026-05-11), не стартував. Передумова — Sprint 9 функціонально закритий.
+
+## [11. Deep-link UX-recovery після abandoned magic-link claim](11-deep-link-recovery/README.md)
+
+Phone-юзер відкрив magic-link → backend створив Business+Account і виставив session-credentials, але юзер закрив таб ДО `router.replace` claim-target-у (network drop, accident). Без mitigation на наступному cold-login (день/тиждень пізніше) юзер потрапляє на дефолтний cabinet-root і втрачає inструкцію "Перевірте список банків" (banner `?completed-from=landing` не показується). Sprint 11 додає `User.pendingPostLoginTarget`-stamp на success-claim (LandingClaimService extension); same-device flow clear-ить через verify-page-handler; cold-login flow resume-ить через AuthInitializer. Двошарова open-redirect-protection через shared `validateSameOriginPath`-helper.
+
+**Status:** заплановано (2026-05-11), не стартував. Передумова — Sprint 10 функціонально закритий.
+
+## [12. Orphan-Business cleanup: email-pipeline + cron-deletion](12-orphan-cleanup/README.md)
+
+Phone-юзер міг закрити таб і так не дозаповнити firstName/lastName — orphan-Business+Account накопичуються у БД. Sprint 12 додає cron-сервіс з 3-stage email-pipeline (1-й день: soft-reminder; 6-й день: final-warning; 7-й день: cascade-delete). Prereq-guards гарантують cron-downtime resilience: навіть на multi-day-downtime юзер отримує обидва листи перед deletion. Stamping через `User.profileCompletionReminders`-sub-doc; claim-first-pattern race-protection проти double-fire-paralleled-crons. Email templates на classic-polite tone, multi-business pluralization. Cross-field env-invariant `first < final < deletion`.
+
+**Status:** заплановано (2026-05-11), не стартував. Передумови — Sprint 9, 10, 11 функціонально закриті.
 
 ---
 
