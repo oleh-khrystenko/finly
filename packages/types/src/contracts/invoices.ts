@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-import { slugPresetSchema } from '../enums/slug-preset';
 import {
     bankCodeSchema,
     businessNameSchema,
@@ -11,6 +10,8 @@ import {
     invoicePaymentPurposeSchema,
     invoiceSlugSchema,
 } from '../entities/invoice';
+import { slugPresetSchema } from '../enums/slug-preset';
+import { PublicAccountListItemSchema } from './accounts';
 
 /**
  * Sprint 4 §4.1 — write/read контракти для інвойсу.
@@ -169,14 +170,20 @@ export type UpdateInvoiceRequest = z.infer<typeof UpdateInvoiceSchema>;
 
 /**
  * `PublicInvoiceSchema` — view-схема public endpoint
- * (`GET /businesses/public/:slug/invoices/:invoiceSlug`).
+ * (`GET /businesses/public/:slug/account/:accountSlug/invoices/:invoiceSlug`).
  *
- * **Whitelist 7 полів** (Sprint 4 §"Скоуп.Shared"):
+ * **Whitelist 8 полів** (Sprint 4 §"Скоуп.Shared" + Sprint 9 §4.7 розширення):
  *  - 4 invoice-fields: `amount`, `amountLocked`, `paymentPurpose`, `validUntil`.
  *  - `slug` — invoice-slug.
  *  - `business` — nested view: `type`, `name`, `slug`, `acceptedBanks` (4 поля
  *    з Sprint 3 `PublicBusinessSchema`, **без `seoIndexEnabled`** — інвойси
  *    завжди `noindex`, hardcoded на frontend).
+ *  - **`account` — nested view (Sprint 9 §SP-6 розширення):** `slug`, `name`,
+ *    `bankCode`, `ibanMask`. Клієнт бачить через який рахунок іде платіж +
+ *    4-цифровий IBAN-tail для disambiguation. Reuse
+ *    `PublicAccountListItemSchema` напряму — той самий whitelist, що на
+ *    business-root-list-view (DRY-інваріант: account-shape consistent across
+ *    public endpoints).
  *  - `nbuLinks` — pre-built NBU payload-link URLs (primary + legacy);
  *    **`null` коли invoice expired** (`validUntil < now`) — server-side
  *    block оплати по простроченому рахунку (review fix). Поки backend не
@@ -194,7 +201,8 @@ export type UpdateInvoiceRequest = z.infer<typeof UpdateInvoiceSchema>;
  *
  * **Реквізити (IBAN, ІПН) знову не у JSON-полях** — leak-vector тільки через
  * `nbuLinks` Base64URL payload (той самий інваріант що Sprint 3
- * `PublicBusinessSchema`).
+ * `PublicBusinessSchema`). `account.ibanMask` (`•{last4}`) — НЕ leak,
+ * 5-символьний disambiguator з якого неможливо відновити повний IBAN.
  */
 export const PublicInvoiceSchema = z.object({
     amount: invoiceAmountKopecksSchema,
@@ -208,6 +216,7 @@ export const PublicInvoiceSchema = z.object({
         slug: businessSlugSchema,
         acceptedBanks: z.array(bankCodeSchema),
     }),
+    account: PublicAccountListItemSchema,
     nbuLinks: z
         .object({
             primary: z.string().url(),

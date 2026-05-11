@@ -105,9 +105,10 @@ export const RESPONSE_CODE = {
     TAXATION_REQUIRED_FOR_TYPE: 'TAXATION_REQUIRED_FOR_TYPE',
     /**
      * Sprint 7 §7.5 — service-layer cross-check на UPDATE: PATCH містить
-     * `requisites.taxId` неправильного формату для document-resident `type`
-     * (наприклад, 8-digit ЄДРПОУ при type=fop, або 10-digit РНОКПП при
-     * type=tov).
+     * `taxId` неправильного формату для document-resident `type` (наприклад,
+     * 8-digit ЄДРПОУ при type=fop, або 10-digit РНОКПП при type=tov). Sprint 9
+     * §SP-1 path-update: `taxId` тепер top-level поле Business (раніше
+     * `requisites.taxId`); semantics коду незмінні.
      *
      * Окремий код від `INVALID_TAX_ID` / `INVALID_LEGAL_TAX_ID` — ці два
      * описують **структурну** помилку (regex/checksum), цей — **type-binding**
@@ -149,6 +150,39 @@ export const RESPONSE_CODE = {
      * справжню причину видно лише у server-логах.
      */
     CASCADE_DELETE_REQUIRES_REPLICA_SET: 'CASCADE_DELETE_REQUIRES_REPLICA_SET',
+
+    // --- accounts error (Sprint 9 §SP-1..§SP-3) ---
+    /** Account не знайдено в межах business-у. `AccountAccessGuard` / `AccountsService.getBySlug`. UA: "Рахунок не знайдено". */
+    ACCOUNT_NOT_FOUND: 'ACCOUNT_NOT_FOUND',
+    /**
+     * Sprint 9 §SP-3 — Account-delete pre-check: `Invoice.countDocuments({accountId}) > 0`.
+     * 409 з UA-template, що містить `{invoicesPhrase}`-плейсхолдер; caller
+     * (backend exception + frontend toast.error) pre-resolves через
+     * `pluralizeUa(count, 'виставлений інвойс', 'виставлені інвойси', 'виставлених інвойсів')`.
+     * UA-шаблон: "Цей рахунок має {invoicesPhrase}. Спочатку видаліть їх або весь бізнес".
+     */
+    ACCOUNT_HAS_INVOICES: 'ACCOUNT_HAS_INVOICES',
+    /** `AccountAccessGuard` ownership-check fail (account.businessId ≠ request.business._id). UA: "Доступ до рахунку заборонено". */
+    ACCOUNT_ACCESS_DENIED: 'ACCOUNT_ACCESS_DENIED',
+    /**
+     * `AccountSlugGeneratorService` після MAX_ATTEMPTS retries (астрономічно
+     * недосяжно при random 8-char A-Za-z0-9). Окремий код від Sprint 3
+     * `SLUG_GENERATION_FAILED` (business-domain): error-mapping може дати
+     * домен-специфічну рекомендацію. UA: "Не вдалося згенерувати рахунок. Спробуйте ще раз".
+     */
+    ACCOUNT_SLUG_GENERATION_FAILED: 'ACCOUNT_SLUG_GENERATION_FAILED',
+    /**
+     * Sprint 9 §SP-2 — anti-duplicate IBAN під одним бізнесом. compound-unique
+     * `(businessId, iban)` на Mongo; AccountsService.create ловить 11000 і
+     * мапить на цей код. Cross-business-duplicate (один IBAN на двох бізнесах
+     * одного юзера) — дозволено, цей код не спрацьовує. UA: "Цей IBAN вже доданий до бізнесу".
+     */
+    ACCOUNT_IBAN_DUPLICATE: 'ACCOUNT_IBAN_DUPLICATE',
+    /**
+     * Sprint 9 §SP-2 safety-net — unknown 11000-патерн у AccountsService.create
+     * (не slug-collision, не iban-duplicate). UA: "Не вдалося створити рахунок. Спробуйте ще раз".
+     */
+    ACCOUNT_CREATE_FAILED: 'ACCOUNT_CREATE_FAILED',
 
     // --- qr error (Sprint 2 §2.1 + Sprint 8 fix) ---
     /**
@@ -219,6 +253,12 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.INVOICE_EXPIRED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVOICE_VALID_UNTIL_IN_PAST]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.CASCADE_DELETE_REQUIRES_REPLICA_SET]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.ACCOUNT_NOT_FOUND]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.ACCOUNT_HAS_INVOICES]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.ACCOUNT_ACCESS_DENIED]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.ACCOUNT_SLUG_GENERATION_FAILED]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.ACCOUNT_IBAN_DUPLICATE]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.ACCOUNT_CREATE_FAILED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.PAYLOAD_TOO_LARGE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.ONBOARDING_INCOMPLETE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.UNAUTHORIZED]: RESPONSE_TYPE.ERROR,

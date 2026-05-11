@@ -70,7 +70,9 @@
 
 **Стартовий MVP-набір банків (продуктовий підбір, не повний ринковий перелік):**
 
-- PrivatBank, Monobank, PUMB, Oschadbank, Sense, Ukrgazbank (EcoBank), SportBank, IZIBank, Raiffeisen, Abank, Credit Dnipro.
+- PrivatBank, Monobank, PUMB, Oschadbank, Sense, Ukrgazbank (EcoBank), IZIBank, Raiffeisen, Abank, Credit Dnipro.
+
+> **SportBank — прибрано у Sprint 9.** Проєкт закрито 06.05.2024 (Таскомбанк припинив розвиток); клієнти переведені у ТАСКОМБАНК на ту саму ліцензію + МФО, на якому працює IZIBank (339500). Колишній SportBank-IBAN тепер автодетектиться як `izibank`.
 
 **Контекст.** Офіційний список українських банків, що інтегровані з платіжним QR-стандартом НБУ, **ширший за наш MVP-набір** (актуальний перелік — на сторінці bank.gov.ua). Наш стартовий набір — фокус на банках з найбільшою часткою користувачів. Перелік розширюється за фактом попиту після релізу.
 
@@ -200,7 +202,7 @@ Discriminator живе у Zod write-DTO (`CreateBusinessSchema` discriminated un
 ### 3.1 [КРИТИЧНЕ] Per-bank deep links — як примусово відкривати конкретний банк
 
 **Постановка задачі.**
-На публічній сторінці клієнт бачить кнопки/іконки для кожного підтримуваного українського банку (Privat24, Monobank, PUMB, Oschad, Sense, Ukrgazbank, SportBank, IZIBank, Raiffeisen, Abank, Credit Dnipro).
+На публічній сторінці клієнт бачить кнопки/іконки для кожного підтримуваного українського банку (Privat24, Monobank, PUMB, Oschad, Sense, Ukrgazbank, IZIBank, Raiffeisen, Abank, Credit Dnipro).
 
 При натисканні на конкретний банк **повинен відкритись саме цей банк** з попередньо заповненими реквізитами і сумою. **НЕ системний пікер**, **НЕ "оберіть, у якому додатку відкрити"**.
 

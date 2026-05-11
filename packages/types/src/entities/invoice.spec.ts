@@ -6,6 +6,7 @@ const PURPOSE_LIMIT = effectiveLimit('purpose');
 const VALID_INVOICE = {
     id: '507f1f77bcf86cd799439021',
     businessId: '507f1f77bcf86cd799439011',
+    accountId: '507f1f77bcf86cd799439031',
     slug: 'zamovlennia-147-aB3xQ9k7',
     amount: 150000, // 1500.00 грн у копійках
     amountLocked: true,
@@ -21,6 +22,28 @@ describe('InvoiceSchema', () => {
     it('parses a fully populated invoice', () => {
         const result = InvoiceSchema.safeParse(VALID_INVOICE);
         expect(result.success).toBe(true);
+    });
+
+    it('Sprint 9 §SP-6 — rejects invoice без accountId', () => {
+        const { accountId: _omit, ...without } = VALID_INVOICE;
+        void _omit;
+        const result = InvoiceSchema.safeParse(without);
+        expect(result.success).toBe(false);
+    });
+
+    it('Sprint 9 — rejects malformed accountId', () => {
+        const result = InvoiceSchema.safeParse({
+            ...VALID_INVOICE,
+            accountId: 'not-an-objectid',
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('Sprint 9 — businessId і accountId обидва required (denormalized invariant)', () => {
+        const { businessId: _omit, ...without } = VALID_INVOICE;
+        void _omit;
+        const result = InvoiceSchema.safeParse(without);
+        expect(result.success).toBe(false);
     });
 
     it('parses a "client-types-amount" invoice (amount=null)', () => {
@@ -305,13 +328,13 @@ describe('InvoiceSchema', () => {
 // -----------------------------------------------------------------------------
 // Sprint 8 fix — `InvoicePayeeSnapshotSchema.recipientName` reuse
 // `businessNameSchema` напряму (раніше — inline `payeeNameSchema`-дублікат).
-// Drift-захист: snapshot kładeться у NBU payload через invoice flow, тому
-// має ту саму charset/length-валідацію, що live business name. Без цих
-// тестів майбутнє розхрдження business vs snapshot пройде compile + unit
-// без сигналу.
+// Sprint 9 widening — `taxId: payerTaxIdZod` (union RNOKPP ∪ ЄДРПОУ),
+// раніше тільки `individualTaxIdZod`. Drift-захист: snapshot kładеться у NBU
+// payload через invoice flow, тому має ту саму валідацію, що live business
+// (name + taxId).
 // -----------------------------------------------------------------------------
 
-describe('InvoicePayeeSnapshotSchema — drift-guard від businessNameSchema', () => {
+describe('InvoicePayeeSnapshotSchema — drift-guard від Business shape', () => {
     const VALID_SNAPSHOT = {
         recipientName: 'Іваненко Олена Петрівна',
         iban: 'UA213223130000026007233566001',
@@ -319,8 +342,17 @@ describe('InvoicePayeeSnapshotSchema — drift-guard від businessNameSchema',
         paymentPurpose: 'Оплата за послуги',
     };
 
-    it('parses valid snapshot', () => {
+    it('parses valid snapshot з 10-digit RNOKPP', () => {
         const result = InvoicePayeeSnapshotSchema.safeParse(VALID_SNAPSHOT);
+        expect(result.success).toBe(true);
+    });
+
+    it('Sprint 9 widening — parses snapshot з 8-digit ЄДРПОУ (tov / organization invoice)', () => {
+        const result = InvoicePayeeSnapshotSchema.safeParse({
+            ...VALID_SNAPSHOT,
+            recipientName: 'ТОВ Кав\'ярня',
+            taxId: '12345678',
+        });
         expect(result.success).toBe(true);
     });
 
@@ -360,5 +392,13 @@ describe('InvoicePayeeSnapshotSchema — drift-guard від businessNameSchema',
                 )
             ).toBe(true);
         }
+    });
+
+    it('rejects structurally garbage taxId (ні RNOKPP, ні ЄДРПОУ)', () => {
+        const result = InvoicePayeeSnapshotSchema.safeParse({
+            ...VALID_SNAPSHOT,
+            taxId: '1234567', // 7 digits — neither format
+        });
+        expect(result.success).toBe(false);
     });
 });

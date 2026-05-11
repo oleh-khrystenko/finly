@@ -4,7 +4,6 @@ import { BusinessSchema } from './business';
 const NAME_LIMIT = effectiveLimit('receiverName');
 const PURPOSE_LIMIT = effectiveLimit('purpose');
 
-const VALID_IBAN = 'UA213223130000026007233566001';
 const VALID_TAX_ID = '1234567899';
 
 const VALID_BUSINESS = {
@@ -15,7 +14,7 @@ const VALID_BUSINESS = {
     slug: 'ivanenko-fop',
     slugLower: 'ivanenko-fop',
     name: 'Іваненко',
-    requisites: { iban: VALID_IBAN, taxId: VALID_TAX_ID },
+    taxId: VALID_TAX_ID,
     taxationSystem: 'simplified-3',
     isVatPayer: false,
     paymentPurposeTemplate: 'Оплата за послуги',
@@ -71,28 +70,28 @@ describe('BusinessSchema', () => {
         expect(result.success).toBe(false);
     });
 
-    it('rejects invalid IBAN inside requisites', () => {
-        const result = BusinessSchema.safeParse({
-            ...VALID_BUSINESS,
-            requisites: {
-                iban: 'UA00000000000000000000000000',
-                taxId: VALID_TAX_ID,
-            },
-        });
-        expect(result.success).toBe(false);
-    });
-
-    it('rejects structurally invalid taxId at sub-schema level (Sprint 7 §SP-4 defense-in-depth)', () => {
-        // `BusinessRequisitesSchema.taxId: payerTaxIdZod` reject-ить structurally
-        // garbage (10-digit з wrong checksum, 7-digit, 9-digit, alpha) до того, як
-        // parent-refine `TAX_ID_FORMAT_MISMATCH_TYPE` дістанеться. Type-binding
+    it('rejects structurally invalid taxId at top-level (Sprint 9 §SP-1 — taxId flat, raniше requisites.taxId)', () => {
+        // `payerTaxIdZod` (union RNOKPP ∪ ЄДРПОУ) reject-ить structurally
+        // garbage (10-digit з wrong checksum, 7-digit, 9-digit, alpha) до того,
+        // як parent-refine `TAX_ID_FORMAT_MISMATCH_TYPE` дістанеться. Type-binding
         // живе на parent-refine — покрито окремими тестами у "Sprint 7 — type-driven
         // refines" блоці нижче.
         const result = BusinessSchema.safeParse({
             ...VALID_BUSINESS,
-            requisites: { iban: VALID_IBAN, taxId: '1234567890' },
+            taxId: '1234567890', // 10-digit, wrong checksum
         });
         expect(result.success).toBe(false);
+    });
+
+    it('Sprint 9 §SP-1 — Business більше не містить requisites; iban перейшов на Account', () => {
+        const { requisites: _requisites, ...without } = {
+            ...VALID_BUSINESS,
+            requisites: { iban: 'UA213223130000026007233566001' },
+        };
+        void _requisites;
+        // Без requisites — parse OK.
+        const result = BusinessSchema.safeParse(without);
+        expect(result.success).toBe(true);
     });
 
     it.each([
@@ -260,10 +259,7 @@ describe('BusinessSchema', () => {
     });
 
     // -------------------------------------------------------------------------
-    // Sprint 8 fix — NBU-charset refine (Win1251-mapping). Закриває інваріант
-    // "будь-який валідно збережений Business → валідний QR" (Sprint 2 §2.2):
-    // до Sprint 8 emoji / non-Win1251-Unicode проходив save → render QR
-    // падав з 500 на public-сторінці (`PayloadValidationError` → `INTERNAL_ERROR`).
+    // Sprint 8 fix — NBU-charset refine (Win1251-mapping).
     // -------------------------------------------------------------------------
 
     describe('name / paymentPurposeTemplate — NBU charset refine', () => {
@@ -298,8 +294,6 @@ describe('BusinessSchema', () => {
         });
 
         it('rejects name з LF (multi-line атака на field-separator)', () => {
-            // LF/CR розділяють поля payload; всередині значення вони ламають
-            // кількість полів, що зчитує банк-парсер.
             const result = BusinessSchema.safeParse({
                 ...VALID_BUSINESS,
                 name: 'Іваненко\nПетро',
@@ -308,8 +302,6 @@ describe('BusinessSchema', () => {
         });
 
         it('accepts name з допустимою typography (апостроф U+2019, dash U+2014)', () => {
-            // Win1251 mapping містить General Punctuation 0x80-0x97;
-            // апостроф ’ (U+2019) і dash — (U+2014) дозволені.
             const result = BusinessSchema.safeParse({
                 ...VALID_BUSINESS,
                 name: 'ТОВ «Кав’ярня — Майдан»',
@@ -403,11 +395,10 @@ describe('BusinessSchema', () => {
     // Sprint 7 §SP-3 + §SP-4 — type-driven refines: (taxation iff
     // requiresTaxation(type)) і (taxId-format matches type).
     //
-    // Golden vectors для 4 типів × (valid, missing-taxation, garbage-taxation,
-    // taxId-wrong-length) — точне покриття per §7.2 acceptance.
+    // Sprint 9 §SP-1 path-оновлення: `taxId` тепер top-level, не `requisites.taxId`.
     // -------------------------------------------------------------------------
 
-    describe('Sprint 7 — type-driven refines', () => {
+    describe('Sprint 7 — type-driven refines (Sprint 9 path-flatten)', () => {
         const VALID_RNOKPP = '1234567899'; // 10 digits + valid checksum
         const VALID_EDRPOU = '12345678'; // 8 digits, no checksum
 
@@ -421,7 +412,7 @@ describe('BusinessSchema', () => {
                 type: 'individual' as const,
                 taxationSystem: null,
                 isVatPayer: null,
-                requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+                taxId: VALID_RNOKPP,
             };
 
             it('accepts valid individual (taxation-fields null, RNOKPP 10-digit)', () => {
@@ -457,20 +448,17 @@ describe('BusinessSchema', () => {
                 }
             });
 
-            it('rejects 8-digit ЄДРПОУ on individual → TAX_ID_FORMAT_MISMATCH_TYPE', () => {
+            it('rejects 8-digit ЄДРПОУ on individual → TAX_ID_FORMAT_MISMATCH_TYPE з path=[taxId]', () => {
                 const result = BusinessSchema.safeParse(
-                    buildBusiness({
-                        ...base,
-                        requisites: { iban: VALID_IBAN, taxId: VALID_EDRPOU },
-                    })
+                    buildBusiness({ ...base, taxId: VALID_EDRPOU })
                 );
                 expect(result.success).toBe(false);
                 if (!result.success) {
-                    expect(
-                        result.error.issues.some(
-                            (i) => i.message === 'TAX_ID_FORMAT_MISMATCH_TYPE'
-                        )
-                    ).toBe(true);
+                    const mismatchIssue = result.error.issues.find(
+                        (i) => i.message === 'TAX_ID_FORMAT_MISMATCH_TYPE'
+                    );
+                    expect(mismatchIssue).toBeDefined();
+                    expect(mismatchIssue?.path).toEqual(['taxId']);
                 }
             });
         });
@@ -480,7 +468,7 @@ describe('BusinessSchema', () => {
                 type: 'fop' as const,
                 taxationSystem: 'simplified-3' as const,
                 isVatPayer: false,
-                requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+                taxId: VALID_RNOKPP,
             };
 
             it('accepts valid fop', () => {
@@ -518,10 +506,7 @@ describe('BusinessSchema', () => {
 
             it('rejects 8-digit ЄДРПОУ on fop → TAX_ID_FORMAT_MISMATCH_TYPE', () => {
                 const result = BusinessSchema.safeParse(
-                    buildBusiness({
-                        ...base,
-                        requisites: { iban: VALID_IBAN, taxId: VALID_EDRPOU },
-                    })
+                    buildBusiness({ ...base, taxId: VALID_EDRPOU })
                 );
                 expect(result.success).toBe(false);
                 if (!result.success) {
@@ -539,7 +524,7 @@ describe('BusinessSchema', () => {
                 type: 'tov' as const,
                 taxationSystem: 'general' as const,
                 isVatPayer: true,
-                requisites: { iban: VALID_IBAN, taxId: VALID_EDRPOU },
+                taxId: VALID_EDRPOU,
             };
 
             it('accepts valid tov with VAT on general', () => {
@@ -563,10 +548,7 @@ describe('BusinessSchema', () => {
 
             it('rejects 10-digit RNOKPP on tov → TAX_ID_FORMAT_MISMATCH_TYPE', () => {
                 const result = BusinessSchema.safeParse(
-                    buildBusiness({
-                        ...base,
-                        requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
-                    })
+                    buildBusiness({ ...base, taxId: VALID_RNOKPP })
                 );
                 expect(result.success).toBe(false);
                 if (!result.success) {
@@ -603,7 +585,7 @@ describe('BusinessSchema', () => {
                 type: 'organization' as const,
                 taxationSystem: null,
                 isVatPayer: null,
-                requisites: { iban: VALID_IBAN, taxId: VALID_EDRPOU },
+                taxId: VALID_EDRPOU,
             };
 
             it('accepts valid organization', () => {
@@ -627,10 +609,7 @@ describe('BusinessSchema', () => {
 
             it('rejects 10-digit RNOKPP on organization → TAX_ID_FORMAT_MISMATCH_TYPE', () => {
                 const result = BusinessSchema.safeParse(
-                    buildBusiness({
-                        ...base,
-                        requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
-                    })
+                    buildBusiness({ ...base, taxId: VALID_RNOKPP })
                 );
                 expect(result.success).toBe(false);
                 if (!result.success) {
@@ -643,11 +622,9 @@ describe('BusinessSchema', () => {
             });
         });
 
-        // Sub-schema sanity: `BusinessRequisitesSchema.taxId: payerTaxIdZod`
-        // reject-ить structurally невалідне (ні 10-digit + checksum, ні 8-digit
-        // pattern) на write- і read-paths однаково — незалежно від `type`.
-        // Type-binding (`TAX_ID_FORMAT_MISMATCH_TYPE`) живе на parent-refine
-        // і активується лише після pass sub-schema; cases вище покривають.
+        // Sub-schema sanity: `payerTaxIdZod` reject-ить structurally невалідне
+        // (ні 10-digit + checksum, ні 8-digit pattern) на write- і read-paths
+        // однаково — незалежно від `type`.
         it.each([
             '',
             '1234567', // 7 digits — ні те, ні те
@@ -678,7 +655,7 @@ describe('BusinessSchema', () => {
                         buildBusiness({
                             type,
                             ...taxationOverrides,
-                            requisites: { iban: VALID_IBAN, taxId },
+                            taxId,
                         })
                     );
                     expect(result.success).toBe(false);
