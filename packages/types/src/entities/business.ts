@@ -132,6 +132,20 @@ export const BusinessSchema = z
         slugLower: businessSlugLowerSchema,
         name: businessNameSchema,
         /**
+         * Sprint 10 §SP-11 — anti-duplicate-Business token для anon-claim-flow.
+         * UUID v4, генерований frontend-side на CTA-click "Зберегти у кабінет".
+         * Backend `BusinessesService.create` має partial-unique-compound-index
+         * `(ownerId, claimIdempotencyKey)` з `partialFilterExpression:
+         * { claimIdempotencyKey: { $type: 'string' } }` — повторний POST з
+         * тим самим (userId, key) повертає existing Business replay-shape
+         * замість дубльованого insert.
+         *
+         * **Optional у entity-shape**, бо cabinet-wizard-create НЕ передає
+         * це поле (відсутнє у документі → не входить у partial-index → не
+         * блокує множинні cabinet-create без anon-claim-context-у).
+         */
+        claimIdempotencyKey: z.string().uuid().optional(),
+        /**
          * Sprint 9 §SP-1 — `taxId` як top-level поле (раніше `requisites.taxId`).
          * `requisites`-wrapper повністю прибраний разом з міграцією IBAN на
          * окрему сутність `Account`. Defense-in-depth structural-валідатор

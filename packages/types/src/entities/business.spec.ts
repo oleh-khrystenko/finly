@@ -374,6 +374,36 @@ describe('BusinessSchema', () => {
         });
     });
 
+    describe('Sprint 10 — claimIdempotencyKey optional', () => {
+        const VALID_UUID = '550e8400-e29b-41d4-a716-446655440000';
+
+        it('parses business без claimIdempotencyKey (cabinet-create path)', () => {
+            const { claimIdempotencyKey: _omit, ...without } = {
+                ...VALID_BUSINESS,
+                claimIdempotencyKey: undefined,
+            };
+            void _omit;
+            const result = BusinessSchema.safeParse(without);
+            expect(result.success).toBe(true);
+        });
+
+        it('parses business з claimIdempotencyKey (anon-claim path)', () => {
+            const result = BusinessSchema.safeParse({
+                ...VALID_BUSINESS,
+                claimIdempotencyKey: VALID_UUID,
+            });
+            expect(result.success).toBe(true);
+        });
+
+        it('rejects невалідний UUID format у claimIdempotencyKey', () => {
+            const result = BusinessSchema.safeParse({
+                ...VALID_BUSINESS,
+                claimIdempotencyKey: 'not-a-uuid',
+            });
+            expect(result.success).toBe(false);
+        });
+    });
+
     describe('seoIndexEnabled (Sprint 3 E3)', () => {
         it('accepts seoIndexEnabled=true', () => {
             const result = BusinessSchema.safeParse({

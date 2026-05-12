@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { UserProfileSchema } from '../entities/user';
 import { emailSchema, passwordSchema } from '../validation/common';
+import { LandingDraftSchema } from './landing-draft';
 
 // --- Magic Link Purpose ---
 
@@ -24,11 +25,46 @@ export const MagicLinkPurposeSchema = z.enum([
 
 // --- Magic Link ---
 
-export const SendMagicLinkSchema = z.object({
-    email: z.string().email(),
-    purpose: MagicLinkPurposeSchema.optional(),
-    redirectTo: z.string().startsWith('/').max(2048).optional(),
-});
+/**
+ * Sprint 10 §SP-7/§SP-11/§SP-12 — magic-link endpoint приймає **три optional
+ * sibling-fields** для anon-claim cross-device flow:
+ *
+ *  - `landingDraft` — anon-payload (receiverName / iban / taxId / purpose) для
+ *    серверного claim після verify.
+ *  - `claimIdempotencyKey` — UUID v4, anti-duplicate token (Sprint 10 §SP-11).
+ *  - `termsVersion` — версія terms, прийнятих anon-користувачем на signin-step
+ *    (Sprint 10 §SP-12 terms-pre-stamp; backend stamps `acceptedTermsVersion`
+ *    ДО claim, що закриває acceptTerms ordering window).
+ *
+ * **Cross-field-coexistence invariant** (`landingDraft <-> claimIdempotencyKey`):
+ * draft без idempotency-key не має сенсу — backend не може дедуплікувати POST1
+ * без token-а; key без draft не має payload-у. Refine reject-ить mismatched-pair
+ * на write-side через `LANDING_DRAFT_AND_KEY_MUST_COEXIST`. `termsVersion` —
+ * окремий optional-field, БЕЗ cross-coupling: він прокидається на всіх 4
+ * frontend-call-site-ах `sendMagicLink` коли user прийняв terms (включно з
+ * reset-password-flow, де `landingDraft` не передається).
+ */
+export const SendMagicLinkSchema = z
+    .object({
+        email: z.string().email(),
+        purpose: MagicLinkPurposeSchema.optional(),
+        redirectTo: z.string().startsWith('/').max(2048).optional(),
+        landingDraft: LandingDraftSchema.optional(),
+        claimIdempotencyKey: z
+            .string()
+            .uuid({ message: 'INVALID_CLAIM_IDEMPOTENCY_KEY' })
+            .optional(),
+        termsVersion: z.string().optional(),
+    })
+    .refine(
+        (data) =>
+            (data.landingDraft !== undefined) ===
+            (data.claimIdempotencyKey !== undefined),
+        {
+            message: 'LANDING_DRAFT_AND_KEY_MUST_COEXIST',
+            path: ['claimIdempotencyKey'],
+        }
+    );
 
 export const VerifyMagicLinkSchema = z.object({
     token: z.string().min(1),
@@ -36,12 +72,66 @@ export const VerifyMagicLinkSchema = z.object({
 
 // --- Auth Response ---
 
-export const AuthResponseSchema = z.object({
-    user: UserProfileSchema,
-    accessToken: z.string(),
-    purpose: MagicLinkPurposeSchema.optional(),
-    accountDeleted: z.boolean().optional(),
-});
+/**
+ * Sprint 10 §SP-7 — verify-response extension з 5 optional claim-fields. На
+ * не-claim-magic-link-ах (всі чотири purposes без `landingDraft`) поля
+ * undefined; backwards-compat для всіх Sprint 8 callsite-ів `verifyMagicLink`.
+ *
+ * **Discriminated narrowing на `claimState`:**
+ *  - `'success'` ⇒ `claimedBusinessSlug + claimedAccountSlug` присутні.
+ *  - `'business-failed'` ⇒ `failedClaimDraft` присутній (для form-recovery
+ *    через redirect на `/business/new?from=landing` з pre-filled wizard).
+ *  - `'account-failed'` ⇒ `partialBusinessSlug + failedClaimDraft` присутні
+ *    (Business створено, але Account-POST впав; recovery через
+ *    `/business/{slug}/account/new?from=landing` з pre-filled IBAN).
+ *
+ * Refine reject-ить порушення на response-side (defense-in-depth, бо backend
+ * формує response сам — Zod ловить регресію при drift-у controller-логіки).
+ *
+ * **Чому success-with-state, а не throw** (planning-questions.md): claim-
+ * failure НЕ блокує auth — user уже автентикований, accessToken у response
+ * body, refresh-cookie виставлено. Discriminated success-shape — uniform path
+ * для finalization (`acceptTerms + getMe + setUser`); claim-state читається
+ * post-finalization для router.replace-target-у.
+ */
+export const AuthResponseSchema = z
+    .object({
+        user: UserProfileSchema,
+        accessToken: z.string(),
+        purpose: MagicLinkPurposeSchema.optional(),
+        accountDeleted: z.boolean().optional(),
+        claimState: z
+            .enum(['success', 'business-failed', 'account-failed'])
+            .optional(),
+        claimedBusinessSlug: z.string().optional(),
+        claimedAccountSlug: z.string().optional(),
+        partialBusinessSlug: z.string().optional(),
+        failedClaimDraft: LandingDraftSchema.optional(),
+    })
+    .refine(
+        (data) => {
+            if (data.claimState === 'success') {
+                return (
+                    data.claimedBusinessSlug !== undefined &&
+                    data.claimedAccountSlug !== undefined
+                );
+            }
+            if (data.claimState === 'business-failed') {
+                return data.failedClaimDraft !== undefined;
+            }
+            if (data.claimState === 'account-failed') {
+                return (
+                    data.partialBusinessSlug !== undefined &&
+                    data.failedClaimDraft !== undefined
+                );
+            }
+            return true;
+        },
+        {
+            message: 'CLAIM_STATE_FIELDS_MISMATCH',
+            path: ['claimState'],
+        }
+    );
 
 // --- Check Email ---
 

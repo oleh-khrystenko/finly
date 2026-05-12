@@ -247,6 +247,56 @@ describe('CreateBusinessSchema', () => {
     });
 });
 
+describe('Sprint 10 — CreateBusinessSchema.claimIdempotencyKey', () => {
+    const VALID_UUID = '550e8400-e29b-41d4-a716-446655440000';
+
+    it('accepts create без claimIdempotencyKey (cabinet wizard)', () => {
+        const result = CreateBusinessSchema.safeParse(VALID_CREATE);
+        expect(result.success).toBe(true);
+    });
+
+    it('accepts create з claimIdempotencyKey (anon-claim)', () => {
+        const result = CreateBusinessSchema.safeParse({
+            ...VALID_CREATE,
+            claimIdempotencyKey: VALID_UUID,
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('rejects невалідний UUID format у claimIdempotencyKey', () => {
+        const result = CreateBusinessSchema.safeParse({
+            ...VALID_CREATE,
+            claimIdempotencyKey: 'not-a-uuid',
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it.each(['individual', 'fop', 'tov', 'organization'] as const)(
+        'accepts claimIdempotencyKey у %s variant',
+        (type) => {
+            const VALID_RNOKPP = '1234567899';
+            const VALID_EDRPOU = '12345678';
+            const isLegal = type === 'tov' || type === 'organization';
+            const isTaxation = type === 'fop' || type === 'tov';
+            const result = CreateBusinessSchema.safeParse({
+                type,
+                name: 'Іваненко',
+                taxId: isLegal ? VALID_EDRPOU : VALID_RNOKPP,
+                paymentPurposeTemplate: 'Збір',
+                acceptedBanks: ['privatbank'],
+                claimIdempotencyKey: VALID_UUID,
+                ...(isTaxation
+                    ? {
+                          taxationSystem: 'simplified-3' as const,
+                          isVatPayer: false,
+                      }
+                    : {}),
+            });
+            expect(result.success).toBe(true);
+        }
+    );
+});
+
 describe('UpdateBusinessSchema', () => {
     it('accepts empty object (no-op partial)', () => {
         const result = UpdateBusinessSchema.safeParse({});
@@ -295,8 +345,9 @@ describe('UpdateBusinessSchema', () => {
         'createdAt',
         'requisites',
         'invoiceSlugPresetDefault',
+        'claimIdempotencyKey',
     ])(
-        'rejects невідомий ключ %s через .strict() (slug-mutation / Sprint 9 видалені ключі)',
+        'rejects невідомий ключ %s через .strict() (slug-mutation / Sprint 9 видалені ключі / Sprint 10 immutable claim-key)',
         (key) => {
             const result = UpdateBusinessSchema.safeParse({
                 [key]: 'whatever',

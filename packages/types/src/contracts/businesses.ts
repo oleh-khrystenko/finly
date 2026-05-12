@@ -58,6 +58,23 @@ const acceptedBanksField = z.array(bankCodeSchema).min(1, {
 });
 
 /**
+ * Sprint 10 §SP-11 — UUID v4 anti-duplicate token для anon-claim-flow. Optional
+ * у write-DTO: cabinet wizard НЕ передає це поле (відсутнє у payload-і →
+ * `.strict()` пропускає, бо поле задекларовано optional). Anon-claim прокидає
+ * UUID v4, згенерований frontend `crypto.randomUUID()` на CTA-click "Зберегти
+ * у кабінет"; backend `BusinessesService.create` робить dedup через partial-
+ * unique-compound-index `(ownerId, claimIdempotencyKey)`.
+ *
+ * Single source of truth для 4 discriminated-union variants — drift двох
+ * `claimIdempotencyKey`-полів у `individual`/`fop`/`tov`/`organization`
+ * variants виключений.
+ */
+const claimIdempotencyKeyField = z
+    .string()
+    .uuid({ message: 'INVALID_CLAIM_IDEMPOTENCY_KEY' })
+    .optional();
+
+/**
  * Coupled VAT × taxationSystem refine — застосовується **per-variant** у
  * fop / tov create-варіантах. Для individual / organization variants поля
  * фізично відсутні, refine не потрібен.
@@ -106,6 +123,7 @@ const createIndividualVariant = z
         taxId: individualTaxIdZod,
         paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
         acceptedBanks: acceptedBanksField,
+        claimIdempotencyKey: claimIdempotencyKeyField,
     })
     .strict();
 
@@ -118,6 +136,7 @@ const createFopVariant = z
         isVatPayer: z.boolean(),
         paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
         acceptedBanks: acceptedBanksField,
+        claimIdempotencyKey: claimIdempotencyKeyField,
     })
     .strict()
     .refine(taxationVatCheck, taxationVatRefineOptions);
@@ -131,6 +150,7 @@ const createTovVariant = z
         isVatPayer: z.boolean(),
         paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
         acceptedBanks: acceptedBanksField,
+        claimIdempotencyKey: claimIdempotencyKeyField,
     })
     .strict()
     .refine(taxationVatCheck, taxationVatRefineOptions);
@@ -142,6 +162,7 @@ const createOrganizationVariant = z
         taxId: legalEntityTaxIdZod,
         paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
         acceptedBanks: acceptedBanksField,
+        claimIdempotencyKey: claimIdempotencyKeyField,
     })
     .strict();
 
