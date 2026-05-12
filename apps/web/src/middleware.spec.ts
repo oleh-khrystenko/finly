@@ -382,33 +382,53 @@ describe('middleware', () => {
             expect(mockRewrite).not.toHaveBeenCalled();
         });
 
-        // ─── Sprint 4 §4.7 — invoice 2-segment paths (Branch A2) ───
+        // ─── Sprint 9 §SP-4 — Branch A1 додає Cache-Control header ───
 
-        it('9. host=pay + /IvanEnko/inv-001-aaa → rewrite на /host-pay/IvanEnko/inv-001-aaa (Branch A2)', () => {
-            const req = createMockRequest('/IvanEnko/inv-001-aaa', {
+        it('Branch A1 ставить `Cache-Control: no-store, no-cache, must-revalidate` на rewrite (§SP-4 defense-in-depth для 1-Account-redirect-flip)', () => {
+            // 307-redirect-at-1-Account живе у Server Component
+            // (`host-pay/[slug]/page.tsx`). Якщо CDN/proxy шар закешує
+            // redirect-response — ФОП, який додав 2-й рахунок, не зможе
+            // показати клієнту новий список (cached response продовжить
+            // редіректити). `no-store` на rewrite-response гарантує fresh
+            // resolution на кожен hit.
+            const req = createMockRequest('/IvanEnko', {
+                host: 'pay.finly.com.ua',
+            });
+            const response = middleware(req);
+
+            expect(response.headers.get('Cache-Control')).toBe(
+                'no-store, no-cache, must-revalidate'
+            );
+        });
+
+        // ─── Sprint 9 §SP-5 — A2 семантичний flip (invoice-URL → account-URL) ───
+
+        it('9. host=pay + /IvanEnko/{accountSlug} → rewrite на /host-pay/IvanEnko/{accountSlug} (Branch A2 — account-URL, Sprint 9 §SP-5)', () => {
+            // Sprint 4 §4.7 був invoice-URL; Sprint 9 §SP-5 матрьошкова
+            // навігація переніс інвойс на 3-сегментний path (Branch A3),
+            // 2-сегментний path тепер account-URL.
+            const req = createMockRequest('/IvanEnko/aBc12345', {
                 host: 'pay.finly.com.ua',
             });
             middleware(req);
 
             expect(mockRewrite).toHaveBeenCalledTimes(1);
             const url: URL = mockRewrite.mock.calls[0][0];
-            expect(url.pathname).toBe('/host-pay/IvanEnko/inv-001-aaa');
+            expect(url.pathname).toBe('/host-pay/IvanEnko/aBc12345');
         });
 
-        it('9a. case-preserved у обох сегментах rewrite (business + invoice)', () => {
-            const req = createMockRequest('/IvanEnko/Inv-Vanity', {
+        it('9a. case-preserved у обох сегментах rewrite (business + account)', () => {
+            const req = createMockRequest('/IvanEnko/AbCdEfGh', {
                 host: 'pay.finly.com.ua',
             });
             middleware(req);
 
             const url: URL = mockRewrite.mock.calls[0][0];
-            expect(url.pathname).toBe('/host-pay/IvanEnko/Inv-Vanity');
+            expect(url.pathname).toBe('/host-pay/IvanEnko/AbCdEfGh');
         });
 
-        it('10. host=pay + reserved business-slug + invoice-slug → 404 (reserved-check на 1-му сегменті)', () => {
-            // `business` зарезервований; навіть з валідним 2-сегментним path
-            // middleware має заблокувати рекурсивний rewrite.
-            const req = createMockRequest('/business/inv-001-aaa', {
+        it('10. host=pay + reserved business-slug + account-slug → 404 (reserved-check на 1-му сегменті)', () => {
+            const req = createMockRequest('/business/aBc12345', {
                 host: 'pay.finly.com.ua',
             });
             const response = middleware(req);
@@ -417,10 +437,8 @@ describe('middleware', () => {
             expect(mockRewrite).not.toHaveBeenCalled();
         });
 
-        it('11. host=cabinet + /host-pay/biz/inv → 404 (Branch C: 2-segment direct-URL-attack захист)', () => {
-            // Cabinet host НЕ повинен віддавати invoice-сторінку при
-            // direct-URL-input на internal host-pay-route.
-            const req = createMockRequest('/host-pay/IvanEnko/inv-001-aaa', {
+        it('11. host=cabinet + /host-pay/biz/acc → 404 (Branch C: 2-segment direct-URL-attack захист)', () => {
+            const req = createMockRequest('/host-pay/IvanEnko/aBc12345', {
                 host: 'finly.com.ua',
             });
             const response = middleware(req);
@@ -429,8 +447,54 @@ describe('middleware', () => {
             expect(mockRewrite).not.toHaveBeenCalled();
         });
 
-        it('12. host=pay + 3-сегментна path → 404 (Branch B fall-through; немає 3-segment routes у public-зоні)', () => {
-            const req = createMockRequest('/biz/inv/extra', {
+        // ─── Sprint 9 §SP-6 — Branch A3 (3-сегментний invoice-URL) ───
+
+        it('Branch A3: host=pay + /IvanEnko/aBc12345/inv-001 → rewrite на /host-pay/IvanEnko/aBc12345/inv-001 (Sprint 9 §SP-6)', () => {
+            const req = createMockRequest('/IvanEnko/aBc12345/inv-001', {
+                host: 'pay.finly.com.ua',
+            });
+            middleware(req);
+
+            expect(mockRewrite).toHaveBeenCalledTimes(1);
+            const url: URL = mockRewrite.mock.calls[0][0];
+            expect(url.pathname).toBe(
+                '/host-pay/IvanEnko/aBc12345/inv-001'
+            );
+        });
+
+        it('Branch A3 case-preserved у всіх 3 сегментах', () => {
+            const req = createMockRequest('/IvanEnko/AbCdEfGh/Inv-Vanity', {
+                host: 'pay.finly.com.ua',
+            });
+            middleware(req);
+
+            const url: URL = mockRewrite.mock.calls[0][0];
+            expect(url.pathname).toBe(
+                '/host-pay/IvanEnko/AbCdEfGh/Inv-Vanity'
+            );
+        });
+
+        it('Branch A3 + reserved business-slug → 404', () => {
+            const req = createMockRequest('/business/aBc12345/inv-001', {
+                host: 'pay.finly.com.ua',
+            });
+            const response = middleware(req);
+
+            expect(response.status).toBe(404);
+            expect(mockRewrite).not.toHaveBeenCalled();
+        });
+
+        it('Branch A3 НЕ ставить Cache-Control (state стабільний — fresh-redirect-flip лише на A1)', () => {
+            const req = createMockRequest('/IvanEnko/aBc12345/inv-001', {
+                host: 'pay.finly.com.ua',
+            });
+            const response = middleware(req);
+
+            expect(response.headers.get('Cache-Control')).toBeUndefined();
+        });
+
+        it('12. host=pay + 4-сегментна path → 404 (Branch B fall-through; немає 4-segment routes у public-зоні)', () => {
+            const req = createMockRequest('/biz/acc/inv/extra', {
                 host: 'pay.finly.com.ua',
             });
             const response = middleware(req);

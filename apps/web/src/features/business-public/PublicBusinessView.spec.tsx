@@ -1,58 +1,169 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
-import type { BusinessType } from '@finly/types';
+import type {
+    BusinessType,
+    PublicAccountListItem,
+} from '@finly/types';
 import PublicBusinessView from './PublicBusinessView';
 
-const NBU_LINKS = {
-    primary: 'https://qr.bank.gov.ua/abc',
-    legacy: 'https://bank.gov.ua/qr/abc',
-};
+const TWO_ACCOUNTS: PublicAccountListItem[] = [
+    {
+        slug: 'aBc12345',
+        name: 'ПриватБанк •2580',
+        bankCode: 'privatbank',
+        ibanMask: '•2580',
+    },
+    {
+        slug: 'dEf67890',
+        name: 'monobank •8104',
+        bankCode: 'monobank',
+        ibanMask: '•8104',
+    },
+];
 
 /**
- * Sprint 7 §SP-5 — heading на public-сторінці бізнесу: уніфікований
- * "Платіж на користь {name}" для всіх 4 типів. До Sprint 7 був
- * type-driven шаблон ("Оплата на ${BUSINESS_TYPE_LABEL[type]} ${name}"),
- * що давав лінгвістично незграбні комбінації для individual / organization
- * і дублював юр-форму, що часто вже у назві.
+ * Sprint 9 §SP-4 — public root-вивіска бізнесу: empty-state (0 Account) /
+ * cards-list (2+ Account). 1-Account випадок резолвиться Server-Component
+ * 307-redirect-ом перед render-ом цього компонента; тут не тестується.
+ *
+ * Sprint 7 §SP-5 heading type-нейтральний — лишається без змін.
  */
-describe('PublicBusinessView — Sprint 7 §SP-5 type-нейтральний heading', () => {
-    it.each<[BusinessType, string]>([
-        ['individual', 'Іваненко І.І.'],
-        ['fop', 'ФОП Іваненко'],
-        ['tov', 'ТОВ Каса Здоровя'],
-        ['organization', 'ОСББ Покрова'],
-    ])('%s + name="%s" → heading "Платіж на користь %s"', (type, name) => {
-        render(
-            <PublicBusinessView
-                type={type}
-                name={name}
-                slug="test"
-                acceptedBanks={['privatbank']}
-                nbuLinks={NBU_LINKS}
-            />
+describe('PublicBusinessView (Sprint 9 §SP-4)', () => {
+    describe('empty-state (accounts.length === 0)', () => {
+        it.each<BusinessType>(['individual', 'fop', 'tov', 'organization'])(
+            '%s — повідомлення "Власник ще не налаштував жодного рахунку"',
+            (type) => {
+                render(
+                    <PublicBusinessView
+                        type={type}
+                        name="Іваненко"
+                        slug="IvanEnko"
+                        accounts={[]}
+                    />
+                );
+                expect(
+                    screen.getByText(/Власник ще не налаштував/)
+                ).toBeInTheDocument();
+            }
         );
-        const heading = screen.getByRole('heading', { level: 1 });
-        expect(heading).toHaveTextContent(`Платіж на користь ${name}`);
-    });
 
-    it.each<BusinessType>(['individual', 'fop', 'tov', 'organization'])(
-        '%s — heading НЕ містить BUSINESS_TYPE_LABEL префіксу',
-        (type) => {
+        it('heading зі звертанням до бізнесу присутній навіть для empty-state', () => {
             render(
                 <PublicBusinessView
-                    type={type}
-                    name="Тестовий"
-                    slug="test"
-                    acceptedBanks={['privatbank']}
-                    nbuLinks={NBU_LINKS}
+                    type="fop"
+                    name="Іваненко"
+                    slug="IvanEnko"
+                    accounts={[]}
                 />
             );
             const heading = screen.getByRole('heading', { level: 1 });
-            // Перевіряємо, що heading НЕ починається з "Оплата на" (старий
-            // pre-Sprint-7 формат) і не містить type-label-літералів.
+            expect(heading).toHaveTextContent('Платіж на користь Іваненко');
+        });
+    });
+
+    describe('cards-list (accounts.length >= 2)', () => {
+        it('Sprint 7 §SP-5 type-нейтральний heading "Платіж на користь {name}"', () => {
+            render(
+                <PublicBusinessView
+                    type="fop"
+                    name="Іваненко"
+                    slug="IvanEnko"
+                    accounts={TWO_ACCOUNTS}
+                />
+            );
+            const heading = screen.getByRole('heading', { level: 1 });
+            expect(heading).toHaveTextContent('Платіж на користь Іваненко');
+            // Guard: heading НЕ містить BUSINESS_TYPE_LABEL префіксу.
             expect(heading.textContent).not.toMatch(/^Оплата на/);
-            expect(heading.textContent).not.toContain('Я особисто');
-            expect(heading.textContent).not.toContain('ФОП Тестовий ФОП');
-        }
-    );
+        });
+
+        it('рендерить картку на кожен account з name + bank-label + ibanMask', () => {
+            render(
+                <PublicBusinessView
+                    type="fop"
+                    name="Іваненко"
+                    slug="IvanEnko"
+                    accounts={TWO_ACCOUNTS}
+                />
+            );
+            expect(screen.getByText('ПриватБанк •2580')).toBeInTheDocument();
+            expect(screen.getByText('monobank •8104')).toBeInTheDocument();
+            // bank-label-rows (non-null bankCode).
+            expect(screen.getByText('ПриватБанк')).toBeInTheDocument();
+            expect(screen.getByText('monobank')).toBeInTheDocument();
+            // 2 ibanMask-tag-и (•2580 + •8104) — render симетрично.
+            expect(screen.getByText('•2580')).toBeInTheDocument();
+            expect(screen.getByText('•8104')).toBeInTheDocument();
+        });
+
+        it('§SP-9 null-fallback rule — на bankCode=null bank-label-row ВІДСУТНІЙ у DOM (а не fallback на "Невідомий банк")', () => {
+            const withNullBank: PublicAccountListItem[] = [
+                {
+                    slug: 'aBc12345',
+                    name: 'Банк •2580',
+                    bankCode: null,
+                    ibanMask: '•2580',
+                },
+                {
+                    slug: 'dEf67890',
+                    name: 'monobank •8104',
+                    bankCode: 'monobank',
+                    ibanMask: '•8104',
+                },
+            ];
+            render(
+                <PublicBusinessView
+                    type="fop"
+                    name="Іваненко"
+                    slug="IvanEnko"
+                    accounts={withNullBank}
+                />
+            );
+            // monobank label рендериться (non-null bankCode).
+            expect(screen.getByText('monobank')).toBeInTheDocument();
+            // Жодного fallback-тексту для null-bankCode.
+            expect(
+                screen.queryByText(/Невідомий банк/)
+            ).not.toBeInTheDocument();
+            // ibanMask все одно показуємо — disambiguator.
+            expect(screen.getByText('•2580')).toBeInTheDocument();
+        });
+
+        it('кожна картка — посилання на /{businessSlug}/{accountSlug} (case-preserved)', () => {
+            render(
+                <PublicBusinessView
+                    type="fop"
+                    name="Іваненко"
+                    slug="IvanEnko"
+                    accounts={TWO_ACCOUNTS}
+                />
+            );
+            const links = screen.getAllByRole('link');
+            // 2 картки → 2 посилання.
+            expect(links).toHaveLength(2);
+            expect(links[0]).toHaveAttribute('href', '/IvanEnko/aBc12345');
+            expect(links[1]).toHaveAttribute('href', '/IvanEnko/dEf67890');
+        });
+
+        it('encodeURIComponent на slug і accountSlug — спецсимволи не ламають URL', () => {
+            render(
+                <PublicBusinessView
+                    type="fop"
+                    name="Іваненко"
+                    slug="a b"
+                    accounts={[
+                        {
+                            slug: 'c/d',
+                            name: 'Банк',
+                            bankCode: null,
+                            ibanMask: '•0000',
+                        },
+                    ]}
+                />
+            );
+            const link = screen.getByRole('link');
+            expect(link.getAttribute('href')).toContain('a%20b');
+            expect(link.getAttribute('href')).toContain('c%2Fd');
+        });
+    });
 });

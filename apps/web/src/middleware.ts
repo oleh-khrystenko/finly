@@ -36,8 +36,19 @@ export default function middleware(request: NextRequest) {
     }
 
     if (isPublicHostReq) {
-        // Branch A1 — public host + root-рівнева path (`/{slug}`),
-        // slug ≠ reserved → rewrite на `/host-pay/{slug}` (Sprint 3 §3.9).
+        // Branch A1 — public host + root-рівнева path (`/{businessSlug}`),
+        // slug ≠ reserved → rewrite на `/host-pay/{businessSlug}` (Sprint 3 §3.9).
+        //
+        // **Sprint 9 §SP-4 defense-in-depth — `Cache-Control: no-store`**:
+        // host-pay-root робить умовний 307-redirect-at-1-Account на server-side
+        // (Server Component викликає Next.js `redirect()`). Семантика залежить
+        // від стану `accounts.length`, що може змінитися (ФОП додасть 2-й
+        // рахунок → 1-Account redirect перестає бути коректним). Chrome
+        // агресивно кешує redirect-responses in-memory. Без header на
+        // rewrite-response CDN/proxy-шар може віддавати cached HTML з
+        // редіректом і клієнт застрягне на застарілому шляху після зміни
+        // власником стану. 307 на app-рівні + `no-store` на edge-рівні
+        // гарантують, що кожен запит резолвить актуальний стан.
         const rootSlugMatch = /^\/([^/]+)$/.exec(pathname);
         if (rootSlugMatch) {
             const slug = rootSlugMatch[1]!;
@@ -47,34 +58,67 @@ export default function middleware(request: NextRequest) {
                 // взяв такий slug і не зіткнувся з рекурсивним rewrite.
                 return new NextResponse(null, { status: 404 });
             }
-            return NextResponse.rewrite(
+            const response = NextResponse.rewrite(
                 new URL(`/host-pay/${slug}${search}`, request.url)
             );
+            response.headers.set(
+                'Cache-Control',
+                'no-store, no-cache, must-revalidate'
+            );
+            return response;
         }
 
-        // Branch A2 — public host + 2-сегментна path (`/{businessSlug}/{invoiceSlug}`)
-        // (Sprint 4 §4.7). Reserved-check тільки на business-slug; invoice-slug —
-        // будь-який валідний string (compound-unique-blocked у БД per-business).
-        const invoiceSlugMatch = /^\/([^/]+)\/([^/]+)$/.exec(pathname);
-        if (invoiceSlugMatch) {
-            const businessSlug = invoiceSlugMatch[1]!;
-            const invoiceSlug = invoiceSlugMatch[2]!;
+        // Branch A2 — public host + 2-сегментна path (`/{businessSlug}/{accountSlug}`)
+        // (Sprint 9 §SP-5 матрьошкова навігація). **Семантичний flip vs Sprint 4**:
+        // раніше 2-сегментний path інтерпретувався як invoice-URL; з Sprint 9
+        // нумерація інвойсів живе per-account і invoice-URL став 3-сегментним
+        // (`/{biz}/{acc}/{inv}` — Branch A3). 2-сегментний path тепер означає
+        // per-account вивіску.
+        //
+        // Reserved-check тільки на business-slug — account-slug system-generated
+        // 8-char tail (`A-Za-z0-9`), не торкає reserved-list.
+        const accountSlugMatch = /^\/([^/]+)\/([^/]+)$/.exec(pathname);
+        if (accountSlugMatch) {
+            const businessSlug = accountSlugMatch[1]!;
+            const accountSlug = accountSlugMatch[2]!;
             const businessSlugLower = businessSlug.toLowerCase();
             if (RESERVED_SLUGS_SET.has(businessSlugLower)) {
                 return new NextResponse(null, { status: 404 });
             }
             return NextResponse.rewrite(
                 new URL(
-                    `/host-pay/${businessSlug}/${invoiceSlug}${search}`,
+                    `/host-pay/${businessSlug}/${accountSlug}${search}`,
                     request.url
                 )
             );
         }
 
-        // Branch B — public host + non-root, non-2-segment path. `/api/*` уже
-        // excluded matcher-ом (не доходить сюди). Все інше (`/business/foo`,
-        // `/auth/signin`, root `/`, 3+-segment) → 404. Робить cabinet route-и
-        // non-addressable з pay-host.
+        // Branch A3 — public host + 3-сегментна path
+        // (`/{businessSlug}/{accountSlug}/{invoiceSlug}`) (Sprint 9 §SP-6).
+        // Invoice public-URL став 3-сегментним після перенесення інвойсів під
+        // account. Reserved-check тільки на business-slug; account-slug та
+        // invoice-slug — system-generated рядки без обмеження на reserved-list.
+        const invoiceSlugMatch = /^\/([^/]+)\/([^/]+)\/([^/]+)$/.exec(pathname);
+        if (invoiceSlugMatch) {
+            const businessSlug = invoiceSlugMatch[1]!;
+            const accountSlug = invoiceSlugMatch[2]!;
+            const invoiceSlug = invoiceSlugMatch[3]!;
+            const businessSlugLower = businessSlug.toLowerCase();
+            if (RESERVED_SLUGS_SET.has(businessSlugLower)) {
+                return new NextResponse(null, { status: 404 });
+            }
+            return NextResponse.rewrite(
+                new URL(
+                    `/host-pay/${businessSlug}/${accountSlug}/${invoiceSlug}${search}`,
+                    request.url
+                )
+            );
+        }
+
+        // Branch B — public host + root `/` / 4+-segment / інші cabinet route-и
+        // (`/business/foo`, `/auth/signin`). `/api/*` уже excluded matcher-ом
+        // (не доходить сюди). 404 робить cabinet route-и non-addressable з
+        // pay-host і обмежує public-зону трьома sigment-рівнями матрьошки.
         return new NextResponse(null, { status: 404 });
     }
 

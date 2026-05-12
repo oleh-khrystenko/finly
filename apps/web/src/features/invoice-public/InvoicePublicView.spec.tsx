@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
+import type { BankCode } from '@finly/types';
 import InvoicePublicView from './InvoicePublicView';
 
 const baseProps = {
@@ -14,13 +15,19 @@ const baseProps = {
         slug: 'IvanEnko',
         acceptedBanks: ['privatbank' as const, 'monobank' as const],
     },
+    account: {
+        slug: 'aBc12345',
+        name: 'ПриватБанк •2580',
+        bankCode: 'privatbank' as BankCode | null,
+        ibanMask: '•2580',
+    },
     nbuLinks: {
         primary: 'https://qr.bank.gov.ua/abc',
         legacy: 'https://bank.gov.ua/qr/abc',
     } as { primary: string; legacy: string } | null,
 };
 
-describe('InvoicePublicView (Sprint 4 §4.7)', () => {
+describe('InvoicePublicView (Sprint 4 §4.7 + Sprint 9 §SP-6)', () => {
     describe('Heading (Plan: "Рахунок на {amount} ₴" або "Рахунок на оплату")', () => {
         it('amount=number → "Рахунок на 1 500,00 ₴"', () => {
             render(<InvoicePublicView {...baseProps} />);
@@ -34,6 +41,34 @@ describe('InvoicePublicView (Sprint 4 §4.7)', () => {
             expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
                 'Рахунок на оплату'
             );
+        });
+    });
+
+    describe('Sprint 9 §SP-6 — account-sub-info під heading', () => {
+        it('bankCode != null → "{BUSINESS_TYPE_LABEL} {business.name} через {account.name} ({BANK_LABEL} {ibanMask})"', () => {
+            render(<InvoicePublicView {...baseProps} />);
+            expect(
+                screen.getByText(
+                    'ФОП Іваненко через ПриватБанк •2580 (ПриватБанк •2580)'
+                )
+            ).toBeInTheDocument();
+        });
+
+        it('§SP-9 null-fallback — bankCode === null → drop BANK_LABEL-prefix, але `•{last4}` лишається unconditional', () => {
+            render(
+                <InvoicePublicView
+                    {...baseProps}
+                    account={{
+                        ...baseProps.account,
+                        bankCode: null,
+                        name: 'Основний',
+                    }}
+                />
+            );
+            // Heading-sub-line: "ФОП Іваненко через Основний (•2580)".
+            expect(
+                screen.getByText('ФОП Іваненко через Основний (•2580)')
+            ).toBeInTheDocument();
         });
     });
 
@@ -73,10 +108,6 @@ describe('InvoicePublicView (Sprint 4 §4.7)', () => {
     });
 
     describe('Expired-banner — server-driven через nbuLinks=null (review fix)', () => {
-        // Sprint 4 review fix: expiry-resolution живе на сервері — `nbuLinks: null`
-        // у public-view-payload є SINGLE source of truth для UI. Раніше client
-        // сам порівнював `validUntil < now` (weak block — cached link, scraping
-        // могли обійти, і API віддавав `nbuLinks` навіть для expired).
         it('nbuLinks=null → "Термін рахунку минув" banner', () => {
             render(<InvoicePublicView {...baseProps} nbuLinks={null} />);
             expect(
@@ -89,23 +120,18 @@ describe('InvoicePublicView (Sprint 4 §4.7)', () => {
 
         it('nbuLinks=null → CTAs + QR ВІДСУТНІ', () => {
             render(<InvoicePublicView {...baseProps} nbuLinks={null} />);
-            // Жодного NBU-CTA
             expect(
                 screen.queryByRole('link', { name: 'Відкрити в банку' })
             ).not.toBeInTheDocument();
             expect(
                 screen.queryByRole('link', { name: 'Запасний варіант' })
             ).not.toBeInTheDocument();
-            // Жодного QR-img
             expect(
                 screen.queryByAltText(/QR на основну адресу/)
             ).not.toBeInTheDocument();
         });
 
         it('nbuLinks=null + validUntil у минулому → дата у sub-info все одно показується', () => {
-            // Server-side block (`nbuLinks=null`) ще не означає, що client
-            // приховує `validUntil`-дату — користувач має бачити, до якого
-            // моменту рахунок був дійсний.
             const past = new Date('2024-01-01');
             render(
                 <InvoicePublicView
@@ -121,14 +147,12 @@ describe('InvoicePublicView (Sprint 4 §4.7)', () => {
 
         it('active (nbuLinks={primary,legacy}) → 2 CTAs + 2 QRs РЕНДЕРЯТЬСЯ', () => {
             render(<InvoicePublicView {...baseProps} />);
-            // 2 CTAs:
             expect(
                 screen.getByRole('link', { name: 'Відкрити в банку' })
             ).toBeInTheDocument();
             expect(
                 screen.getByRole('link', { name: 'Запасний варіант' })
             ).toBeInTheDocument();
-            // 2 QR images:
             expect(
                 screen.getByAltText('QR на основну адресу')
             ).toBeInTheDocument();
@@ -167,15 +191,15 @@ describe('InvoicePublicView (Sprint 4 §4.7)', () => {
             );
         });
 
-        it('QR images мають URL з business + invoice slug + host=primary|legacy', () => {
+        it('Sprint 9 §SP-6 — QR URL 3-сегментний: business + account + invoice slug + host param', () => {
             render(<InvoicePublicView {...baseProps} />);
             const primaryQr = screen.getByAltText('QR на основну адресу');
             const legacyQr = screen.getByAltText('QR на запасну адресу');
             expect(primaryQr.getAttribute('src')).toMatch(
-                /\/IvanEnko\/invoices\/inv-001-aB3xQ9k7\/qr\/nbu\.png\?host=primary$/
+                /\/IvanEnko\/account\/aBc12345\/invoices\/inv-001-aB3xQ9k7\/qr\/nbu\.png\?host=primary$/
             );
             expect(legacyQr.getAttribute('src')).toMatch(
-                /\/IvanEnko\/invoices\/inv-001-aB3xQ9k7\/qr\/nbu\.png\?host=legacy$/
+                /\/IvanEnko\/account\/aBc12345\/invoices\/inv-001-aB3xQ9k7\/qr\/nbu\.png\?host=legacy$/
             );
         });
     });

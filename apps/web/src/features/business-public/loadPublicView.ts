@@ -1,22 +1,28 @@
-import type { PublicBusinessView } from '@finly/types';
+import { PublicBusinessSchema, type PublicBusinessView } from '@finly/types';
 
 /**
- * Sprint 3 §3.3 + §3.9 — server-side fetch публічного view бізнесу для
- * Server Component-а на `app/host-pay/[slug]/page.tsx`.
+ * Sprint 9 §SP-4 — server-side fetch root-вивіски бізнесу для Server
+ * Component `app/host-pay/[slug]/page.tsx`.
  *
- * **Чому НЕ через `apiClient`** (axios з in-memory token + refresh dedupe):
- * apiClient — client-only state, недоступний у Server Components. Public
- * endpoint без auth (немає `Authorization`/cookie), тож native `fetch` —
- * найпростіший і консистентний з Next.js ISR cache (`next.revalidate`).
+ * **`cache: 'no-store'` (Sprint 9 change vs Sprint 3 `revalidate: 60`).**
+ * Server Component робить branching на `accounts.length` (0/1/2+):
+ * `=== 1 → redirect()` — стан умовний. Якщо ФОП додав 2-й рахунок, але
+ * Next.js ISR віддав закешований 1-Account snapshot → клієнт отримає 307
+ * на застарілий accountSlug замість списку. UAT ACC-2 явно перевіряє цей
+ * сценарій (`додав 2-й рахунок → одразу побачив список з 2 карток у тій
+ * самій сесії`). Без `cache: 'no-store'` test не пройде.
  *
- * **Чому `API_INTERNAL_URL`, не `NEXT_PUBLIC_API_URL`:** server-side у
+ * Edge-level cache controlled через `Cache-Control: no-store` header, що
+ * middleware Branch A1 ставить на rewrite-response (defense-in-depth для
+ * CDN/proxy-шару — деталі у `middleware.ts` коментарі Branch A1).
+ *
+ * **Zod-parse на boundary** — API JSON містить `accounts` array;
+ * `PublicBusinessSchema` strip-ить leak-кандидати і валідує shape.
+ *
+ * **Чому `API_INTERNAL_URL`, не `NEXT_PUBLIC_API_URL`** — server-side у
  * docker-compose рендер на `http://api:4000` (internal network); public
- * URL `/api` — це Next.js rewrites для client-side. Server Component
- * викликає API напряму без proxy hop-у.
- *
- * **Cache:** `revalidate: 60` (Sprint 3 рішення F4) — узгоджується з
- * `Cache-Control: max-age=3600, stale-while-revalidate=86400` на API-боці
- * (60s тут агресивніший — публікація змін ФОП-а видна швидше).
+ * `/api` — це Next.js rewrites для client-side. Server Component викликає
+ * API напряму без proxy hop-у.
  */
 export async function loadPublicView(
     slug: string
@@ -28,13 +34,13 @@ export async function loadPublicView(
         );
     }
     const url = `${apiBase}/api/businesses/public/${encodeURIComponent(slug)}`;
-    const res = await fetch(url, { next: { revalidate: 60 } });
+    const res = await fetch(url, { cache: 'no-store' });
     if (res.status === 404) return null;
     if (!res.ok) {
         throw new Error(
             `Public business fetch failed: ${res.status} ${res.statusText}`
         );
     }
-    const json = (await res.json()) as { data: PublicBusinessView };
-    return json.data;
+    const json = (await res.json()) as { data: unknown };
+    return PublicBusinessSchema.parse(json.data);
 }

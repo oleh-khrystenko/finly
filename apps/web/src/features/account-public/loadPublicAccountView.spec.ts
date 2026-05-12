@@ -1,12 +1,10 @@
 /**
- * Sprint 4 §4.7 + Sprint 9 §SP-6 — server-side fetch helper для Server
- * Component `app/host-pay/[slug]/[accountSlug]/[invoiceSlug]/page.tsx`.
- *
- * Sprint 9: URL 3-сегментний (`/account/{accountSlug}/invoices/{invoiceSlug}`)
- * + view shape отримав `account` nested-block (Sprint 9 §SP-6).
+ * Sprint 9 §SP-4 — server-side fetch helper для Server Component
+ * `app/host-pay/[slug]/[accountSlug]/page.tsx`. Той самий patern, що Sprint 3
+ * `loadPublicView.spec.ts` і Sprint 4 `loadPublicInvoiceView.spec.ts`.
  */
 
-import { loadPublicInvoiceView } from './loadPublicInvoiceView';
+import { loadPublicAccountView } from './loadPublicAccountView';
 
 const fetchMock = jest.fn();
 const realFetch = globalThis.fetch;
@@ -25,58 +23,48 @@ beforeEach(() => {
     fetchMock.mockReset();
 });
 
-describe('loadPublicInvoiceView (Sprint 9 — 3-сегментна URL)', () => {
+describe('loadPublicAccountView', () => {
     const sampleView = {
-        amount: 150000,
-        amountLocked: true,
-        paymentPurpose: 'Оплата',
-        validUntil: null,
-        slug: 'inv-001-aB3xQ9k7',
+        slug: 'aBc12345',
+        name: 'ПриватБанк •2580',
+        bankCode: 'privatbank',
+        ibanMask: '•2580',
         business: {
             type: 'fop',
             name: 'Іваненко',
             slug: 'IvanEnko',
             acceptedBanks: ['privatbank'],
-        },
-        account: {
-            slug: 'aBc12345',
-            name: 'ПриватБанк •2580',
-            bankCode: 'privatbank',
-            ibanMask: '•2580',
+            seoIndexEnabled: false,
         },
         nbuLinks: {
-            primary: 'https://qr.bank.gov.ua/...',
-            legacy: 'https://bank.gov.ua/qr/...',
+            primary: 'https://qr.bank.gov.ua/abc',
+            legacy: 'https://bank.gov.ua/qr/abc',
         },
     };
 
-    it('успіх: fetch правильний 3-segment URL + повертає parsed shape з account', async () => {
+    it('успіх: fetch /api/businesses/public/{biz}/account/{acc} + повертає parsed shape', async () => {
         fetchMock.mockResolvedValue({
             ok: true,
             status: 200,
             json: async () => ({ data: sampleView }),
         });
 
-        const result = await loadPublicInvoiceView(
-            'IvanEnko',
-            'aBc12345',
-            'inv-001-aB3xQ9k7'
-        );
+        const result = await loadPublicAccountView('IvanEnko', 'aBc12345');
         expect(fetchMock).toHaveBeenCalledWith(
-            'http://api:4000/api/businesses/public/IvanEnko/account/aBc12345/invoices/inv-001-aB3xQ9k7',
+            'http://api:4000/api/businesses/public/IvanEnko/account/aBc12345',
             { cache: 'no-store' }
         );
         expect(result).toEqual(sampleView);
     });
 
-    it('404 → null', async () => {
+    it('404 → null (caller робить notFound() у Server Component)', async () => {
         fetchMock.mockResolvedValue({
             ok: false,
             status: 404,
             statusText: 'Not Found',
         });
 
-        const result = await loadPublicInvoiceView('biz', 'acc', 'missing');
+        const result = await loadPublicAccountView('biz', 'missing');
         expect(result).toBeNull();
     });
 
@@ -88,37 +76,37 @@ describe('loadPublicInvoiceView (Sprint 9 — 3-сегментна URL)', () => 
         });
 
         await expect(
-            loadPublicInvoiceView('biz', 'acc', 'inv')
+            loadPublicAccountView('biz', 'acc')
         ).rejects.toThrow(/500/);
     });
 
-    it('encodeURIComponent для всіх 3 сегментів', async () => {
+    it('encodeURIComponent для обох сегментів', async () => {
         fetchMock.mockResolvedValue({
             ok: false,
             status: 404,
             statusText: 'Not Found',
         });
 
-        await loadPublicInvoiceView('a b', 'c/d', 'e f');
+        await loadPublicAccountView('a b', 'c/d');
         const called = fetchMock.mock.calls[0]![0] as string;
-        expect(called).toContain('/a%20b/account/c%2Fd/invoices/e%20f');
+        expect(called).toContain('/a%20b/account/c%2Fd');
     });
 
     it('crash якщо API_INTERNAL_URL не виставлений', async () => {
         delete process.env.API_INTERNAL_URL;
         await expect(
-            loadPublicInvoiceView('biz', 'acc', 'inv')
+            loadPublicAccountView('biz', 'acc')
         ).rejects.toThrow(/API_INTERNAL_URL/);
         process.env.API_INTERNAL_URL = 'http://api:4000';
     });
 
-    it("використовує `cache: 'no-store'` — invoice mutable payment data (review fix)", async () => {
+    it("використовує `cache: 'no-store'` — fresh state для UI-consistency", async () => {
         fetchMock.mockResolvedValue({
             ok: true,
             status: 200,
             json: async () => ({ data: sampleView }),
         });
-        await loadPublicInvoiceView('biz', 'acc', 'inv');
+        await loadPublicAccountView('biz', 'acc');
         const opts = fetchMock.mock.calls[0]![1];
         expect(opts).toEqual({ cache: 'no-store' });
     });
