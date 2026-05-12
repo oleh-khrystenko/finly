@@ -9,18 +9,20 @@ export type InvoiceDocument = HydratedDocument<Invoice>;
 /**
  * Sprint 4 review fix — embedded subdoc, що фрозить платіжні реквізити на
  * момент створення інвойсу. NBU/QR payload public-зони будується з цього
- * snapshot-у, а не з runtime-mutable Business — фікс для дефекту "ФОП
- * редагує бізнес-IBAN, старе invoice-посилання тихо начинає вести на новий
+ * snapshot-у, а не з runtime-mutable Business/Account — фікс для дефекту
+ * "ФОП редагує IBAN, старе invoice-посилання тихо начинає вести на новий
  * payload".
  *
- * **Поля snapshot-у:**
- *  - `recipientName` — `business.name` на момент create
- *  - `iban` — `business.requisites.iban` на момент create
- *  - `taxId` — `business.requisites.taxId` на момент create
+ * **Поля snapshot-у** (Sprint 9 §SP-6 — джерела оновлено після розщеплення
+ * Business на Business + Account):
+ *  - `recipientName` — `business.name` на момент create.
+ *  - `iban` — `account.iban` на момент create (раніше `business.requisites.
+ *    iban`; Sprint 9 переніс IBAN на окрему сутність Account).
+ *  - `taxId` — `business.taxId` на момент create (раніше `business.requisites.
+ *    taxId`; Sprint 9 flatten-ув requisites-wrapper у top-level taxId).
  *  - `paymentPurpose` — effective purpose, resolved через
  *    `effectiveInvoicePurpose(dto.paymentPurpose, business.paymentPurposeTemplate)`
- *    на момент create. Раніше runtime-resolve лідилав до URL/payload-drift
- *    у `with-purpose`-slug-flow.
+ *    на момент create.
  *
  * **`_id: false`** — embedded subdoc-у власний `_id` не потрібен, ці дані
  * не запит-ються незалежно від parent invoice.
@@ -60,13 +62,22 @@ const InvoicePayeeSnapshotSchema =
  */
 @Schema({ timestamps: true })
 export class Invoice {
+    /**
+     * Sprint 9 §SP-6 — invoice nest-иться під Account (`accountId` required).
+     * `businessId` залишається як denormalized field (set on insert з
+     * `account.businessId`, immutable). Дозволяє прямий
+     * `Invoice.deleteMany({businessId})` у cascade-delete-business + analytical-
+     * запити без `$lookup` через accounts.
+     */
     @Prop({ required: true, type: Types.ObjectId })
     businessId!: Types.ObjectId;
 
+    @Prop({ required: true, type: Types.ObjectId })
+    accountId!: Types.ObjectId;
+
     /**
      * Slug per-invoice: `{людська-частина}-{8-char-tail}` або `{tail}`.
-     * Генератор + slug-preset вибір — Sprint 3. Тут — структурна вимога БД:
-     * NOT NULL + per-business unique (compound `{businessId, slug}`).
+     * Sprint 9 §SP-6 — per-account unique (compound `{accountId, slug}`).
      */
     @Prop({ required: true, trim: true })
     slug!: string;
@@ -150,47 +161,38 @@ export const InvoiceSchema = SchemaFactory.createForClass(Invoice);
 // Sprint 4 §4.4 fix — JSON-serialization `_id: ObjectId → id: string`.
 applyJsonTransform(InvoiceSchema);
 
-InvoiceSchema.index({ businessId: 1, slug: 1 }, { unique: true });
 /**
- * List-pagination index. **`_id: -1` як tail для tie-break-у** —
- * `(createdAt, _id)` total order гарантує detермінований offset-paging для
- * `InvoicesService.getByBusinessId` (`sort: { createdAt: -1, _id: -1 }`).
- * Без `_id`-tail Mongo тримав би тіе-групи у in-memory-tie-break після
- * scan-у — на масштабі 100+ tie-group дoc-ів робить sort-fan-out поза
- * index-scan-режимом. Prefix-match `(businessId)` і `(businessId, createdAt)`
- * залишається доступний для `countDocuments`/aggregate-`$lookup`-stage
- * через index-prefix rule.
- *
- * **Operational note.** Prod-кластери, що пройшли деплой ДО цієї зміни,
- * мають старий `{ businessId: 1, createdAt: -1 }` index як residual artifact.
- * Mongoose `autoIndex` створює новий 3-field index, але старий не дропає.
- * Cleanup — окремий ops-крок: `db.invoices.dropIndex('businessId_1_createdAt_-1')`
- * або наступна migration; функціонально безпечно лишити обидва (planner
- * обере новий 3-field).
+ * Sprint 9 §SP-6 — invoice-uniqueness scope-ується per-account (раніше
+ * per-business). Два account-и одного business-у можуть мати інвойс з
+ * однаковим slug-string-ом (Privat-inv-001 / Mono-inv-001) — per-account
+ * counter-namespace.
  */
-InvoiceSchema.index({ businessId: 1, createdAt: -1, _id: -1 });
+InvoiceSchema.index({ accountId: 1, slug: 1 }, { unique: true });
+
+/**
+ * Sprint 9 — primary list-pagination index переходить на `(accountId,
+ * createdAt: -1, _id: -1)` — той самий tie-break invariant, що Sprint 4, але
+ * у новому per-account namespace.
+ */
+InvoiceSchema.index({ accountId: 1, createdAt: -1, _id: -1 });
+
+/**
+ * Sprint 9 — non-unique `(businessId, createdAt -1)` залишається для cascade-
+ * delete-business filter-у і analytical-запитів "усі інвойси бізнесу" без
+ * `$lookup` через accounts.
+ */
+InvoiceSchema.index({ businessId: 1, createdAt: -1 });
+
 InvoiceSchema.index({ validUntil: 1 }, { sparse: true });
 
 /**
- * Sprint 4 §4.1 — partial-unique compound для counter-presets-race-protection.
- *
- * **`partialFilterExpression`** включає документи лише з обома fields-not-null:
- * counter-presets (`simple`/`with-month`/`with-year`) — у index і unique-блокують
- * один-одного; non-counter modes (`explicit`/`random`/`with-purpose`) — поза
- * index-ом, не впливають на counter-namespace.
- *
- * **Race-сценарій, що блокується:** два паралельні `POST /invoices` під одним
- * бізнесом з пресетом `simple` читають `MAX(N)+1 = 1` одночасно і обидва
- * пробують insert з `slugCounter=1`. Один проходить, другий падає на
- * `code: 11000`; `InvoicesService.create` ловить його і retry-генерує наступний
- * номер (як SP-1 risk #2 mitigation описує). Без цього index-у обидва
- * insert-и проходили б (різні tails → різні `slug`-strings → не дублікат на
- * `(businessId, slug)` compound-unique), і у БД зʼявилися б два інвойси
- * `inv-001-...` з тим самим візуальним номером — порушення monotonic
- * invariant.
+ * Sprint 9 §SP-6 — partial-unique compound `(accountId, slugCounterScope,
+ * slugCounter)` race-блокує counter-collision на write-path у per-account
+ * namespace. Privat і Mono account-и одного бізнесу мають незалежні counter-
+ * послідовності (`'simple'` counter=1 у обох — дозволено).
  */
 InvoiceSchema.index(
-    { businessId: 1, slugCounterScope: 1, slugCounter: 1 },
+    { accountId: 1, slugCounterScope: 1, slugCounter: 1 },
     {
         unique: true,
         partialFilterExpression: {

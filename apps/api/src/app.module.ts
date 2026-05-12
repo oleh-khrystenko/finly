@@ -9,6 +9,7 @@ import { AppService } from './app.service';
 import { OnboardingInterceptor } from './common/interceptors/onboarding.interceptor';
 import { ENV } from './config/env';
 import { RedisModule } from './common/modules/redis.module';
+import { AccountsModule } from './modules/accounts/accounts.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { BusinessesModule } from './modules/businesses/businesses.module';
 import { EmailModule } from './modules/email/email.module';
@@ -57,6 +58,7 @@ import { AiModule } from './modules/ai/ai.module';
         EmailModule,
         UsersModule,
         BusinessesModule,
+        AccountsModule,
         InvoicesModule,
         ReportsModule,
         StorageModule,

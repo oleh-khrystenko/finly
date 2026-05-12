@@ -33,6 +33,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
     let invoiceModel: Model<InvoiceDocument>;
     let counterModel: Model<InvoiceSlugCounterDocument>;
     let businessId: Types.ObjectId;
+    let accountId: Types.ObjectId;
 
     beforeAll(async () => {
         mongo = await createStandaloneMongo();
@@ -72,6 +73,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
         await invoiceModel.deleteMany({});
         await counterModel.deleteMany({});
         businessId = new Types.ObjectId();
+        accountId = new Types.ObjectId();
     });
 
     /**
@@ -97,6 +99,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
     ): Promise<void> {
         await invoiceModel.create({
             businessId,
+            accountId,
             slug: 'placeholder',
             amount: null,
             amountLocked: false,
@@ -114,6 +117,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
         it('повертає {humanPart}-{tail}, slugPreset=null, counter-fields=null', async () => {
             const result = await gen({
                 businessId,
+                accountId,
                 slugInput: { kind: 'explicit', humanPart: 'inv-2026' },
                 paymentPurpose: null,
                 businessPaymentPurposeTemplate: 'Оплата',
@@ -129,6 +133,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
         it('повертає голий 8-char tail, slugPreset=null, counter-fields=null', async () => {
             const result = await gen({
                 businessId,
+                accountId,
                 slugInput: { kind: 'random' },
                 paymentPurpose: null,
                 businessPaymentPurposeTemplate: 'Оплата',
@@ -144,6 +149,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
         it('перший інвойс — inv-001 + counter-fields seeded', async () => {
             const result = await gen({
                 businessId,
+                accountId,
                 slugInput: { kind: 'preset', preset: 'simple' },
                 paymentPurpose: null,
                 businessPaymentPurposeTemplate: 'Оплата',
@@ -158,6 +164,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
             for (let i = 1; i <= 10; i++) {
                 const r = await gen({
                     businessId,
+                    accountId,
                     slugInput: { kind: 'preset', preset: 'simple' },
                     paymentPurpose: null,
                     businessPaymentPurposeTemplate: 'Оплата',
@@ -192,6 +199,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
 
             const result = await gen({
                 businessId,
+                accountId,
                 slugInput: { kind: 'preset', preset: 'simple' },
                 paymentPurpose: null,
                 businessPaymentPurposeTemplate: 'Оплата',
@@ -201,10 +209,11 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
             expect(result.slugCounter).toBe(1);
         });
 
-        it('counter-isolation per businessId: інший business не впливає', async () => {
-            const otherBusinessId = new Types.ObjectId();
+        it('Sprint 9 §SP-6 — counter-isolation per accountId: інший account не впливає', async () => {
+            const otherAccountId = new Types.ObjectId();
             await invoiceModel.create({
-                businessId: otherBusinessId,
+                businessId,
+                accountId: otherAccountId,
                 slug: 'inv-555-aaaaaaaa',
                 slugPreset: 'simple',
                 slugCounterScope: 'simple',
@@ -218,6 +227,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
 
             const result = await gen({
                 businessId,
+                accountId,
                 slugInput: { kind: 'preset', preset: 'simple' },
                 paymentPurpose: null,
                 businessPaymentPurposeTemplate: 'Оплата',
@@ -226,7 +236,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
             expect(result.slugCounter).toBe(1);
         });
 
-        it('partial-unique compound (businessId, slugCounterScope, slugCounter) блокує race-collision на write-path', async () => {
+        it('Sprint 9 §SP-6 — partial-unique compound (accountId, slugCounterScope, slugCounter) блокує race-collision', async () => {
             // Sprint 4 §4.1 — критичний invariant для retry-on-11000
             // mitigation (SP-1 risk #2). Доводить, що compound-unique у
             // Mongoose schema справді блокує два paralleл write-и з тим
@@ -247,6 +257,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
             await expect(
                 invoiceModel.create({
                     businessId,
+                    accountId,
                     slug: 'inv-001-bbbbbbbb',
                     slugPreset: 'simple',
                     slugCounterScope: 'simple',
@@ -273,6 +284,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
             //   invoices: counter=1, counter=2 (counter=3 invoice deleted)
             await counterModel.create({
                 businessId,
+                accountId,
                 scope: 'simple',
                 last: 3,
             });
@@ -294,6 +306,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
 
             const r = await gen({
                 businessId,
+                accountId,
                 slugInput: { kind: 'preset', preset: 'simple' },
                 paymentPurpose: null,
                 businessPaymentPurposeTemplate: 'Оплата',
@@ -302,7 +315,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
             expect(r.slugCounter).toBe(4);
 
             const counterDoc = await counterModel
-                .findOne({ businessId, scope: 'simple' })
+                .findOne({ accountId, scope: 'simple' })
                 .lean();
             expect(counterDoc?.last).toBe(4);
         });
@@ -338,6 +351,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
 
             const r = await gen({
                 businessId,
+                accountId,
                 slugInput: { kind: 'preset', preset: 'simple' },
                 paymentPurpose: null,
                 businessPaymentPurposeTemplate: 'Оплата',
@@ -346,7 +360,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
             expect(r.slugCounter).toBe(6);
 
             const counterDoc = await counterModel
-                .findOne({ businessId, scope: 'simple' })
+                .findOne({ accountId, scope: 'simple' })
                 .lean();
             expect(counterDoc?.last).toBe(6);
         });
@@ -365,6 +379,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
             await expect(
                 invoiceModel.create({
                     businessId,
+                    accountId,
                     slug: 'bbbbbbbb',
                     slugPreset: null,
                     slugCounterScope: null,
@@ -383,6 +398,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
         it('містить YYYY-MM prefix у Kyiv-tz і слідує counter', async () => {
             const r = await gen({
                 businessId,
+                accountId,
                 slugInput: { kind: 'preset', preset: 'with-month' },
                 paymentPurpose: null,
                 businessPaymentPurposeTemplate: 'Оплата',
@@ -408,12 +424,14 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                     : `${year}-${String(month - 1).padStart(2, '0')}`;
             await counterModel.create({
                 businessId,
+                accountId,
                 scope: prevMonthScope,
                 last: 5,
             });
 
             const r = await gen({
                 businessId,
+                accountId,
                 slugInput: { kind: 'preset', preset: 'with-month' },
                 paymentPurpose: null,
                 businessPaymentPurposeTemplate: 'Оплата',
@@ -427,7 +445,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
             expect(r.slugCounter).toBe(1);
             // Counter-doc для попереднього місяця має лишитись недоторканим.
             const prev = await counterModel
-                .findOne({ businessId, scope: prevMonthScope })
+                .findOne({ accountId, scope: prevMonthScope })
                 .lean();
             expect(prev?.last).toBe(5);
         });
@@ -452,6 +470,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
             try {
                 const r = await gen({
                     businessId,
+                    accountId,
                     slugInput: { kind: 'preset', preset: 'with-month' },
                     paymentPurpose: null,
                     businessPaymentPurposeTemplate: 'Оплата',
@@ -467,6 +486,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
         it('містить YYYY prefix у Kyiv-tz і counter', async () => {
             const r = await gen({
                 businessId,
+                accountId,
                 slugInput: { kind: 'preset', preset: 'with-year' },
                 paymentPurpose: null,
                 businessPaymentPurposeTemplate: 'Оплата',
@@ -488,6 +508,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
             try {
                 const r = await gen({
                     businessId,
+                    accountId,
                     slugInput: { kind: 'preset', preset: 'with-year' },
                     paymentPurpose: null,
                     businessPaymentPurposeTemplate: 'Оплата',
@@ -503,6 +524,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
         it('explicit paymentPurpose — slug містить slugified explicit-purpose', async () => {
             const r = await gen({
                 businessId,
+                accountId,
                 slugInput: { kind: 'preset', preset: 'with-purpose' },
                 paymentPurpose: 'Оплата за консультацію',
                 businessPaymentPurposeTemplate: 'Default biz',
@@ -514,6 +536,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
         it('paymentPurpose=null — inheritance з business template', async () => {
             const r = await gen({
                 businessId,
+                accountId,
                 slugInput: { kind: 'preset', preset: 'with-purpose' },
                 paymentPurpose: null,
                 businessPaymentPurposeTemplate: 'Послуги веб-розробки',
@@ -525,6 +548,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
         it('empty-after-slugify (emoji-only) → fallback на рівень 3', async () => {
             const r = await gen({
                 businessId,
+                accountId,
                 slugInput: { kind: 'preset', preset: 'with-purpose' },
                 paymentPurpose: '🎉🎁',
                 businessPaymentPurposeTemplate: 'Default',
@@ -536,6 +560,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
         it("apostrophe-cyrillic edge — m'iaso → miaso", async () => {
             const r = await gen({
                 businessId,
+                accountId,
                 slugInput: { kind: 'preset', preset: 'with-purpose' },
                 paymentPurpose: 'М’ясо',
                 businessPaymentPurposeTemplate: 'Default',
@@ -546,6 +571,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
         it('numeric purpose preserved у slug', async () => {
             const r = await gen({
                 businessId,
+                accountId,
                 slugInput: { kind: 'preset', preset: 'with-purpose' },
                 paymentPurpose: 'Замовлення 147',
                 businessPaymentPurposeTemplate: 'Default',
@@ -566,6 +592,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
             await expect(
                 gen({
                     businessId,
+                    accountId,
                     slugInput: { kind: 'random' },
                     paymentPurpose: null,
                     businessPaymentPurposeTemplate: 'Default',
@@ -588,6 +615,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
 
             const r = await gen({
                 businessId,
+                accountId,
                 slugInput: { kind: 'random' },
                 paymentPurpose: null,
                 businessPaymentPurposeTemplate: 'Default',

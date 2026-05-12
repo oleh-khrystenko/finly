@@ -12,6 +12,7 @@ import type {
     UpdateBusinessRequest,
 } from '@finly/types';
 
+import { Account } from '../accounts/schemas/account.schema';
 import { InvoiceSlugCounter } from '../invoices/schemas/invoice-slug-counter.schema';
 import { Invoice } from '../invoices/schemas/invoice.schema';
 import { BusinessesService } from './businesses.service';
@@ -28,6 +29,10 @@ describe('BusinessesService', () => {
         findOneAndUpdate: jest.Mock;
         exists: jest.Mock;
         deleteOne: jest.Mock;
+    }>;
+    let accountModel: jest.Mocked<{
+        countDocuments: jest.Mock;
+        deleteMany: jest.Mock;
     }>;
     let invoiceModel: jest.Mocked<{
         countDocuments: jest.Mock;
@@ -48,10 +53,7 @@ describe('BusinessesService', () => {
     const VALID_CREATE: CreateBusinessRequest = {
         type: 'fop',
         name: 'Іваненко',
-        requisites: {
-            iban: 'UA213223130000026007233566001',
-            taxId: '1234567899',
-        },
+        taxId: '1234567899',
         taxationSystem: 'simplified-3',
         isVatPayer: false,
         paymentPurposeTemplate: 'Оплата',
@@ -66,6 +68,10 @@ describe('BusinessesService', () => {
             findOneAndUpdate: jest.fn(),
             exists: jest.fn(),
             deleteOne: jest.fn(),
+        };
+        accountModel = {
+            countDocuments: jest.fn().mockResolvedValue(0),
+            deleteMany: jest.fn().mockResolvedValue({ deletedCount: 0 }),
         };
         invoiceModel = {
             countDocuments: jest.fn().mockResolvedValue(0),
@@ -96,6 +102,10 @@ describe('BusinessesService', () => {
                 {
                     provide: getModelToken(Business.name),
                     useValue: businessModel,
+                },
+                {
+                    provide: getModelToken(Account.name),
+                    useValue: accountModel,
                 },
                 {
                     provide: getModelToken(Invoice.name),
@@ -459,10 +469,7 @@ describe('BusinessesService', () => {
                 mockExistingType('fop');
                 await expect(
                     service.update('IvanEnko', {
-                        requisites: {
-                            iban: 'UA213223130000026007233566001',
-                            taxId: '12345678', // ЄДРПОУ для tov, не для fop
-                        },
+                        taxId: '12345678', // ЄДРПОУ для tov, не для fop
                     })
                 ).rejects.toMatchObject({
                     response: {
@@ -475,10 +482,7 @@ describe('BusinessesService', () => {
                 mockExistingType('tov');
                 await expect(
                     service.update('IvanEnko', {
-                        requisites: {
-                            iban: 'UA213223130000026007233566001',
-                            taxId: '1234567899', // RNOKPP для fop, не для tov
-                        },
+                        taxId: '1234567899', // RNOKPP для fop, не для tov
                     })
                 ).rejects.toMatchObject({
                     response: {
@@ -487,15 +491,12 @@ describe('BusinessesService', () => {
                 });
             });
 
-            it('individual + PATCH valid 10-digit RNOKPP → проходить cross-check (далі $expr-update)', async () => {
+            it('individual + PATCH valid 10-digit RNOKPP → проходить cross-check', async () => {
                 mockExistingType('individual');
                 mockUpdateReturn({ name: 'X' });
                 await expect(
                     service.update('IvanEnko', {
-                        requisites: {
-                            iban: 'UA213223130000026007233566001',
-                            taxId: '1234567899',
-                        },
+                        taxId: '1234567899',
                     })
                 ).resolves.toBeDefined();
             });
@@ -503,19 +504,13 @@ describe('BusinessesService', () => {
             it('fop + valid PATCH (RNOKPP + taxation) → cross-check passes', async () => {
                 mockExistingType('fop');
                 mockUpdateReturn({
-                    requisites: {
-                        iban: 'UA213223130000026007233566001',
-                        taxId: '1234567899',
-                    },
+                    taxId: '1234567899',
                     taxationSystem: 'simplified-3',
                     isVatPayer: false,
                 });
                 await expect(
                     service.update('IvanEnko', {
-                        requisites: {
-                            iban: 'UA213223130000026007233566001',
-                            taxId: '1234567899',
-                        },
+                        taxId: '1234567899',
                         taxationSystem: 'simplified-3',
                         isVatPayer: false,
                     } as UpdateBusinessRequest)
@@ -566,13 +561,20 @@ describe('BusinessesService', () => {
             });
         };
 
-        it('повертає affectedInvoices (counter перед transaction)', async () => {
+        it('Sprint 9 §SP-5 — повертає {affectedAccounts, affectedInvoices}', async () => {
             invoiceModel.countDocuments.mockResolvedValue(3);
+            accountModel.countDocuments.mockResolvedValue(2);
             mockDeleteOne(1);
 
             const result = await service.delete(businessFixture);
-            expect(result).toEqual({ affectedInvoices: 3 });
+            expect(result).toEqual({
+                affectedAccounts: 2,
+                affectedInvoices: 3,
+            });
             expect(invoiceModel.countDocuments).toHaveBeenCalledWith({
+                businessId,
+            });
+            expect(accountModel.countDocuments).toHaveBeenCalledWith({
                 businessId,
             });
         });
@@ -604,12 +606,13 @@ describe('BusinessesService', () => {
             mockDeleteOne(0); // race з паралельним delete-ом
 
             await expect(service.delete(businessFixture)).resolves.toEqual({
+                affectedAccounts: 0,
                 affectedInvoices: 0,
             });
             expect(session.endSession).toHaveBeenCalledTimes(1);
         });
 
-        it('replica-set absence: ловить "Transaction... replica set" → CASCADE_DELETE_REQUIRES_REPLICA_SET', async () => {
+        it('replica-set absence: ловить "Transaction... replica set" → TRANSACTION_REQUIRES_REPLICA_SET', async () => {
             invoiceModel.countDocuments.mockResolvedValue(0);
             const replSetErr = new Error(
                 'Transaction numbers are only allowed on a replica set member or mongos'

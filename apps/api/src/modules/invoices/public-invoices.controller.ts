@@ -22,6 +22,8 @@ import {
 
 import { SkipOnboarding } from '../../common/decorators/skip-onboarding.decorator';
 import { ENV } from '../../config/env';
+import { AccountsService } from '../accounts/accounts.service';
+import type { AccountDocument } from '../accounts/schemas/account.schema';
 import { BusinessesService } from '../businesses/businesses.service';
 import type { BusinessDocument } from '../businesses/schemas/business.schema';
 import { QrService } from '../qr/qr.service';
@@ -32,67 +34,25 @@ import { effectiveInvoicePurpose } from './purpose-resolver';
 import type { InvoiceDocument } from './schemas/invoice.schema';
 
 /**
- * Sprint 4 §4.3 — public endpoints для зони `pay.finly.com.ua/{slug}/{invoiceSlug}`.
+ * Sprint 4 §4.3 + Sprint 9 §9.1 — public endpoints для зони
+ * `pay.finly.com.ua/{businessSlug}/{accountSlug}/{invoiceSlug}`.
  *
- * **Окремий controller від `InvoicesController` (cabinet).** Розділення зон
- * by design (той самий патерн, що Sprint 3 `PublicBusinessesController`):
- *  - public — без guard-ів, без cookie / Authorization. На відміну від
- *    business-public, тут **без CDN-cache** (`Cache-Control: no-store`,
- *    обґрунтування нижче) — invoice mutable payment data.
- *  - cabinet — за `JwtActiveGuard` + `BusinessAccessGuard`, без CDN-cache.
- *  Спільні primitives (`BusinessesService.getBySlug` case-insensitive,
- *  `InvoicesService.getBySlug` case-sensitive) — single read-path для обох
- *  сторін.
+ * Lookup chain: business case-insensitive → account case-sensitive `(businessId,
+ * slug)` → invoice case-sensitive `(accountId, slug)`. 404 на кожному кроці.
  *
- * **Lookup chain.** Спершу business case-insensitively (slug-вивіска ФОП —
- * vanity, регістр у клієнтському посиланні може плавати); потім invoice
- * case-sensitively у межах `business._id` (SP-8: invoice-slug 99% system-
- * generated, case-insensitive lookup не дає UX-користі). 404 на будь-якому
- * з двох — той самий response shape, frontend `host-pay/[slug]/[invoiceSlug]`
- * (Sprint 4 §4.7) обробляє через `notFound()`.
+ * **Whitelist 8 полів** (Sprint 9 розширення з 7): додано `account: {slug, name,
+ * bankCode, ibanMask}` (`PublicAccountListItemSchema` reuse).
  *
- * **Whitelist 7 полів у JSON-response.** `PublicInvoiceSchema.parse`
- * (Sprint 4 §4.1 — single source of truth) strip-ить leak-кандидати:
- * `requisites`, `taxationSystem`, `isVatPayer`, `ownerId`, `managers`,
- * `slugPreset`, `slugCounter*`, timestamps. Visible: invoice.{amount,
- * amountLocked, paymentPurpose, validUntil, slug}, business.{type, name,
- * slug, acceptedBanks}, nbuLinks.{primary, legacy}.
- *
- * **Реквізити leak-vector.** IBAN/ІПН не у JSON — тільки у `nbuLinks`
- * Base64URL payload (той самий інваріант, що `PublicBusinessesController`):
- * дані доступні **тільки через формати, що читаються банком як платіжна
- * команда**.
- *
- * **`@SkipOnboarding()`** — public endpoints доступні всім (включно з
- * не-залогіненими). Глобальний `OnboardingInterceptor` пропустимо явно через
- * decorator.
- *
- * **`Cache-Control: no-store`** — invoice — це mutable payment command:
- * `amount`, `paymentPurpose`, `validUntil`, lockMask і delete-state можуть
- * змінитися ФОПом у будь-який момент. Aggressive shared-cache (`public,
- * max-age=3600, SWR=86400`) у Sprint 4 створював correctness-ризик: клієнт
- * по збереженому посиланню міг отримати застарілу суму/QR після редагування
- * або взагалі бачити рахунок після видалення. Для payment flow це
- * неприйнятно. CDN-relief, якщо знадобиться у майбутньому, реалізуємо через
- * ETag-валідацію або cache-busting query (`?v={updatedAt}`), не через
- * time-based stale window. Business endpoints (vanity вивіска, immutable-ish)
- * залишаються з агресивним кешем — у `PublicBusinessesController`.
- */
-/**
- * **Throttle policy.** Public payment endpoints живуть під окремим named
- * throttler-ом `'public-payment'` (`app.module.ts`): public invoice page робить
- * 3 виклики на render (JSON view + 2 QR PNG), а CDN-cache тут свідомо
- * вимкнений (`Cache-Control: no-store`, mutable payment data) — тож шквал
- * клієнтів через NAT/proxy швидко перевершив би дефолтний 60/min на IP.
- * `@SkipThrottle({ default: true })` вимикає default; `@Throttle({
- * 'public-payment': ... })` ставить вищу policy. Захист зберігається.
+ * **`Cache-Control: no-store`** — invoice mutable payment command. CDN-cache
+ * створив би drift на edit/delete.
  */
 @SkipThrottle({ default: true })
 @Throttle({ 'public-payment': { limit: 600, ttl: 60000 } })
-@Controller('businesses/public/:slug/invoices')
+@Controller('businesses/public/:slug/account/:accountSlug/invoices')
 export class PublicInvoicesController {
     constructor(
         private readonly businessesService: BusinessesService,
+        private readonly accountsService: AccountsService,
         private readonly invoicesService: InvoicesService,
         private readonly qrService: QrService
     ) {}
@@ -102,24 +62,21 @@ export class PublicInvoicesController {
     @Header('Cache-Control', 'no-store')
     async getPublic(
         @Param('slug') slug: string,
+        @Param('accountSlug') accountSlug: string,
         @Param('invoiceSlug') invoiceSlug: string
     ): Promise<{ data: PublicInvoiceView }> {
-        const { business, invoice } = await this.lookupOrThrow(
+        const { business, account, invoice } = await this.lookupOrThrow(
             slug,
+            accountSlug,
             invoiceSlug
         );
         const expired = isInvoiceExpired(invoice.validUntil);
-        // Sprint 4 review fix — server-side expiry block. Раніше expired-
-        // banner існував тільки на клієнті (client-side `getInvoiceStatus`),
-        // але `nbuLinks` все одно віддавалися у JSON. Зараз: коли
-        // `validUntil < now` — `nbuLinks: null`; client рендерить heading
-        // + "Прострочено"-banner без жодного payment-vector-у. QR endpoints
-        // у такому стані повертають 410 (defense-in-depth).
         const nbuLinks = expired
             ? null
             : (() => {
                   const payloadInput = buildPayloadInputFromInvoice(
                       business,
+                      account,
                       invoice
                   );
                   return {
@@ -133,15 +90,6 @@ export class PublicInvoicesController {
                       ),
                   };
               })();
-        // PublicInvoiceSchema.parse — це whitelist-фільтр: усе, що не у
-        // схемі, відкидається. Якщо колись Mongoose-doc отримає leak-поле
-        // — це місце відрубає його перед серіалізацією.
-        // Sprint 4 review fix — snapshot fields пріоритет, fallback на
-        // live business для legacy invoices (pre-snapshot створених).
-        // `paymentPurpose` і `business.name` у public-view МУСЯТЬ матчити
-        // payload (NBU QR/link) — інакше клієнт бачить одне, банк-додаток
-        // отримує інше. payload-mapper уже використовує snapshot першим;
-        // тут робимо те саме для view-shape consistency.
         const snapshot = invoice.payeeSnapshot;
         const view = PublicInvoiceSchema.parse({
             amount: invoice.amount,
@@ -156,72 +104,61 @@ export class PublicInvoicesController {
             slug: invoice.slug,
             business: {
                 type: business.type,
-                // Snapshot recipient name — той самий, що у NBU payload.
-                // Якщо ФОП перейменував business після виставлення інвойсу,
-                // клієнт бачить original ім'я, що відповідає платіжній
-                // команді у банку.
                 name: snapshot?.recipientName ?? business.name,
                 slug: business.slug,
                 acceptedBanks: business.acceptedBanks,
+            },
+            account: {
+                slug: account.slug,
+                name: account.name,
+                bankCode: account.bankCode,
+                ibanMask: `•${account.iban.slice(-4)}`,
             },
             nbuLinks,
         });
         return { data: view };
     }
 
-    /**
-     * QR на public-URL інвойсу (`pay.finly.com.ua/{businessSlug}/{invoiceSlug}`).
-     * Той самий "канонічний-URL"-патерн, що Sprint 3 business-QR — скан клієнтом
-     * веде одразу на канонічну сторінку без 301-redirect-hop-у.
-     */
     @SkipOnboarding()
     @Get(':invoiceSlug/qr/business.png')
     @Header('Cache-Control', 'no-store')
     async getBusinessQr(
         @Param('slug') slug: string,
+        @Param('accountSlug') accountSlug: string,
         @Param('invoiceSlug') invoiceSlug: string,
         @Res() res: Response
     ): Promise<void> {
-        const { business, invoice } = await this.lookupOrThrow(
+        const { business, account, invoice } = await this.lookupOrThrow(
             slug,
+            accountSlug,
             invoiceSlug
         );
         if (isInvoiceExpired(invoice.validUntil)) {
-            // Defense-in-depth: client уже не показує QR-image коли nbuLinks=null,
-            // але прямий запит до endpoint (cached link, scraping) має відрубатися.
             throw new GoneException({
                 code: RESPONSE_CODE.INVOICE_EXPIRED,
                 message: 'Invoice expired',
             });
         }
-        // Канонічний URL — case-preserved business slug + invoice slug.
-        const url = `${ENV.PAY_PUBLIC_URL.replace(/\/$/, '')}/${business.slug}/${invoice.slug}`;
+        const url = `${ENV.PAY_PUBLIC_URL.replace(/\/$/, '')}/${business.slug}/${account.slug}/${invoice.slug}`;
         const png = await this.qrService.renderForUrl(url);
-        // Content-Type ставимо ВРУЧНУ після expiry-check — `@Header()`-декоратор
-        // pre-apply-ить header до запуску handler-а, тож при `GoneException`
-        // exception-filter пише JSON, а Content-Type залишається image/png і
-        // клієнт не парсить body. Manual setHeader тут — це на success-шляху.
         res.setHeader('Content-Type', 'image/png');
         res.send(png);
     }
 
-    /**
-     * QR з NBU-payload-link (формат 003) на одну з двох норматив-allowed
-     * адрес. Payload містить amount + lockMask + validUntil — сканування
-     * відкриває банк-додаток з пред-заповненими реквізитами і сумою.
-     */
     @SkipOnboarding()
     @Get(':invoiceSlug/qr/nbu.png')
     @Header('Cache-Control', 'no-store')
     async getNbuQr(
         @Param('slug') slug: string,
+        @Param('accountSlug') accountSlug: string,
         @Param('invoiceSlug') invoiceSlug: string,
         @Query('host') hostParam: string | undefined,
         @Res() res: Response
     ): Promise<void> {
         const host = resolveNbuHost(hostParam);
-        const { business, invoice } = await this.lookupOrThrow(
+        const { business, account, invoice } = await this.lookupOrThrow(
             slug,
+            accountSlug,
             invoiceSlug
         );
         if (isInvoiceExpired(invoice.validUntil)) {
@@ -230,24 +167,23 @@ export class PublicInvoicesController {
                 message: 'Invoice expired',
             });
         }
-        const input = buildPayloadInputFromInvoice(business, invoice);
+        const input = buildPayloadInputFromInvoice(business, account, invoice);
         const png = await this.qrService.renderForNbuPayload(input, '003', {
             host,
         });
-        // Content-Type — manual після expiry-check (див. коментар у `getBusinessQr`).
         res.setHeader('Content-Type', 'image/png');
         res.send(png);
     }
 
-    /**
-     * Спільний lookup-helper: bizness case-insensitive, invoice case-sensitive.
-     * 404 на любому з двох — single shape для frontend-host-aware-rewrite-у
-     * (`host-pay/[slug]/[invoiceSlug]`, §4.7).
-     */
     private async lookupOrThrow(
         slug: string,
+        accountSlug: string,
         invoiceSlug: string
-    ): Promise<{ business: BusinessDocument; invoice: InvoiceDocument }> {
+    ): Promise<{
+        business: BusinessDocument;
+        account: AccountDocument;
+        invoice: InvoiceDocument;
+    }> {
         const business = await this.businessesService.getBySlug(slug);
         if (!business) {
             throw new NotFoundException({
@@ -255,8 +191,18 @@ export class PublicInvoicesController {
                 message: 'Business not found',
             });
         }
-        const invoice = await this.invoicesService.getBySlug(
+        const account = await this.accountsService.getBySlug(
             business._id,
+            accountSlug
+        );
+        if (!account) {
+            throw new NotFoundException({
+                code: RESPONSE_CODE.ACCOUNT_NOT_FOUND,
+                message: 'Account not found',
+            });
+        }
+        const invoice = await this.invoicesService.getBySlug(
+            account._id,
             invoiceSlug
         );
         if (!invoice) {
@@ -265,16 +211,10 @@ export class PublicInvoicesController {
                 message: 'Invoice not found',
             });
         }
-        return { business, invoice };
+        return { business, account, invoice };
     }
 }
 
-/**
- * Маппимо user-facing `?host=primary|legacy` → constants. Не приймаємо raw
- * host у query (`?host=qr.bank.gov.ua`) — щоб (1) public-API не leak-нув
- * деталі НБУ-нормативу клієнтам, (2) typo дав чітку помилку, не silent
- * fallback. Той самий патерн, що Sprint 3 `PublicBusinessesController`.
- */
 function resolveNbuHost(
     hostParam: string | undefined
 ): AllowedNbuPayloadLinkHost003 {

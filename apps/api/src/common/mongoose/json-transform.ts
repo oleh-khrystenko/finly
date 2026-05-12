@@ -21,7 +21,7 @@ import type { Schema } from 'mongoose';
  * (`businessModel.aggregate(...)`) — ОКРЕМА відповідальність: aggregate
  * повертає plain objects без Mongoose-transform-у; для нього треба
  * `$addFields: { id: { $toString: '$_id' } } + $unset: ['_id', '__v']`-stage
- * у самому pipeline (див. `getOwnedAndManagedWithInvoicesCount`).
+ * у самому pipeline (див. `getOwnedAndManagedWithCounts`).
  *
  * **Mongoose document instance access** (`doc._id`) лишається без змін —
  * transform впливає лише на JSON-serialization. Тести, що звертаються до

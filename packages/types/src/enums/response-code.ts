@@ -141,15 +141,23 @@ export const RESPONSE_CODE = {
      */
     INVOICE_VALID_UNTIL_IN_PAST: 'INVOICE_VALID_UNTIL_IN_PAST',
     /**
-     * Sprint 4 §4.0 + SP-5 — cascade-delete вимагає Mongo replica-set
-     * (`session.withTransaction`). Standalone mongod кидає
-     * `MongoServerError: Transaction numbers are only allowed on a replica set...`.
-     * Service ловить → 500 з цим кодом, без жодного fallback на 2 sequential
-     * deletes. Це failure-mode для misconfigured infra, не runtime-fallback.
-     * UA: нейтральне "Не вдалося видалити бізнес. Зверніться в підтримку" —
-     * справжню причину видно лише у server-логах.
+     * Sprint 4 §4.0 + SP-5 / Sprint 9 §SP-1 + §SP-3 — generic infra-misconfig:
+     * Mongo транзакція вимагає replica-set (`session.withTransaction`).
+     * Standalone mongod кидає `MongoServerError: Transaction numbers are only
+     * allowed on a replica set...`. Service ловить → 500 з цим кодом.
+     *
+     * **Уніфікований код для 4 service-call-сайтів** (Sprint 9 review fix —
+     * раніше `CASCADE_DELETE_REQUIRES_REPLICA_SET` reuse-ався у не-cascade
+     * flow-ах, що давало user-у "Не вдалося видалити бізнес" на create-account):
+     *  - `BusinessesService.delete` (cascade-delete business+accounts+invoices)
+     *  - `AccountsService.create` (touch-business orphan-prevention)
+     *  - `AccountsService.delete` (cascade Invoice.count+Account.delete)
+     *  - `InvoicesService.create` (touch-account orphan-prevention)
+     *
+     * UA: нейтральне "Сервер тимчасово недоступний. Зверніться в підтримку" —
+     * справжню причину (infra-misconfig) видно лише у server-логах.
      */
-    CASCADE_DELETE_REQUIRES_REPLICA_SET: 'CASCADE_DELETE_REQUIRES_REPLICA_SET',
+    TRANSACTION_REQUIRES_REPLICA_SET: 'TRANSACTION_REQUIRES_REPLICA_SET',
 
     // --- accounts error (Sprint 9 §SP-1..§SP-3) ---
     /** Account не знайдено в межах business-у. `AccountAccessGuard` / `AccountsService.getBySlug`. UA: "Рахунок не знайдено". */
@@ -252,7 +260,7 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.INVOICE_AMOUNT_LOCKED_REQUIRES_AMOUNT]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVOICE_EXPIRED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVOICE_VALID_UNTIL_IN_PAST]: RESPONSE_TYPE.ERROR,
-    [RESPONSE_CODE.CASCADE_DELETE_REQUIRES_REPLICA_SET]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.TRANSACTION_REQUIRES_REPLICA_SET]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.ACCOUNT_NOT_FOUND]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.ACCOUNT_HAS_INVOICES]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.ACCOUNT_ACCESS_DENIED]: RESPONSE_TYPE.ERROR,

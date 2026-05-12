@@ -163,13 +163,12 @@ function createRedisMock() {
 
 // ─── Fixtures ───
 
-const VALID_IBAN = 'UA213223130000026007233566001';
 const VALID_TAX_ID = '1234567899';
 
 const VALID_CREATE_PAYLOAD = {
     type: 'fop',
     name: 'ФОП Іваненко',
-    requisites: { iban: VALID_IBAN, taxId: VALID_TAX_ID },
+    taxId: VALID_TAX_ID,
     taxationSystem: 'simplified-3',
     isVatPayer: false,
     paymentPurposeTemplate: 'Оплата за послуги',
@@ -182,7 +181,7 @@ describe('Businesses E2E', () => {
     let app: INestApplication<App>;
     // Sprint 4 §4.2 — ReplSet (не standalone), бо `BusinessesService.delete`
     // тепер cascade-delete-ає інвойси через `withTransaction` (§SP-5).
-    // Standalone mongod кидає `CASCADE_DELETE_REQUIRES_REPLICA_SET` на delete-flow.
+    // Standalone mongod кидає `TRANSACTION_REQUIRES_REPLICA_SET` на delete-flow.
     let mongo: Awaited<ReturnType<typeof createReplSetMongo>>;
     let userModel: Model<UserDocument>;
     let businessModel: Model<BusinessDocument>;
@@ -446,7 +445,7 @@ describe('Businesses E2E', () => {
                     .send({
                         ...baseFields,
                         type: 'individual',
-                        requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+                        taxId: VALID_RNOKPP,
                     })
                     .expect(201);
 
@@ -470,7 +469,7 @@ describe('Businesses E2E', () => {
                     .send({
                         ...baseFields,
                         type: 'tov',
-                        requisites: { iban: VALID_IBAN, taxId: VALID_EDRPOU },
+                        taxId: VALID_EDRPOU,
                         taxationSystem: 'general',
                         isVatPayer: true,
                     })
@@ -496,7 +495,7 @@ describe('Businesses E2E', () => {
                     .send({
                         ...baseFields,
                         type: 'organization',
-                        requisites: { iban: VALID_IBAN, taxId: VALID_EDRPOU },
+                        taxId: VALID_EDRPOU,
                     })
                     .expect(201);
 
@@ -518,7 +517,7 @@ describe('Businesses E2E', () => {
                     .send({
                         ...baseFields,
                         type: 'individual',
-                        requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+                        taxId: VALID_RNOKPP,
                         taxationSystem: 'simplified-3',
                         isVatPayer: false,
                     })
@@ -532,7 +531,7 @@ describe('Businesses E2E', () => {
                     .set('Authorization', bearerFor(user))
                     .send({
                         ...VALID_CREATE_PAYLOAD,
-                        requisites: { iban: VALID_IBAN, taxId: VALID_EDRPOU },
+                        taxId: VALID_EDRPOU,
                     })
                     .expect(400);
             });
@@ -545,7 +544,7 @@ describe('Businesses E2E', () => {
                     .send({
                         ...baseFields,
                         type: 'organization',
-                        requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+                        taxId: VALID_RNOKPP,
                     })
                     .expect(400);
             });
@@ -558,7 +557,7 @@ describe('Businesses E2E', () => {
                     .send({
                         ...baseFields,
                         type: 'tov',
-                        requisites: { iban: VALID_IBAN, taxId: VALID_EDRPOU },
+                        taxId: VALID_EDRPOU,
                         isVatPayer: false,
                     })
                     .expect(400);
@@ -572,7 +571,7 @@ describe('Businesses E2E', () => {
                     .send({
                         ...baseFields,
                         type: 'startup',
-                        requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+                        taxId: VALID_RNOKPP,
                     })
                     .expect(400);
             });
@@ -715,7 +714,7 @@ describe('Businesses E2E', () => {
             expect(body.data.name).toBe('Нова назва');
         });
 
-        it('Sprint 4 §4.4 contract — list response має `id: string` per item + `invoicesCount`', async () => {
+        it('Sprint 9 §9.1 contract — list response має `id: string` per item + `accountsCount` + `invoicesCount`', async () => {
             const user = await createUser();
             await supertest(app.getHttpServer())
                 .post('/api/businesses/me')
@@ -736,72 +735,14 @@ describe('Businesses E2E', () => {
                 expect(item.id).toMatch(/^[a-f0-9]{24}$/);
                 expect(item).not.toHaveProperty('_id');
                 expect(item).not.toHaveProperty('__v');
+                expect(typeof item.accountsCount).toBe('number');
                 expect(typeof item.invoicesCount).toBe('number');
+                expect(item).not.toHaveProperty('requisites');
+                expect(item).not.toHaveProperty('invoiceSlugPresetDefault');
             }
         });
 
-        /**
-         * Sprint 4 review fix — legacy documents без `invoiceSlugPresetDefault`-
-         * поля (створені до May 6) повинні в aggregate-output отримати
-         * `null`, а не undefined. Mongoose `default: null` не спрацьовує
-         * на read existing docs; aggregation pipeline bypass-ить Mongoose
-         * повністю — без `$ifNull` контракт `BusinessWithInvoicesCount`
-         * (`SlugPreset | null`) ламається на legacy state.
-         */
-        it('list normalizes missing invoiceSlugPresetDefault до null (review fix)', async () => {
-            const user = await createUser();
-            // Створюємо бізнес напряму через `Model.collection.insertOne` —
-            // це обходить Mongoose schema defaults і дає той самий shape, що
-            // мав би legacy документ (поле `invoiceSlugPresetDefault` зовсім
-            // відсутнє у БД).
-            await businessModel.collection.insertOne({
-                type: 'fop',
-                ownerId: user._id,
-                managers: [],
-                slug: 'LegacyDoc',
-                slugLower: 'legacydoc',
-                name: 'Legacy ФОП',
-                requisites: {
-                    iban: 'UA213223130000026007233566001',
-                    taxId: '3490307813',
-                },
-                taxationSystem: 'simplified-3',
-                isVatPayer: false,
-                paymentPurposeTemplate: 'Послуги',
-                acceptedBanks: ['privat', 'mono'],
-                seoIndexEnabled: false,
-                deletedAt: null,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-                // `invoiceSlugPresetDefault` навмисно відсутній.
-            });
-
-            const res = await supertest(app.getHttpServer())
-                .get('/api/businesses/me')
-                .set('Authorization', bearerFor(user))
-                .expect(200);
-
-            const items = (
-                res.body as {
-                    data: Array<{
-                        slug: string;
-                        invoiceSlugPresetDefault: unknown;
-                    }>;
-                }
-            ).data;
-            const legacy = items.find((i) => i.slug === 'LegacyDoc');
-            expect(legacy).toBeDefined();
-            // Контракт BusinessWithInvoicesCount — null, а не undefined.
-            expect(legacy!.invoiceSlugPresetDefault).toBeNull();
-            expect(
-                Object.prototype.hasOwnProperty.call(
-                    legacy!,
-                    'invoiceSlugPresetDefault'
-                )
-            ).toBe(true);
-        });
-
-        it('Sprint 4 §4.4 contract — getBySlug response має `id: string` + `invoicesCount`', async () => {
+        it('Sprint 9 §9.1 contract — getBySlug response має `id: string` + `accountsCount` + `invoicesCount`', async () => {
             const user = await createUser();
             const created = await supertest(app.getHttpServer())
                 .post('/api/businesses/me')
@@ -819,7 +760,11 @@ describe('Businesses E2E', () => {
             expect(data.id).toMatch(/^[a-f0-9]{24}$/);
             expect(data).not.toHaveProperty('_id');
             expect(data).not.toHaveProperty('__v');
+            expect(typeof data.accountsCount).toBe('number');
             expect(typeof data.invoicesCount).toBe('number');
+            expect(data).not.toHaveProperty('requisites');
+            expect(data).not.toHaveProperty('invoiceSlugPresetDefault');
+            expect(data.taxId).toBe(VALID_TAX_ID);
         });
 
         it('reject спробу змінити slug через PATCH — 400 (slug-immutability via .strict())', async () => {
@@ -868,64 +813,7 @@ describe('Businesses E2E', () => {
                 .expect(400);
         });
 
-        it('Sprint 4 §4.1 — PATCH invoiceSlugPresetDefault зберігає поле і getBySlug повертає його (e2e cycle)', async () => {
-            const user = await createUser();
-            const created = await supertest(app.getHttpServer())
-                .post('/api/businesses/me')
-                .set('Authorization', bearerFor(user))
-                .send(VALID_CREATE_PAYLOAD);
-            const { slug } = (created.body as { data: { slug: string } }).data;
-
-            // На create — поле = null (default)
-            const initial = await supertest(app.getHttpServer())
-                .get(`/api/businesses/me/${slug}`)
-                .set('Authorization', bearerFor(user))
-                .expect(200);
-            expect(
-                (
-                    initial.body as {
-                        data: { invoiceSlugPresetDefault: string | null };
-                    }
-                ).data.invoiceSlugPresetDefault
-            ).toBeNull();
-
-            // PATCH на 'with-month'
-            const patched = await supertest(app.getHttpServer())
-                .patch(`/api/businesses/me/${slug}`)
-                .set('Authorization', bearerFor(user))
-                .send({ invoiceSlugPresetDefault: 'with-month' })
-                .expect(200);
-            expect(
-                (patched.body as { data: { invoiceSlugPresetDefault: string } })
-                    .data.invoiceSlugPresetDefault
-            ).toBe('with-month');
-
-            // GET знову — поле persisted
-            const reread = await supertest(app.getHttpServer())
-                .get(`/api/businesses/me/${slug}`)
-                .set('Authorization', bearerFor(user))
-                .expect(200);
-            expect(
-                (reread.body as { data: { invoiceSlugPresetDefault: string } })
-                    .data.invoiceSlugPresetDefault
-            ).toBe('with-month');
-
-            // Reset на null — теж валідно (semantic "не визначено")
-            const resetRes = await supertest(app.getHttpServer())
-                .patch(`/api/businesses/me/${slug}`)
-                .set('Authorization', bearerFor(user))
-                .send({ invoiceSlugPresetDefault: null })
-                .expect(200);
-            expect(
-                (
-                    resetRes.body as {
-                        data: { invoiceSlugPresetDefault: string | null };
-                    }
-                ).data.invoiceSlugPresetDefault
-            ).toBeNull();
-        });
-
-        it('Sprint 4 §4.1 — rejects unknown slug-preset value (Zod enum)', async () => {
+        it('Sprint 9 §SP-1 — `invoiceSlugPresetDefault` видалено з business (переїхав на Account); PATCH reject-ить unknown key', async () => {
             const user = await createUser();
             const created = await supertest(app.getHttpServer())
                 .post('/api/businesses/me')
@@ -936,7 +824,7 @@ describe('Businesses E2E', () => {
             await supertest(app.getHttpServer())
                 .patch(`/api/businesses/me/${slug}`)
                 .set('Authorization', bearerFor(user))
-                .send({ invoiceSlugPresetDefault: 'unknown-preset' })
+                .send({ invoiceSlugPresetDefault: 'with-month' })
                 .expect(400);
         });
 
@@ -950,10 +838,7 @@ describe('Businesses E2E', () => {
                 .send({
                     type: 'individual',
                     name: 'Збір',
-                    requisites: {
-                        iban: VALID_IBAN,
-                        taxId: VALID_TAX_ID,
-                    },
+                    taxId: VALID_TAX_ID,
                     paymentPurposeTemplate: 'Збір',
                     acceptedBanks: ['privatbank'],
                 })
@@ -981,12 +866,7 @@ describe('Businesses E2E', () => {
             const res = await supertest(app.getHttpServer())
                 .patch(`/api/businesses/me/${slug}`)
                 .set('Authorization', bearerFor(user))
-                .send({
-                    requisites: {
-                        iban: VALID_IBAN,
-                        taxId: '12345678', // 8-digit ЄДРПОУ
-                    },
-                })
+                .send({ taxId: '12345678' /* 8-digit ЄДРПОУ */ })
                 .expect(400);
 
             const body = res.body as { error: { code: string } };
@@ -1083,7 +963,7 @@ describe('Businesses E2E', () => {
     // ─── Public ───
 
     describe('GET /businesses/public/:slug', () => {
-        it('повертає whitelist полів + nbuLinks; реквізити не leak-нуті у JSON', async () => {
+        it('Sprint 9 §SP-4 — повертає whitelist полів + `accounts: []` (без nbuLinks на business-level)', async () => {
             const user = await createUser();
             const created = await supertest(app.getHttpServer())
                 .post('/api/businesses/me')
@@ -1097,29 +977,25 @@ describe('Businesses E2E', () => {
 
             const body = res.body as {
                 data: Record<string, unknown> & {
-                    nbuLinks: { primary: string; legacy: string };
+                    accounts: Array<unknown>;
                 };
             };
             expect(Object.keys(body.data).sort()).toEqual([
                 'acceptedBanks',
+                'accounts',
                 'name',
-                'nbuLinks',
                 'seoIndexEnabled',
                 'slug',
                 'type',
             ]);
-            // Реквізити НЕ leak-нуто прямо у JSON
             expect(body.data).not.toHaveProperty('requisites');
+            expect(body.data).not.toHaveProperty('taxId');
             expect(body.data).not.toHaveProperty('taxationSystem');
             expect(body.data).not.toHaveProperty('isVatPayer');
             expect(body.data).not.toHaveProperty('ownerId');
-            // nbuLinks ведуть на правильні host-и (рішення A2)
-            expect(body.data.nbuLinks.primary).toMatch(
-                /^https:\/\/qr\.bank\.gov\.ua\//
-            );
-            expect(body.data.nbuLinks.legacy).toMatch(
-                /^https:\/\/bank\.gov\.ua\/qr\//
-            );
+            expect(body.data).not.toHaveProperty('nbuLinks');
+            // Без accounts на бізнесі — empty array.
+            expect(body.data.accounts).toEqual([]);
         });
 
         it('case-insensitive lookup на public', async () => {
@@ -1178,117 +1054,6 @@ describe('Businesses E2E', () => {
         });
     });
 
-    describe('GET /businesses/public/:slug/qr/business.png', () => {
-        it('віддає PNG з Cache-Control public', async () => {
-            const user = await createUser();
-            const created = await supertest(app.getHttpServer())
-                .post('/api/businesses/me')
-                .set('Authorization', bearerFor(user))
-                .send(VALID_CREATE_PAYLOAD);
-            const { slug } = (created.body as { data: { slug: string } }).data;
-
-            const res = await supertest(app.getHttpServer())
-                .get(`/api/businesses/public/${slug}/qr/business.png`)
-                .expect(200);
-
-            expect(res.headers['content-type']).toContain('image/png');
-            expect(res.headers['cache-control']).toMatch(/public/);
-            expect(res.body.length).toBeGreaterThan(0);
-        });
-
-        it('QR кодує PAY_PUBLIC_URL host (не WEB_URL/cabinet) — round-trip jsqr', async () => {
-            // Регресія: QR на cabinet host (`finly.com.ua/{slug}`) ламає UX, бо
-            // host-aware middleware §3.9 на cabinet root-slug повертає 404.
-            // Декодуємо PNG-buffer назад у URL і перевіряємо host.
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            const jsQR = require('jsqr') as typeof import('jsqr').default;
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            const sharp = require('sharp') as typeof import('sharp');
-
-            const user = await createUser();
-            const created = await supertest(app.getHttpServer())
-                .post('/api/businesses/me')
-                .set('Authorization', bearerFor(user))
-                .send(VALID_CREATE_PAYLOAD);
-            const { slug } = (created.body as { data: { slug: string } }).data;
-
-            const res = await supertest(app.getHttpServer())
-                .get(`/api/businesses/public/${slug}/qr/business.png`)
-                .responseType('blob')
-                .expect(200);
-
-            const { data, info } = await sharp(res.body as Buffer)
-                .ensureAlpha()
-                .raw()
-                .toBuffer({ resolveWithObject: true });
-            const decoded = jsQR(
-                new Uint8ClampedArray(
-                    data.buffer,
-                    data.byteOffset,
-                    data.byteLength
-                ),
-                info.width,
-                info.height
-            );
-            expect(decoded).not.toBeNull();
-            expect(decoded!.data).toBe(`https://pay.finly.com.ua/${slug}`);
-            // Sanity: НЕ cabinet origin
-            expect(decoded!.data).not.toBe(`https://finly.com.ua/${slug}`);
-        });
-    });
-
-    describe('GET /businesses/public/:slug/qr/nbu.png', () => {
-        it('?host=primary — PNG з payload на qr.bank.gov.ua', async () => {
-            const user = await createUser();
-            const created = await supertest(app.getHttpServer())
-                .post('/api/businesses/me')
-                .set('Authorization', bearerFor(user))
-                .send(VALID_CREATE_PAYLOAD);
-            const { slug } = (created.body as { data: { slug: string } }).data;
-
-            const res = await supertest(app.getHttpServer())
-                .get(`/api/businesses/public/${slug}/qr/nbu.png?host=primary`)
-                .expect(200);
-            expect(res.headers['content-type']).toContain('image/png');
-        });
-
-        it('?host=legacy — PNG з payload на bank.gov.ua/qr', async () => {
-            const user = await createUser();
-            const created = await supertest(app.getHttpServer())
-                .post('/api/businesses/me')
-                .set('Authorization', bearerFor(user))
-                .send(VALID_CREATE_PAYLOAD);
-            const { slug } = (created.body as { data: { slug: string } }).data;
-
-            await supertest(app.getHttpServer())
-                .get(`/api/businesses/public/${slug}/qr/nbu.png?host=legacy`)
-                .expect(200);
-        });
-
-        it('?host=invalid — 400 VALIDATION_ERROR', async () => {
-            const user = await createUser();
-            const created = await supertest(app.getHttpServer())
-                .post('/api/businesses/me')
-                .set('Authorization', bearerFor(user))
-                .send(VALID_CREATE_PAYLOAD);
-            const { slug } = (created.body as { data: { slug: string } }).data;
-
-            await supertest(app.getHttpServer())
-                .get(`/api/businesses/public/${slug}/qr/nbu.png?host=hacker`)
-                .expect(400);
-        });
-
-        it('без host — 400', async () => {
-            const user = await createUser();
-            const created = await supertest(app.getHttpServer())
-                .post('/api/businesses/me')
-                .set('Authorization', bearerFor(user))
-                .send(VALID_CREATE_PAYLOAD);
-            const { slug } = (created.body as { data: { slug: string } }).data;
-
-            await supertest(app.getHttpServer())
-                .get(`/api/businesses/public/${slug}/qr/nbu.png`)
-                .expect(400);
-        });
-    });
+    // Sprint 9: QR endpoints видалено з business-controller-а — переїхали на
+    // `PublicAccountsController` (`/businesses/public/:slug/account/:accountSlug/qr/...`).
 });

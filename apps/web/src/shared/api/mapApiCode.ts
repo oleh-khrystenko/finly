@@ -54,6 +54,13 @@ const ERRORS: Record<string, MessageDict> = {
         email_send_failed: 'Не вдалося надіслати лист. Спробуйте пізніше',
         internal_error: 'Сталася помилка на сервері. Спробуйте пізніше',
         unknown: 'Сталася помилка. Спробуйте пізніше',
+        // Sprint 4 §4.2 SP-5 / Sprint 9 §SP-1 — infra-misconfig fallback для
+        // всіх Mongo-transaction-call-sites (business cascade-delete + invoice
+        // create + account create + account delete). Нейтральний message: ні
+        // delete-flow, ні create-flow — generic-server-issue, бо причина —
+        // конфігурація replica-set, видима лише у server-логах.
+        transaction_requires_replica_set:
+            'Сервер тимчасово недоступний. Зверніться в підтримку',
     },
     ai: {
         ai_rate_limit_exceeded: 'Забагато AI-запитів. Спробуйте пізніше.',
@@ -95,11 +102,19 @@ const ERRORS: Record<string, MessageDict> = {
         // валідний код, але невідповідного формату для типу бізнесу.
         tax_id_format_mismatch_type:
             'Код одержувача не відповідає формату для цього типу платника',
-        // Sprint 4 §4.2 SP-5 — cascade-delete без replica-set. Нейтральне
-        // user-facing повідомлення: справжню причину (infra-misconfig) видно
-        // лише у server-логах, не leak-ається user-у.
-        cascade_delete_requires_replica_set:
-            'Не вдалося видалити бізнес. Зверніться в підтримку',
+    },
+    // Sprint 9 §SP-1..§SP-3 — accounts UA-messages. ACCOUNT_HAS_INVOICES не тут:
+    // backend pre-resolves повідомлення через pluralizeUa (accounts.service.ts
+    // ConflictException.message) — frontend toast.error читає поле message
+    // напряму, mapApiCode-намір не потрібен.
+    accounts: {
+        account_not_found: 'Рахунок не знайдено',
+        account_access_denied: 'У вас немає доступу до цього рахунку',
+        account_slug_generation_failed:
+            'Не вдалося згенерувати рахунок. Спробуйте ще раз',
+        account_iban_duplicate: 'Цей IBAN вже доданий до бізнесу',
+        account_create_failed:
+            'Не вдалося створити рахунок. Спробуйте ще раз',
     },
     invoices: {
         invoice_not_found: 'Рахунок не знайдено',
