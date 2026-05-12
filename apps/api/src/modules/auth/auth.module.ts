@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 
 import { ENV } from '../../config/env';
+import { LandingClaimModule } from '../landing-claim/landing-claim.module';
 import { UsersModule } from '../users/users.module';
 import { StorageModule } from '../storage/storage.module';
 import { AuthController } from './auth.controller';
@@ -19,6 +20,9 @@ import { JwtStrategy } from './strategies/jwt.strategy';
         }),
         forwardRef(() => UsersModule),
         StorageModule,
+        // Sprint 10 §10.1 — без forwardRef (петлі немає: LandingClaim →
+        // Businesses/Accounts, які не імпортують AuthModule напряму).
+        LandingClaimModule,
     ],
     controllers: [AuthController],
     providers: [AuthService, JwtStrategy, GoogleStrategy],

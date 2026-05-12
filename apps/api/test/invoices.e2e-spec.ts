@@ -320,7 +320,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             const { slug, accountSlug } = await createBusinessFor(user);
 
             const res = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: 150000,
@@ -354,7 +356,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             const { slug, accountSlug } = await createBusinessFor(user);
 
             const res = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: null,
@@ -381,7 +385,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             const { slug, accountSlug } = await createBusinessFor(user);
 
             const res = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: null,
@@ -403,7 +409,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             const past = new Date(Date.now() - 86_400_000).toISOString(); // вчора
 
             const res = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: 100000,
@@ -423,7 +431,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             const { slug, accountSlug } = await createBusinessFor(user);
 
             await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: 150000,
@@ -440,7 +450,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             const { slug, accountSlug } = await createBusinessFor(user);
 
             const res = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: 100,
@@ -463,7 +475,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
             for (let i = 1; i <= 5; i++) {
                 const res = await supertest(app.getHttpServer())
-                    .post(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`)
+                    .post(
+                        `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                    )
                     .set('Authorization', bearerFor(user))
                     .send({
                         amount: 100000,
@@ -487,7 +501,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             const intruder = await createUser();
 
             const res = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(intruder))
                 .send({
                     amount: 100,
@@ -512,7 +528,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             // створимо 3 інвойси
             for (let i = 0; i < 3; i++) {
                 await supertest(app.getHttpServer())
-                    .post(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`)
+                    .post(
+                        `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                    )
                     .set('Authorization', bearerFor(user))
                     .send({
                         amount: 100,
@@ -524,7 +542,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             }
 
             const res = await supertest(app.getHttpServer())
-                .get(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices?page=1&limit=2`)
+                .get(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices?page=1&limit=2`
+                )
                 .set('Authorization', bearerFor(user))
                 .expect(200);
 
@@ -547,7 +567,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             const { slug, accountSlug } = await createBusinessFor(user);
 
             const res = await supertest(app.getHttpServer())
-                .get(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`)
+                .get(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .expect(200);
             const body = res.body as {
@@ -627,7 +649,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             const user = await createUser();
             const { slug, accountSlug } = await createBusinessFor(user);
             const create = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: 100,
@@ -640,7 +664,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                 .slug;
 
             const res = await supertest(app.getHttpServer())
-                .get(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`)
+                .get(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`
+                )
                 .set('Authorization', bearerFor(user))
                 .expect(200);
             expect((res.body as { data: { slug: string } }).data.slug).toBe(
@@ -652,7 +678,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             const user = await createUser();
             const { slug, accountSlug } = await createBusinessFor(user);
             const res = await supertest(app.getHttpServer())
-                .get(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/missing-aaaaaaaa`)
+                .get(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/missing-aaaaaaaa`
+                )
                 .set('Authorization', bearerFor(user))
                 .expect(404);
             expect((res.body as { error: { code: string } }).error.code).toBe(
@@ -664,7 +692,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             const user = await createUser();
             const { slug, accountSlug } = await createBusinessFor(user);
             const create = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: 100,
@@ -696,7 +726,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             const user = await createUser();
             const { slug, accountSlug } = await createBusinessFor(user);
             const create = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: 100,
@@ -709,7 +741,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                 .slug;
 
             const res = await supertest(app.getHttpServer())
-                .patch(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`)
+                .patch(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({ paymentPurpose: 'New purpose' })
                 .expect(200);
@@ -727,7 +761,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             const user = await createUser();
             const { slug, accountSlug } = await createBusinessFor(user);
             const create = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: 100,
@@ -741,7 +777,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
             // Sanity: public-view спочатку показує "Original".
             const before = await supertest(app.getHttpServer())
-                .get(`/api/businesses/public/${slug}/account/${accountSlug}/invoices/${invoiceSlug}`)
+                .get(
+                    `/api/businesses/public/${slug}/account/${accountSlug}/invoices/${invoiceSlug}`
+                )
                 .expect(200);
             expect(
                 (before.body as { data: { paymentPurpose: string } }).data
@@ -750,14 +788,18 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
             // Cabinet PATCH purpose → "Updated".
             await supertest(app.getHttpServer())
-                .patch(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`)
+                .patch(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({ paymentPurpose: 'Updated' })
                 .expect(200);
 
             // Public-view відразу віддає "Updated" — snapshot mirror спрацював.
             const after = await supertest(app.getHttpServer())
-                .get(`/api/businesses/public/${slug}/account/${accountSlug}/invoices/${invoiceSlug}`)
+                .get(
+                    `/api/businesses/public/${slug}/account/${accountSlug}/invoices/${invoiceSlug}`
+                )
                 .expect(200);
             expect(
                 (after.body as { data: { paymentPurpose: string } }).data
@@ -772,7 +814,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             const user = await createUser();
             const { slug, accountSlug } = await createBusinessFor(user);
             const create = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: 100,
@@ -786,13 +830,17 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
             // PATCH paymentPurpose=null → resolve до template.
             await supertest(app.getHttpServer())
-                .patch(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`)
+                .patch(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({ paymentPurpose: null })
                 .expect(200);
 
             const view = await supertest(app.getHttpServer())
-                .get(`/api/businesses/public/${slug}/account/${accountSlug}/invoices/${invoiceSlug}`)
+                .get(
+                    `/api/businesses/public/${slug}/account/${accountSlug}/invoices/${invoiceSlug}`
+                )
                 .expect(200);
             // Public-purpose === business.paymentPurposeTemplate seeded у helper.
             expect(
@@ -805,7 +853,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             const user = await createUser();
             const { slug, accountSlug } = await createBusinessFor(user);
             const create = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: 100,
@@ -818,7 +868,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                 .slug;
 
             await supertest(app.getHttpServer())
-                .patch(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`)
+                .patch(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({ slug: 'evil-vanity' })
                 .expect(400);
@@ -830,7 +882,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                 const user = await createUser();
                 const { slug, accountSlug } = await createBusinessFor(user);
                 const create = await supertest(app.getHttpServer())
-                    .post(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`)
+                    .post(
+                        `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                    )
                     .set('Authorization', bearerFor(user))
                     .send({
                         amount: 100,
@@ -843,7 +897,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                     .data.slug;
 
                 await supertest(app.getHttpServer())
-                    .patch(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`)
+                    .patch(
+                        `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`
+                    )
                     .set('Authorization', bearerFor(user))
                     .send({ [key]: 'evil' })
                     .expect(400);
@@ -854,7 +910,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             const user = await createUser();
             const { slug, accountSlug } = await createBusinessFor(user);
             const create = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: null,
@@ -867,7 +925,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                 .slug;
 
             const res = await supertest(app.getHttpServer())
-                .patch(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`)
+                .patch(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({ amountLocked: true })
                 .expect(400);
@@ -884,7 +944,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             const user = await createUser();
             const { slug, accountSlug } = await createBusinessFor(user);
             const create = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: 100,
@@ -897,7 +959,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                 .slug;
 
             const res = await supertest(app.getHttpServer())
-                .patch(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`)
+                .patch(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({ amount: null, amountLocked: true })
                 .expect(400);
@@ -910,7 +974,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             const user = await createUser();
             const { slug, accountSlug } = await createBusinessFor(user);
             const create = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: 100,
@@ -924,7 +990,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             const past = new Date(Date.now() - 86_400_000).toISOString();
 
             const res = await supertest(app.getHttpServer())
-                .patch(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`)
+                .patch(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({ validUntil: past })
                 .expect(400);
@@ -941,7 +1009,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             const user = await createUser();
             const { slug, accountSlug } = await createBusinessFor(user);
             const create = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: 100,
@@ -954,12 +1024,16 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                 .slug;
 
             await supertest(app.getHttpServer())
-                .delete(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`)
+                .delete(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`
+                )
                 .set('Authorization', bearerFor(user))
                 .expect(200);
 
             await supertest(app.getHttpServer())
-                .get(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`)
+                .get(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`
+                )
                 .set('Authorization', bearerFor(user))
                 .expect(404);
         });
@@ -975,7 +1049,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             // Створюємо 2 інвойси
             for (let i = 0; i < 2; i++) {
                 await supertest(app.getHttpServer())
-                    .post(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`)
+                    .post(
+                        `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                    )
                     .set('Authorization', bearerFor(user))
                     .send({
                         amount: 100,
@@ -1003,7 +1079,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             // 3 інвойси
             for (let i = 0; i < 3; i++) {
                 await supertest(app.getHttpServer())
-                    .post(`/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`)
+                    .post(
+                        `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                    )
                     .set('Authorization', bearerFor(user))
                     .send({
                         amount: 100,
@@ -1336,9 +1414,8 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                         },
                     })
                     .expect(201);
-                const invoiceSlug = (
-                    res.body as { data: { slug: string } }
-                ).data.slug;
+                const invoiceSlug = (res.body as { data: { slug: string } })
+                    .data.slug;
 
                 await supertest(app.getHttpServer())
                     .get(

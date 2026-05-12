@@ -135,9 +135,7 @@ export class BusinessesController {
     @Delete(':slug')
     @UseGuards(BusinessAccessGuard)
     @HttpCode(HttpStatus.OK)
-    async delete(
-        @CurrentBusiness() business: BusinessDocument
-    ): Promise<{
+    async delete(@CurrentBusiness() business: BusinessDocument): Promise<{
         data: { affectedAccounts: number; affectedInvoices: number };
     }> {
         // Sprint 9 §SP-5 — повертаємо обидва counters cascade-видалених

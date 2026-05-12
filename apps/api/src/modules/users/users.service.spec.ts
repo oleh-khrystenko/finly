@@ -570,6 +570,45 @@ describe('UsersService', () => {
         });
     });
 
+    describe('stampAcceptedTerms (Sprint 10 §SP-12)', () => {
+        it('idempotent filter — викликає updateOne з $ne на termsVersion', async () => {
+            mockModel.updateOne.mockResolvedValue({ matchedCount: 0 });
+            await service.stampAcceptedTerms('507f1f77bcf86cd799439011', 'v2');
+
+            expect(mockModel.updateOne).toHaveBeenCalledWith(
+                {
+                    _id: '507f1f77bcf86cd799439011',
+                    termsVersion: { $ne: 'v2' },
+                },
+                {
+                    $set: {
+                        termsAcceptedAt: expect.any(Date),
+                        termsVersion: 'v2',
+                    },
+                }
+            );
+        });
+
+        it('overwrite на новий version — той самий update-shape, новий version у $set', async () => {
+            mockModel.updateOne.mockResolvedValue({ matchedCount: 1 });
+            await service.stampAcceptedTerms('507f1f77bcf86cd799439011', 'v3');
+
+            const updateArg = mockModel.updateOne.mock.calls[0][1];
+            expect(updateArg.$set.termsVersion).toBe('v3');
+            expect(updateArg.$set.termsAcceptedAt).toBeInstanceOf(Date);
+        });
+
+        it('no-op коли version === current — filter $ne блокує match (matchedCount=0)', async () => {
+            // Імітуємо БД-state: termsVersion='v2'. Filter $ne: v2 не матчить
+            // документ — updateOne повертає matchedCount=0. Метод повертає
+            // void без помилки (idempotent semantics).
+            mockModel.updateOne.mockResolvedValue({ matchedCount: 0 });
+            await expect(
+                service.stampAcceptedTerms('507f1f77bcf86cd799439011', 'v2')
+            ).resolves.toBeUndefined();
+        });
+    });
+
     describe('commitReservation', () => {
         const userId = '507f1f77bcf86cd799439011';
         const reservationId = 'test-reservation-uuid';

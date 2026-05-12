@@ -111,6 +111,21 @@ if (!ENV.PAYMENTS_SUBSCRIPTION_ENABLED && !ENV.PAYMENTS_ONE_OFF_ENABLED) {
     );
 }
 
+// Sprint 10 §10.1 — dedup-overwrite-flow (sendMagicLink SP-8) припускає, що
+// magic-record-у живий поки існує dedup-key. Інваріант: TTL magic-record-у
+// (хвилини → секунди) ≥ TTL dedup-key-у (секунди). Якщо інверсія — dedup-key
+// переживе magic-record-у, redis.get(`magic:${existingToken}`) поверне null,
+// dedup-overwrite-flow упаде у fallthrough на normal-flow (новий token + лист)
+// замість silent-overwrite — anti-spam invariant порушено.
+if (ENV.AUTH_MAGIC_LINK_TTL_MIN * 60 < ENV.AUTH_MAGIC_LINK_DEDUP_SEC) {
+    throw new Error(
+        `❌ AUTH_MAGIC_LINK_DEDUP_SEC (${ENV.AUTH_MAGIC_LINK_DEDUP_SEC}s) ` +
+            `must not exceed AUTH_MAGIC_LINK_TTL_MIN converted to seconds ` +
+            `(${ENV.AUTH_MAGIC_LINK_TTL_MIN}min = ${ENV.AUTH_MAGIC_LINK_TTL_MIN * 60}s). ` +
+            'Otherwise dedup-key outlives magic-record and overwrite-flow breaks.'
+    );
+}
+
 // Парсинг AUTH_LOCKOUT_THRESHOLDS="5:1,10:5,20:15" → [{ attempts: 5, blockMin: 1 }, ...]
 export function parseLockoutThresholds(
     raw: string

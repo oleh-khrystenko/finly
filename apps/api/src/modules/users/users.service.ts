@@ -297,6 +297,36 @@ export class UsersService {
         );
     }
 
+    /**
+     * Sprint 10 §SP-12 — terms-pre-stamp у magic-link verify-flow ДО claim.
+     * Idempotent: filter `termsVersion: $ne: version` блокує перезапис того
+     * самого значення; на новий version — overwrite. Викликається з
+     * `AuthService.verifyMagicLink` order-step (2), uniform across `login` /
+     * `register` / `reset-password` purpose-ів (`delete-account` структурно
+     * виключений: terms-stamp до видалення акаунту не має сенсу).
+     *
+     * Відрізняється від `acceptTerms` саме idempotency-семантикою: `acceptTerms`
+     * — public user-action endpoint (POST /users/me/accept-terms), завжди
+     * стемпить новий `termsAcceptedAt`; `stampAcceptedTerms` — server-side
+     * automatic у magic-link flow, не повинен оновлювати `termsAcceptedAt`
+     * якщо version не змінилася (іначе верифікація поверни-знов-знов сторінки
+     * безпідставно пере-стемпило б дату).
+     */
+    async stampAcceptedTerms(
+        userId: string,
+        termsVersion: string
+    ): Promise<void> {
+        await this.userModel.updateOne(
+            { _id: userId, termsVersion: { $ne: termsVersion } },
+            {
+                $set: {
+                    termsAcceptedAt: new Date(),
+                    termsVersion,
+                },
+            }
+        );
+    }
+
     async hasExecution(userId: string): Promise<boolean> {
         const user = await this.userModel.findById(userId).exec();
         if (!user) return false;

@@ -16,7 +16,9 @@ function makeBusiness(
     } as unknown as BusinessDocument;
 }
 
-function makeAccount(overrides: Partial<AccountDocument> = {}): AccountDocument {
+function makeAccount(
+    overrides: Partial<AccountDocument> = {}
+): AccountDocument {
     return {
         iban: 'UA213223130000026007233566001',
         ...overrides,

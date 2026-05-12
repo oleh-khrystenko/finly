@@ -87,11 +87,36 @@ export class BusinessesService {
         isBookkeeperMode: boolean
     ): Promise<BusinessDocument> {
         const userObjectId = new Types.ObjectId(userId);
-        const slug = await this.slugGenerator.generateRandomSlug();
 
         const ownership = isBookkeeperMode
             ? { ownerId: null, managers: [userObjectId] }
             : { ownerId: userObjectId, managers: [] as Types.ObjectId[] };
+
+        // Sprint 10 §SP-11 — anon-claim replay через partial-unique-index
+        // `(ownerId, claimIdempotencyKey)`. Pre-check уникає вторинного insert
+        // у happy-path; partial-unique-index ловить race-window між findOne
+        // та create. **Ownership-aware filter** покриває обидва режими:
+        // owned (`ownerId=userId`) і bookkeeper (`ownerId=null` +
+        // `managers ∋ userId`); plain `{ownerId: userId}`-filter не
+        // спрацював би для bookkeeper-документа, де ownerId зберігається як
+        // null.
+        const replayFilter = dto.claimIdempotencyKey
+            ? this.buildClaimReplayFilter(
+                  userObjectId,
+                  isBookkeeperMode,
+                  dto.claimIdempotencyKey
+              )
+            : null;
+        if (replayFilter) {
+            const existing = await this.businessModel
+                .findOne(replayFilter)
+                .exec();
+            if (existing) {
+                return existing;
+            }
+        }
+
+        const slug = await this.slugGenerator.generateRandomSlug();
 
         // Sprint 7 §SP-3 — discriminated-union variants `individual` /
         // `organization` фізично не містять taxation-полів у DTO-shape. Mongoose
@@ -120,17 +145,28 @@ export class BusinessesService {
                 ...ownership,
             });
         } catch (err) {
-            // Race condition: SlugGenerator щойно перевірив `slugLower` як
-            // вільний, але паралельний create зайняв його раніше за наш
-            // insert. Для 8-char × 62-alphabet алфавіту вірогідність ≈ 0,
-            // але defensively ловимо MongoServerError 11000 і кидаємо
-            // SLUG_GENERATION_FAILED з логом — це сигнал для алерту, не
-            // user-facing помилка.
-            if (
-                err instanceof Error &&
-                'code' in err &&
-                (err as { code: number }).code === 11000
-            ) {
+            if (isDuplicateKeyError(err)) {
+                const keyPattern = readKeyPattern(err);
+                // Sprint 10 §SP-11 — race-window між pre-check findOne і
+                // insert: concurrent claim з тим самим (userId, key) дойшов
+                // до insert-а раніше. Partial-unique-index блокує другий
+                // insert; ловимо 11000 на саме цьому компоунд-ключі і
+                // повертаємо existing-документ як replay-shape (та сама
+                // contract-семантика, що у pre-check-гілці вище).
+                if (replayFilter && keyPattern.claimIdempotencyKey === 1) {
+                    const existing = await this.businessModel
+                        .findOne(replayFilter)
+                        .exec();
+                    if (existing) {
+                        return existing;
+                    }
+                }
+                // Sprint 3 — race condition: SlugGenerator щойно перевірив
+                // `slugLower` як вільний, але паралельний create зайняв його
+                // раніше за наш insert. Для 8-char × 62-alphabet алфавіту
+                // вірогідність ≈ 0, але defensively ловимо і кидаємо
+                // SLUG_GENERATION_FAILED — сигнал для алерту, не user-facing
+                // помилка.
                 this.logger.error(
                     `Slug collision race for "${slug}" (slugLower=${slug.toLowerCase()})`
                 );
@@ -141,6 +177,20 @@ export class BusinessesService {
             }
             throw err;
         }
+    }
+
+    private buildClaimReplayFilter(
+        userObjectId: Types.ObjectId,
+        isBookkeeperMode: boolean,
+        claimIdempotencyKey: string
+    ): FilterQuery<BusinessDocument> {
+        return isBookkeeperMode
+            ? {
+                  ownerId: null,
+                  managers: userObjectId,
+                  claimIdempotencyKey,
+              }
+            : { ownerId: userObjectId, claimIdempotencyKey };
     }
 
     async getOwnedAndManaged(
@@ -438,18 +488,9 @@ export class BusinessesService {
             await session.withTransaction(async () => {
                 // Sprint 9 §SP-5 cascade — три collections + business у тій
                 // самій TX. Atomic-or-nothing: або повністю, або нічого.
-                await this.invoiceModel.deleteMany(
-                    { businessId },
-                    { session }
-                );
-                await this.accountModel.deleteMany(
-                    { businessId },
-                    { session }
-                );
-                await this.counterModel.deleteMany(
-                    { businessId },
-                    { session }
-                );
+                await this.invoiceModel.deleteMany({ businessId }, { session });
+                await this.accountModel.deleteMany({ businessId }, { session });
+                await this.counterModel.deleteMany({ businessId }, { session });
                 await this.businessModel.deleteOne(
                     { _id: businessId },
                     { session }
@@ -475,4 +516,22 @@ export class BusinessesService {
 
         return { affectedAccounts, affectedInvoices };
     }
+}
+
+function isDuplicateKeyError(err: unknown): err is Error & { code: number } {
+    return (
+        err instanceof Error &&
+        'code' in err &&
+        (err as { code: unknown }).code === 11000
+    );
+}
+
+function readKeyPattern(err: unknown): Record<string, number> {
+    if (err && typeof err === 'object' && 'keyPattern' in err) {
+        const kp = (err as { keyPattern?: unknown }).keyPattern;
+        if (kp && typeof kp === 'object') {
+            return kp as Record<string, number>;
+        }
+    }
+    return {};
 }

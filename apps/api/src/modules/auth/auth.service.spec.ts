@@ -9,6 +9,7 @@ import { JwtService } from '@nestjs/jwt';
 
 import { REDIS_CLIENT } from '../../common/modules/redis.module';
 import { RedisCounterService } from '../../common/services/redis-counter.service';
+import { LandingClaimService } from '../landing-claim/landing-claim.service';
 import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
 import { EmailService } from '../email/email.service';
@@ -88,6 +89,10 @@ const mockStorageService = {
     reUploadExternalAvatar: jest.fn(),
 };
 
+const mockLandingClaimService = {
+    attemptLandingClaim: jest.fn(),
+};
+
 describe('AuthService', () => {
     let authService: AuthService;
     let jwtService: JwtService;
@@ -117,6 +122,10 @@ describe('AuthService', () => {
                         setPasswordHash: jest.fn().mockResolvedValue(undefined),
                         softDelete: jest.fn().mockResolvedValue(undefined),
                         updateTimezone: jest.fn().mockResolvedValue(undefined),
+                        // Sprint 10 §SP-12 — idempotent terms-stamp у verifyMagicLink.
+                        stampAcceptedTerms: jest
+                            .fn()
+                            .mockResolvedValue(undefined),
                     },
                 },
                 {
@@ -131,6 +140,10 @@ describe('AuthService', () => {
                 {
                     provide: StorageService,
                     useValue: mockStorageService,
+                },
+                {
+                    provide: LandingClaimService,
+                    useValue: mockLandingClaimService,
                 },
                 {
                     provide: REDIS_CLIENT,
@@ -155,6 +168,8 @@ describe('AuthService', () => {
         // Default: no avatar re-upload path. Individual tests override.
         mockStorageService.isR2Url.mockReturnValue(false);
         mockStorageService.reUploadExternalAvatar.mockReset();
+        // Default: no landing claim (no-op). Spring 10 claim-integration tests override.
+        mockLandingClaimService.attemptLandingClaim.mockReset();
     });
 
     describe('generateTokens', () => {
@@ -695,8 +710,16 @@ describe('AuthService', () => {
         });
 
         it('should skip sending email if dedup key exists (anti-spam)', async () => {
+            // Sprint 10 §SP-8 — dedup-hit йде у overwrite-flow з валідним
+            // magic-record-payload-ом (anti-spam invariant збережено: лист
+            // повторно не відправляється; replace TTL через KEEPTTL).
             mockRedisCounter.incrementFixedWindow.mockResolvedValue(1);
-            mockRedis.get.mockResolvedValue('existing-token');
+            mockRedis.get
+                .mockResolvedValueOnce('existing-token')
+                .mockResolvedValueOnce(
+                    JSON.stringify({ email, purpose: 'login' })
+                );
+            mockRedis.set.mockResolvedValue('OK');
 
             await authService.sendMagicLink(email);
 
@@ -727,6 +750,163 @@ describe('AuthService', () => {
                 `magic_dedup:${email}:login`
             );
             expect(emailService.sendMagicLink).toHaveBeenCalled();
+        });
+
+        // ─── Sprint 10 §SP-8 — dedup-overwrite з трьома sibling-fields ───
+
+        describe('dedup-overwrite (Sprint 10 §SP-8)', () => {
+            const DRAFT = {
+                receiverName: 'Іваненко',
+                iban: 'UA213223130000026007233566001',
+                taxId: '1234567899',
+                purpose: 'Оплата',
+            } as const;
+            const KEY = '00000000-0000-4000-8000-000000000000';
+            const DRAFT_DRIFT = { ...DRAFT, receiverName: 'Петренко' };
+
+            it('(a) перший виклик з 3 полями — write у новий record (no dedup hit)', async () => {
+                mockRedisCounter.incrementFixedWindow.mockResolvedValue(1);
+                mockRedis.get.mockResolvedValue(null); // no dedup key
+
+                await authService.sendMagicLink(email, 'login', undefined, {
+                    landingDraft: DRAFT,
+                    claimIdempotencyKey: KEY,
+                    termsVersion: 'v2',
+                });
+
+                const setCall = mockPipeline.set.mock.calls.find(
+                    (c: unknown[]) =>
+                        typeof c[0] === 'string' && c[0].startsWith('magic:')
+                );
+                expect(setCall).toBeDefined();
+                const payload = JSON.parse(setCall![1] as string) as Record<
+                    string,
+                    unknown
+                >;
+                expect(payload).toMatchObject({
+                    email,
+                    purpose: 'login',
+                    landingDraft: DRAFT,
+                    claimIdempotencyKey: KEY,
+                    termsVersion: 'v2',
+                });
+                expect(emailService.sendMagicLink).toHaveBeenCalledTimes(1);
+            });
+
+            it('(b) повторний з тими самими 3 полями — KEEPTTL overwrite, лист НЕ відправлено', async () => {
+                mockRedisCounter.incrementFixedWindow.mockResolvedValue(1);
+                // 1-й get → dedup-key value (existingToken); 2-й get → existing magic-record payload
+                mockRedis.get
+                    .mockResolvedValueOnce('existing-token-abc')
+                    .mockResolvedValueOnce(
+                        JSON.stringify({
+                            email,
+                            purpose: 'login',
+                            landingDraft: DRAFT,
+                            claimIdempotencyKey: KEY,
+                            termsVersion: 'v2',
+                        })
+                    );
+                mockRedis.set.mockResolvedValue('OK');
+
+                await authService.sendMagicLink(email, 'login', undefined, {
+                    landingDraft: DRAFT,
+                    claimIdempotencyKey: KEY,
+                    termsVersion: 'v2',
+                });
+
+                expect(mockRedis.set).toHaveBeenCalledWith(
+                    'magic:existing-token-abc',
+                    expect.any(String),
+                    'KEEPTTL'
+                );
+                expect(emailService.sendMagicLink).not.toHaveBeenCalled();
+            });
+
+            it('(c) повторний з drift-нутим landingDraft — record оновлено новим draft, лист НЕ відправлено', async () => {
+                mockRedisCounter.incrementFixedWindow.mockResolvedValue(1);
+                mockRedis.get
+                    .mockResolvedValueOnce('existing-token-abc')
+                    .mockResolvedValueOnce(
+                        JSON.stringify({
+                            email,
+                            purpose: 'login',
+                            landingDraft: DRAFT,
+                            claimIdempotencyKey: KEY,
+                        })
+                    );
+                mockRedis.set.mockResolvedValue('OK');
+
+                await authService.sendMagicLink(email, 'login', undefined, {
+                    landingDraft: DRAFT_DRIFT,
+                    claimIdempotencyKey: KEY,
+                });
+
+                const setArg = mockRedis.set.mock.calls[0][1] as string;
+                const payload = JSON.parse(setArg) as Record<string, unknown>;
+                expect(payload.landingDraft).toEqual(DRAFT_DRIFT);
+                expect(emailService.sendMagicLink).not.toHaveBeenCalled();
+            });
+
+            it('(d) повторний без landingDraft+key (reset-password-resend) — drop sibling-fields, termsVersion overwrite-нуто', async () => {
+                mockRedisCounter.incrementFixedWindow.mockResolvedValue(1);
+                mockRedis.get
+                    .mockResolvedValueOnce('existing-token-abc')
+                    .mockResolvedValueOnce(
+                        JSON.stringify({
+                            email,
+                            purpose: 'reset-password',
+                            landingDraft: DRAFT,
+                            claimIdempotencyKey: KEY,
+                            termsVersion: 'v1',
+                        })
+                    );
+                mockRedis.set.mockResolvedValue('OK');
+
+                await authService.sendMagicLink(
+                    email,
+                    'reset-password',
+                    undefined,
+                    { termsVersion: 'v2' }
+                );
+
+                const setArg = mockRedis.set.mock.calls[0][1] as string;
+                const payload = JSON.parse(setArg) as Record<string, unknown>;
+                expect(payload.landingDraft).toBeUndefined();
+                expect(payload.claimIdempotencyKey).toBeUndefined();
+                expect(payload.termsVersion).toBe('v2');
+                expect(emailService.sendMagicLink).not.toHaveBeenCalled();
+            });
+
+            it('(e) змішаний flow — перший без sibling-fields, потім з; overwrite додає у той самий token-record', async () => {
+                mockRedisCounter.incrementFixedWindow.mockResolvedValue(1);
+                mockRedis.get
+                    .mockResolvedValueOnce('existing-token-abc')
+                    .mockResolvedValueOnce(
+                        JSON.stringify({
+                            email,
+                            purpose: 'login',
+                        })
+                    );
+                mockRedis.set.mockResolvedValue('OK');
+
+                await authService.sendMagicLink(email, 'login', undefined, {
+                    landingDraft: DRAFT,
+                    claimIdempotencyKey: KEY,
+                    termsVersion: 'v2',
+                });
+
+                const setArg = mockRedis.set.mock.calls[0][1] as string;
+                const payload = JSON.parse(setArg) as Record<string, unknown>;
+                expect(payload).toMatchObject({
+                    email,
+                    purpose: 'login',
+                    landingDraft: DRAFT,
+                    claimIdempotencyKey: KEY,
+                    termsVersion: 'v2',
+                });
+                expect(emailService.sendMagicLink).not.toHaveBeenCalled();
+            });
         });
     });
 
@@ -952,6 +1132,156 @@ describe('AuthService', () => {
             expect(
                 'accountDeleted' in result ? result.accountDeleted : undefined
             ).toBeUndefined();
+        });
+
+        // ─── Sprint 10 §10.1 — claim-integration order-of-operations ───
+
+        describe('claim-integration (Sprint 10 §10.1)', () => {
+            const DRAFT = {
+                receiverName: 'Іваненко',
+                iban: 'UA213223130000026007233566001',
+                taxId: '1234567899',
+                purpose: 'Оплата',
+            } as const;
+            const KEY = '00000000-0000-4000-8000-000000000000';
+            const userIdStr = '507f1f77bcf86cd799439011';
+
+            const seedMagicPayload = (extra: Record<string, unknown>) => {
+                mockRedis.getdel.mockResolvedValue(
+                    JSON.stringify({
+                        email: 'user@example.com',
+                        purpose: 'login',
+                        ...extra,
+                    })
+                );
+                const saveMock = jest.fn().mockResolvedValue(mockUser);
+                jest.spyOn(
+                    usersService,
+                    'findOrCreateByEmail'
+                ).mockResolvedValue({
+                    ...mockUser,
+                    _id: { toString: () => userIdStr },
+                    deletedAt: null,
+                    worksAsBookkeeper: false,
+                    save: saveMock,
+                } as never);
+                jest.spyOn(jwtService, 'signAsync')
+                    .mockResolvedValueOnce('access-token')
+                    .mockResolvedValueOnce('refresh-token');
+            };
+
+            it('(a) без landingDraft+claimIdempotencyKey у Redis — no claim, baseline auth-response', async () => {
+                seedMagicPayload({});
+
+                const result = await authService.verifyMagicLink(token);
+
+                expect(
+                    mockLandingClaimService.attemptLandingClaim
+                ).not.toHaveBeenCalled();
+                expect(
+                    'claimResult' in result ? result.claimResult : 'absent'
+                ).toBeUndefined();
+            });
+
+            it('(b) з обома + claim-success — claimResult містить claimState=success + claimed slugs', async () => {
+                seedMagicPayload({
+                    landingDraft: DRAFT,
+                    claimIdempotencyKey: KEY,
+                });
+                mockLandingClaimService.attemptLandingClaim.mockResolvedValue({
+                    claimState: 'success',
+                    claimedBusinessSlug: 'BizSlug1',
+                    claimedAccountSlug: 'AcctSlg1',
+                });
+
+                const result = await authService.verifyMagicLink(token);
+
+                expect(
+                    mockLandingClaimService.attemptLandingClaim
+                ).toHaveBeenCalledWith(
+                    { userId: userIdStr, isBookkeeperMode: false },
+                    DRAFT,
+                    KEY
+                );
+                expect(
+                    'claimResult' in result ? result.claimResult : null
+                ).toEqual({
+                    claimState: 'success',
+                    claimedBusinessSlug: 'BizSlug1',
+                    claimedAccountSlug: 'AcctSlg1',
+                });
+            });
+
+            it('(c) з обома + business-failed — claimResult містить failedClaimDraft', async () => {
+                seedMagicPayload({
+                    landingDraft: DRAFT,
+                    claimIdempotencyKey: KEY,
+                });
+                mockLandingClaimService.attemptLandingClaim.mockResolvedValue({
+                    claimState: 'business-failed',
+                    failedClaimDraft: DRAFT,
+                });
+
+                const result = await authService.verifyMagicLink(token);
+
+                expect(
+                    'claimResult' in result ? result.claimResult : null
+                ).toEqual({
+                    claimState: 'business-failed',
+                    failedClaimDraft: DRAFT,
+                });
+            });
+
+            it('(d) з обома + account-failed (Business створено) — partialBusinessSlug + failedClaimDraft', async () => {
+                seedMagicPayload({
+                    landingDraft: DRAFT,
+                    claimIdempotencyKey: KEY,
+                });
+                mockLandingClaimService.attemptLandingClaim.mockResolvedValue({
+                    claimState: 'account-failed',
+                    partialBusinessSlug: 'PartialBiz',
+                    failedClaimDraft: DRAFT,
+                });
+
+                const result = await authService.verifyMagicLink(token);
+
+                expect(
+                    'claimResult' in result ? result.claimResult : null
+                ).toEqual({
+                    claimState: 'account-failed',
+                    partialBusinessSlug: 'PartialBiz',
+                    failedClaimDraft: DRAFT,
+                });
+            });
+
+            it('(e) terms-pre-stamp: payload з termsVersion → stampAcceptedTerms викликається ДО claim', async () => {
+                seedMagicPayload({
+                    landingDraft: DRAFT,
+                    claimIdempotencyKey: KEY,
+                    termsVersion: 'v3',
+                });
+                mockLandingClaimService.attemptLandingClaim.mockResolvedValue({
+                    claimState: 'success',
+                    claimedBusinessSlug: 'BizSlug1',
+                    claimedAccountSlug: 'AcctSlg1',
+                });
+
+                await authService.verifyMagicLink(token);
+
+                const stampFn = (
+                    usersService as unknown as {
+                        stampAcceptedTerms: jest.Mock;
+                    }
+                ).stampAcceptedTerms;
+                expect(stampFn).toHaveBeenCalledWith(userIdStr, 'v3');
+                // Order verification: stamp invoked before claim. Jest captures
+                // invocationCallOrder per mock instance.
+                const stampOrder = stampFn.mock.invocationCallOrder[0];
+                const claimOrder =
+                    mockLandingClaimService.attemptLandingClaim.mock
+                        .invocationCallOrder[0];
+                expect(stampOrder).toBeLessThan(claimOrder);
+            });
         });
     });
 

@@ -13,6 +13,7 @@ import { AuthGuard } from '@nestjs/passport';
 import {
     AuthResponse,
     CheckEmailResponse,
+    DeleteAccountVerifyResponse,
     MAGIC_LINK_PURPOSE,
     RESPONSE_CODE,
     type ApiMessageResponse,
@@ -122,7 +123,12 @@ export class AuthController {
         await this.authService.sendMagicLink(
             dto.email,
             dto.purpose ?? MAGIC_LINK_PURPOSE.LOGIN,
-            dto.redirectTo
+            dto.redirectTo,
+            {
+                landingDraft: dto.landingDraft,
+                claimIdempotencyKey: dto.claimIdempotencyKey,
+                termsVersion: dto.termsVersion,
+            }
         );
         return {
             data: {
@@ -136,7 +142,7 @@ export class AuthController {
     async verifyMagicLink(
         @Body() dto: VerifyMagicLinkDto,
         @Res({ passthrough: true }) res: Response
-    ): Promise<{ data: AuthResponse | { deleted: true; message: string } }> {
+    ): Promise<{ data: AuthResponse | DeleteAccountVerifyResponse }> {
         const result = await this.authService.verifyMagicLink(dto.token);
 
         if (result.deleted) {
@@ -150,7 +156,7 @@ export class AuthController {
             };
         }
 
-        const { user, tokens, purpose, accountDeleted } = result;
+        const { user, tokens, purpose, accountDeleted, claimResult } = result;
 
         res.cookie('bid_refresh', tokens.refreshToken, REFRESH_COOKIE_OPTIONS);
 
@@ -160,6 +166,10 @@ export class AuthController {
                 accessToken: tokens.accessToken,
                 purpose,
                 ...(accountDeleted && { accountDeleted }),
+                // Sprint 10 §SP-7 — claim-fields merged через spread; всі
+                // discriminated-shape-варіанти (success / business-failed /
+                // account-failed) уже несуть тільки потрібні поля.
+                ...(claimResult ?? {}),
             },
         };
     }

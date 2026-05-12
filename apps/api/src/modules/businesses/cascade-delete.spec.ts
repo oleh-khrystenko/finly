@@ -217,8 +217,10 @@ describe('BusinessesService cascade-delete (Sprint 4 §SP-5, MongoMemoryReplSet)
     });
 
     it('cross-business isolation: cascade видаляє лише цей business', async () => {
-        const { business: target } =
-            await seedBusinessWithAccountsAndInvoices(1, 2);
+        const { business: target } = await seedBusinessWithAccountsAndInvoices(
+            1,
+            2
+        );
         const other = await businessModel.create({
             type: 'fop',
             ownerId: new Types.ObjectId(),

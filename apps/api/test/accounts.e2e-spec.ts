@@ -321,9 +321,9 @@ describe('Accounts E2E (Sprint 9 §SP-1..§SP-3)', () => {
                 .send({ iban: VALID_IBAN, name: 'Основний рахунок' })
                 .expect(201);
 
-            expect(
-                (res.body as { data: { name: string } }).data.name
-            ).toBe('Основний рахунок');
+            expect((res.body as { data: { name: string } }).data.name).toBe(
+                'Основний рахунок'
+            );
         });
 
         it('§SP-2 — duplicate IBAN під тим самим business → 409 ACCOUNT_IBAN_DUPLICATE', async () => {
@@ -506,8 +506,8 @@ describe('Accounts E2E (Sprint 9 §SP-1..§SP-3)', () => {
                 .post(`/api/businesses/me/${businessSlug}/accounts`)
                 .set('Authorization', bearerFor(user))
                 .send({ iban: VALID_IBAN });
-            const accountSlug = (accRes.body as { data: { slug: string } })
-                .data.slug;
+            const accountSlug = (accRes.body as { data: { slug: string } }).data
+                .slug;
             await supertest(app.getHttpServer())
                 .post(
                     `/api/businesses/me/${businessSlug}/accounts/${accountSlug}/invoices`
@@ -555,8 +555,8 @@ describe('Accounts E2E (Sprint 9 §SP-1..§SP-3)', () => {
                 .post(`/api/businesses/me/${businessSlug}/accounts`)
                 .set('Authorization', bearerFor(user))
                 .send({ iban: VALID_IBAN });
-            const accountSlug = (accRes.body as { data: { slug: string } })
-                .data.slug;
+            const accountSlug = (accRes.body as { data: { slug: string } }).data
+                .slug;
 
             await supertest(app.getHttpServer())
                 .delete(
@@ -578,8 +578,8 @@ describe('Accounts E2E (Sprint 9 §SP-1..§SP-3)', () => {
                 .post(`/api/businesses/me/${businessSlug}/accounts`)
                 .set('Authorization', bearerFor(user))
                 .send({ iban: VALID_IBAN });
-            const accountSlug = (accRes.body as { data: { slug: string } })
-                .data.slug;
+            const accountSlug = (accRes.body as { data: { slug: string } }).data
+                .slug;
 
             const res = await supertest(app.getHttpServer())
                 .get(
@@ -606,17 +606,16 @@ describe('Accounts E2E (Sprint 9 §SP-1..§SP-3)', () => {
             const user = await createUser();
             const businessSlug = await createBusinessFor(user);
             // 2 account-и × 2 інвойси
-            for (const iban of [
-                VALID_IBAN,
-                'UA273052992990004149497786452',
-            ]) {
+            for (const iban of [VALID_IBAN, 'UA273052992990004149497786452']) {
                 const accRes = await supertest(app.getHttpServer())
                     .post(`/api/businesses/me/${businessSlug}/accounts`)
                     .set('Authorization', bearerFor(user))
                     .send({ iban });
-                const accountSlug = (accRes.body as {
-                    data: { slug: string };
-                }).data.slug;
+                const accountSlug = (
+                    accRes.body as {
+                        data: { slug: string };
+                    }
+                ).data.slug;
                 for (let i = 0; i < 2; i++) {
                     await supertest(app.getHttpServer())
                         .post(

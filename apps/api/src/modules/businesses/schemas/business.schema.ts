@@ -136,6 +136,20 @@ export class Business {
     @Prop({ type: Date, default: null })
     deletedAt!: Date | null;
 
+    /**
+     * Sprint 10 §SP-11 — anti-duplicate-Business UUID v4 token для anon-claim
+     * flow. Frontend генерує `crypto.randomUUID()` на CTA-click "Зберегти у
+     * кабінет" і прокидає у `POST /businesses/me` (через magic-link Redis-record-у
+     * або напряму на same-device-flow). Backend дедуплікує через partial-unique-
+     * compound-index `(ownerId, claimIdempotencyKey)` нижче.
+     *
+     * **Optional у документі**, бо cabinet-wizard-create НЕ передає key —
+     * поле відсутнє у документі, не входить у `partialFilterExpression`, не
+     * блокує множинні cabinet-create без anon-claim-context-у.
+     */
+    @Prop({ type: String, required: false })
+    claimIdempotencyKey?: string;
+
     // Declared for TypeScript visibility; managed by Mongoose `timestamps: true`.
     createdAt!: Date;
     updatedAt!: Date;
@@ -155,3 +169,19 @@ applyJsonTransform(BusinessSchema);
 BusinessSchema.index({ slugLower: 1 }, { unique: true });
 BusinessSchema.index({ ownerId: 1 }, { sparse: true });
 BusinessSchema.index({ managers: 1 });
+
+// Sprint 10 §SP-11 — partial-unique `(ownerId, claimIdempotencyKey)` для
+// anon-claim dedup. `partialFilterExpression: { claimIdempotencyKey: { $type:
+// 'string' } }` критично: без нього sparse-index плутав би null-key документи
+// (cabinet wizard-create) у один null-bucket → друге wizard-create без anon-
+// claim упало б на 11000. Partial-filter включає тільки документи з
+// claimIdempotencyKey-string-ом — anon-claim-flow єдиний consumer.
+BusinessSchema.index(
+    { ownerId: 1, claimIdempotencyKey: 1 },
+    {
+        unique: true,
+        partialFilterExpression: {
+            claimIdempotencyKey: { $type: 'string' },
+        },
+    }
+);

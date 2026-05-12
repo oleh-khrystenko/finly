@@ -113,8 +113,7 @@ export class AccountsService {
                 if (touch.matchedCount === 0) {
                     throw new NotFoundException({
                         code: RESPONSE_CODE.BUSINESS_NOT_FOUND,
-                        message:
-                            'Business deleted during account creation',
+                        message: 'Business deleted during account creation',
                     });
                 }
                 const docs = await this.accountModel.create(
@@ -268,6 +267,22 @@ export class AccountsService {
         return this.accountModel.countDocuments({ businessId });
     }
 
+    /**
+     * Sprint 10 review fix — lookup для POST2-replay у `LandingClaimService`.
+     * Single-document read через `(businessId, iban)` compound-unique-index
+     * (Sprint 9 §SP-2) — O(1) на DB-рівні. Не використовується cabinet-flow-ом
+     * (там IBAN не lookup-key, бо unique тільки у scope-і business-у); живе тут
+     * як domain-owned read-helper, не у LandingClaimService напряму
+     * (LandingClaim не має @InjectModel-доступу до Account і не повинен мати —
+     * separation-of-concerns).
+     */
+    async findByBusinessAndIban(
+        businessId: Types.ObjectId,
+        iban: string
+    ): Promise<AccountDocument | null> {
+        return this.accountModel.findOne({ businessId, iban }).exec();
+    }
+
     async update(
         account: AccountDocument,
         dto: UpdateAccountRequest
@@ -331,10 +346,7 @@ export class AccountsService {
                         message: `Цей рахунок має ${invoicesPhrase}. Спочатку видаліть їх або весь бізнес`,
                     });
                 }
-                await this.counterModel.deleteMany(
-                    { accountId },
-                    { session }
-                );
+                await this.counterModel.deleteMany({ accountId }, { session });
                 await this.accountModel.deleteOne(
                     { _id: accountId },
                     { session }

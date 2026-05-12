@@ -202,10 +202,17 @@ describe('AuthController', () => {
                 purpose: undefined,
             } as any);
 
+            // Sprint 10 — 4-й argument options-object з 3 optional sibling-
+            // fields. Без передачі — усі три undefined.
             expect(mockAuthService.sendMagicLink).toHaveBeenCalledWith(
                 'test@gmail.com',
                 MAGIC_LINK_PURPOSE.LOGIN,
-                undefined
+                undefined,
+                {
+                    landingDraft: undefined,
+                    claimIdempotencyKey: undefined,
+                    termsVersion: undefined,
+                }
             );
         });
 
@@ -220,7 +227,12 @@ describe('AuthController', () => {
             expect(mockAuthService.sendMagicLink).toHaveBeenCalledWith(
                 'test@gmail.com',
                 MAGIC_LINK_PURPOSE.REGISTER,
-                undefined
+                undefined,
+                {
+                    landingDraft: undefined,
+                    claimIdempotencyKey: undefined,
+                    termsVersion: undefined,
+                }
             );
         });
     });
