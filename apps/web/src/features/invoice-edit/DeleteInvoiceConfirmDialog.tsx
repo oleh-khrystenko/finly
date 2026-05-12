@@ -35,10 +35,10 @@ export default function DeleteInvoiceConfirmDialog() {
                 onConfirm?.();
                 close();
             }}
-            title="Видалити рахунок?"
+            title="Видалити інвойс?"
             description={
                 invoice
-                    ? `Рахунок «${invoice.slug}» буде видалено. Клієнт, який має збережене посилання, не зможе оплатити.`
+                    ? `Інвойс «${invoice.slug}» буде видалено. Клієнт, який має збережене посилання, не зможе оплатити.`
                     : ''
             }
             confirmLabel="Видалити"

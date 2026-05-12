@@ -4,13 +4,22 @@ import { useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { ibanZod, individualTaxIdZod } from '@finly/types';
+import { individualTaxIdZod } from '@finly/types';
 import UiInput from '@/shared/ui/UiInput';
 import UiButton from '@/shared/ui/UiButton';
 import { getZodFieldError } from '@/shared/lib';
 import { taxIdFieldConfig } from '@/entities/business';
 import { useBusinessWizardStore } from './businessWizardStore';
 
+/**
+ * Sprint 9 §9.2 — крок "Реквізити" wizard-у. **Тільки `taxId`** (IBAN видалений
+ * повністю — живе на Account після Sprint 9, створюється окремою формою
+ * `/business/[slug]/account/new` пост-create бізнесу).
+ *
+ * Type-aware валідація `taxId` через `taxIdFieldConfig(type)` — single source
+ * of truth label/placeholder/validator/maxLength, що шерить wizard з
+ * cabinet-edit `RequisitesSection`.
+ */
 export default function Step2Requisites() {
     const formData = useBusinessWizardStore((s) => s.formData);
     const patch = useBusinessWizardStore((s) => s.patchFormData);
@@ -20,9 +29,8 @@ export default function Step2Requisites() {
     /**
      * Defensive: якщо store потрапив у Step 'requisites' без обраного `type`
      * (наприклад, stale sessionStorage drift), редіректимо назад на Step 1
-     * замість render-у з невідомим валідатором. Це той самий sanity-fail-safe
-     * patern, що Step3Taxation робить через `requiresTaxation` (§7.7
-     * sprint-плану).
+     * замість render-у з невідомим валідатором. Той самий patern, що
+     * Step3Taxation робить через `requiresTaxation` (§7.7).
      */
     useEffect(() => {
         if (!formData.type) {
@@ -31,23 +39,15 @@ export default function Step2Requisites() {
     }, [formData.type, setStep]);
 
     const type = formData.type;
-    // Sprint 7 §SP-4 — type-aware UI-config через shared helper. Той самий
-    // мапінг використовує `RequisitesSection` у cabinet edit; зміна label-копії
-    // у одному місці — propagates в обох UI-точках.
-    //
-    // Fallback на `individualTaxIdZod` — щоб TS звузив `Schema` до конкретного
-    // ZodObject-shape з `taxId: ZodType<string>` (без union з generic ZodString).
-    // Runtime-фолбек ніколи не triggers, бо при `!type` early-return нижче
-    // skip-ить render до redirect-у `useEffect` вище. RHF / `useForm` потребують
-    // **stable Schema** на кожен render (хук-порядок), тому неможливо
-    // повертати null зі store-config.
+    // Sprint 7 §SP-4 — type-aware UI-config через shared helper. Fallback на
+    // `individualTaxIdZod` — щоб TS звузив `Schema` до конкретного ZodObject-
+    // shape; runtime-фолбек skip-ається early-return-ом нижче.
     const config = type ? taxIdFieldConfig(type) : null;
     const taxIdValidator = config?.validator ?? individualTaxIdZod;
 
     const Schema = useMemo(
         () =>
             z.object({
-                iban: ibanZod,
                 taxId: taxIdValidator,
             }),
         [taxIdValidator]
@@ -58,20 +58,19 @@ export default function Step2Requisites() {
         resolver: zodResolver(Schema),
         mode: 'onChange',
         defaultValues: {
-            iban: formData.requisites?.iban ?? '',
-            taxId: formData.requisites?.taxId ?? '',
+            taxId: formData.taxId ?? '',
         },
     });
     const { errors, isValid } = form.formState;
 
     const onSubmit = (data: Values) => {
-        patch({ requisites: data });
+        patch({ taxId: data.taxId });
         // `nextStep` обчислює steps[] з поточного `formData.type` —
         // skip `'taxation'` для individual/organization автоматично.
         nextStep();
     };
 
-    if (!type || !config) return null; // Effect вище redirect-ить, render skip під час transition.
+    if (!type || !config) return null;
 
     return (
         <form
@@ -79,13 +78,6 @@ export default function Step2Requisites() {
             className="space-y-5"
             noValidate
         >
-            <UiInput
-                label="IBAN"
-                placeholder="UA213223130000026007233566001"
-                inputMode="text"
-                {...form.register('iban')}
-                error={getZodFieldError(errors.iban)}
-            />
             <UiInput
                 label={config.label}
                 placeholder={config.placeholder}

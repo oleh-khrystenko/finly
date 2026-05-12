@@ -1,0 +1,163 @@
+'use client';
+
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useRouter } from 'next/navigation';
+import { AxiosError } from 'axios';
+import { toast } from 'sonner';
+import {
+    CreateAccountSchema,
+    accountNameSchema,
+    ibanZod,
+    type CreateAccountRequest,
+} from '@finly/types';
+import { z } from 'zod';
+
+import { createAccount, getApiMessage } from '@/shared/api';
+import { getZodFieldError } from '@/shared/lib';
+import UiButton from '@/shared/ui/UiButton';
+import UiInput from '@/shared/ui/UiInput';
+import UiSectionCard from '@/shared/ui/UiSectionCard';
+
+interface Props {
+    businessSlug: string;
+}
+
+/**
+ * Sprint 9 §9.2 — single-form для створення Account під бізнесом.
+ *
+ * Поля:
+ *  - `iban` (required) — `ibanZod`-валідація на client-side; backend reject-не
+ *    duplicate `(businessId, iban)` через 409 `ACCOUNT_IBAN_DUPLICATE`.
+ *  - `name` (optional) — backend auto-generate `"{BANK_LABEL[bankCode]} •{last4}"`
+ *    якщо порожнє (Sprint 9 §A4 auto-default-policy). UI показує placeholder.
+ *
+ * **Resolver через `RHF + zod` на флат-shape**: оба поля валідуються
+ * незалежно. `CreateAccountSchema` уже `.strict()` — будь-яке зайве поле
+ * reject-неться, тому body shape точно матчить контракт.
+ *
+ * **`name`-схема з literal('')-варіантом**: empty string у `name`-input
+ * означає "хочу auto-default з МФО", не "явне порожнє name". `accountNameSchema`
+ * має `.min(1)`, тож сам `.optional()`-wrapper не допоможе — `''` (не `undefined`)
+ * пішло б через `.min(1)` і fail-ило б `INVALID_ACCOUNT_NAME_REQUIRED`, блокуючи
+ * submit-кнопку у `mode: 'onChange'`-формі.
+ *
+ * Union `z.literal('').or(accountNameSchema)` дозволяє `''` як легітимний "skip-
+ * варіант" з form-side; submit-handler нормалізує `''.trim() === '' → omit`
+ * (line ~75) перед POST. `.optional()` додатково покриває `undefined` (RHF
+ * uncontrolled).
+ */
+const FormSchema = z.object({
+    iban: ibanZod,
+    name: z.literal('').or(accountNameSchema).optional(),
+});
+
+type FormValues = z.input<typeof FormSchema>;
+
+export default function AccountCreateForm({ businessSlug }: Props) {
+    const router = useRouter();
+    const [submitting, setSubmitting] = useState(false);
+
+    const form = useForm<FormValues>({
+        resolver: zodResolver(FormSchema),
+        mode: 'onChange',
+        defaultValues: { iban: '', name: '' },
+    });
+    const { register, handleSubmit, formState } = form;
+    const { errors, isValid } = formState;
+
+    const onSubmit = async (values: FormValues): Promise<void> => {
+        const name = values.name?.trim();
+        const dto: CreateAccountRequest = {
+            iban: values.iban,
+            // Empty input → omit `name`, щоб backend застосував auto-default.
+            ...(name && name.length > 0 ? { name } : {}),
+        };
+
+        // Belt-and-suspenders: pre-submit pass через канонічний contract-схему.
+        const parsed = CreateAccountSchema.safeParse(dto);
+        if (!parsed.success) {
+            toast.error('Перевірте правильність значень');
+            return;
+        }
+
+        setSubmitting(true);
+        try {
+            const created = await createAccount(businessSlug, parsed.data);
+            toast.success('Рахунок створено');
+            router.replace(
+                `/business/${businessSlug}/account/${created.slug}`
+            );
+        } catch (err) {
+            const code =
+                err instanceof AxiosError
+                    ? ((
+                          err.response?.data as
+                              | { error?: { code?: string } }
+                              | undefined
+                      )?.error?.code ?? 'unknown')
+                    : 'unknown';
+            toast.error(getApiMessage(code, 'accounts'));
+            setSubmitting(false);
+        }
+    };
+
+    return (
+        <form
+            onSubmit={(e) => {
+                void handleSubmit(onSubmit)(e);
+            }}
+            className="space-y-4"
+            noValidate
+        >
+            <UiSectionCard title="IBAN рахунку">
+                <UiInput
+                    label="IBAN"
+                    placeholder="UA213223130000026007233566001"
+                    inputMode="text"
+                    {...register('iban')}
+                    error={getZodFieldError(errors.iban)}
+                />
+                <p className="text-muted-foreground mt-2 text-xs">
+                    IBAN неможливо буде змінити після створення. Якщо помилитеся
+                    — видаліть рахунок і створіть новий.
+                </p>
+            </UiSectionCard>
+
+            <UiSectionCard title="Назва рахунку">
+                <UiInput
+                    label="Назва"
+                    placeholder="За замовчуванням підтягнеться з банку"
+                    {...register('name')}
+                    error={getZodFieldError(errors.name)}
+                    maxLength={60}
+                />
+                <p className="text-muted-foreground mt-2 text-xs">
+                    Залиште порожнім — назва підтягнеться автоматично з МФО
+                    (наприклад, «ПриватБанк •2580»).
+                </p>
+            </UiSectionCard>
+
+            <div className="flex justify-end gap-3 pt-2">
+                <UiButton
+                    as="link"
+                    href={`/business/${businessSlug}`}
+                    variant="text"
+                    size="md"
+                    disabled={submitting}
+                >
+                    Скасувати
+                </UiButton>
+                <UiButton
+                    type="submit"
+                    variant="filled"
+                    size="md"
+                    disabled={submitting || !isValid}
+                >
+                    {submitting ? 'Створюю...' : 'Створити рахунок'}
+                </UiButton>
+            </div>
+        </form>
+    );
+}

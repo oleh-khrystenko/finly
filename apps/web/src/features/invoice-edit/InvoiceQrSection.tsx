@@ -11,25 +11,30 @@ import UiSectionCard from '@/shared/ui/UiSectionCard';
 interface Props {
     invoice: Invoice;
     businessSlug: string;
+    /**
+     * Sprint 9 §SP-5 — account-slug у public-URL інвойсу (3-сегментний матрьошка).
+     */
+    accountSlug: string;
     apiBase?: string;
 }
 
 /**
- * Sprint 4 §4.6 — секція "QR-картинка" для інвойсу. Показує public-URL QR
- * (canonical-URL інвойсу: `pay.finly.com.ua/{businessSlug}/{invoiceSlug}`).
+ * Sprint 4 §4.6 + Sprint 9 §SP-5 — секція "QR-картинка" для інвойсу.
+ * Показує public-URL QR (canonical 3-сегментний матрьошка-URL інвойсу).
  *
- * **Patern ідентичний Sprint 3 `QrSection` для бізнесу** — `<img>` з public
- * endpoint, кнопка "Завантажити" через blob+anchor; toast-error на failure.
+ * **Patern ідентичний Sprint 3** — `<img>` з public endpoint, кнопка
+ * "Завантажити" через blob+anchor; toast-error на failure.
  */
 export default function InvoiceQrSection({
     invoice,
     businessSlug,
+    accountSlug,
     apiBase = '/api',
 }: Props) {
     const [downloading, setDownloading] = useState(false);
     const url = `${apiBase}/businesses/public/${encodeURIComponent(
         businessSlug
-    )}/invoices/${encodeURIComponent(invoice.slug)}/qr/business.png`;
+    )}/account/${encodeURIComponent(accountSlug)}/invoices/${encodeURIComponent(invoice.slug)}/qr/business.png`;
 
     const handleDownload = async () => {
         setDownloading(true);

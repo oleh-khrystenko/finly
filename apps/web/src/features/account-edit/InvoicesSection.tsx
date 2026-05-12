@@ -13,47 +13,35 @@ import InvoiceCard from './InvoiceCard';
 
 interface Props {
     businessSlug: string;
+    accountSlug: string;
     /**
      * Template з batch-fetched `Business` на parent-page. Lifted-down до
-     * `InvoiceCard` для inheritance fallback (`paymentPurpose ?? template`) —
-     * mirror backend-резолвера `effectiveInvoicePurpose`. Section не робить
-     * власного fetch business-document-у; template приходить з cabinet-page,
-     * де `Business` вже завантажений для решти секцій.
+     * `InvoiceCard` для inheritance fallback (`paymentPurpose ?? template`).
      */
     businessPaymentPurposeTemplate: string;
-    /** Public-payment-page origin для побудови copy-link URL у InvoiceCard. */
+    /** Public-payment-page origin для побудови copy-link URL. */
     payPublicOrigin: string;
 }
 
 const PAGE_SIZE = 10;
 
 /**
- * Sprint 4 §4.4 — секція "Рахунки" на сторінці бізнесу `/business/{slug}`.
+ * Sprint 4 §4.4 + Sprint 9 §SP-5/§SP-6 — секція "Інвойси" на account-cabinet-
+ * page. До Sprint 9 жила на business-cabinet (Sprint 4 §4.4); переїхала разом
+ * з per-account-нумерацією інвойсів.
  *
- * **Layout.** `UiSectionCard` з `headerRight`-CTA "Виставити рахунок";
- * всередині — empty-state АБО list карток з "Завантажити ще"-trigger-button.
+ * **List-fetch:** `listInvoices(businessSlug, accountSlug, page, limit)` —
+ * 3-сегментний URL `/businesses/me/{biz}/accounts/{acc}/invoices`.
  *
- * **State-discriminator (review fix).** `data: { paramSlug, items, total,
- * page } | null` — items ключуються route-param-ом. Якщо `businessSlug`
- * змінився між page-навігаціями (cabinet → інший cabinet → той самий список
- * через soft-back), старі items відкидаються render-ом до завершення нового
- * fetch. Без discriminator-у: попередня сторінка показувалася за свіжою
- * URL до завершення async-fetch, що ламає UX і race-condition безпеку.
+ * **State-discriminator** (review fix). `data: { paramBiz, paramAcc, items,
+ * total, page } | null` — items ключуються route-param-ами. Якщо змінився
+ * хоча б один з business/account — старі items відкидаються render-ом до
+ * завершення нового fetch.
  *
- * **Pagination state.** `loaded: Invoice[]` (накопичувальний) + `total: number`
- * для знання, коли зупинятись. Кожен "Завантажити ще" робить fetch з
- * `page = поточна + 1`, потім `mergeUniqueById` зливає items з existing-prev:
- * дублі (інвойс, що з'явився повторно через паралельний insert/order-shift)
- * перезаписуються по `id`, не дублюються в UI. Map-merge preserves order:
- * existing зберігають свою позицію, нові додаються в кінець.
+ * **Pagination state.** `loaded: Invoice[]` (накопичувальний) + `total`;
+ * `mergeUniqueById` зливає items з existing-prev (dedup по `id`).
  */
 
-/**
- * Merge нових items з existing з deduplication по `id`. О(N+M); preserves
- * order existing-items, нові вставляються в кінець (Map insertion-order).
- * Якщо новий item має той самий `id`, що existing — overwrite-иться (свіжіша
- * версія перемагає, логічно для optimistic-state-у).
- */
 function mergeUniqueById<T extends { id: string }>(prev: T[], next: T[]): T[] {
     const map = new Map<string, T>(prev.map((item) => [item.id, item]));
     for (const item of next) map.set(item.id, item);
@@ -61,14 +49,16 @@ function mergeUniqueById<T extends { id: string }>(prev: T[], next: T[]): T[] {
 }
 
 interface SectionData {
-    paramSlug: string;
+    paramBiz: string;
+    paramAcc: string;
     items: Invoice[];
     total: number;
     page: number;
 }
 
 interface SectionError {
-    paramSlug: string;
+    paramBiz: string;
+    paramAcc: string;
     message: string;
 }
 
@@ -83,6 +73,7 @@ function extractMessage(err: unknown): string {
 
 export default function InvoicesSection({
     businessSlug,
+    accountSlug,
     businessPaymentPurposeTemplate,
     payPublicOrigin,
 }: Props) {
@@ -90,20 +81,17 @@ export default function InvoicesSection({
     const [error, setError] = useState<SectionError | null>(null);
     const [loadingMore, setLoadingMore] = useState(false);
 
-    // Sprint 4 §4.6 — pendingInvoiceDeletesStore filter-ить items, що вже у
-    // 5s-undo вікні. Без цього: optimistic redirect з invoice-cabinet →
-    // fresh fetch → бачимо інвойс ще присутнім у списку до того, як backend
-    // DELETE реально спрацює.
+    // Sprint 4 §4.6 + Sprint 9 §SP-10 — 3-сегментний key.
     const pendingDeleteKeys = usePendingInvoiceDeletesStore((s) => s.keys);
 
-    // Initial / re-fetch на зміну businessSlug.
     useEffect(() => {
         let cancelled = false;
-        listInvoices(businessSlug, 1, PAGE_SIZE)
+        listInvoices(businessSlug, accountSlug, 1, PAGE_SIZE)
             .then((res) => {
                 if (cancelled) return;
                 setData({
-                    paramSlug: businessSlug,
+                    paramBiz: businessSlug,
+                    paramAcc: accountSlug,
                     items: res.items,
                     total: res.total,
                     page: res.page,
@@ -113,66 +101,81 @@ export default function InvoicesSection({
             .catch((err: unknown) => {
                 if (cancelled) return;
                 setError({
-                    paramSlug: businessSlug,
+                    paramBiz: businessSlug,
+                    paramAcc: accountSlug,
                     message: extractMessage(err),
                 });
             });
         return () => {
             cancelled = true;
         };
-    }, [businessSlug]);
+    }, [businessSlug, accountSlug]);
 
-    const isCurrent = data?.paramSlug === businessSlug;
-    const isErrorCurrent = error?.paramSlug === businessSlug;
+    const isCurrent =
+        data?.paramBiz === businessSlug && data?.paramAcc === accountSlug;
+    const isErrorCurrent =
+        error?.paramBiz === businessSlug && error?.paramAcc === accountSlug;
 
     const loadMore = useCallback(async () => {
-        if (loadingMore || !data || data.paramSlug !== businessSlug) return;
-        const captured = businessSlug;
+        if (
+            loadingMore ||
+            !data ||
+            data.paramBiz !== businessSlug ||
+            data.paramAcc !== accountSlug
+        ) {
+            return;
+        }
+        const capturedBiz = businessSlug;
+        const capturedAcc = accountSlug;
         setLoadingMore(true);
         try {
-            const next = await listInvoices(captured, data.page + 1, PAGE_SIZE);
-            // Apply тільки якщо state ще відповідає тому самому бізнесу —
-            // інакше fetch може долетіти після page-navigation і записати
-            // чужі items.
+            const next = await listInvoices(
+                capturedBiz,
+                capturedAcc,
+                data.page + 1,
+                PAGE_SIZE
+            );
             setData((prev) =>
-                prev && prev.paramSlug === captured
+                prev &&
+                prev.paramBiz === capturedBiz &&
+                prev.paramAcc === capturedAcc
                     ? {
-                          paramSlug: captured,
+                          paramBiz: capturedBiz,
+                          paramAcc: capturedAcc,
                           items: mergeUniqueById(prev.items, next.items),
                           total: next.total,
                           page: next.page,
                       }
                     : prev
             );
-            // Review fix — попередня помилка ("Завантажити ще" failed → toast),
-            // якщо вона стосувалася того самого бізнесу, при наступному
-            // успішному loadMore має зникнути. Без цього error-плашка
-            // лишалася над свіжим списком (initial-load очищала помилку,
-            // loadMore ні — асиметрія state-flow-у).
             setError((prev) =>
-                prev && prev.paramSlug === captured ? null : prev
+                prev &&
+                prev.paramBiz === capturedBiz &&
+                prev.paramAcc === capturedAcc
+                    ? null
+                    : prev
             );
         } catch (err: unknown) {
             setError({
-                paramSlug: captured,
+                paramBiz: capturedBiz,
+                paramAcc: capturedAcc,
                 message: extractMessage(err),
             });
         } finally {
             setLoadingMore(false);
         }
-    }, [businessSlug, data, loadingMore]);
+    }, [businessSlug, accountSlug, data, loadingMore]);
 
     const visibleItems = useMemo(() => {
         if (!isCurrent || !data) return null;
         return data.items.filter(
-            (i) => !pendingDeleteKeys.has(`${businessSlug}/${i.slug}`)
+            (i) =>
+                !pendingDeleteKeys.has(
+                    `${businessSlug}/${accountSlug}/${i.slug}`
+                )
         );
-    }, [isCurrent, data, pendingDeleteKeys, businessSlug]);
+    }, [isCurrent, data, pendingDeleteKeys, businessSlug, accountSlug]);
 
-    // `total` приходить з backend — це source of truth по фактичному
-    // remaining-count. Frontend pending-deletes тимчасово ховають N items з UI;
-    // зменшуємо total відповідно, щоб "Завантажити ще ({total - items.length})"
-    // не показувало від'ємні / надто великі числа.
     const total = isCurrent && data ? data.total : 0;
     const hiddenInList =
         visibleItems === null || data === null
@@ -181,20 +184,22 @@ export default function InvoicesSection({
     const visibleTotal = Math.max(0, total - hiddenInList);
     const hasMore = visibleItems !== null && visibleItems.length < visibleTotal;
 
+    const createInvoiceHref = `/business/${businessSlug}/account/${accountSlug}/invoice/new`;
+
     return (
         <UiSectionCard
             id="invoices"
-            title="Рахунки"
+            title="Інвойси"
             headerRight={
                 visibleItems !== null && visibleItems.length > 0 ? (
                     <UiButton
                         as="link"
-                        href={`/business/${businessSlug}/invoice/new`}
+                        href={createInvoiceHref}
                         variant="filled"
                         size="sm"
                         IconLeft={<Plus />}
                     >
-                        Виставити рахунок
+                        Виставити інвойс
                     </UiButton>
                 ) : undefined
             }
@@ -213,7 +218,9 @@ export default function InvoicesSection({
 
             {visibleItems !== null &&
                 visibleItems.length === 0 &&
-                !isErrorCurrent && <EmptyState businessSlug={businessSlug} />}
+                !isErrorCurrent && (
+                    <EmptyState createHref={createInvoiceHref} />
+                )}
 
             {visibleItems !== null && visibleItems.length > 0 && (
                 <div className="space-y-3">
@@ -223,6 +230,7 @@ export default function InvoicesSection({
                                 key={inv.id}
                                 invoice={inv}
                                 businessSlug={businessSlug}
+                                accountSlug={accountSlug}
                                 businessPaymentPurposeTemplate={
                                     businessPaymentPurposeTemplate
                                 }
@@ -253,7 +261,7 @@ export default function InvoicesSection({
     );
 }
 
-function EmptyState({ businessSlug }: { businessSlug: string }) {
+function EmptyState({ createHref }: { createHref: string }) {
     return (
         <div className="flex flex-col items-center gap-4 py-8 text-center">
             <div className="bg-muted text-muted-foreground flex size-12 items-center justify-center rounded-full">
@@ -261,21 +269,21 @@ function EmptyState({ businessSlug }: { businessSlug: string }) {
             </div>
             <div className="space-y-1">
                 <p className="text-foreground text-sm font-medium">
-                    Поки немає виставлених рахунків
+                    Поки немає виставлених інвойсів
                 </p>
                 <p className="text-muted-foreground max-w-sm text-xs">
-                    Натисніть «Виставити рахунок» — клієнт отримає посилання з
+                    Натисніть «Виставити інвойс» — клієнт отримає посилання з
                     сумою і призначенням, готове для оплати.
                 </p>
             </div>
             <UiButton
                 as="link"
-                href={`/business/${businessSlug}/invoice/new`}
+                href={createHref}
                 variant="filled"
                 size="sm"
                 IconLeft={<Plus />}
             >
-                Виставити рахунок
+                Виставити інвойс
             </UiButton>
         </div>
     );

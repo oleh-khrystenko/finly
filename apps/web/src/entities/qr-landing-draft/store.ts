@@ -29,7 +29,18 @@ interface QrLandingDraftState {
 }
 
 const STORAGE_KEY = 'finly:landing-draft';
-const STORAGE_VERSION = 1;
+/**
+ * Sprint 9 §9.2 — bump 1→2 як defense-in-depth для stale `intent='claim-pending'`
+ * у браузерах QA/dev-сесій, що до Sprint 9 deploy натиснули CTA "Зберегти у
+ * кабінет" і закешували `formData`-shape під старий backend-contract. Sprint 9
+ * видалив `requisites`-wrapper з `CreateBusinessSchema` — старий claim-payload
+ * упреться у `.strict()` reject на 400. Migrate-handler нижче reset-ить state
+ * на initial для unknown version, тож stale-payload не виконається.
+ *
+ * Sprint 10 при поверненні CTA з новою архітектурою bump-не version знову (2→3)
+ * разом з shape-міграцією formData.
+ */
+const STORAGE_VERSION = 2;
 
 const INITIAL_STATE = {
     formData: {} as Partial<QrPreviewInput>,

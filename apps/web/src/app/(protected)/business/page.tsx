@@ -1,14 +1,13 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, Briefcase, FileText, Plus } from 'lucide-react';
+import { ArrowRight, Briefcase, CreditCard, FileText, Plus } from 'lucide-react';
 import { AxiosError } from 'axios';
-import { BUSINESS_TYPE_LABEL } from '@finly/types';
 import {
-    getApiMessage,
-    listBusinesses,
-    type BusinessWithInvoicesCount,
-} from '@/shared/api';
+    BUSINESS_TYPE_LABEL,
+    type BusinessWithCounts,
+} from '@finly/types';
+import { getApiMessage, listBusinesses } from '@/shared/api';
 import { ENV } from '@/shared/config/env';
 import { useAuthStore } from '@/entities/user';
 import { usePendingDeletesStore } from '@/features/business-edit/pendingDeletesStore';
@@ -38,7 +37,7 @@ export default function BusinessListPage() {
     const user = useAuthStore((s) => s.user);
     const isBookkeeper = user?.worksAsBookkeeper ?? false;
 
-    const [items, setItems] = useState<BusinessWithInvoicesCount[] | null>(
+    const [items, setItems] = useState<BusinessWithCounts[] | null>(
         null
     );
     const [error, setError] = useState<string | null>(null);
@@ -188,15 +187,17 @@ function BusinessCard({
     isBookkeeper,
     payHost,
 }: {
-    business: BusinessWithInvoicesCount;
+    business: BusinessWithCounts;
     isBookkeeper: boolean;
     payHost: string;
 }) {
     const typeLabel = BUSINESS_TYPE_LABEL[business.type];
-    const invoicesCount = business.invoicesCount;
-    // Sprint 4 §4.4 SP-4 — counter активних інвойсів + scroll-target на
-    // секцію "Рахунки". Hash `#invoices` — frontend-only anchor; cabinet
-    // page додає id="invoices" wrapper до секції (через UiSectionCard).
+    const { accountsCount, invoicesCount } = business;
+    // Sprint 9 §Risk #7 mitigation — два counter-и (рахунки + інвойси усього)
+    // на business-картці, щоб ФОП з 1 рахунком розумів обсяг без drill-down-у
+    // у per-account-page. "Рахунків" без слова "активних" — рахує всі
+    // документи в `Account`-колекції цього бізнесу. Аналогічно invoicesCount
+    // — всі invoice-документи (включно з expired).
     return (
         <UiSectionCard
             title={business.name}
@@ -217,30 +218,34 @@ function BusinessCard({
                         {business.slug}
                     </span>
                 </p>
-                {invoicesCount > 0 && (
-                    <p className="text-muted-foreground inline-flex items-center gap-1 pt-1 text-xs">
-                        <FileText className="size-3.5" />
-                        {/*
-                         * Лейбл "{N} рахунків" — без слова "активних":
-                         * counter рахує **всі** invoice-документи бізнесу,
-                         * включно з expired. Інакше label вводив би в оману
-                         * (3 інвойси, з яких 2 прострочені — UI каже "3
-                         * активних"). Експеричні invoices теж лежать у
-                         * кабінеті, доступні для редагування/видалення,
-                         * тож їх логічно рахувати.
-                         */}
+                <div className="flex flex-wrap gap-x-3 gap-y-1 pt-1">
+                    <p className="text-muted-foreground inline-flex items-center gap-1 text-xs">
+                        <CreditCard className="size-3.5" />
                         {pluralizeUa(
-                            invoicesCount,
+                            accountsCount,
                             'рахунок',
                             'рахунки',
                             'рахунків'
                         )}
                     </p>
-                )}
+                    {invoicesCount > 0 && (
+                        <p className="text-muted-foreground inline-flex items-center gap-1 text-xs">
+                            <FileText className="size-3.5" />
+                            {pluralizeUa(
+                                invoicesCount,
+                                'інвойс',
+                                'інвойси',
+                                'інвойсів'
+                            )}
+                        </p>
+                    )}
+                </div>
             </div>
             <UiButton
                 as="link"
-                href={`/business/${business.slug}${invoicesCount > 0 ? '#invoices' : ''}`}
+                href={`/business/${business.slug}${
+                    accountsCount > 0 ? '#accounts' : ''
+                }`}
                 variant="outline"
                 size="sm"
                 IconRight={<ArrowRight />}

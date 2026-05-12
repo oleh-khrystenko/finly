@@ -10,22 +10,27 @@ import UiSectionCard from '@/shared/ui/UiSectionCard';
 interface Props {
     invoice: Invoice;
     businessSlug: string;
+    /**
+     * Sprint 9 §SP-5 — account-slug у public URL інвойсу.
+     * Public-URL інвойсу стає 3-сегментним `{businessSlug}/{accountSlug}/{invoiceSlug}`.
+     */
+    accountSlug: string;
     /** Public payment-page origin (NEXT_PUBLIC_PAY_PUBLIC_URL). */
     payPublicOrigin: string;
 }
 
 /**
- * Sprint 4 §4.6 — секція "Slug" (readonly + copy + URL preview).
- * Slug invoice immutable після створення (Sprint 4 §"НЕ-скоуп": vanity-edit
- * для інвойсу не передбачений).
+ * Sprint 4 §4.6 + Sprint 9 §SP-5 — секція "Slug" (readonly + copy + URL preview).
+ * Slug invoice immutable після створення. Public URL — 3-сегментний матрьошка.
  */
 export default function SlugSection({
     invoice,
     businessSlug,
+    accountSlug,
     payPublicOrigin,
 }: Props) {
     const [copied, setCopied] = useState(false);
-    const publicUrl = `${payPublicOrigin.replace(/\/$/, '')}/${businessSlug}/${invoice.slug}`;
+    const publicUrl = `${payPublicOrigin.replace(/\/$/, '')}/${businessSlug}/${accountSlug}/${invoice.slug}`;
 
     const handleCopy = async () => {
         try {
@@ -42,13 +47,13 @@ export default function SlugSection({
             <div className="space-y-3">
                 <div>
                     <p className="text-muted-foreground text-xs font-medium">
-                        Slug рахунку
+                        Slug інвойсу
                     </p>
                     <p className="text-foreground mt-1 font-mono text-sm break-all">
                         {invoice.slug}
                     </p>
                     <p className="text-muted-foreground mt-0.5 text-xs">
-                        Slug рахунку незмінний після створення
+                        Slug інвойсу незмінний після створення
                     </p>
                 </div>
                 <div>

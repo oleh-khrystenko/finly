@@ -4,7 +4,6 @@ import type {
     BankCode,
     BusinessType,
     CreateBusinessRequest,
-    SlugPreset,
     TaxationSystem,
 } from '@finly/types';
 import { MVP_BANKS, requiresTaxation } from '@finly/types';
@@ -104,15 +103,22 @@ export const STEP_TITLES: Record<BusinessWizardStep, string> = {
  * draft + final-submit-mapping `draft → CreateBusinessRequest variant` дає
  * single source of truth з чистою dispatch-логікою.
  */
+/**
+ * Sprint 9 §9.2 — `iban` повністю прибраний з draft (живе тільки на Account,
+ * створюється окремою формою пост-create через `POST /businesses/me/{slug}/
+ * accounts`). `requisites`-wrapper видалений; `taxId` стає top-level field-ом
+ * у draft + у `CreateBusinessSchema`. `invoiceSlugPresetDefault` видалений
+ * (orphan-key у Sprint 7 v2-draft — `buildCreateRequestFromDraft` його не
+ * emit-ив; Sprint 9 переніс власника поля на Account).
+ */
 export interface BusinessWizardDraft {
     type?: BusinessType;
     name?: string;
-    requisites?: { iban?: string; taxId?: string };
+    taxId?: string;
     taxationSystem?: TaxationSystem;
     isVatPayer?: boolean;
     paymentPurposeTemplate?: string;
     acceptedBanks?: BankCode[];
-    invoiceSlugPresetDefault?: SlugPreset | null;
 }
 
 /**
@@ -196,6 +202,16 @@ const NUMERIC_STEP_TO_NAMED: Record<number, BusinessWizardStep> = {
     4: 'purpose-banks',
 };
 
+/**
+ * Sprint 9 §9.2 — v3 migration:
+ *  - drop `requisites`-wrapper з draft-shape (`iban` зник повністю, `taxId`
+ *    flatten-ується у top-level). v2-payload з `formData.requisites.taxId`
+ *    переноситься у `formData.taxId`; `formData.requisites` вилучається.
+ *  - drop orphan `invoiceSlugPresetDefault` (v2 містив поле, але emitter
+ *    `buildCreateRequestFromDraft` його не emit-ив; Sprint 9 переніс owner-а).
+ *
+ * Якщо persisted shape неможливо інтерпретувати — fallback на initial state.
+ */
 const migratePersistedState = (
     persistedState: unknown,
     version: number
@@ -210,7 +226,7 @@ const migratePersistedState = (
     }
     const state = persistedState as {
         currentStep?: unknown;
-        formData?: BusinessWizardDraft;
+        formData?: Record<string, unknown>;
     };
 
     let migratedStep: BusinessWizardStep;
@@ -222,9 +238,49 @@ const migratePersistedState = (
         migratedStep = 'type-name';
     }
 
+    const rawForm = state.formData ?? {};
+    const migratedForm: BusinessWizardDraft = { ...INITIAL_FORM };
+
+    // Pass-through полів, що не змінюють форму між v2 і v3.
+    if (typeof rawForm.type === 'string') {
+        migratedForm.type = rawForm.type as BusinessType;
+    }
+    if (typeof rawForm.name === 'string') {
+        migratedForm.name = rawForm.name;
+    }
+    if (typeof rawForm.taxationSystem === 'string') {
+        migratedForm.taxationSystem = rawForm.taxationSystem as TaxationSystem;
+    }
+    if (typeof rawForm.isVatPayer === 'boolean') {
+        migratedForm.isVatPayer = rawForm.isVatPayer;
+    }
+    if (typeof rawForm.paymentPurposeTemplate === 'string') {
+        migratedForm.paymentPurposeTemplate = rawForm.paymentPurposeTemplate;
+    }
+    if (Array.isArray(rawForm.acceptedBanks)) {
+        migratedForm.acceptedBanks = rawForm.acceptedBanks as BankCode[];
+    }
+
+    // v2 → v3: `requisites.taxId` (якщо був) → top-level `taxId`.
+    // `requisites.iban` навмисно drop-ається (Account-domain).
+    if (version < 3) {
+        const requisites = rawForm.requisites as
+            | { iban?: unknown; taxId?: unknown }
+            | undefined;
+        if (
+            requisites &&
+            typeof requisites === 'object' &&
+            typeof requisites.taxId === 'string'
+        ) {
+            migratedForm.taxId = requisites.taxId;
+        }
+    } else if (typeof rawForm.taxId === 'string') {
+        migratedForm.taxId = rawForm.taxId;
+    }
+
     return {
         currentStep: migratedStep,
-        formData: state.formData ?? INITIAL_FORM,
+        formData: migratedForm,
     };
 };
 
@@ -286,10 +342,12 @@ export const useBusinessWizardStore = create<BusinessWizardState>()(
         {
             name: 'finly:business-wizard',
             storage: createJSONStorage(() => sessionStorage),
-            // Sprint 7 §SP-6 — bump version при breaking change у state-shape
-            // (`currentStep: 1|2|3|4` → named literals). `migrate` маппить
-            // старі persistanceси, чужорідні значення → fresh `'type-name'`.
-            version: 2,
+            // Sprint 7 §SP-6 — bump 1→2 при breaking change `currentStep`
+            //   (`1|2|3|4` → named literals).
+            // Sprint 9 §9.2 — bump 2→3: `requisites`-wrapper видалено
+            //   (taxId flatten на top-level), `invoiceSlugPresetDefault` drop
+            //   (переїхав на Account). `migrate` переносить v2→v3 поля.
+            version: 3,
             migrate: migratePersistedState,
             // **Persist лише data-частину**, не actions. Без цього default-
             // merge переписав би actions значеннями, що повернула migrate-
@@ -323,13 +381,13 @@ export function buildCreateRequestFromDraft(
     const {
         type,
         name,
-        requisites,
+        taxId,
         paymentPurposeTemplate,
         acceptedBanks,
         taxationSystem,
         isVatPayer,
     } = draft;
-    if (!type || !name || !requisites?.iban || !requisites.taxId) {
+    if (!type || !name || !taxId) {
         throw new Error('Wizard draft incomplete: required fields missing');
     }
     if (!paymentPurposeTemplate || !acceptedBanks?.length) {
@@ -337,7 +395,7 @@ export function buildCreateRequestFromDraft(
     }
     const baseFields = {
         name,
-        requisites: { iban: requisites.iban, taxId: requisites.taxId },
+        taxId,
         paymentPurposeTemplate,
         acceptedBanks,
     };

@@ -15,6 +15,7 @@ import {
     CreateInvoiceSchema,
     effectiveLimit,
     humanSlugPartSchema,
+    type Account,
     type Business,
     type CreateInvoiceRequest,
     type SlugInput,
@@ -37,6 +38,12 @@ import { useSlugPresetWarningStore } from '@/entities/invoice';
 
 interface Props {
     business: Business;
+    /**
+     * Sprint 9 §SP-6 — Account, що володіє новим інвойсом. `invoiceSlugPresetDefault`
+     * читається з account-доку (per-account нумерація). `business` лишається
+     * для `paymentPurposeTemplate` (template-fallback resolution у purpose-input).
+     */
+    account: Account;
 }
 
 /**
@@ -139,8 +146,10 @@ interface FormValues {
 
 const PURPOSE_CHAR_LIMIT = effectiveLimit('purpose').chars;
 
-function defaultSlugOption(business: Business): SlugInputOption {
-    const preset: SlugPreset = business.invoiceSlugPresetDefault ?? 'simple';
+function defaultSlugOption(account: Account): SlugInputOption {
+    // Sprint 9 §SP-6 — preset-default тепер на Account (per-account нумерація);
+    // null fallback на global system default `'simple'` (Sprint 4 §SP-1).
+    const preset: SlugPreset = account.invoiceSlugPresetDefault ?? 'simple';
     return `preset:${preset}` as SlugInputOption;
 }
 
@@ -306,14 +315,14 @@ const createInvoiceResolver: Resolver<FormValues> = async (values) => {
     return { values, errors: {} };
 };
 
-export default function CreateInvoiceForm({ business }: Props) {
+export default function CreateInvoiceForm({ business, account }: Props) {
     const router = useRouter();
     const openWarning = useSlugPresetWarningStore((s) => s.open);
     const [submitting, setSubmitting] = useState(false);
 
     const initialOption = useMemo(
-        () => defaultSlugOption(business),
-        [business]
+        () => defaultSlugOption(account),
+        [account]
     );
 
     const form = useForm<FormValues>({
@@ -418,10 +427,14 @@ export default function CreateInvoiceForm({ business }: Props) {
         const payload = formValuesToCreateRequest(values);
         setSubmitting(true);
         try {
-            const created = await createInvoice(business.slug, payload);
-            toast.success('Рахунок створено');
+            const created = await createInvoice(
+                business.slug,
+                account.slug,
+                payload
+            );
+            toast.success('Інвойс створено');
             router.replace(
-                `/business/${business.slug}/invoice/${created.slug}`
+                `/business/${business.slug}/account/${account.slug}/invoice/${created.slug}`
             );
         } catch (err: unknown) {
             const code =
@@ -595,7 +608,7 @@ export default function CreateInvoiceForm({ business }: Props) {
             </UiSectionCard>
 
             {/* Slug-input — flat 6-option dropdown */}
-            <UiSectionCard title="Як назвати рахунок">
+            <UiSectionCard title="Як назвати інвойс">
                 <div className="space-y-3">
                     <UiSelect
                         options={SLUG_OPTIONS}
@@ -670,7 +683,7 @@ export default function CreateInvoiceForm({ business }: Props) {
             <div className="flex justify-end gap-3 pt-2">
                 <UiButton
                     as="link"
-                    href={`/business/${business.slug}#invoices`}
+                    href={`/business/${business.slug}/account/${account.slug}#invoices`}
                     variant="text"
                     size="md"
                     disabled={submitting}
@@ -685,7 +698,7 @@ export default function CreateInvoiceForm({ business }: Props) {
                         submitting || formState.isSubmitting || purposeOverflow
                     }
                 >
-                    {submitting ? 'Створюю...' : 'Створити рахунок'}
+                    {submitting ? 'Створюю...' : 'Створити інвойс'}
                 </UiButton>
             </div>
         </form>

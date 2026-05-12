@@ -16,13 +16,12 @@ import {
 interface Props {
     invoice: Invoice;
     businessSlug: string;
+    accountSlug: string;
     /**
-     * Template для **legacy fallback** (`payeeSnapshot === null && payment
+     * Template для legacy fallback (`payeeSnapshot === null && payment
      * Purpose === null`) — той самий runtime-resolution-path, що backend
-     * `payload-mapper.ts:59-64` і `public-invoices.controller.ts:138-142`. Для
-     * post-Sprint-4-review-fix invoices з frozen `payeeSnapshot` цей prop не
-     * читається — single source of truth для display = snapshot. Передається
-     * з batch-fetch-у `Business`-документу на parent-сторінці.
+     * `payload-mapper`. Передається з batch-fetch-у `Business`-документу на
+     * parent-сторінці.
      */
     businessPaymentPurposeTemplate: string;
     /** Public-payment-page origin для побудови copy-link URL. */
@@ -30,32 +29,24 @@ interface Props {
 }
 
 /**
- * Sprint 4 §4.4 — окрема картка інвойсу у списку секції "Рахунки".
+ * Sprint 4 §4.4 + Sprint 9 §SP-5 — окрема картка інвойсу у списку секції
+ * "Інвойси" на account-cabinet-page.
  *
- * **Layout** — design-tokens borders + flex column. Status-badge у header-right
- * (як `BusinessCard.headerRight` у Sprint 3). Purpose truncate 2 lines через
- * Tailwind `line-clamp-2` — overflow-text не псує grid висоту карток.
- *
- * **Copy-link** — той самий patern, що `PublicSection` Sprint 3 (1.5s checkmark
- * fallback на toast-error при відмові clipboard API).
+ * **Sprint 9 URL-update**: public-URL стає 3-сегментним —
+ * `{payOrigin}/{businessSlug}/{accountSlug}/{invoiceSlug}`. Cabinet-link
+ * — `/business/{biz}/account/{acc}/invoice/{inv}` (матрьошка §SP-5).
  */
 export default function InvoiceCard({
     invoice,
     businessSlug,
+    accountSlug,
     businessPaymentPurposeTemplate,
     payPublicOrigin,
 }: Props) {
     const [copied, setCopied] = useState(false);
-    const publicUrl = `${payPublicOrigin.replace(/\/$/, '')}/${businessSlug}/${invoice.slug}`;
+    const publicUrl = `${payPublicOrigin.replace(/\/$/, '')}/${businessSlug}/${accountSlug}/${invoice.slug}`;
     const formattedAmount = formatKopecksAsHryvnia(invoice.amount);
     const status = getInvoiceStatus(invoice.validUntil);
-    // Той самий рядок, що піде у NBU payload (backend-mirror): snapshot-first,
-    // legacy live-template fallback (post-Sprint-4-review-fix invoices мають
-    // frozen `payeeSnapshot.paymentPurpose`). Italic-сигнал — лише для
-    // legacy-runtime-inheritance, де текст реально драйфне при редагуванні
-    // business; frozen snapshot з `paymentPurpose === null` показується
-    // звичайним стилем — це **explicit frozen template at create**, не
-    // runtime-наслідування.
     const purpose = resolveInvoicePayeePurpose(
         invoice.payeeSnapshot,
         invoice.paymentPurpose,
@@ -122,7 +113,7 @@ export default function InvoiceCard({
                 </UiButton>
                 <UiButton
                     as="link"
-                    href={`/business/${businessSlug}/invoice/${invoice.slug}`}
+                    href={`/business/${businessSlug}/account/${accountSlug}/invoice/${invoice.slug}`}
                     variant="filled"
                     size="sm"
                     IconRight={<ArrowRight />}

@@ -95,7 +95,7 @@ export async function updateProfile(
     return data.data;
 }
 
-export async function deleteAccount(): Promise<{
+export async function deleteUserAccount(): Promise<{
     requiresPassword?: boolean;
     requiresMagicLink?: boolean;
 }> {

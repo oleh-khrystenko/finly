@@ -1,14 +1,20 @@
 /**
- * Sprint 4 §4.6 — критичний регресійний тест на frontend Undo для інвойсу.
+ * Sprint 4 §4.6 + Sprint 9 §SP-10 — критичний регресійний тест на frontend
+ * Undo для інвойсу.
  *
- * Той самий контракт, що Sprint 3 `scheduleDeleteWithUndo.spec.ts`:
+ * **Sprint 9 update**: 3-арг key `(business, account, invoice)`; інвойсна
+ * uniqueness scope-нута на `(accountId, slug)`, тому два account-и одного
+ * business-у можуть мати інвойс з тим самим slug-string-ом — composite-key
+ * обов'язковий для коректного filter-у у `InvoicesSection`.
+ *
+ * Контракт:
  *  - 5s pass → DELETE called.
  *  - cancel у межах 5s → DELETE НЕ called.
- *  - pendingInvoiceDeletesStore add синхронно перед setTimeout (optimistic
- *    UI removal у `InvoicesSection`).
- *  - success → key ЗАЛИШАЄТЬСЯ у store до browser-unload (захист від
- *    re-show stale-entry у локальному state).
+ *  - pendingInvoiceDeletesStore add синхронно перед setTimeout.
+ *  - success → key ЗАЛИШАЄТЬСЯ у store до browser-unload.
  *  - failure → key remove (UI restore-ить інвойс).
+ *  - Privat-inv-001 і Mono-inv-001 у одному business-i — НЕ колидують
+ *    (3-сегментний key disambiguator).
  */
 
 const mockDeleteInvoice = jest.fn();
@@ -49,8 +55,9 @@ import {
 } from './pendingInvoiceDeletesStore';
 
 const BIZ = 'IvanEnko';
+const ACC = 'aB3xQ9k7';
 const INV = 'order-2026-aB3xQ9k7';
-const KEY = makeInvoiceKey(BIZ, INV);
+const KEY = makeInvoiceKey(BIZ, ACC, INV);
 
 describe('scheduleInvoiceDeleteWithUndo', () => {
     beforeEach(() => {
@@ -68,6 +75,7 @@ describe('scheduleInvoiceDeleteWithUndo', () => {
         const onScheduled = jest.fn();
         scheduleInvoiceDeleteWithUndo({
             businessSlug: BIZ,
+            accountSlug: ACC,
             invoiceSlug: INV,
             onScheduled,
             onCancelled: jest.fn(),
@@ -78,12 +86,13 @@ describe('scheduleInvoiceDeleteWithUndo', () => {
     it('показує sonner toast з cancel-button', () => {
         scheduleInvoiceDeleteWithUndo({
             businessSlug: BIZ,
+            accountSlug: ACC,
             invoiceSlug: INV,
             onScheduled: jest.fn(),
             onCancelled: jest.fn(),
         });
         expect(mockToast).toHaveBeenCalledWith(
-            `Рахунок «${INV}» буде видалено`,
+            `Інвойс «${INV}» буде видалено`,
             expect.objectContaining({
                 duration: INVOICE_UNDO_TIMEOUT_MS,
                 action: expect.objectContaining({ label: 'Скасувати' }),
@@ -91,10 +100,11 @@ describe('scheduleInvoiceDeleteWithUndo', () => {
         );
     });
 
-    it('після 5s викликає deleteInvoice(business, invoice) — критичний path', () => {
+    it('після 5s викликає deleteInvoice(business, account, invoice)', () => {
         mockDeleteInvoice.mockResolvedValue(undefined);
         scheduleInvoiceDeleteWithUndo({
             businessSlug: BIZ,
+            accountSlug: ACC,
             invoiceSlug: INV,
             onScheduled: jest.fn(),
             onCancelled: jest.fn(),
@@ -102,7 +112,7 @@ describe('scheduleInvoiceDeleteWithUndo', () => {
 
         expect(mockDeleteInvoice).not.toHaveBeenCalled();
         jest.advanceTimersByTime(INVOICE_UNDO_TIMEOUT_MS);
-        expect(mockDeleteInvoice).toHaveBeenCalledWith(BIZ, INV);
+        expect(mockDeleteInvoice).toHaveBeenCalledWith(BIZ, ACC, INV);
         expect(mockDeleteInvoice).toHaveBeenCalledTimes(1);
     });
 
@@ -110,6 +120,7 @@ describe('scheduleInvoiceDeleteWithUndo', () => {
         const onCancelled = jest.fn();
         scheduleInvoiceDeleteWithUndo({
             businessSlug: BIZ,
+            accountSlug: ACC,
             invoiceSlug: INV,
             onScheduled: jest.fn(),
             onCancelled,
@@ -128,21 +139,10 @@ describe('scheduleInvoiceDeleteWithUndo', () => {
         expect(mockToastMessage).toHaveBeenCalledWith('Видалення скасовано');
     });
 
-    it('cancel у межах 5s — clearTimeout працює навіть якщо ref-ів немає', () => {
-        scheduleInvoiceDeleteWithUndo({
-            businessSlug: BIZ,
-            invoiceSlug: INV,
-            onScheduled: jest.fn(),
-            onCancelled: jest.fn(),
-        });
-        lastToastAction!.onClick();
-        jest.advanceTimersByTime(INVOICE_UNDO_TIMEOUT_MS * 2);
-        expect(mockDeleteInvoice).not.toHaveBeenCalled();
-    });
-
     it('add(...) у pendingDeletes ВІДРАЗУ при scheduling (synchronous)', () => {
         scheduleInvoiceDeleteWithUndo({
             businessSlug: BIZ,
+            accountSlug: ACC,
             invoiceSlug: INV,
             onScheduled: jest.fn(),
             onCancelled: jest.fn(),
@@ -152,9 +152,10 @@ describe('scheduleInvoiceDeleteWithUndo', () => {
         );
     });
 
-    it('cancel button → remove(...) з pendingDeletes (інвойс повертається у list)', () => {
+    it('cancel button → remove(...) з pendingDeletes', () => {
         scheduleInvoiceDeleteWithUndo({
             businessSlug: BIZ,
+            accountSlug: ACC,
             invoiceSlug: INV,
             onScheduled: jest.fn(),
             onCancelled: jest.fn(),
@@ -168,10 +169,11 @@ describe('scheduleInvoiceDeleteWithUndo', () => {
         );
     });
 
-    it('success after 5s → key ЗАЛИШАЄТЬСЯ у pendingDeletes (інваріант проти UI re-show)', async () => {
+    it('success after 5s → key ЗАЛИШАЄТЬСЯ у pendingDeletes', async () => {
         mockDeleteInvoice.mockResolvedValue(undefined);
         scheduleInvoiceDeleteWithUndo({
             businessSlug: BIZ,
+            accountSlug: ACC,
             invoiceSlug: INV,
             onScheduled: jest.fn(),
             onCancelled: jest.fn(),
@@ -183,16 +185,17 @@ describe('scheduleInvoiceDeleteWithUndo', () => {
         expect(usePendingInvoiceDeletesStore.getState().keys.has(KEY)).toBe(
             true
         );
-        expect(mockDeleteInvoice).toHaveBeenCalledWith(BIZ, INV);
+        expect(mockDeleteInvoice).toHaveBeenCalledWith(BIZ, ACC, INV);
     });
 
-    it('failure after 5s → remove(...) — UI restore-ить інвойс у list', async () => {
+    it('failure after 5s → remove(...)', async () => {
         const apiError = Object.assign(new Error('failed'), {
             response: { data: { error: { code: 'INTERNAL_ERROR' } } },
         });
         mockDeleteInvoice.mockRejectedValue(apiError);
         scheduleInvoiceDeleteWithUndo({
             businessSlug: BIZ,
+            accountSlug: ACC,
             invoiceSlug: INV,
             onScheduled: jest.fn(),
             onCancelled: jest.fn(),
@@ -204,5 +207,23 @@ describe('scheduleInvoiceDeleteWithUndo', () => {
         expect(usePendingInvoiceDeletesStore.getState().keys.has(KEY)).toBe(
             false
         );
+    });
+
+    it('Sprint 9 §SP-10 regression — Privat-inv-001 і Mono-inv-001 у одному бізнесі НЕ колидують', () => {
+        // add(biz, accPrivat, 'inv-001') — Privat-namespace.
+        scheduleInvoiceDeleteWithUndo({
+            businessSlug: BIZ,
+            accountSlug: 'privatAA',
+            invoiceSlug: 'inv-001',
+            onScheduled: jest.fn(),
+            onCancelled: jest.fn(),
+        });
+
+        const store = usePendingInvoiceDeletesStore.getState();
+        // Privat-key є.
+        expect(store.has(BIZ, 'privatAA', 'inv-001')).toBe(true);
+        // Mono-key з тим самим invoice-slug-string — НЕ присутній (інший
+        // composite key).
+        expect(store.has(BIZ, 'monoBBBB', 'inv-001')).toBe(false);
     });
 });

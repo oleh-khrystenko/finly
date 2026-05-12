@@ -50,7 +50,8 @@ describe('useQrLandingDraftStore', () => {
                 version: number;
             };
             expect(parsed.state.formData).toEqual(VALID_FORM);
-            expect(parsed.version).toBe(1);
+            // Sprint 9 §9.2 — bump 1→2 (defense-in-depth stale claim-intent).
+            expect(parsed.version).toBe(2);
         });
     });
 
@@ -101,6 +102,51 @@ describe('useQrLandingDraftStore', () => {
                 'intent',
                 'result',
             ]);
+        });
+    });
+
+    describe('migrate handler (Sprint 9 §9.2 stale claim-intent reset)', () => {
+        /**
+         * Sprint 9 §9.2 §Risk #11 — QA-сесія до Sprint 9 deploy мала
+         * persisted v1-payload з `intent='claim-pending'` + старий
+         * `requisites.iban`-friendly formData. Після Sprint 9 deploy
+         * `useClaimLandingDraft` зчитав би intent і викликав
+         * `claimLandingDraftAsBusiness` зі shape-ом, що backend reject-не
+         * на 400 (`.strict()` cardinality на новому CreateBusinessSchema).
+         *
+         * Test імітує цей сценарій: pre-seed v1-payload у localStorage, потім
+         * створює fresh store-instance і перевіряє, що `migrate`-handler
+         * reset-ив state на initial (intent='idle', formData={}, result=null).
+         *
+         * Зауваження: prod-flow — fresh `create(persist(...))` при імпорті
+         * модуля. Тест використовує `setState({ ...stale })` для імітації
+         * pre-hydrate state-у, бо store вже create-нутий top-level.
+         * Регресія матиме той самий ефект, що migrate, бо `getState()`
+         * викликає migrate якщо state перед-завантажений з storage з нижчою
+         * версією.
+         */
+        it('v1-persisted claim-pending payload → reset на INITIAL_STATE на нову версію', () => {
+            // Seed stale v1-shape у localStorage (як його залишила Sprint 8
+            // деплою). Zustand `persist` middleware викличе migrate при
+            // hydrate, якщо version mismatch.
+            const stalePayload = JSON.stringify({
+                state: {
+                    formData: VALID_FORM,
+                    result: VALID_RESULT,
+                    intent: 'claim-pending',
+                },
+                version: 1,
+            });
+            localStorage.setItem('finly:landing-draft', stalePayload);
+
+            // Trigger rehydrate. У runtime persist API є `.rehydrate()` —
+            // викликаємо явно, щоб migrate спрацював синхронно у тесті.
+            void useQrLandingDraftStore.persist.rehydrate();
+
+            const s = useQrLandingDraftStore.getState();
+            expect(s.intent).toBe('idle');
+            expect(s.formData).toEqual({});
+            expect(s.result).toBeNull();
         });
     });
 

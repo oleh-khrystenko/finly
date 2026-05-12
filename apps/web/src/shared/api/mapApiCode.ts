@@ -117,17 +117,19 @@ const ERRORS: Record<string, MessageDict> = {
             'Не вдалося створити рахунок. Спробуйте ще раз',
     },
     invoices: {
-        invoice_not_found: 'Рахунок не знайдено',
+        // Sprint 9 disambiguation — слово "рахунок" відведено під Account
+        // (банківський рахунок). Invoice-домен везде — "інвойс".
+        invoice_not_found: 'Інвойс не знайдено',
         invoice_slug_generation_failed:
             'Не вдалося згенерувати посилання. Спробуйте ще раз',
         invoice_amount_locked_requires_amount:
             'Заблокувати редагування суми можна лише при заданій сумі',
         // Sprint 4 review fix — server-side 410 Gone на QR endpoints після
         // `validUntil < now`. JSON-view продовжує працювати з `nbuLinks: null`,
-        // тож банер "Термін рахунку минув" рендериться без переходу на цей
+        // тож банер "Термін інвойсу минув" рендериться без переходу на цей
         // toast — код використовується тільки якщо клієнт прямо запитає
         // expired QR-image (e.g., cached link, scraping).
-        invoice_expired: 'Термін рахунку минув',
+        invoice_expired: 'Термін інвойсу минув',
         invoice_valid_until_in_past: 'Термін дії не може бути у минулому',
     },
     // Sprint 8 fix — overall payload-size overflow після build NBU-payload.

@@ -28,7 +28,6 @@ import BusinessWizardForm from './BusinessWizardForm';
 import { useBusinessWizardStore } from './businessWizardStore';
 import { MVP_BANKS } from '@finly/types';
 
-const VALID_IBAN = 'UA213223130000026007233566001';
 const VALID_RNOKPP = '1234567899';
 const VALID_EDRPOU = '12345678';
 
@@ -93,10 +92,9 @@ describe('BusinessWizardForm', () => {
             await waitFor(() => expect(button).not.toBeDisabled());
             fireEvent.click(button);
 
+            // Sprint 9 §9.2 — Step 2 містить тільки taxId-input (без IBAN).
             await waitFor(() => {
-                expect(
-                    screen.getByPlaceholderText(VALID_IBAN)
-                ).toBeInTheDocument();
+                expect(screen.getByLabelText('РНОКПП')).toBeInTheDocument();
             });
             expect(useBusinessWizardStore.getState().currentStep).toBe(
                 'requisites'
@@ -108,7 +106,7 @@ describe('BusinessWizardForm', () => {
         });
     });
 
-    describe('Step requisites — type-aware taxId (Sprint 7 §SP-4)', () => {
+    describe('Step requisites — Sprint 9 §9.2 + Sprint 7 §SP-4 (тільки taxId)', () => {
         it('fop — label "РНОКПП", maxLength=10, валідатор reject-ить 8-digit ЄДРПОУ', async () => {
             act(() => {
                 useBusinessWizardStore.setState({
@@ -126,9 +124,6 @@ describe('BusinessWizardForm', () => {
             expect(taxIdInput).toHaveAttribute('maxlength', '10');
             // 8-digit ЄДРПОУ — невалідний для fop
             fireEvent.change(taxIdInput, { target: { value: VALID_EDRPOU } });
-            // IBAN треба валідний, інакше Form-isValid має іншу причину false
-            const ibanInput = screen.getByPlaceholderText(VALID_IBAN);
-            fireEvent.change(ibanInput, { target: { value: VALID_IBAN } });
 
             const nextButton = screen.getByRole('button', { name: /далі/i });
             await waitFor(() => expect(nextButton).toBeDisabled());
@@ -149,8 +144,6 @@ describe('BusinessWizardForm', () => {
 
             const taxIdInput = screen.getByLabelText('ЄДРПОУ');
             expect(taxIdInput).toHaveAttribute('maxlength', '8');
-            const ibanInput = screen.getByPlaceholderText(VALID_IBAN);
-            fireEvent.change(ibanInput, { target: { value: VALID_IBAN } });
             fireEvent.change(taxIdInput, { target: { value: VALID_EDRPOU } });
 
             const nextButton = screen.getByRole('button', { name: /далі/i });
@@ -172,12 +165,41 @@ describe('BusinessWizardForm', () => {
 
             const taxIdInput = screen.getByLabelText('РНОКПП');
             expect(taxIdInput).toHaveAttribute('maxlength', '10');
-            const ibanInput = screen.getByPlaceholderText(VALID_IBAN);
-            fireEvent.change(ibanInput, { target: { value: VALID_IBAN } });
             fireEvent.change(taxIdInput, { target: { value: VALID_RNOKPP } });
 
             const nextButton = screen.getByRole('button', { name: /далі/i });
             await waitFor(() => expect(nextButton).not.toBeDisabled());
+        });
+
+        it('submit step requisites → store зберігає taxId як top-level (без requisites-wrapper)', async () => {
+            act(() => {
+                useBusinessWizardStore.setState({
+                    currentStep: 'requisites',
+                    formData: {
+                        type: 'fop',
+                        name: 'Іваненко',
+                        acceptedBanks: [...MVP_BANKS],
+                    },
+                });
+            });
+            render(<BusinessWizardForm />);
+
+            const taxIdInput = screen.getByLabelText('РНОКПП');
+            fireEvent.change(taxIdInput, { target: { value: VALID_RNOKPP } });
+
+            const nextButton = screen.getByRole('button', { name: /далі/i });
+            await waitFor(() => expect(nextButton).not.toBeDisabled());
+            fireEvent.click(nextButton);
+
+            await waitFor(() => {
+                const data = useBusinessWizardStore.getState().formData;
+                expect(data.taxId).toBe(VALID_RNOKPP);
+            });
+            const data = useBusinessWizardStore.getState().formData;
+            // Defensive — переконуємось що `requisites`-wrapper не зʼявився.
+            expect(
+                (data as Record<string, unknown>).requisites
+            ).toBeUndefined();
         });
     });
 
@@ -189,7 +211,7 @@ describe('BusinessWizardForm', () => {
                     formData: {
                         type: 'fop',
                         name: 'Іваненко',
-                        requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+                        taxId: VALID_RNOKPP,
                         taxationSystem: 'simplified-1',
                         isVatPayer: false,
                         acceptedBanks: [...MVP_BANKS],
@@ -212,7 +234,7 @@ describe('BusinessWizardForm', () => {
                     formData: {
                         type: 'fop',
                         name: 'Іваненко',
-                        requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+                        taxId: VALID_RNOKPP,
                         taxationSystem: 'simplified-3',
                         isVatPayer: false,
                         acceptedBanks: [...MVP_BANKS],
@@ -229,16 +251,13 @@ describe('BusinessWizardForm', () => {
         });
 
         it("Sprint 7 §SP-7 — defensive redirect: type=individual на step 'taxation' → setStep('purpose-banks')", () => {
-            // Stale-state recovery: користувач якось потрапив сюди (URL,
-            // devtools), але type не вимагає оподаткування. Step3Taxation
-            // ефект redirect-ить на наступний логічний крок без render-у форми.
             act(() => {
                 useBusinessWizardStore.setState({
                     currentStep: 'taxation',
                     formData: {
                         type: 'individual',
                         name: 'Іваненко',
-                        requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+                        taxId: VALID_RNOKPP,
                         acceptedBanks: [...MVP_BANKS],
                     },
                 });
@@ -246,7 +265,6 @@ describe('BusinessWizardForm', () => {
 
             render(<BusinessWizardForm />);
 
-            // Effect виконується після першого render-у. Чекаємо стейт-зміни.
             return waitFor(() => {
                 expect(useBusinessWizardStore.getState().currentStep).toBe(
                     'purpose-banks'
@@ -255,15 +273,15 @@ describe('BusinessWizardForm', () => {
         });
     });
 
-    describe("Step 'purpose-banks' — submit з 4-type-aware payload-ом", () => {
-        it('fop submit з повним CreateBusinessRequest (taxation присутній)', async () => {
+    describe("Step 'purpose-banks' — submit з 4-type-aware payload-ом (Sprint 9 §9.2 без requisites)", () => {
+        it('fop submit з повним CreateBusinessRequest (taxation присутній, taxId top-level)', async () => {
             act(() => {
                 useBusinessWizardStore.setState({
                     currentStep: 'purpose-banks',
                     formData: {
                         type: 'fop',
                         name: 'Іваненко',
-                        requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+                        taxId: VALID_RNOKPP,
                         taxationSystem: 'simplified-3',
                         isVatPayer: true,
                         paymentPurposeTemplate: 'Оплата за послуги',
@@ -289,7 +307,7 @@ describe('BusinessWizardForm', () => {
             expect(mockCreateBusiness).toHaveBeenCalledWith({
                 type: 'fop',
                 name: 'Іваненко',
-                requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+                taxId: VALID_RNOKPP,
                 taxationSystem: 'simplified-3',
                 isVatPayer: true,
                 paymentPurposeTemplate: 'Оплата за послуги',
@@ -303,18 +321,13 @@ describe('BusinessWizardForm', () => {
         });
 
         it('individual submit БЕЗ taxation-полів (Sprint 7 §SP-3 discriminated union)', async () => {
-            // Backend reject-нув би taxation-поля для individual через
-            // .strict()-variant (`createIndividualVariant`). buildCreateRequestFromDraft
-            // має відсікти taxation з payload-у незалежно від stale draft state.
             act(() => {
                 useBusinessWizardStore.setState({
                     currentStep: 'purpose-banks',
                     formData: {
                         type: 'individual',
                         name: 'Іваненко',
-                        requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
-                        // Stale taxation з попереднього вибору fop-у — defensive
-                        // не повинно потрапити у submit.
+                        taxId: VALID_RNOKPP,
                         taxationSystem: undefined,
                         isVatPayer: undefined,
                         paymentPurposeTemplate: 'На пицу',
@@ -335,8 +348,10 @@ describe('BusinessWizardForm', () => {
             );
             const payload = mockCreateBusiness.mock.calls[0]![0];
             expect(payload.type).toBe('individual');
+            expect(payload.taxId).toBe(VALID_RNOKPP);
             expect(payload).not.toHaveProperty('taxationSystem');
             expect(payload).not.toHaveProperty('isVatPayer');
+            expect(payload).not.toHaveProperty('requisites');
         });
 
         it('organization submit з ЄДРПОУ (8-digit), без taxation-полів', async () => {
@@ -346,7 +361,7 @@ describe('BusinessWizardForm', () => {
                     formData: {
                         type: 'organization',
                         name: 'ОСББ Покрова',
-                        requisites: { iban: VALID_IBAN, taxId: VALID_EDRPOU },
+                        taxId: VALID_EDRPOU,
                         paymentPurposeTemplate: 'Внесок на ОСББ',
                         acceptedBanks: [...MVP_BANKS],
                     },
@@ -365,7 +380,7 @@ describe('BusinessWizardForm', () => {
             );
             const payload = mockCreateBusiness.mock.calls[0]![0];
             expect(payload.type).toBe('organization');
-            expect(payload.requisites.taxId).toBe(VALID_EDRPOU);
+            expect(payload.taxId).toBe(VALID_EDRPOU);
             expect(payload).not.toHaveProperty('taxationSystem');
         });
 
@@ -376,7 +391,7 @@ describe('BusinessWizardForm', () => {
                     formData: {
                         type: 'fop',
                         name: 'Іваненко',
-                        requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+                        taxId: VALID_RNOKPP,
                         taxationSystem: 'simplified-3',
                         isVatPayer: false,
                         paymentPurposeTemplate: 'Оплата',
@@ -405,7 +420,7 @@ describe('BusinessWizardForm', () => {
                     formData: {
                         type: 'fop',
                         name: 'Іваненко',
-                        // requisites відсутні → CreateBusinessSchema fail
+                        // taxId відсутній → CreateBusinessSchema fail на required-полі
                         taxationSystem: 'simplified-3',
                         isVatPayer: false,
                         acceptedBanks: [...MVP_BANKS],
