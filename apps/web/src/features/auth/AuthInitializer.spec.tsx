@@ -3,16 +3,21 @@ import { render } from '@testing-library/react';
 
 const mockRefreshToken = jest.fn();
 const mockGetMe = jest.fn();
+const mockClearPendingPostLoginTarget = jest.fn();
 
 jest.mock('@/shared/api', () => ({
     refreshToken: (...args: any[]) => mockRefreshToken(...args),
     getMe: (...args: any[]) => mockGetMe(...args),
+    clearPendingPostLoginTarget: (...args: any[]) =>
+        mockClearPendingPostLoginTarget(...args),
 }));
 
 let mockPathname = '/profile';
+const mockRouterReplace = jest.fn();
 
 jest.mock('next/navigation', () => ({
     usePathname: () => mockPathname,
+    useRouter: () => ({ replace: mockRouterReplace }),
 }));
 
 const mockSetUser = jest.fn();
@@ -40,6 +45,7 @@ describe('AuthInitializer', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         mockPathname = '/profile';
+        mockClearPendingPostLoginTarget.mockResolvedValue(undefined);
     });
 
     it('calls refreshToken and getMe on normal path, then setUser', async () => {
@@ -146,5 +152,102 @@ describe('AuthInitializer', () => {
         await new Promise((r) => setTimeout(r, 50));
 
         expect(mockOpenTermsReacceptDialog).toHaveBeenCalledTimes(1);
+    });
+
+    describe('pendingPostLoginTarget (Sprint 11 cold-login resume)', () => {
+        it('does not clear or redirect when pendingPostLoginTarget is absent', async () => {
+            mockRefreshToken.mockResolvedValue('token');
+            mockGetMe.mockResolvedValue({
+                id: '1',
+                email: 'user@finly.com.ua',
+                termsVersion: CURRENT_TERMS_VERSION,
+            });
+
+            render(<AuthInitializer />);
+            await new Promise((r) => setTimeout(r, 50));
+
+            expect(mockClearPendingPostLoginTarget).not.toHaveBeenCalled();
+            expect(mockRouterReplace).not.toHaveBeenCalled();
+        });
+
+        it('clears stamp THEN redirects on valid same-origin target', async () => {
+            const callOrder: string[] = [];
+            mockClearPendingPostLoginTarget.mockImplementation(async () => {
+                callOrder.push('clear');
+            });
+            mockRouterReplace.mockImplementation(() => {
+                callOrder.push('replace');
+            });
+
+            mockRefreshToken.mockResolvedValue('token');
+            mockGetMe.mockResolvedValue({
+                id: '1',
+                email: 'user@finly.com.ua',
+                termsVersion: CURRENT_TERMS_VERSION,
+                pendingPostLoginTarget:
+                    '/business/iva-X3kQ/account/acc-aB12cD34?completed-from=landing',
+            });
+
+            render(<AuthInitializer />);
+            await new Promise((r) => setTimeout(r, 50));
+
+            expect(mockClearPendingPostLoginTarget).toHaveBeenCalledTimes(1);
+            expect(mockRouterReplace).toHaveBeenCalledWith(
+                '/business/iva-X3kQ/account/acc-aB12cD34?completed-from=landing'
+            );
+            expect(callOrder).toEqual(['clear', 'replace']);
+        });
+
+        it('warns + clears + skips redirect on invalid (open-redirect) target', async () => {
+            const warnSpy = jest
+                .spyOn(console, 'warn')
+                .mockImplementation(() => {});
+
+            mockRefreshToken.mockResolvedValue('token');
+            mockGetMe.mockResolvedValue({
+                id: '1',
+                email: 'user@finly.com.ua',
+                termsVersion: CURRENT_TERMS_VERSION,
+                pendingPostLoginTarget: '//attacker.com',
+            });
+
+            render(<AuthInitializer />);
+            await new Promise((r) => setTimeout(r, 50));
+
+            expect(warnSpy).toHaveBeenCalled();
+            expect(mockClearPendingPostLoginTarget).toHaveBeenCalledTimes(1);
+            expect(mockRouterReplace).not.toHaveBeenCalled();
+
+            warnSpy.mockRestore();
+        });
+
+        it('still redirects on valid target even if clear-API fails', async () => {
+            const warnSpy = jest
+                .spyOn(console, 'warn')
+                .mockImplementation(() => {});
+
+            mockClearPendingPostLoginTarget.mockRejectedValue(
+                new Error('network down')
+            );
+
+            mockRefreshToken.mockResolvedValue('token');
+            mockGetMe.mockResolvedValue({
+                id: '1',
+                email: 'user@finly.com.ua',
+                termsVersion: CURRENT_TERMS_VERSION,
+                pendingPostLoginTarget: '/business/iva/account/acc',
+            });
+
+            render(<AuthInitializer />);
+            await new Promise((r) => setTimeout(r, 50));
+
+            expect(mockClearPendingPostLoginTarget).toHaveBeenCalledTimes(1);
+            expect(warnSpy).toHaveBeenCalled();
+            expect(mockRouterReplace).toHaveBeenCalledWith(
+                '/business/iva/account/acc'
+            );
+
+            warnSpy.mockRestore();
+        });
     });
 });

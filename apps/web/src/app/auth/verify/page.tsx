@@ -11,6 +11,7 @@ import {
     verifyMagicLink,
     getMe,
     acceptTerms,
+    clearPendingPostLoginTarget,
     getApiMessage,
 } from '@/shared/api';
 import { isValidRedirect } from '@/shared/lib';
@@ -103,6 +104,19 @@ function VerifyContent() {
                 const user = await getMe();
                 useAuthStore.getState().setUser(user);
                 setStatus('success');
+
+                // Sprint 11 — same-device pendingPostLoginTarget clear ДО
+                // redirect-у. Гарантує, що backend-stamped target не
+                // вистрелить як stale-redirect через AuthInitializer на
+                // наступному cold-login. Fire-and-forget — clear-failure
+                // не повинен ламати UX-redirect; стале значення підбере
+                // cron Stage 3 (Sprint 12).
+                void clearPendingPostLoginTarget().catch((err) => {
+                    console.warn(
+                        '[verify] failed to clear pendingPostLoginTarget',
+                        err
+                    );
+                });
 
                 const target = handleClaimRedirect(result, redirectTarget);
                 router.replace(target);

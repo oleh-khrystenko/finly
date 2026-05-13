@@ -12,6 +12,7 @@ jest.mock('@/shared/config', () => ({
 const mockVerifyMagicLink = jest.fn();
 const mockAcceptTerms = jest.fn();
 const mockGetMe = jest.fn();
+const mockClearPendingPostLoginTarget = jest.fn();
 const mockRouterReplace = jest.fn();
 let mockSearchParams = new URLSearchParams();
 
@@ -22,6 +23,7 @@ jest.mock('@/shared/api', () => {
         verifyMagicLink: (...args: unknown[]) => mockVerifyMagicLink(...args),
         acceptTerms: () => mockAcceptTerms(),
         getMe: () => mockGetMe(),
+        clearPendingPostLoginTarget: () => mockClearPendingPostLoginTarget(),
     };
 });
 
@@ -62,6 +64,7 @@ describe('VerifyPage — claimState branching (Sprint 10)', () => {
         });
         mockAcceptTerms.mockResolvedValue(undefined);
         mockGetMe.mockResolvedValue(USER);
+        mockClearPendingPostLoginTarget.mockResolvedValue(undefined);
     });
 
     it('purpose=register без claimState → fall-through на /profile (дефолтний redirectTarget)', async () => {
@@ -166,6 +169,25 @@ describe('VerifyPage — claimState branching (Sprint 10)', () => {
             expect(s.formData).toEqual(VALID_DRAFT);
             expect(s.intent).toBe('claim-failed-account');
         });
+    });
+
+    it('Sprint 11 — clearPendingPostLoginTarget викликається ДО router.replace незалежно від claimState', async () => {
+        mockVerifyMagicLink.mockResolvedValue({
+            user: USER,
+            accessToken: 'a',
+            purpose: 'login',
+        });
+
+        render(<VerifyPage />);
+
+        await waitFor(() => {
+            expect(mockRouterReplace).toHaveBeenCalled();
+        });
+        expect(mockClearPendingPostLoginTarget).toHaveBeenCalled();
+        const firstClearOrder =
+            mockClearPendingPostLoginTarget.mock.invocationCallOrder[0];
+        const firstReplaceOrder = mockRouterReplace.mock.invocationCallOrder[0];
+        expect(firstClearOrder).toBeLessThan(firstReplaceOrder);
     });
 
     it('purpose=delete-account → terminal "deleted", claim-state не обробляється', async () => {
