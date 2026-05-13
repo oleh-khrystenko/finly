@@ -64,6 +64,15 @@ class UserExecutions {
     activeReservation!: ActiveReservation | null;
 }
 
+@Schema({ _id: false })
+class ProfileCompletionReminders {
+    @Prop({ type: Date, default: null })
+    firstReminderSentAt!: Date | null;
+
+    @Prop({ type: Date, default: null })
+    finalWarningSentAt!: Date | null;
+}
+
 @Schema({ timestamps: true })
 export class User {
     @Prop({ required: true, unique: true, lowercase: true, trim: true })
@@ -136,6 +145,23 @@ export class User {
      */
     @Prop({ type: String, required: false })
     pendingPostLoginTarget?: string;
+
+    /**
+     * Sprint 12 — 3-stage orphan-cleanup email-pipeline stamps. Cron-only read
+     * path, без queries-by-stamp → index не потрібен. Factory-default обох-null
+     * на insert; cron оновлює через atomic `findOneAndUpdate` з conditional-
+     * filter (claim-first pattern). Field-path-и (`...firstReminderSentAt`,
+     * `...finalWarningSentAt`) — частина public-API сервіс-методів і aggregation
+     * pipeline cron-а; перейменування ламає обидва.
+     */
+    @Prop({
+        type: ProfileCompletionReminders,
+        default: () => ({
+            firstReminderSentAt: null,
+            finalWarningSentAt: null,
+        }),
+    })
+    profileCompletionReminders!: ProfileCompletionReminders;
 
     @Prop()
     lastLoginAt?: Date;

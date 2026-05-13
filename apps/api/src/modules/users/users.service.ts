@@ -370,6 +370,80 @@ export class UsersService {
         );
     }
 
+    /**
+     * Sprint 12 §12.1a — atomic claim-first stamp для 3-stage orphan-cleanup
+     * email-pipeline. Conditional-filter включає prereq-guard для `'final'`
+     * (stamp finalWarningSentAt дозволено тільки якщо firstReminderSentAt уже
+     * non-null). Caller отримує boolean: `true` → ми claim-нули і мусимо
+     * відправити лист; `false` → інший concurrent cron-instance уже claim-нув
+     * АБО prereq-guard відхилив (Stage 2 без Stage 1 stamp у race-window).
+     */
+    async stampProfileCompletionReminder(
+        userId: string,
+        stage: 'first' | 'final'
+    ): Promise<boolean> {
+        const filter: Record<string, unknown> =
+            stage === 'first'
+                ? {
+                      _id: userId,
+                      'profileCompletionReminders.firstReminderSentAt': null,
+                  }
+                : {
+                      _id: userId,
+                      'profileCompletionReminders.finalWarningSentAt': null,
+                      'profileCompletionReminders.firstReminderSentAt': {
+                          $ne: null,
+                      },
+                  };
+        const fieldPath =
+            stage === 'first'
+                ? 'profileCompletionReminders.firstReminderSentAt'
+                : 'profileCompletionReminders.finalWarningSentAt';
+        const result = await this.userModel.updateOne(filter, {
+            $set: { [fieldPath]: new Date() },
+        });
+        return result.matchedCount > 0;
+    }
+
+    /**
+     * Sprint 12 §12.1a — revert щойно-claim-нутого stamp-а на email-send-
+     * failure path-у. Non-conditional `$set:null` — caller гарантує що
+     * викликається тільки після successful claim і failed email-send (поза
+     * цим контекстом використовувати не можна — стерти non-null stamp без
+     * перевірки prereq-у Stage 2/3 порушить email-trail invariant).
+     */
+    async resetSingleStamp(
+        userId: string,
+        stage: 'first' | 'final'
+    ): Promise<void> {
+        const fieldPath =
+            stage === 'first'
+                ? 'profileCompletionReminders.firstReminderSentAt'
+                : 'profileCompletionReminders.finalWarningSentAt';
+        await this.userModel.updateOne(
+            { _id: userId },
+            { $set: { [fieldPath]: null } }
+        );
+    }
+
+    /**
+     * Sprint 12 §12.1a — full clear обох stamps. Викликається ТІЛЬКИ після
+     * Stage-3 full-success cascade-deletion (history-bucket consumed; цикл
+     * рестартує якщо user знову створить orphan-Business). Partial-cascade
+     * failure → reminders НЕ reset-ляться (наступний cron-cycle ретраїть Stage 3).
+     */
+    async resetProfileCompletionReminders(userId: string): Promise<void> {
+        await this.userModel.updateOne(
+            { _id: userId },
+            {
+                $set: {
+                    'profileCompletionReminders.firstReminderSentAt': null,
+                    'profileCompletionReminders.finalWarningSentAt': null,
+                },
+            }
+        );
+    }
+
     async hasExecution(userId: string): Promise<boolean> {
         const user = await this.userModel.findById(userId).exec();
         if (!user) return false;

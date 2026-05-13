@@ -635,6 +635,136 @@ describe('UsersService', () => {
         });
     });
 
+    describe('stampProfileCompletionReminder (Sprint 12 §12.1a)', () => {
+        const userId = '507f1f77bcf86cd799439011';
+
+        it('Stage 1 claim — atomic updateOne з filter null + $set Date; returns true on match', async () => {
+            mockModel.updateOne.mockResolvedValue({ matchedCount: 1 });
+
+            const claimed = await service.stampProfileCompletionReminder(
+                userId,
+                'first'
+            );
+
+            expect(claimed).toBe(true);
+            expect(mockModel.updateOne).toHaveBeenCalledWith(
+                {
+                    _id: userId,
+                    'profileCompletionReminders.firstReminderSentAt': null,
+                },
+                {
+                    $set: {
+                        'profileCompletionReminders.firstReminderSentAt':
+                            expect.any(Date),
+                    },
+                }
+            );
+        });
+
+        it('Stage 1 idempotent skip — matchedCount=0 returns false (already-stamped race-loser)', async () => {
+            mockModel.updateOne.mockResolvedValue({ matchedCount: 0 });
+
+            const claimed = await service.stampProfileCompletionReminder(
+                userId,
+                'first'
+            );
+
+            expect(claimed).toBe(false);
+        });
+
+        it('Stage 2 claim — filter включає prereq-guard firstReminderSentAt: $ne null', async () => {
+            mockModel.updateOne.mockResolvedValue({ matchedCount: 1 });
+
+            const claimed = await service.stampProfileCompletionReminder(
+                userId,
+                'final'
+            );
+
+            expect(claimed).toBe(true);
+            expect(mockModel.updateOne).toHaveBeenCalledWith(
+                {
+                    _id: userId,
+                    'profileCompletionReminders.finalWarningSentAt': null,
+                    'profileCompletionReminders.firstReminderSentAt': {
+                        $ne: null,
+                    },
+                },
+                {
+                    $set: {
+                        'profileCompletionReminders.finalWarningSentAt':
+                            expect.any(Date),
+                    },
+                }
+            );
+        });
+
+        it('Stage 2 skip без prereq stamp — matchedCount=0 (filter не зматчив)', async () => {
+            // БД-state: firstReminderSentAt=null → prereq-guard не пропустив.
+            mockModel.updateOne.mockResolvedValue({ matchedCount: 0 });
+
+            const claimed = await service.stampProfileCompletionReminder(
+                userId,
+                'final'
+            );
+
+            expect(claimed).toBe(false);
+        });
+    });
+
+    describe('resetSingleStamp (Sprint 12 §12.1a)', () => {
+        const userId = '507f1f77bcf86cd799439011';
+
+        it('first → $set null на firstReminderSentAt без conditional filter', async () => {
+            mockModel.updateOne.mockResolvedValue({ matchedCount: 1 });
+
+            await service.resetSingleStamp(userId, 'first');
+
+            expect(mockModel.updateOne).toHaveBeenCalledWith(
+                { _id: userId },
+                {
+                    $set: {
+                        'profileCompletionReminders.firstReminderSentAt': null,
+                    },
+                }
+            );
+        });
+
+        it('final → $set null на finalWarningSentAt без conditional filter', async () => {
+            mockModel.updateOne.mockResolvedValue({ matchedCount: 1 });
+
+            await service.resetSingleStamp(userId, 'final');
+
+            expect(mockModel.updateOne).toHaveBeenCalledWith(
+                { _id: userId },
+                {
+                    $set: {
+                        'profileCompletionReminders.finalWarningSentAt': null,
+                    },
+                }
+            );
+        });
+    });
+
+    describe('resetProfileCompletionReminders (Sprint 12 §12.1a)', () => {
+        it('clears обидва stamps одним updateOne', async () => {
+            mockModel.updateOne.mockResolvedValue({ matchedCount: 1 });
+
+            await service.resetProfileCompletionReminders(
+                '507f1f77bcf86cd799439011'
+            );
+
+            expect(mockModel.updateOne).toHaveBeenCalledWith(
+                { _id: '507f1f77bcf86cd799439011' },
+                {
+                    $set: {
+                        'profileCompletionReminders.firstReminderSentAt': null,
+                        'profileCompletionReminders.finalWarningSentAt': null,
+                    },
+                }
+            );
+        });
+    });
+
     describe('stampAcceptedTerms (Sprint 10 §SP-12)', () => {
         it('idempotent filter — викликає updateOne з $ne на termsVersion', async () => {
             mockModel.updateOne.mockResolvedValue({ matchedCount: 0 });
