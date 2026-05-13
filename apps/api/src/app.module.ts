@@ -15,6 +15,7 @@ import { BusinessesModule } from './modules/businesses/businesses.module';
 import { EmailModule } from './modules/email/email.module';
 import { InvoicesModule } from './modules/invoices/invoices.module';
 import { LandingClaimModule } from './modules/landing-claim/landing-claim.module';
+import { OrphanCleanupModule } from './modules/orphan-cleanup/orphan-cleanup.module';
 import { UsersModule } from './modules/users/users.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { StorageModule } from './modules/storage/storage.module';
@@ -62,6 +63,7 @@ import { AiModule } from './modules/ai/ai.module';
         AccountsModule,
         InvoicesModule,
         LandingClaimModule,
+        OrphanCleanupModule,
         ReportsModule,
         StorageModule,
         PaymentsModule,

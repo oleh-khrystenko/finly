@@ -427,12 +427,18 @@ export class UsersService {
     }
 
     /**
-     * Sprint 12 §12.1a — full clear обох stamps. Викликається ТІЛЬКИ після
-     * Stage-3 full-success cascade-deletion (history-bucket consumed; цикл
+     * Sprint 12 §12.1a — post-Stage-3 atomic housekeeping. Викликається ТІЛЬКИ
+     * після cascade-deletion full-success (history-bucket consumed; цикл
      * рестартує якщо user знову створить orphan-Business). Partial-cascade
-     * failure → reminders НЕ reset-ляться (наступний cron-cycle ретраїть Stage 3).
+     * failure → метод НЕ викликається, наступний cron-cycle ретраїть Stage 3.
+     *
+     * Single `updateOne` з комбінованим `$set` + `$unset` — atomic-within-doc
+     * write. Альтернатива (два sequential update-и) ризикує stuck-stamps-станом
+     * на transient Mongo-failure між ними: cascade committed, reminders stuck,
+     * наступний цикл silent-видалить новий orphan-Business без листа (порушує
+     * compliance-invariant "warned twice before deletion").
      */
-    async resetProfileCompletionReminders(userId: string): Promise<void> {
+    async finalizeOrphanCleanup(userId: string): Promise<void> {
         await this.userModel.updateOne(
             { _id: userId },
             {
@@ -440,6 +446,7 @@ export class UsersService {
                     'profileCompletionReminders.firstReminderSentAt': null,
                     'profileCompletionReminders.finalWarningSentAt': null,
                 },
+                $unset: { pendingPostLoginTarget: 1 },
             }
         );
     }

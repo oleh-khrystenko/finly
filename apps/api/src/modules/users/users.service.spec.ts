@@ -745,14 +745,13 @@ describe('UsersService', () => {
         });
     });
 
-    describe('resetProfileCompletionReminders (Sprint 12 §12.1a)', () => {
-        it('clears обидва stamps одним updateOne', async () => {
+    describe('finalizeOrphanCleanup (Sprint 12 §12.1a)', () => {
+        it('atomic single updateOne — clears stamps AND $unset pendingPostLoginTarget', async () => {
             mockModel.updateOne.mockResolvedValue({ matchedCount: 1 });
 
-            await service.resetProfileCompletionReminders(
-                '507f1f77bcf86cd799439011'
-            );
+            await service.finalizeOrphanCleanup('507f1f77bcf86cd799439011');
 
+            expect(mockModel.updateOne).toHaveBeenCalledTimes(1);
             expect(mockModel.updateOne).toHaveBeenCalledWith(
                 { _id: '507f1f77bcf86cd799439011' },
                 {
@@ -760,6 +759,7 @@ describe('UsersService', () => {
                         'profileCompletionReminders.firstReminderSentAt': null,
                         'profileCompletionReminders.finalWarningSentAt': null,
                     },
+                    $unset: { pendingPostLoginTarget: 1 },
                 }
             );
         });
