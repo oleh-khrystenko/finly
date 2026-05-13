@@ -58,4 +58,53 @@ describe('UserSchema', () => {
         });
         expect(result.success).toBe(false);
     });
+
+    it('applies default profileCompletionReminders shape when field missing', () => {
+        const result = UserSchema.safeParse(VALID_USER);
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.profileCompletionReminders).toEqual({
+                firstReminderSentAt: null,
+                finalWarningSentAt: null,
+            });
+        }
+    });
+
+    it('parses profileCompletionReminders with non-null ISO-string stamps', () => {
+        const result = UserSchema.safeParse({
+            ...VALID_USER,
+            profileCompletionReminders: {
+                firstReminderSentAt: '2026-05-13T05:00:00.000Z',
+                finalWarningSentAt: '2026-05-18T05:00:00.000Z',
+            },
+        });
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(
+                result.data.profileCompletionReminders.firstReminderSentAt,
+            ).toEqual(new Date('2026-05-13T05:00:00.000Z'));
+            expect(
+                result.data.profileCompletionReminders.finalWarningSentAt,
+            ).toEqual(new Date('2026-05-18T05:00:00.000Z'));
+        }
+    });
+
+    it('parses profileCompletionReminders with mixed null and Date stamp', () => {
+        const result = UserSchema.safeParse({
+            ...VALID_USER,
+            profileCompletionReminders: {
+                firstReminderSentAt: new Date('2026-05-13T05:00:00.000Z'),
+                finalWarningSentAt: null,
+            },
+        });
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(
+                result.data.profileCompletionReminders.firstReminderSentAt,
+            ).toEqual(new Date('2026-05-13T05:00:00.000Z'));
+            expect(
+                result.data.profileCompletionReminders.finalWarningSentAt,
+            ).toBeNull();
+        }
+    });
 });

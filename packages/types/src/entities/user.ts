@@ -21,6 +21,11 @@ export const UserExecutionsSchema = z.object({
     freeReportUsed: z.boolean(),
 });
 
+export const UserProfileCompletionRemindersSchema = z.object({
+    firstReminderSentAt: z.coerce.date().nullable(),
+    finalWarningSentAt: z.coerce.date().nullable(),
+});
+
 export const UserSchema = z.object({
     id: objectIdSchema,
     email: z.string().email(),
@@ -52,6 +57,10 @@ export const UserSchema = z.object({
         .string()
         .refine(validateSameOriginPath, { message: 'INVALID_REDIRECT_TARGET' })
         .optional(),
+    profileCompletionReminders: UserProfileCompletionRemindersSchema.default({
+        firstReminderSentAt: null,
+        finalWarningSentAt: null,
+    }),
 });
 
 export const UserProfileSchema = UserSchema.pick({
