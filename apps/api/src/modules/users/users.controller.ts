@@ -61,9 +61,17 @@ export class UsersController {
         @CurrentUser() user: UserDocument,
         @Body() dto: UpdateProfileDto
     ): Promise<{ data: Record<string, unknown> }> {
+        const userId = user._id.toString();
+        // Sprint 11 — explicit clear-action для backend-stamped redirect-target.
+        // DTO дозволяє лише `null`; стемп робиться backend-only через
+        // `UsersService.setPendingPostLoginTarget` (не через цей endpoint).
+        const { pendingPostLoginTarget, ...profileDto } = dto;
+        if (pendingPostLoginTarget === null) {
+            await this.usersService.clearPendingPostLoginTarget(userId);
+        }
         const updated = await this.usersService.updateProfile(
-            user._id.toString(),
-            dto
+            userId,
+            profileDto
         );
         return { data: mapUserToProfileResponse(updated!) };
     }

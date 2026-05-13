@@ -126,6 +126,17 @@ export class User {
     @Prop({ type: String, default: null })
     termsVersion!: string | null;
 
+    /**
+     * Sprint 11 — single-stamp post-login deep-link target. Write-once на
+     * `LandingClaimService` success-claim, consume-and-clear на verify-handler
+     * (same-device) АБО `AuthInitializer` (cold-login resume). Більшість юзерів
+     * ніколи не торкають це поле, тож sparse-by-default; окремий index не
+     * додаємо — поле читається тільки через per-user `getMe()`-flow, без
+     * queries-by-target.
+     */
+    @Prop({ type: String, required: false })
+    pendingPostLoginTarget?: string;
+
     @Prop()
     lastLoginAt?: Date;
 

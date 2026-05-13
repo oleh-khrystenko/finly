@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { AccountsModule } from '../accounts/accounts.module';
 import { BusinessesModule } from '../businesses/businesses.module';
+import { UsersModule } from '../users/users.module';
 import { LandingClaimService } from './landing-claim.service';
 
 /**
@@ -9,15 +10,15 @@ import { LandingClaimService } from './landing-claim.service';
  * імпортує LandingClaimModule без forwardRef (петлі немає: Auth depends on
  * LandingClaim → Businesses + Accounts, які не знають про Auth).
  *
- * Dependency DAG:
- *   AuthModule → LandingClaimModule → {BusinessesModule, AccountsModule}
+ * Sprint 11 — додано UsersModule для виклику `setPendingPostLoginTarget`
+ * напряму на success-claim. Граф залишається directed-acyclic: UsersModule
+ * forwardRef-ить лише AuthModule (existing), а не LandingClaim.
  *
- * BusinessesModule + AccountsModule самі імпортують UsersModule (для access-
- * patterns); UsersModule forwardRef-ить AuthModule. Кільце замикається через
- * forwardRef, не через цей модуль.
+ * Dependency DAG:
+ *   AuthModule → LandingClaimModule → {BusinessesModule, AccountsModule, UsersModule}
  */
 @Module({
-    imports: [BusinessesModule, AccountsModule],
+    imports: [BusinessesModule, AccountsModule, UsersModule],
     providers: [LandingClaimService],
     exports: [LandingClaimService],
 })

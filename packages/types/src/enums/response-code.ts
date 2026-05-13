@@ -212,6 +212,17 @@ export const RESPONSE_CODE = {
      */
     PAYLOAD_TOO_LARGE: 'PAYLOAD_TOO_LARGE',
 
+    // --- users error ---
+    /**
+     * Sprint 11 — open-redirect protection. `UsersService.setPendingPostLoginTarget`
+     * відхиляє target, що не пройшов `validateSameOriginPath`. Шлях також
+     * блокує DTO-validation на `PATCH /users/me`, якщо frontend помилково
+     * передав non-null value (anti-injection rule). User-actionable повідомлення
+     * не потрібне: стемп робиться backend-only, цей код ніколи не доходить до
+     * happy-path UI.
+     */
+    INVALID_REDIRECT_TARGET: 'INVALID_REDIRECT_TARGET',
+
     // --- errors ---
     UNAUTHORIZED: 'UNAUTHORIZED',
     VALIDATION_ERROR: 'VALIDATION_ERROR',
@@ -269,6 +280,7 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.ACCOUNT_CREATE_FAILED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.PAYLOAD_TOO_LARGE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.ONBOARDING_INCOMPLETE]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.INVALID_REDIRECT_TARGET]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.UNAUTHORIZED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.VALIDATION_ERROR]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.NOT_FOUND]: RESPONSE_TYPE.ERROR,

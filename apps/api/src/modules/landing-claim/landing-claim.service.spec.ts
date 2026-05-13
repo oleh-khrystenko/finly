@@ -8,6 +8,7 @@ import { RESPONSE_CODE, type LandingDraft } from '@finly/types';
 
 import { AccountsService } from '../accounts/accounts.service';
 import { BusinessesService } from '../businesses/businesses.service';
+import { UsersService } from '../users/users.service';
 import { LandingClaimService } from './landing-claim.service';
 
 describe('LandingClaimService.attemptLandingClaim (Sprint 10 §10.1)', () => {
@@ -17,6 +18,7 @@ describe('LandingClaimService.attemptLandingClaim (Sprint 10 §10.1)', () => {
         create: jest.Mock;
         findByBusinessAndIban: jest.Mock;
     }>;
+    let usersService: jest.Mocked<{ setPendingPostLoginTarget: jest.Mock }>;
 
     const DRAFT: LandingDraft = {
         receiverName: 'Іваненко',
@@ -36,11 +38,15 @@ describe('LandingClaimService.attemptLandingClaim (Sprint 10 §10.1)', () => {
             create: jest.fn(),
             findByBusinessAndIban: jest.fn(),
         };
+        usersService = {
+            setPendingPostLoginTarget: jest.fn().mockResolvedValue(undefined),
+        };
         const module = await Test.createTestingModule({
             providers: [
                 LandingClaimService,
                 { provide: BusinessesService, useValue: businessesService },
                 { provide: AccountsService, useValue: accountsService },
+                { provide: UsersService, useValue: usersService },
             ],
         }).compile();
         service = module.get(LandingClaimService);
@@ -292,6 +298,162 @@ describe('LandingClaimService.attemptLandingClaim (Sprint 10 §10.1)', () => {
 
             expect(errorSpy).toHaveBeenCalledTimes(1);
             expect(warnSpy).not.toHaveBeenCalled();
+        });
+    });
+
+    // ─── Sprint 11 — pendingPostLoginTarget stamp ───
+
+    describe('post-login target stamp', () => {
+        it('success → стемпить deep-link з канонічними slug-ами', async () => {
+            businessesService.create.mockResolvedValue({
+                slug: 'BizSlug1',
+                _id: 'biz-id',
+            });
+            accountsService.create.mockResolvedValue({
+                slug: 'AcctSlg1',
+                _id: 'acct-id',
+            });
+
+            await service.attemptLandingClaim(CTX, DRAFT, KEY);
+
+            expect(usersService.setPendingPostLoginTarget).toHaveBeenCalledWith(
+                CTX.userId,
+                '/business/BizSlug1/account/AcctSlg1?completed-from=landing'
+            );
+        });
+
+        it('POST2-replay (existing account знайдено) → стемпить той самий deep-link', async () => {
+            businessesService.create.mockResolvedValue({
+                slug: 'BizSlug1',
+                _id: 'biz-id',
+            });
+            accountsService.create.mockRejectedValue(
+                new ConflictException({
+                    code: RESPONSE_CODE.ACCOUNT_IBAN_DUPLICATE,
+                    message: 'IBAN already used for this business',
+                })
+            );
+            accountsService.findByBusinessAndIban.mockResolvedValue({
+                slug: 'AcctSlg1',
+                _id: 'acct-id',
+            });
+
+            await service.attemptLandingClaim(CTX, DRAFT, KEY);
+
+            expect(usersService.setPendingPostLoginTarget).toHaveBeenCalledWith(
+                CTX.userId,
+                '/business/BizSlug1/account/AcctSlg1?completed-from=landing'
+            );
+        });
+
+        it('POST1-failure → стемп НЕ викликається', async () => {
+            businessesService.create.mockRejectedValue(
+                new Error('Mongo timeout')
+            );
+
+            await service.attemptLandingClaim(CTX, DRAFT, KEY);
+
+            expect(
+                usersService.setPendingPostLoginTarget
+            ).not.toHaveBeenCalled();
+        });
+
+        it('POST2-failure (без replay-match) → стемп НЕ викликається', async () => {
+            businessesService.create.mockResolvedValue({
+                slug: 'PartialBiz',
+                _id: 'biz-id',
+            });
+            accountsService.create.mockRejectedValue(
+                new Error('IBAN duplicate')
+            );
+
+            await service.attemptLandingClaim(CTX, DRAFT, KEY);
+
+            expect(
+                usersService.setPendingPostLoginTarget
+            ).not.toHaveBeenCalled();
+        });
+
+        it('stamp infra-failure (Mongo timeout) — non-blocking: success + warn', async () => {
+            const warnSpy = jest
+                .spyOn(Logger.prototype, 'warn')
+                .mockImplementation(() => undefined);
+            const errorSpy = jest
+                .spyOn(Logger.prototype, 'error')
+                .mockImplementation(() => undefined);
+            try {
+                businessesService.create.mockResolvedValue({
+                    slug: 'BizSlug1',
+                    _id: 'biz-id',
+                });
+                accountsService.create.mockResolvedValue({
+                    slug: 'AcctSlg1',
+                    _id: 'acct-id',
+                });
+                usersService.setPendingPostLoginTarget.mockRejectedValue(
+                    new Error('Mongo timeout')
+                );
+
+                const result = await service.attemptLandingClaim(
+                    CTX,
+                    DRAFT,
+                    KEY
+                );
+
+                expect(result).toEqual({
+                    claimState: 'success',
+                    claimedBusinessSlug: 'BizSlug1',
+                    claimedAccountSlug: 'AcctSlg1',
+                });
+                expect(warnSpy).toHaveBeenCalled();
+                expect(errorSpy).not.toHaveBeenCalled();
+            } finally {
+                warnSpy.mockRestore();
+                errorSpy.mockRestore();
+            }
+        });
+
+        it('stamp INVALID_REDIRECT_TARGET (programmer bug) — non-blocking: success + logger.error (alertable)', async () => {
+            const warnSpy = jest
+                .spyOn(Logger.prototype, 'warn')
+                .mockImplementation(() => undefined);
+            const errorSpy = jest
+                .spyOn(Logger.prototype, 'error')
+                .mockImplementation(() => undefined);
+            try {
+                const { BadRequestException } = await import('@nestjs/common');
+                businessesService.create.mockResolvedValue({
+                    slug: 'BizSlug1',
+                    _id: 'biz-id',
+                });
+                accountsService.create.mockResolvedValue({
+                    slug: 'AcctSlg1',
+                    _id: 'acct-id',
+                });
+                usersService.setPendingPostLoginTarget.mockRejectedValue(
+                    new BadRequestException({
+                        code: RESPONSE_CODE.INVALID_REDIRECT_TARGET,
+                        message: 'Invalid pending post-login target',
+                    })
+                );
+
+                const result = await service.attemptLandingClaim(
+                    CTX,
+                    DRAFT,
+                    KEY
+                );
+
+                expect(result).toEqual({
+                    claimState: 'success',
+                    claimedBusinessSlug: 'BizSlug1',
+                    claimedAccountSlug: 'AcctSlg1',
+                });
+                expect(errorSpy).toHaveBeenCalled();
+                expect(warnSpy).not.toHaveBeenCalled();
+            } finally {
+                warnSpy.mockRestore();
+                errorSpy.mockRestore();
+            }
         });
     });
 });

@@ -8,6 +8,7 @@ import {
 import { AccountsService } from '../accounts/accounts.service';
 import type { BusinessDocument } from '../businesses/schemas/business.schema';
 import { BusinessesService } from '../businesses/businesses.service';
+import { UsersService } from '../users/users.service';
 
 /**
  * Sprint 10 §10.1 — discriminated tuple-result для 2-sequential anon-claim
@@ -56,7 +57,8 @@ export class LandingClaimService {
 
     constructor(
         private readonly businessesService: BusinessesService,
-        private readonly accountsService: AccountsService
+        private readonly accountsService: AccountsService,
+        private readonly usersService: UsersService
     ) {}
 
     async attemptLandingClaim(
@@ -88,6 +90,11 @@ export class LandingClaimService {
             const account = await this.accountsService.create(business, {
                 iban: draft.iban,
             });
+            await this.stampPostLoginTarget(
+                ctx.userId,
+                business.slug,
+                account.slug
+            );
             return {
                 claimState: 'success',
                 claimedBusinessSlug: business.slug,
@@ -123,6 +130,11 @@ export class LandingClaimService {
                         draft.iban
                     );
                 if (existing) {
+                    await this.stampPostLoginTarget(
+                        ctx.userId,
+                        business.slug,
+                        existing.slug
+                    );
                     return {
                         claimState: 'success',
                         claimedBusinessSlug: business.slug,
@@ -180,6 +192,36 @@ export class LandingClaimService {
             this.logger.warn(ctx);
         }
     }
+
+    /**
+     * Sprint 11 — на success-claim стемпить deep-link для cold-login resume.
+     * Stamp non-blocking за дизайном: claim вже виконався, повертаємо success
+     * незалежно від результату стемпу. Catch розрізняє severity для alerting:
+     *  - `INVALID_REDIRECT_TARGET` — programmer bug у path-template; рідкісне,
+     *    але alertable, бо означає що cold-login resume для цього user-а
+     *    структурно зламаний → `logger.error`.
+     *  - Решта (Mongo timeout, transient infra) → `logger.warn`, бо очікувано
+     *    у race-сценаріях і recovery вже покрито Sprint 12 cron-cleanup-flow.
+     * Без re-throw: invariant "stamp-failure не блокує claim-flow".
+     */
+    private async stampPostLoginTarget(
+        userId: string,
+        businessSlug: string,
+        accountSlug: string
+    ): Promise<void> {
+        const target = `/business/${businessSlug}/account/${accountSlug}?completed-from=landing`;
+        try {
+            await this.usersService.setPendingPostLoginTarget(userId, target);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            const ctx = `Failed to stamp pendingPostLoginTarget for user ${userId} → ${target}: ${message}`;
+            if (isInvalidRedirectTarget(err)) {
+                this.logger.error(ctx);
+            } else {
+                this.logger.warn(ctx);
+            }
+        }
+    }
 }
 
 function isAccountIbanDuplicate(err: HttpException): boolean {
@@ -190,5 +232,17 @@ function isAccountIbanDuplicate(err: HttpException): boolean {
         'code' in resp &&
         (resp as { code: unknown }).code ===
             RESPONSE_CODE.ACCOUNT_IBAN_DUPLICATE
+    );
+}
+
+function isInvalidRedirectTarget(err: unknown): boolean {
+    if (!(err instanceof HttpException)) return false;
+    const resp = err.getResponse();
+    return (
+        typeof resp === 'object' &&
+        resp !== null &&
+        'code' in resp &&
+        (resp as { code: unknown }).code ===
+            RESPONSE_CODE.INVALID_REDIRECT_TARGET
     );
 }

@@ -570,6 +570,71 @@ describe('UsersService', () => {
         });
     });
 
+    describe('setPendingPostLoginTarget (Sprint 11)', () => {
+        const userId = '507f1f77bcf86cd799439011';
+
+        it('writes valid same-origin path via $set', async () => {
+            mockModel.updateOne.mockResolvedValue({ matchedCount: 1 });
+
+            await service.setPendingPostLoginTarget(
+                userId,
+                '/business/biz/account/acc?completed-from=landing'
+            );
+
+            expect(mockModel.updateOne).toHaveBeenCalledWith(
+                { _id: userId },
+                {
+                    $set: {
+                        pendingPostLoginTarget:
+                            '/business/biz/account/acc?completed-from=landing',
+                    },
+                }
+            );
+        });
+
+        it('throws INVALID_REDIRECT_TARGET on missing leading slash', async () => {
+            await expect(
+                service.setPendingPostLoginTarget(userId, 'evil.com')
+            ).rejects.toMatchObject({
+                response: { code: 'INVALID_REDIRECT_TARGET' },
+            });
+            expect(mockModel.updateOne).not.toHaveBeenCalled();
+        });
+
+        it('throws INVALID_REDIRECT_TARGET on absolute URL with protocol', async () => {
+            await expect(
+                service.setPendingPostLoginTarget(userId, 'http://attacker.com')
+            ).rejects.toMatchObject({
+                response: { code: 'INVALID_REDIRECT_TARGET' },
+            });
+            expect(mockModel.updateOne).not.toHaveBeenCalled();
+        });
+
+        it('throws INVALID_REDIRECT_TARGET on protocol-relative URL', async () => {
+            await expect(
+                service.setPendingPostLoginTarget(userId, '//attacker.com')
+            ).rejects.toMatchObject({
+                response: { code: 'INVALID_REDIRECT_TARGET' },
+            });
+            expect(mockModel.updateOne).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('clearPendingPostLoginTarget (Sprint 11)', () => {
+        it('issues $unset on the field', async () => {
+            mockModel.updateOne.mockResolvedValue({ matchedCount: 1 });
+
+            await service.clearPendingPostLoginTarget(
+                '507f1f77bcf86cd799439011'
+            );
+
+            expect(mockModel.updateOne).toHaveBeenCalledWith(
+                { _id: '507f1f77bcf86cd799439011' },
+                { $unset: { pendingPostLoginTarget: 1 } }
+            );
+        });
+    });
+
     describe('stampAcceptedTerms (Sprint 10 §SP-12)', () => {
         it('idempotent filter — викликає updateOne з $ne на termsVersion', async () => {
             mockModel.updateOne.mockResolvedValue({ matchedCount: 0 });

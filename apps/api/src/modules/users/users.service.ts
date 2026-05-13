@@ -1,8 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Connection, Model, Types } from 'mongoose';
 
-import { EXECUTION_TRANSACTION_TYPE } from '@finly/types';
+import {
+    EXECUTION_TRANSACTION_TYPE,
+    RESPONSE_CODE,
+    validateSameOriginPath,
+} from '@finly/types';
 import {
     ExecutionTransaction,
     ExecutionTransactionDocument,
@@ -324,6 +328,45 @@ export class UsersService {
                     termsVersion,
                 },
             }
+        );
+    }
+
+    /**
+     * Sprint 11 — write-once stamp на success-claim (`LandingClaimService`).
+     * Runtime validation через shared helper зберігає invariant навіть на
+     * прямих сервіс-call-сайтах поза DTO-pipeline. Невалідний target — throw
+     * `INVALID_REDIRECT_TARGET` як programming-error-marker: caller
+     * (`LandingClaimService.stampPostLoginTarget`) розрізняє його від
+     * infra-failures і пише у `logger.error` (alertable severity), без
+     * re-throw — stamp non-blocking за дизайном claim-flow.
+     */
+    async setPendingPostLoginTarget(
+        userId: string,
+        target: string
+    ): Promise<void> {
+        if (!validateSameOriginPath(target)) {
+            throw new BadRequestException({
+                code: RESPONSE_CODE.INVALID_REDIRECT_TARGET,
+                message: 'Invalid pending post-login target',
+            });
+        }
+        await this.userModel.updateOne(
+            { _id: userId },
+            { $set: { pendingPostLoginTarget: target } }
+        );
+    }
+
+    /**
+     * Sprint 11 — consume-and-clear; викликається frontend через PATCH
+     * `/users/me { pendingPostLoginTarget: null }` (verify-handler same-device
+     * + AuthInitializer cold-login). Sprint 12 cron Stage 3 cleanup-flow теж
+     * скористається цим методом напряму. Idempotent — `$unset` на відсутньому
+     * полі — no-op.
+     */
+    async clearPendingPostLoginTarget(userId: string): Promise<void> {
+        await this.userModel.updateOne(
+            { _id: userId },
+            { $unset: { pendingPostLoginTarget: 1 } }
         );
     }
 
