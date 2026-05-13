@@ -297,15 +297,6 @@ export class InvoicesService {
     }
 
     /**
-     * Sprint 9 — кількість інвойсів бізнесу для cabinet `getBySlug`-counters.
-     * Index `(businessId, createdAt)` (denormalized field, §SP-6) — prefix-
-     * match без `$lookup` через accounts.
-     */
-    async countByBusinessId(businessId: Types.ObjectId): Promise<number> {
-        return this.invoiceModel.countDocuments({ businessId });
-    }
-
-    /**
      * Sprint 9 §SP-6 — compound-keyed lookup `(accountId, slug)` case-sensitive.
      * `null` якщо не знайдено — caller (`InvoiceAccessGuard`) обертає у 404.
      */

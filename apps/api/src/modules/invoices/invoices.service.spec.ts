@@ -301,17 +301,6 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
         });
     });
 
-    describe('countByBusinessId', () => {
-        it('повертає countDocuments({businessId})', async () => {
-            invoiceModel.countDocuments.mockResolvedValue(7);
-            const r = await service.countByBusinessId(businessId);
-            expect(r).toBe(7);
-            expect(invoiceModel.countDocuments).toHaveBeenCalledWith({
-                businessId,
-            });
-        });
-    });
-
     describe('getBySlug', () => {
         it('Sprint 9 §SP-6 — compound `(accountId, slug)` case-sensitive', async () => {
             const exec = jest.fn().mockResolvedValue(null);

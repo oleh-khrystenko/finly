@@ -176,25 +176,6 @@ export class AccountsService {
     }
 
     /**
-     * Public-list flow (`pay.finly.com.ua/{businessSlug}` root + `accounts`-array
-     * у `PublicBusinessSchema`). Повертає Mongoose-документи — caller-и читають
-     * `account.iban`, `.slug`, `.name`, `.bankCode` typed через `AccountDocument`
-     * (без `Record<string, unknown>`-cast-у).
-     *
-     * **Sort `{ createdAt: 1 }` (asc)** — customer-perspective "перший-створений
-     * = основний-рахунок зверху" (§9.1). Index `(businessId, createdAt)`
-     * direction-neutral.
-     */
-    async listForBusinessPublic(
-        businessId: Types.ObjectId
-    ): Promise<AccountDocument[]> {
-        return this.accountModel
-            .find({ businessId })
-            .sort({ createdAt: 1 })
-            .exec();
-    }
-
-    /**
      * Cabinet-list flow з per-item `invoicesCount` через single aggregation
      * pipeline (`$lookup` + nested `$count`). Один Mongo round-trip незалежно
      * від кількості account-ів.
@@ -261,10 +242,6 @@ export class AccountsService {
 
     async countInvoices(accountId: Types.ObjectId): Promise<number> {
         return this.invoiceModel.countDocuments({ accountId });
-    }
-
-    async countByBusinessId(businessId: Types.ObjectId): Promise<number> {
-        return this.accountModel.countDocuments({ businessId });
     }
 
     /**

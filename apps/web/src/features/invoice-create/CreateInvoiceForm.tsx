@@ -54,15 +54,16 @@ interface Props {
  * 4 preset-варіанти, `random`. Без вкладених dropdowns: один клік — один
  * вибір, без UX-cost.
  *
- * **Default опція = `business.invoiceSlugPresetDefault ?? 'simple'`.** Якщо
- * ФОП у "Налаштуваннях рахунків" обрав конкретний пресет — форма стартує з
+ * **Default опція = `account.invoiceSlugPresetDefault ?? 'simple'`** (Sprint 9
+ * §SP-6 — per-account нумерація; до Sprint 9 поле жило на Business). Якщо
+ * ФОП у налаштуваннях рахунку обрав конкретний пресет — форма стартує з
  * нього без додаткового кліку. Якщо `null` — `simple` як global system
  * fallback (§SP-1).
  *
- * **Edge case:** якщо bizness-default = `with-purpose` і це перший інвойс
+ * **Edge case:** якщо account-default = `with-purpose` і це перший інвойс
  * — warning-modal не тригериться автоматично (тільки на manual change через
- * dropdown). `with-purpose` як bizness-level default має бути obvious-вибір
- * ФОП-а у "Налаштуваннях рахунків", де warning теж показується раз.
+ * dropdown). `with-purpose` як account-level default має бути obvious-вибір
+ * ФОП-а у налаштуваннях рахунку, де warning теж показується раз.
  *
  * **Coupled `amount × amountLocked` (SP-6).** Switch "Дозволити клієнту
  * правити суму" — інверсна семантика від API-поля (ON ⇔ `amountLocked=false`).
