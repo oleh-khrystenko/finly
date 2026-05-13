@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AxiosError } from 'axios';
 import { CheckCircle } from 'lucide-react';
+import type { AuthResponse } from '@finly/types';
 import UiButton from '@/shared/ui/UiButton';
 import UiFullPageLoader from '@/shared/ui/UiFullPageLoader';
 import {
@@ -14,8 +15,61 @@ import {
 } from '@/shared/api';
 import { isValidRedirect } from '@/shared/lib';
 import { useAuthStore } from '@/entities/user';
+import { useQrLandingDraftStore } from '@/entities/qr-landing-draft';
 
 type VerifyStatus = 'verifying' | 'success' | 'deleted' | 'error';
+
+/**
+ * Sprint 10 §10.2 — claim-state-aware redirect-resolver. Викликається ПІСЛЯ
+ * auth-finalization (`acceptTerms + getMe + setUser`). 4 гілки:
+ *
+ *  - `claimState === undefined` → fall-through на `redirectTarget` (backwards-
+ *    compat зі Sprint 8: register/login/default без claim).
+ *  - `'success'` → `clearAll()` + redirect на per-account з banner-trigger
+ *    `?completed-from=landing`.
+ *  - `'business-failed'` → `setFormData(failedClaimDraft)` +
+ *    `setIntent('claim-failed-business')` + redirect на
+ *    `/business/new?from=landing` (wizard pre-fill через `?from=landing`).
+ *  - `'account-failed'` → setFormData + setIntent + redirect на
+ *    `/business/{partialBusinessSlug}/account/new?from=landing`.
+ *
+ * `?redirect=` ігнорується для claim-flow — claim-target і generic-target
+ * mutually exclusive.
+ */
+function handleClaimRedirect(
+    response: AuthResponse,
+    fallbackRedirect: string
+): string {
+    const store = useQrLandingDraftStore.getState();
+    if (!response.claimState) return fallbackRedirect;
+
+    if (
+        response.claimState === 'success' &&
+        response.claimedBusinessSlug &&
+        response.claimedAccountSlug
+    ) {
+        store.clearAll();
+        return `/business/${response.claimedBusinessSlug}/account/${response.claimedAccountSlug}?completed-from=landing`;
+    }
+
+    if (response.claimState === 'business-failed' && response.failedClaimDraft) {
+        store.setFormData(response.failedClaimDraft);
+        store.setIntent('claim-failed-business');
+        return '/business/new?from=landing';
+    }
+
+    if (
+        response.claimState === 'account-failed' &&
+        response.failedClaimDraft &&
+        response.partialBusinessSlug
+    ) {
+        store.setFormData(response.failedClaimDraft);
+        store.setIntent('claim-failed-account');
+        return `/business/${response.partialBusinessSlug}/account/new?from=landing`;
+    }
+
+    return fallbackRedirect;
+}
 
 function VerifyContent() {
     const router = useRouter();
@@ -36,38 +90,22 @@ function VerifyContent() {
             try {
                 const result = await verifyMagicLink(token);
 
-                switch (result.purpose) {
-                    case 'register': {
-                        await acceptTerms();
-                        const user = await getMe();
-                        useAuthStore.getState().setUser(user);
-                        setStatus('success');
-                        router.replace(redirectTarget);
-                        break;
-                    }
-
-                    case 'login': {
-                        await acceptTerms();
-                        const user = await getMe();
-                        useAuthStore.getState().setUser(user);
-                        setStatus('success');
-                        router.replace(redirectTarget);
-                        break;
-                    }
-
-                    case 'delete-account': {
-                        setStatus('deleted');
-                        break;
-                    }
-
-                    default: {
-                        await acceptTerms();
-                        const user = await getMe();
-                        useAuthStore.getState().setUser(user);
-                        setStatus('success');
-                        router.replace(redirectTarget);
-                    }
+                if ('deleted' in result) {
+                    setStatus('deleted');
+                    return;
                 }
+
+                // Auth-finalization безумовний для register / login / default —
+                // потрібний user-store-hydration перед AuthGuard на target-page.
+                // acceptTerms() — idempotent-no-op для claim-flow (Sprint 10
+                // SP-12: backend уже stamp-нув terms ДО claim).
+                await acceptTerms();
+                const user = await getMe();
+                useAuthStore.getState().setUser(user);
+                setStatus('success');
+
+                const target = handleClaimRedirect(result, redirectTarget);
+                router.replace(target);
             } catch (err) {
                 setStatus('error');
                 const code =

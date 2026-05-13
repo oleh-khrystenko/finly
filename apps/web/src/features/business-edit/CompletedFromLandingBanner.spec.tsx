@@ -2,11 +2,16 @@ import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 
 const mockRouterReplace = jest.fn();
+const mockRouterPush = jest.fn();
 let mockSearchParams = new URLSearchParams();
-const mockPathname = '/business/iva-X3kQ';
+const mockPathname = '/business/iva-X3kQ/account/acc-aB12cD34';
+const BUSINESS_SLUG = 'iva-X3kQ';
 
 jest.mock('next/navigation', () => ({
-    useRouter: () => ({ replace: mockRouterReplace, push: jest.fn() }),
+    useRouter: () => ({
+        replace: mockRouterReplace,
+        push: mockRouterPush,
+    }),
     usePathname: () => mockPathname,
     useSearchParams: () => mockSearchParams,
 }));
@@ -19,44 +24,60 @@ describe('CompletedFromLandingBanner', () => {
         mockSearchParams = new URLSearchParams();
     });
 
-    it('returns null коли ?completed-from відсутній (no banner на повторних відкриттях)', () => {
+    it('returns null коли ?completed-from відсутній', () => {
         mockSearchParams = new URLSearchParams();
-        const { container } = render(<CompletedFromLandingBanner />);
+        const { container } = render(
+            <CompletedFromLandingBanner businessSlug={BUSINESS_SLUG} />
+        );
         expect(container).toBeEmptyDOMElement();
     });
 
     it('returns null коли ?completed-from має інше значення (не "landing")', () => {
         mockSearchParams = new URLSearchParams('?completed-from=other');
-        const { container } = render(<CompletedFromLandingBanner />);
+        const { container } = render(
+            <CompletedFromLandingBanner businessSlug={BUSINESS_SLUG} />
+        );
         expect(container).toBeEmptyDOMElement();
     });
 
-    it('рендерить заголовок + опис + CTA коли ?completed-from=landing', () => {
+    it('рендерить новий заголовок + опис + CTA коли ?completed-from=landing', () => {
         mockSearchParams = new URLSearchParams('?completed-from=landing');
-        render(<CompletedFromLandingBanner />);
+        render(<CompletedFromLandingBanner businessSlug={BUSINESS_SLUG} />);
 
         expect(
-            screen.getByText('Дані з лендінгу збережено')
+            screen.getByText('Бізнес і рахунок збережено з лендінгу')
         ).toBeInTheDocument();
         expect(
             screen.getByText(/За замовчуванням бізнес приймає всі 11 банків/)
         ).toBeInTheDocument();
-        const cta = screen.getByRole('link', { name: /Перейти до банків/ });
-        expect(cta).toHaveAttribute('href', '#banks');
+        expect(
+            screen.getByRole('button', { name: /Перейти до банків/ })
+        ).toBeInTheDocument();
+    });
+
+    it('CTA "Перейти до банків" робить cross-page push на /business/{slug}#banks', () => {
+        mockSearchParams = new URLSearchParams('?completed-from=landing');
+        render(<CompletedFromLandingBanner businessSlug={BUSINESS_SLUG} />);
+
+        fireEvent.click(
+            screen.getByRole('button', { name: /Перейти до банків/ })
+        );
+
+        expect(mockRouterPush).toHaveBeenCalledWith(
+            `/business/${BUSINESS_SLUG}#banks`
+        );
     });
 
     it('dismiss (X) видаляє query-param через router.replace без створення history-entry', () => {
         mockSearchParams = new URLSearchParams('?completed-from=landing');
-        render(<CompletedFromLandingBanner />);
+        render(<CompletedFromLandingBanner businessSlug={BUSINESS_SLUG} />);
 
         const dismissBtn = screen.getByRole('button', {
             name: /Сховати повідомлення/,
         });
         fireEvent.click(dismissBtn);
 
-        // router.replace, НЕ push (дізмис не повинен потрапити у back-history).
         expect(mockRouterReplace).toHaveBeenCalledTimes(1);
-        // Pathname збережений, query-param очищений.
         expect(mockRouterReplace).toHaveBeenCalledWith(mockPathname);
     });
 
@@ -64,7 +85,7 @@ describe('CompletedFromLandingBanner', () => {
         mockSearchParams = new URLSearchParams(
             '?completed-from=landing&debug=on'
         );
-        render(<CompletedFromLandingBanner />);
+        render(<CompletedFromLandingBanner businessSlug={BUSINESS_SLUG} />);
 
         fireEvent.click(
             screen.getByRole('button', { name: /Сховати повідомлення/ })
@@ -75,9 +96,9 @@ describe('CompletedFromLandingBanner', () => {
         );
     });
 
-    it('має aria-live="polite" для accessibility (screen-reader announcement)', () => {
+    it('має aria-live="polite" для accessibility', () => {
         mockSearchParams = new URLSearchParams('?completed-from=landing');
-        render(<CompletedFromLandingBanner />);
+        render(<CompletedFromLandingBanner businessSlug={BUSINESS_SLUG} />);
 
         const region = screen.getByRole('status');
         expect(region).toHaveAttribute('aria-live', 'polite');

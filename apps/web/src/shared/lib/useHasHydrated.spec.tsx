@@ -5,8 +5,8 @@ import { useHasHydrated } from './useHasHydrated';
 
 interface MockPersist {
     persist: {
-        hasHydrated: jest.Mock<boolean, []>;
-        onFinishHydration: jest.Mock<() => void, [() => void]>;
+        hasHydrated: jest.MockedFunction<() => boolean>;
+        onFinishHydration: jest.MockedFunction<(cb: () => void) => () => void>;
     };
 }
 
@@ -24,7 +24,7 @@ describe('useHasHydrated', () => {
         const store: MockPersist = {
             persist: {
                 hasHydrated: jest.fn(() => true),
-                onFinishHydration: jest.fn(() => () => {}),
+                onFinishHydration: jest.fn((_cb: () => void) => () => {}),
             },
         };
         const values: boolean[] = [];
@@ -51,13 +51,9 @@ describe('useHasHydrated', () => {
             <HydrationProbe store={store} onValue={(v) => values.push(v)} />
         );
 
-        // Перший snapshot — false (hasHydrated() returns false).
         expect(values[0]).toBe(false);
-        // Subscribe-callback зареєстрований.
         expect(store.persist.onFinishHydration).toHaveBeenCalled();
 
-        // Емулюємо завершення hydration: callback fires + наступний snapshot
-        // повертає true.
         store.persist.hasHydrated.mockReturnValue(true);
         act(() => {
             hydrationCallback!();
@@ -71,7 +67,7 @@ describe('useHasHydrated', () => {
         const store: MockPersist = {
             persist: {
                 hasHydrated: jest.fn(() => false),
-                onFinishHydration: jest.fn(() => cleanup),
+                onFinishHydration: jest.fn((_cb: () => void) => cleanup),
             },
         };
 

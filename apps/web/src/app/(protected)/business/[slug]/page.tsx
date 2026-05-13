@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { ArrowLeft, ExternalLink, Trash2 } from 'lucide-react';
 import { AxiosError } from 'axios';
 import { toast } from 'sonner';
@@ -25,7 +24,6 @@ import {
     AccountsSection,
     BanksSection,
     BasicSection,
-    CompletedFromLandingBanner,
     PublicSection,
     RequisitesSection,
     TaxationSection,
@@ -164,13 +162,16 @@ export default function BusinessSlugPage() {
         <UiPageContainer className="space-y-6 py-8 md:py-12">
             {/* Top toolbar: back-link, heading, open-tab. */}
             <div className="flex flex-col gap-4">
-                <Link
+                <UiButton
+                    as="link"
                     href="/business"
-                    className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm"
+                    variant="text"
+                    size="sm"
+                    IconLeft={<ArrowLeft />}
+                    className="self-start px-0"
                 >
-                    <ArrowLeft className="size-4" />
                     Назад до списку
-                </Link>
+                </UiButton>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                     <h1 className="text-foreground text-2xl font-bold tracking-tight md:text-3xl">
                         {heading}
@@ -190,11 +191,6 @@ export default function BusinessSlugPage() {
             </div>
 
             <div className="space-y-4">
-                {/*
-                 * Sprint 8 §8.5 — banner-нагадування після claim-flow з
-                 * лендінгу. Рендериться як null без `?completed-from=landing`-param.
-                 */}
-                <CompletedFromLandingBanner />
                 <BasicSection business={business} onSave={handlePatch} />
                 <RequisitesSection business={business} onSave={handlePatch} />
                 {hasTaxationFields(business) && (

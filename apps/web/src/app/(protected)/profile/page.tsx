@@ -6,6 +6,7 @@ import { isOnboardingComplete } from '@finly/types';
 import UiFullPageLoader from '@/shared/ui/UiFullPageLoader';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
 import UiPageHeading from '@/shared/ui/UiPageHeading';
+import { isValidRedirect } from '@/shared/lib';
 import { useAuthStore } from '@/entities/user';
 import { ProfileForm, SecuritySection, DangerZone } from '@/features/profile';
 import type { ProfileMode } from '@/features/profile';
@@ -22,11 +23,17 @@ function ProfileContent() {
     if (!user) return null;
 
     const handleProfileSaved = () => {
-        if (mode === 'new') {
-            // Sprint 3 §3.5 §E2 — onboarding closing redirect → /business
-            // (replaces /dashboard).
-            router.push('/business');
+        if (mode !== 'new') return;
+
+        // Sprint 10 §10.2 — `?next=` consumption з open-redirect-guard. Sprint 3
+        // baseline-target — `/business`; Sprint 10 honor-ить next-target з
+        // AuthGuard auto-build-у (post-claim або direct deep-link сценарії).
+        const rawNext = searchParams.get('next');
+        if (rawNext && isValidRedirect(rawNext)) {
+            router.push(rawNext);
+            return;
         }
+        router.push('/business');
     };
 
     return (

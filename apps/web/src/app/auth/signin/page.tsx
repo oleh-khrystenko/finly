@@ -8,8 +8,12 @@ import { Mail } from 'lucide-react';
 import { AxiosError } from 'axios';
 import { toast } from 'sonner';
 import { z } from 'zod';
-import { CheckEmailSchema } from '@finly/types';
-import type { MagicLinkPurpose } from '@finly/types';
+import {
+    CheckEmailSchema,
+    CURRENT_TERMS_VERSION,
+    LandingDraftSchema,
+} from '@finly/types';
+import type { LandingDraft, MagicLinkPurpose } from '@finly/types';
 import UiButton from '@/shared/ui/UiButton';
 import UiLink from '@/shared/ui/UiLink';
 import UiCheckbox from '@/shared/ui/UiCheckbox';
@@ -33,6 +37,10 @@ import {
     INTL_LOCALE,
 } from '@/shared/lib';
 import { useAuthStore } from '@/entities/user';
+import {
+    awaitLandingDraftHydration,
+    useQrLandingDraftStore,
+} from '@/entities/qr-landing-draft';
 import SessionExpiredHandler from '@/features/auth/SessionExpiredHandler';
 
 const EmailFormSchema = CheckEmailSchema;
@@ -54,6 +62,28 @@ type SigninState =
 const TOO_MANY_ATTEMPTS = (minutes: number) =>
     `Забагато спроб. Спробуйте через ${minutes} хвилин або скористайтесь посиланням «Забули пароль?»`;
 const ERROR_GENERIC = 'Щось пішло не так. Спробуйте ще раз';
+
+/**
+ * Sprint 10 §10.2 — resolve anon-claim payload з persisted store. Повертає
+ * `{ landingDraft, claimIdempotencyKey }` тільки якщо всі 4 LandingDraft-поля
+ * + idempotency-key валідні і intent === 'claim-pending'; інакше undefined-pair
+ * (backend cross-field refine `LANDING_DRAFT_AND_KEY_MUST_COEXIST` reject-ає
+ * mismatched pair).
+ */
+function resolveLandingClaimPayload(): {
+    landingDraft?: LandingDraft;
+    claimIdempotencyKey?: string;
+} {
+    const state = useQrLandingDraftStore.getState();
+    if (state.intent !== 'claim-pending') return {};
+    if (state.claimIdempotencyKey === null) return {};
+    const parsed = LandingDraftSchema.safeParse(state.formData);
+    if (!parsed.success) return {};
+    return {
+        landingDraft: parsed.data,
+        claimIdempotencyKey: state.claimIdempotencyKey,
+    };
+}
 
 function SigninContent() {
     const router = useRouter();
@@ -121,7 +151,29 @@ function SigninContent() {
     const handleResend = async () => {
         setResending(true);
         try {
-            await sendMagicLink(email, lastPurposeRef.current);
+            // Sprint 10 — purpose рантайм-mutable через `lastPurposeRef`.
+            // `handleForgotPassword` виставляє ref у 'reset-password', тож
+            // послідовність "Email → Перевір пошту → Забули пароль → Перевір
+            // пошту → Надіслати повторно" робить цей resend semантично
+            // reset-password-resend-ом. Anon-claim payload прокидаємо лише на
+            // не-reset-password-purpose (backend cross-field refine все одно
+            // reject-ить mismatched pair).
+            const purposeForResend = lastPurposeRef.current;
+            // Sprint 10 §10.2 — submit-side hydration-gate перед читанням
+            // qrLandingDraftStore: на повільному first-load persist може не
+            // встигнути гідратувати до моменту submit, тоді getState()
+            // повертає INITIAL_STATE і claim-payload втрачається.
+            await awaitLandingDraftHydration();
+            const claimPayload =
+                purposeForResend === 'reset-password'
+                    ? {}
+                    : resolveLandingClaimPayload();
+            await sendMagicLink(email, purposeForResend, undefined, {
+                ...claimPayload,
+                termsVersion: agreedToTerms
+                    ? CURRENT_TERMS_VERSION
+                    : undefined,
+            });
             startResendTimer();
         } catch {
             // dedup на бекенді — не показуємо помилку
@@ -186,7 +238,19 @@ function SigninContent() {
             } else {
                 const purpose = isNewUser ? 'register' : 'login';
                 lastPurposeRef.current = purpose;
-                await sendMagicLink(data.email, purpose, redirect ?? undefined);
+                // Sprint 10 §10.2 — submit-side hydration-gate.
+                await awaitLandingDraftHydration();
+                await sendMagicLink(
+                    data.email,
+                    purpose,
+                    redirect ?? undefined,
+                    {
+                        ...resolveLandingClaimPayload(),
+                        termsVersion: agreedToTerms
+                            ? CURRENT_TERMS_VERSION
+                            : undefined,
+                    }
+                );
                 startResendTimer();
                 setState('magic-link-sent');
             }
@@ -263,7 +327,14 @@ function SigninContent() {
             'Якщо акаунт з цією адресою існує, ми надіслали посилання для зміни пароля';
         try {
             lastPurposeRef.current = 'reset-password';
-            await sendMagicLink(email, 'reset-password');
+            // Sprint 10 — reset-password semantically incompatible з
+            // anon-claim; landingDraft + claimIdempotencyKey НЕ прокидаємо.
+            // termsVersion прокидаємо, якщо user уже погодився на email-step.
+            await sendMagicLink(email, 'reset-password', undefined, {
+                termsVersion: agreedToTerms
+                    ? CURRENT_TERMS_VERSION
+                    : undefined,
+            });
             toast.success(sentMessage);
             startResendTimer();
             setState('magic-link-sent');
@@ -295,7 +366,14 @@ function SigninContent() {
         setSubmitting(true);
         try {
             lastPurposeRef.current = 'login';
-            await sendMagicLink(email, 'login');
+            // Sprint 10 §10.2 — submit-side hydration-gate.
+            await awaitLandingDraftHydration();
+            await sendMagicLink(email, 'login', undefined, {
+                ...resolveLandingClaimPayload(),
+                termsVersion: agreedToTerms
+                    ? CURRENT_TERMS_VERSION
+                    : undefined,
+            });
             startResendTimer();
             setState('magic-link-sent');
             setShowMagicLinkSuggestion(false);

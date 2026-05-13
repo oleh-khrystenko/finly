@@ -21,8 +21,9 @@ import { useClaimLandingDraft } from './useClaimLandingDraft';
  *
  * Як sibling — хук живий незалежно від того, що рендерить AuthGuard
  * (children, /profile, або null). Підписаний на authStore: коли profile
- * стає complete після PATCH `/users/me`, `useEffect` re-fires і викликає
- * `claimLandingDraftAsBusiness` з відповідним redirect-ом.
+ * стає complete після PATCH `/users/me`, `useEffect` re-fires і запускає
+ * Sprint 10 `runClaimChain` (POST1 Business → POST2 Account) з відповідним
+ * success / failure-recovery redirect-ом.
  */
 export function ClaimLandingDraftHook(): null {
     useClaimLandingDraft();

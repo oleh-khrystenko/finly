@@ -18,6 +18,7 @@ jest.mock('@/shared/api', () => ({
 
 jest.mock('next/navigation', () => ({
     useRouter: () => ({ replace: mockRouterReplace }),
+    useSearchParams: () => new URLSearchParams(),
 }));
 
 jest.mock('sonner', () => ({

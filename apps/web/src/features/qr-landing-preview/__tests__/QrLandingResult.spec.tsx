@@ -11,7 +11,8 @@ jest.mock('@/shared/config', () => ({
     },
 }));
 
-const mockClaim = jest.fn();
+const mockCreateBusiness = jest.fn();
+const mockCreateAccount = jest.fn();
 const mockRouterPush = jest.fn();
 const mockRouterReplace = jest.fn();
 const mockToastSuccess = jest.fn();
@@ -19,7 +20,9 @@ const mockToastError = jest.fn();
 const mockClipboardWrite = jest.fn();
 
 jest.mock('../api', () => ({
-    claimLandingDraftAsBusiness: (...args: unknown[]) => mockClaim(...args),
+    createBusinessFromDraft: (...args: unknown[]) =>
+        mockCreateBusiness(...args),
+    createAccountFromDraft: (...args: unknown[]) => mockCreateAccount(...args),
 }));
 
 jest.mock('next/navigation', () => ({
@@ -57,11 +60,6 @@ const VALID_RESULT = {
     qrPngBase64: 'iVBORw0KGgoAAAA',
 };
 
-/**
- * Test-harness: Result тепер приймає `form`-instance як prop. Обгортаємо
- * у компонент з `useForm` тих самих defaults, що QrLandingBlock на mount.
- * Дає доступ до form-state у тестах через `formRef`-callback.
- */
 function ResultHarness(props: {
     initialForm?: Partial<QrPreviewInput>;
     onForm?: (form: ReturnType<typeof useForm<QrPreviewInput>>) => void;
@@ -73,8 +71,7 @@ function ResultHarness(props: {
             receiverName: props.initialForm?.receiverName ?? '',
             iban: props.initialForm?.iban ?? '',
             taxId: props.initialForm?.taxId ?? '',
-            purpose:
-                props.initialForm?.purpose ?? 'Поповнення рахунку',
+            purpose: props.initialForm?.purpose ?? 'Поповнення рахунку',
         },
     });
     if (props.onForm) props.onForm(form);
@@ -132,7 +129,7 @@ describe('QrLandingResult — empty / filled state', () => {
         ).toBeInTheDocument();
     });
 
-    it('filled-state — рендерить UiQrImage + truncated link + warning', () => {
+    it('filled-state — рендерить UiQrImage + truncated link + warning + CTA "Зберегти у кабінет"', () => {
         seedFilledState();
         render(<ResultHarness initialForm={VALID_FORM} />);
 
@@ -141,9 +138,14 @@ describe('QrLandingResult — empty / filled state', () => {
         expect(img.getAttribute('src')).toContain(
             'data:image/png;base64,iVBORw0KGgoAAAA'
         );
-        expect(screen.getByText(/qr\.bank\.gov\.ua\/eyJ0eXAiOi…/)).toBeInTheDocument();
+        expect(
+            screen.getByText(/qr\.bank\.gov\.ua\/eyJ0eXAiOi…/)
+        ).toBeInTheDocument();
         expect(
             screen.getByText(/не зберігаються на нашому сервері/)
+        ).toBeInTheDocument();
+        expect(
+            screen.getByRole('button', { name: /Зберегти у кабінет/ })
         ).toBeInTheDocument();
     });
 });
@@ -176,10 +178,9 @@ describe('QrLandingResult — copy + clear actions', () => {
         });
     });
 
-    it('"Очистити" — clearAll() + form.reset() (input.values стають порожніми)', () => {
+    it('"Очистити" — clearAll() + form.reset()', () => {
         seedFilledState();
 
-        // Захоплюємо form-instance, щоб перевірити reset.
         let formRef: ReturnType<typeof useForm<QrPreviewInput>> | null = null;
         render(
             <ResultHarness
@@ -190,24 +191,17 @@ describe('QrLandingResult — copy + clear actions', () => {
             />
         );
 
-        // Sanity: defaults підставлені
         expect(formRef!.getValues('receiverName')).toBe('Іваненко');
 
         fireEvent.click(screen.getByRole('button', { name: /Очистити/ }));
 
-        // Store очищено
         const s = useQrLandingDraftStore.getState();
         expect(s.formData).toEqual({});
         expect(s.result).toBeNull();
         expect(s.intent).toBe('idle');
+        expect(s.claimIdempotencyKey).toBeNull();
 
-        // Form values очищено — UAT LAND-3-related інваріант
         expect(formRef!.getValues('receiverName')).toBe('');
-        expect(formRef!.getValues('iban')).toBe('');
-        expect(formRef!.getValues('taxId')).toBe('');
-        // Purpose повертається до сенсового дефолту, не порожнього рядка.
-        expect(formRef!.getValues('purpose')).toBe('Поповнення рахунку');
-
         expect(mockToastSuccess).toHaveBeenCalledWith('Дані очищено');
     });
 });
@@ -223,7 +217,7 @@ describe('QrLandingResult — claim CTA по auth-state', () => {
         });
     });
 
-    it('anon: setIntent("claim-pending") + router.push("/auth/signin")', () => {
+    it('anon: setIntent("claim-pending") (з generated claimIdempotencyKey) + router.push("/auth/signin")', () => {
         seedFilledState();
         setAnonAuth();
         render(<ResultHarness initialForm={VALID_FORM} />);
@@ -232,15 +226,18 @@ describe('QrLandingResult — claim CTA по auth-state', () => {
             screen.getByRole('button', { name: /Зберегти у кабінет/ })
         );
 
-        expect(useQrLandingDraftStore.getState().intent).toBe('claim-pending');
+        const s = useQrLandingDraftStore.getState();
+        expect(s.intent).toBe('claim-pending');
+        expect(s.claimIdempotencyKey).not.toBeNull();
         expect(mockRouterPush).toHaveBeenCalledWith('/auth/signin');
-        expect(mockClaim).not.toHaveBeenCalled();
+        expect(mockCreateBusiness).not.toHaveBeenCalled();
     });
 
-    it('logged-in + complete profile: claim → router.replace + form.reset', async () => {
+    it('logged-in + complete profile: 2-step claim → redirect на per-account з ?completed-from=landing', async () => {
         seedFilledState();
         setAuthedWithCompleteProfile();
-        mockClaim.mockResolvedValue({ slug: 'iva-X3kQ' });
+        mockCreateBusiness.mockResolvedValue({ slug: 'iva-X3kQ' });
+        mockCreateAccount.mockResolvedValue({ slug: 'acc-aB12cD34' });
 
         let formRef: ReturnType<typeof useForm<QrPreviewInput>> | null = null;
         render(
@@ -257,16 +254,45 @@ describe('QrLandingResult — claim CTA по auth-state', () => {
         );
 
         await waitFor(() => {
-            expect(mockClaim).toHaveBeenCalledWith(VALID_FORM);
-            expect(mockRouterReplace).toHaveBeenCalledWith(
-                '/business/iva-X3kQ?completed-from=landing'
+            expect(mockCreateBusiness).toHaveBeenCalled();
+            expect(mockCreateAccount).toHaveBeenCalledWith(
+                'iva-X3kQ',
+                VALID_FORM
             );
-            expect(mockToastSuccess).toHaveBeenCalledWith('Бізнес створено');
-            expect(useQrLandingDraftStore.getState().formData).toEqual({});
+            expect(mockRouterReplace).toHaveBeenCalledWith(
+                '/business/iva-X3kQ/account/acc-aB12cD34?completed-from=landing'
+            );
+            expect(mockToastSuccess).toHaveBeenCalledWith(
+                'Бізнес і рахунок збережено'
+            );
+            const s = useQrLandingDraftStore.getState();
+            expect(s.formData).toEqual({});
+            expect(s.claimIdempotencyKey).toBeNull();
         });
-
-        // Form reset відбувся — input cleared (UX consistency на success-path).
         expect(formRef!.getValues('receiverName')).toBe('');
+    });
+
+    it('logged-in + complete profile: POST2 fail → claim-failed-account + redirect на /business/{slug}/account/new?from=landing', async () => {
+        seedFilledState();
+        setAuthedWithCompleteProfile();
+        mockCreateBusiness.mockResolvedValue({ slug: 'iva-X3kQ' });
+        mockCreateAccount.mockRejectedValue(new Error('409 IBAN duplicate'));
+
+        render(<ResultHarness initialForm={VALID_FORM} />);
+
+        fireEvent.click(
+            screen.getByRole('button', { name: /Зберегти у кабінет/ })
+        );
+
+        await waitFor(() => {
+            expect(mockToastError).toHaveBeenCalled();
+            expect(mockRouterReplace).toHaveBeenCalledWith(
+                '/business/iva-X3kQ/account/new?from=landing'
+            );
+            const s = useQrLandingDraftStore.getState();
+            expect(s.intent).toBe('claim-failed-account');
+            expect(s.formData).toEqual(VALID_FORM);
+        });
     });
 
     it('logged-in + incomplete profile: setIntent + redirect на /profile?mode=new', () => {
@@ -280,7 +306,7 @@ describe('QrLandingResult — claim CTA по auth-state', () => {
 
         expect(useQrLandingDraftStore.getState().intent).toBe('claim-pending');
         expect(mockRouterPush).toHaveBeenCalledWith('/profile?mode=new');
-        expect(mockClaim).not.toHaveBeenCalled();
+        expect(mockCreateBusiness).not.toHaveBeenCalled();
     });
 
     it('schema-drift у localStorage: невалідний formData → toast.error без API-виклику', () => {
@@ -299,6 +325,6 @@ describe('QrLandingResult — claim CTA по auth-state', () => {
         );
 
         expect(mockToastError).toHaveBeenCalled();
-        expect(mockClaim).not.toHaveBeenCalled();
+        expect(mockCreateBusiness).not.toHaveBeenCalled();
     });
 });

@@ -10,9 +10,10 @@ import {
 
 import { useQrLandingDraftStore } from '@/entities/qr-landing-draft';
 
+import { useHasHydrated } from '@/shared/lib';
+
 import { QrLandingForm } from './QrLandingForm';
 import { QrLandingResult } from './QrLandingResult';
-import { useHasHydrated } from './lib/useHasHydrated';
 
 /**
  * Sprint 8 §8.3 — orchestrator: тримає `useForm`-instance, persist-bridge,

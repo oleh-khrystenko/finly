@@ -16,12 +16,27 @@ import { z } from 'zod';
 
 import { createAccount, getApiMessage } from '@/shared/api';
 import { getZodFieldError } from '@/shared/lib';
+import { useQrLandingDraftStore } from '@/entities/qr-landing-draft';
 import UiButton from '@/shared/ui/UiButton';
 import UiInput from '@/shared/ui/UiInput';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 
 interface Props {
     businessSlug: string;
+    /**
+     * Sprint 10 §10.2 — pre-fill IBAN value у RHF defaultValues. Передається
+     * page-rapper-ом коли активний `?from=landing`-flow (anon-claim recovery
+     * після failure POST2 Account або після manual wizard-завершення на
+     * recovery-path).
+     */
+    prefillIban?: string;
+    /**
+     * Sprint 10 §10.2 — landing-recovery branch активний. На success робить
+     * `clearAll()` landing-store + redirect з `?completed-from=landing`-banner-
+     * trigger на per-account page. На стандартний cabinet-flow — звичайний
+     * redirect без banner.
+     */
+    landingRecovery?: boolean;
 }
 
 /**
@@ -55,14 +70,18 @@ const FormSchema = z.object({
 
 type FormValues = z.input<typeof FormSchema>;
 
-export default function AccountCreateForm({ businessSlug }: Props) {
+export default function AccountCreateForm({
+    businessSlug,
+    prefillIban,
+    landingRecovery,
+}: Props) {
     const router = useRouter();
     const [submitting, setSubmitting] = useState(false);
 
     const form = useForm<FormValues>({
         resolver: zodResolver(FormSchema),
         mode: 'onChange',
-        defaultValues: { iban: '', name: '' },
+        defaultValues: { iban: prefillIban ?? '', name: '' },
     });
     const { register, handleSubmit, formState } = form;
     const { errors, isValid } = formState;
@@ -85,10 +104,18 @@ export default function AccountCreateForm({ businessSlug }: Props) {
         setSubmitting(true);
         try {
             const created = await createAccount(businessSlug, parsed.data);
-            toast.success('Рахунок створено');
-            router.replace(
-                `/business/${businessSlug}/account/${created.slug}`
-            );
+            if (landingRecovery) {
+                useQrLandingDraftStore.getState().clearAll();
+                toast.success('Бізнес і рахунок збережено');
+                router.replace(
+                    `/business/${businessSlug}/account/${created.slug}?completed-from=landing`
+                );
+            } else {
+                toast.success('Рахунок створено');
+                router.replace(
+                    `/business/${businessSlug}/account/${created.slug}`
+                );
+            }
         } catch (err) {
             const code =
                 err instanceof AxiosError

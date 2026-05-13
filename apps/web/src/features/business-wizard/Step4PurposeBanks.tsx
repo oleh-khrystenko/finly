@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { AxiosError } from 'axios';
 import { toast } from 'sonner';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
     BANK_LABEL,
     CreateBusinessSchema,
@@ -28,6 +28,8 @@ const PurposeWrap = z.object({ paymentPurposeTemplate: PurposeSchema });
 
 export default function Step4PurposeBanks() {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const fromLanding = searchParams.get('from') === 'landing';
     const formData = useBusinessWizardStore((s) => s.formData);
     const patch = useBusinessWizardStore((s) => s.patchFormData);
     const setStep = useBusinessWizardStore((s) => s.setStep);
@@ -107,7 +109,18 @@ export default function Step4PurposeBanks() {
         try {
             const created = await createBusiness(parsed.data);
             reset();
-            router.replace(`/business/${created.slug}`);
+            // Sprint 10 §10.2 — recovery після failure POST1 anon-claim.
+            // Wizard зберіг business; передаємо естафету на account-create-
+            // форму з тим самим landing-draft (IBAN читається з
+            // `qrLandingDraftStore.formData.iban`). Draft не чистимо — це
+            // зробить account-create на повний success.
+            if (fromLanding) {
+                router.replace(
+                    `/business/${created.slug}/account/new?from=landing`
+                );
+            } else {
+                router.replace(`/business/${created.slug}`);
+            }
         } catch (err) {
             const code =
                 err instanceof AxiosError

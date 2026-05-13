@@ -33,6 +33,7 @@ import {
     scheduleAccountDeleteWithUndo,
     useDeleteAccountConfirmStore,
 } from '@/features/account-edit';
+import { CompletedFromLandingBanner } from '@/features/business-edit';
 
 /**
  * Sprint 9 §9.2 §6 — кабінет рахунку
@@ -266,6 +267,12 @@ export default function AccountCabinetPage() {
             </div>
 
             <div className="space-y-4">
+                {/*
+                 * Sprint 10 §10.2 — banner-нагадування після anon-claim з
+                 * лендінгу (`?completed-from=landing`). Рендериться як null
+                 * без query-param-а.
+                 */}
+                <CompletedFromLandingBanner businessSlug={business.slug} />
                 <BasicSection account={account} onSave={onSaveAccount} />
                 <IbanSection account={account} />
                 <InvoiceSettingsSection

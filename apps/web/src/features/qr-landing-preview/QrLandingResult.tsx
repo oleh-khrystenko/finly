@@ -1,12 +1,17 @@
 'use client';
 
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { isOnboardingComplete, LandingDraftSchema } from '@finly/types';
 
+import { useAuthStore } from '@/entities/user';
 import { useQrLandingDraftStore } from '@/entities/qr-landing-draft';
 import UiButton from '@/shared/ui/UiButton';
 import UiQrImage from '@/shared/ui/UiQrImage';
 
 import type { QrLandingFormInstance } from './QrLandingBlock';
+import { runClaimChain } from './runClaimChain';
 import { truncateLink } from './lib/truncateLink';
 
 const EMPTY_FORM_VALUES = {
@@ -21,34 +26,30 @@ interface QrLandingResultProps {
 }
 
 /**
- * Sprint 8 §8.3 — result-pane (sibling до `QrLandingForm`).
+ * Sprint 8 §8.3 / Sprint 10 §10.2 — result-pane (sibling до `QrLandingForm`).
  *
- * **Sprint 9 §Скоуп.Frontend (1):** CTA "Зберегти у кабінет" вимкнено.
- * Поточний Sprint 8 `useClaimLandingDraft` робив `POST /businesses/me` з body,
- * що містить `requisites.iban` (старий shape). Sprint 9 видалив `requisites`-
- * wrapper з `CreateBusinessSchema` — старий claim-payload reject-нувся б на
- * 400 без recovery-path-у. Sprint 10 повертає CTA з новою архітектурою (2
- * sequential POST: Business → Account + form-recovery patern). До Sprint 10
- * deploy лендінг показує тільки preview-QR без claim-action — це degradation,
- * що абсорбується відсутністю production traffic.
- *
- * **Empty-state vs Filled-state**: rendering розгалужено за `result === null`.
- * Empty показує decorative placeholder + microcopy "Ваш QR з'явиться тут".
- * Filled — реальний QR + truncated link + copy CTA + warning.
- *
- * **`form` prop замість read-only callback**: clear-action скидає і store, і
- * RHF-state в одному місці. Без form-handle clear лишав би `<input>`-и
- * з frozen `defaultValues` (RHF uncontrolled). Sprint plan §8.3 explicit:
- * "→ `clearAll()` + `form.reset()`".
- *
- * **`navigator.clipboard` без feature-detection**: усі сучасні browsers
- * у secure contexts (HTTPS / localhost) підтримують Clipboard API.
- * Fail-degrade на toast.error при API-throw (security restrictions,
- * відмова дозволу).
+ * **Anon vs Logged-in CTA-семантика**:
+ *  - Anon: `setIntent('claim-pending')` → `router.push('/auth/signin')`. Atomic
+ *    `setIntent('claim-pending')` генерує `claimIdempotencyKey` через
+ *    `crypto.randomUUID()`. Sprint 10 signin-page прокине draft + key +
+ *    termsVersion у `sendMagicLink` — backend виконає claim після verify.
+ *  - Logged-in + complete profile: 2-step claim chain через спільний
+ *    `runClaimChain`-helper (той самий, що `useClaimLandingDraft` для
+ *    post-magic-link-flow).
+ *  - Logged-in + incomplete profile: redirect на `/profile?mode=new` зі
+ *    збереженим intent — `useClaimLandingDraft` у protected-layout продовжить
+ *    claim після PATCH `/users/me`.
  */
 export function QrLandingResult({ form }: QrLandingResultProps) {
     const result = useQrLandingDraftStore((s) => s.result);
+    const formData = useQrLandingDraftStore((s) => s.formData);
+    const setIntent = useQrLandingDraftStore((s) => s.setIntent);
+    const setFormData = useQrLandingDraftStore((s) => s.setFormData);
     const clearAll = useQrLandingDraftStore((s) => s.clearAll);
+    const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+    const profile = useAuthStore((s) => s.user?.profile);
+    const router = useRouter();
+    const [isClaiming, setIsClaiming] = useState(false);
 
     if (!result) {
         return (
@@ -80,6 +81,51 @@ export function QrLandingResult({ form }: QrLandingResultProps) {
             toast.success('Посилання скопійовано');
         } catch {
             toast.error('Не вдалося скопіювати. Скопіюйте вручну');
+        }
+    };
+
+    const handleClaim = async (): Promise<void> => {
+        if (!isAuthenticated) {
+            setIntent('claim-pending');
+            router.push('/auth/signin');
+            return;
+        }
+
+        if (profile && !isOnboardingComplete(profile)) {
+            setIntent('claim-pending');
+            router.push('/profile?mode=new');
+            return;
+        }
+
+        const parsed = LandingDraftSchema.safeParse(formData);
+        if (!parsed.success) {
+            toast.error(
+                'Не вдалося відновити чернетку. Створіть бізнес вручну з кабінету'
+            );
+            return;
+        }
+
+        // Stamp idempotency-key через ту саму atomic setIntent-транзицію,
+        // що anon-CTA — той самий lifecycle-pattern на обох code-paths.
+        setIntent('claim-pending');
+        const idempotencyKey =
+            useQrLandingDraftStore.getState().claimIdempotencyKey;
+        if (!idempotencyKey) {
+            toast.error('Не вдалося ініціалізувати збереження. Спробуйте ще раз');
+            return;
+        }
+
+        setIsClaiming(true);
+        try {
+            await runClaimChain(parsed.data, idempotencyKey, {
+                setIntent,
+                setFormData,
+                clearAll,
+                router,
+                onSuccessFormReset: () => form.reset(EMPTY_FORM_VALUES),
+            });
+        } finally {
+            setIsClaiming(false);
         }
     };
 
@@ -129,8 +175,19 @@ export function QrLandingResult({ form }: QrLandingResultProps) {
                 role="note"
                 className="border-border bg-muted/30 text-muted-foreground rounded-md border px-3 py-2 text-sm"
             >
-                Ці дані не зберігаються на нашому сервері.
+                Ці дані не зберігаються на нашому сервері. Збережіть бізнес у
+                кабінет, щоб повернутися до нього пізніше.
             </div>
+
+            <UiButton
+                type="button"
+                variant="filled"
+                size="lg"
+                onClick={handleClaim}
+                disabled={isClaiming}
+            >
+                {isClaiming ? 'Зберігаємо...' : 'Зберегти у кабінет'}
+            </UiButton>
         </div>
     );
 }

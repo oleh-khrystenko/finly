@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
+import { useParams, useSearchParams } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { AxiosError } from 'axios';
 import {
@@ -14,15 +14,21 @@ import UiPageHeading from '@/shared/ui/UiPageHeading';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
 import UiButton from '@/shared/ui/UiButton';
+import { useHasHydrated } from '@/shared/lib';
 import { AccountCreateForm } from '@/features/account-create';
+import { useQrLandingDraftStore } from '@/entities/qr-landing-draft';
 
 /**
  * Sprint 9 §9.2 — route `/business/{slug}/account/new`. Single-form для
  * створення Account під бізнесом.
  *
- * **Pre-fetch business**: щоб переконатися, що `BusinessAccessGuard` пропустить
- * наступний POST. Помилка fetch-у — ErrorPage; success — render form з
- * `businessSlug`-prop-ом.
+ * Sprint 10 §10.2 — приймає `?from=landing` для anon-claim recovery flow:
+ *  - hydration-gate на `useQrLandingDraftStore` (через shared `useHasHydrated`-
+ *    hook) — landing-store hydrate-ється асинхронно з localStorage; pre-fill
+ *    IBAN до hydration-complete зчитав би порожній snapshot.
+ *  - На submit success — `AccountCreateForm` сам читає prefillIban з prop-у;
+ *    success-redirect на per-account-page з `?completed-from=landing` banner-
+ *    trigger; cleanup landing-draft робиться там же.
  */
 interface LoadedData {
     paramSlug: string;
@@ -34,8 +40,11 @@ interface ErrorState {
     message: string;
 }
 
-export default function NewAccountPage() {
+function NewAccountContent() {
     const params = useParams<{ slug: string }>();
+    const searchParams = useSearchParams();
+    const fromLanding = searchParams.get('from') === 'landing';
+    const hasHydrated = useHasHydrated(useQrLandingDraftStore);
     const paramSlug = params.slug;
     const [data, setData] = useState<LoadedData | null>(null);
     const [error, setError] = useState<ErrorState | null>(null);
@@ -72,6 +81,18 @@ export default function NewAccountPage() {
     const isDataCurrent = data?.paramSlug === paramSlug;
     const isErrorCurrent = error?.paramSlug === paramSlug;
 
+    // Hydration-gate активний лише на ?from=landing-branch (стандартний flow
+    // не торкає store і render-иться одразу).
+    if (fromLanding && !hasHydrated) {
+        return (
+            <UiPageContainer className="py-16">
+                <div className="flex justify-center">
+                    <UiSpinner size="md" />
+                </div>
+            </UiPageContainer>
+        );
+    }
+
     if (!isDataCurrent && !isErrorCurrent) {
         return (
             <UiPageContainer className="py-16">
@@ -107,6 +128,9 @@ export default function NewAccountPage() {
 
     if (!isDataCurrent || !data) return null;
     const { business } = data;
+    const prefillIban = fromLanding
+        ? useQrLandingDraftStore.getState().formData.iban
+        : undefined;
 
     return (
         <UiPageContainer className="space-y-6 py-8 md:py-12">
@@ -121,7 +145,27 @@ export default function NewAccountPage() {
                 Назад до бізнесу
             </UiButton>
             <UiPageHeading>Додати рахунок</UiPageHeading>
-            <AccountCreateForm businessSlug={business.slug} />
+            <AccountCreateForm
+                businessSlug={business.slug}
+                prefillIban={prefillIban}
+                landingRecovery={fromLanding}
+            />
         </UiPageContainer>
+    );
+}
+
+export default function NewAccountPage() {
+    return (
+        <Suspense
+            fallback={
+                <UiPageContainer className="py-16">
+                    <div className="flex justify-center">
+                        <UiSpinner size="md" />
+                    </div>
+                </UiPageContainer>
+            }
+        >
+            <NewAccountContent />
+        </Suspense>
     );
 }
