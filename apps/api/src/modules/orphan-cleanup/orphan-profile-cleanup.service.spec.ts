@@ -123,7 +123,9 @@ describe('OrphanProfileCleanupService (Sprint 12 §12.1c, MongoMemoryReplSet)', 
         emailMock.sendProfileCompletionReminder.mockClear();
         emailMock.sendProfileCompletionReminder.mockResolvedValue(undefined);
         emailMock.sendProfileCompletionFinalWarning.mockClear();
-        emailMock.sendProfileCompletionFinalWarning.mockResolvedValue(undefined);
+        emailMock.sendProfileCompletionFinalWarning.mockResolvedValue(
+            undefined
+        );
     });
 
     async function seedUser(opts: {
@@ -227,8 +229,12 @@ describe('OrphanProfileCleanupService (Sprint 12 §12.1c, MongoMemoryReplSet)', 
 
         await service.runDailyCleanup();
 
-        expect(emailMock.sendProfileCompletionReminder).toHaveBeenCalledTimes(1);
-        expect(emailMock.sendProfileCompletionFinalWarning).not.toHaveBeenCalled();
+        expect(emailMock.sendProfileCompletionReminder).toHaveBeenCalledTimes(
+            1
+        );
+        expect(
+            emailMock.sendProfileCompletionFinalWarning
+        ).not.toHaveBeenCalled();
         expect(emailMock.sendProfileCompletionReminder).toHaveBeenCalledWith({
             user: { email: user.email },
             businesses: [{ name: 'ФОП Іваненко' }],
@@ -254,9 +260,9 @@ describe('OrphanProfileCleanupService (Sprint 12 §12.1c, MongoMemoryReplSet)', 
         await service.runDailyCleanup();
 
         expect(emailMock.sendProfileCompletionReminder).not.toHaveBeenCalled();
-        expect(emailMock.sendProfileCompletionFinalWarning).toHaveBeenCalledTimes(
-            1
-        );
+        expect(
+            emailMock.sendProfileCompletionFinalWarning
+        ).toHaveBeenCalledTimes(1);
 
         const stamps = await reloadUserReminders(user._id);
         expect(stamps.first).toBeInstanceOf(Date);
@@ -285,9 +291,9 @@ describe('OrphanProfileCleanupService (Sprint 12 §12.1c, MongoMemoryReplSet)', 
             emailMock.sendProfileCompletionFinalWarning
         ).not.toHaveBeenCalled();
 
-        expect(
-            await businessModel.countDocuments({ ownerId: user._id })
-        ).toBe(0);
+        expect(await businessModel.countDocuments({ ownerId: user._id })).toBe(
+            0
+        );
         expect(await accountModel.countDocuments({})).toBe(0);
         expect(await invoiceModel.countDocuments({})).toBe(0);
 
@@ -310,13 +316,15 @@ describe('OrphanProfileCleanupService (Sprint 12 §12.1c, MongoMemoryReplSet)', 
 
         await service.runDailyCleanup();
 
-        expect(emailMock.sendProfileCompletionReminder).toHaveBeenCalledTimes(1);
+        expect(emailMock.sendProfileCompletionReminder).toHaveBeenCalledTimes(
+            1
+        );
         expect(
             emailMock.sendProfileCompletionFinalWarning
         ).not.toHaveBeenCalled();
-        expect(
-            await businessModel.countDocuments({ ownerId: user._id })
-        ).toBe(1);
+        expect(await businessModel.countDocuments({ ownerId: user._id })).toBe(
+            1
+        );
 
         const stamps = await reloadUserReminders(user._id);
         expect(stamps.first).toBeInstanceOf(Date);
@@ -381,7 +389,9 @@ describe('OrphanProfileCleanupService (Sprint 12 §12.1c, MongoMemoryReplSet)', 
 
         await service.runDailyCleanup();
 
-        expect(emailMock.sendProfileCompletionReminder).toHaveBeenCalledTimes(1);
+        expect(emailMock.sendProfileCompletionReminder).toHaveBeenCalledTimes(
+            1
+        );
 
         const stamps = await reloadUserReminders(user._id);
         expect(stamps.first).toBeNull();
@@ -405,9 +415,9 @@ describe('OrphanProfileCleanupService (Sprint 12 §12.1c, MongoMemoryReplSet)', 
         expect(
             emailMock.sendProfileCompletionFinalWarning
         ).not.toHaveBeenCalled();
-        expect(
-            await businessModel.countDocuments({ ownerId: user._id })
-        ).toBe(1);
+        expect(await businessModel.countDocuments({ ownerId: user._id })).toBe(
+            1
+        );
     });
 
     it('User with incomplete profile but no businesses is skipped (no candidates)', async () => {
@@ -449,10 +459,12 @@ describe('OrphanProfileCleanupService (Sprint 12 §12.1c, MongoMemoryReplSet)', 
 
         await service.runDailyCleanup();
 
-        expect(
-            await businessModel.countDocuments({ ownerId: userA._id })
-        ).toBe(1);
-        expect(emailMock.sendProfileCompletionReminder).toHaveBeenCalledTimes(1);
+        expect(await businessModel.countDocuments({ ownerId: userA._id })).toBe(
+            1
+        );
+        expect(emailMock.sendProfileCompletionReminder).toHaveBeenCalledTimes(
+            1
+        );
         expect(emailMock.sendProfileCompletionReminder).toHaveBeenCalledWith({
             user: { email: userB.email },
             businesses: [{ name: 'BizB' }],

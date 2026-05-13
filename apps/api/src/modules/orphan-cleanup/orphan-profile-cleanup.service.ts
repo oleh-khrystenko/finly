@@ -77,7 +77,8 @@ export class OrphanProfileCleanupService {
                     if (ok) stage3Deleted++;
                 }
             } catch (err) {
-                const message = err instanceof Error ? err.message : String(err);
+                const message =
+                    err instanceof Error ? err.message : String(err);
                 this.logger.error(
                     `Unhandled per-candidate failure for user ${candidate._id.toString()}: ${message}. ` +
                         'Continuing with remaining candidates.'
@@ -236,7 +237,8 @@ export class OrphanProfileCleanupService {
                 await this.businessesService.delete(business);
                 deleted++;
             } catch (err) {
-                const message = err instanceof Error ? err.message : String(err);
+                const message =
+                    err instanceof Error ? err.message : String(err);
                 this.logger.error(
                     `Cascade delete failed for business ${business._id.toString()} ` +
                         `(user ${userId}): ${message}. Aborting deletion stage for this user.`
