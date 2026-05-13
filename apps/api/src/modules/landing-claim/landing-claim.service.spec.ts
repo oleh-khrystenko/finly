@@ -141,9 +141,10 @@ describe('LandingClaimService.attemptLandingClaim (Sprint 10 §10.1)', () => {
                 claimedBusinessSlug: 'BizSlug1',
                 claimedAccountSlug: 'AcctSlg1',
             });
-            expect(
-                accountsService.findByBusinessAndIban
-            ).toHaveBeenCalledWith('biz-id', DRAFT.iban);
+            expect(accountsService.findByBusinessAndIban).toHaveBeenCalledWith(
+                'biz-id',
+                DRAFT.iban
+            );
         });
 
         it('ACCOUNT_IBAN_DUPLICATE + lookup повертає null (defensive) → fallthrough на account-failed', async () => {

@@ -120,10 +120,7 @@ export class LandingClaimService {
             // claim-attempt, не випадковий збіг IBAN-у) живе тільки тут —
             // claimIdempotencyKey гарантує "це той самий claim", чого
             // AccountsService.create не знає.
-            if (
-                err instanceof HttpException &&
-                isAccountIbanDuplicate(err)
-            ) {
+            if (err instanceof HttpException && isAccountIbanDuplicate(err)) {
                 const existing =
                     await this.accountsService.findByBusinessAndIban(
                         business._id,
@@ -184,8 +181,7 @@ export class LandingClaimService {
         // Невідомий error (не-HttpException) трактуємо як infra-issue: lower
         // services (Businesses/Accounts) типово мапять відомі помилки у
         // HttpException; raw Error означає uncaught surprise.
-        const status =
-            err instanceof HttpException ? err.getStatus() : 500;
+        const status = err instanceof HttpException ? err.getStatus() : 500;
         if (status >= 500) {
             this.logger.error(ctx);
         } else {
