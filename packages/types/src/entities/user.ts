@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { UserBillingSchema } from '../contracts/payments';
 import { DEFAULT_USER_ROLE, USER_ROLES } from '../enums/user-role';
+import { validateSameOriginPath } from '../utils/path';
 import { objectIdSchema } from '../validation/common';
 
 export const UserProviderSchema = z.object({
@@ -47,6 +48,10 @@ export const UserSchema = z.object({
     billing: UserBillingSchema.nullable().optional(),
     termsAcceptedAt: z.coerce.date().nullable().optional(),
     termsVersion: z.string().nullable().optional(),
+    pendingPostLoginTarget: z
+        .string()
+        .refine(validateSameOriginPath, { message: 'INVALID_REDIRECT_TARGET' })
+        .optional(),
 });
 
 export const UserProfileSchema = UserSchema.pick({
@@ -61,6 +66,7 @@ export const UserProfileSchema = UserSchema.pick({
     accountDeletionRequestedAt: true,
     billing: true,
     termsVersion: true,
+    pendingPostLoginTarget: true,
 });
 
 export type User = z.infer<typeof UserSchema>;

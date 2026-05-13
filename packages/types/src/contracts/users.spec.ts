@@ -39,4 +39,18 @@ describe('UpdateProfileSchema', () => {
         });
         expect(result.success).toBe(true);
     });
+
+    it('accepts pendingPostLoginTarget: null як explicit clear-action', () => {
+        const result = UpdateProfileSchema.safeParse({
+            pendingPostLoginTarget: null,
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('rejects pendingPostLoginTarget: string (frontend не має stamp-ити)', () => {
+        const result = UpdateProfileSchema.safeParse({
+            pendingPostLoginTarget: '/business/foo',
+        });
+        expect(result.success).toBe(false);
+    });
 });

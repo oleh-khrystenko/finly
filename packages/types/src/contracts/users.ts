@@ -19,6 +19,14 @@ export const UpdateProfileSchema = z.object({
     lastName: lastNameSchema.optional(),
     avatar: z.string().url().optional(),
     worksAsBookkeeper: z.boolean().optional(),
+    /**
+     * Тільки `null` приймається через PATCH — це explicit clear-action
+     * для backend-stamped redirect-target (Sprint 11). Frontend не має
+     * причини set-ити non-null value: stamp робить виключно
+     * `LandingClaimService` напряму через `UsersService`-метод. Будь-яке
+     * non-null value через DTO відсікається тут як anti-injection-rule.
+     */
+    pendingPostLoginTarget: z.literal(null).optional(),
 });
 
 export const AcceptTermsSchema = z.object({
