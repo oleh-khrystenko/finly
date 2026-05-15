@@ -15,7 +15,7 @@ const DELETED_COOKIE = 'bid_account_deleted';
 // нормалізується до lowercase перед перевіркою.
 const RESERVED_SLUGS_SET: ReadonlySet<string> = new Set(RESERVED_SLUGS);
 
-export default function middleware(request: NextRequest) {
+export default function proxy(request: NextRequest) {
     const { pathname, search } = request.nextUrl;
     const host = request.headers.get('host');
     // Host comparison case-insensitive — RFC 7230 §2.7. Деталі у

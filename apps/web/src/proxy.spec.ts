@@ -1,4 +1,4 @@
-// Mock next/server before importing middleware
+// Mock next/server before importing proxy
 const mockRedirect = jest.fn((url: URL, status?: number) => ({
     type: 'redirect' as const,
     status: status ?? 307,
@@ -34,7 +34,7 @@ jest.mock('next/server', () => ({
     ),
 }));
 
-import middleware, { config } from './middleware';
+import proxy, { config } from './proxy';
 
 function createMockRequest(
     pathname: string,
@@ -67,7 +67,7 @@ function createMockRequest(
     } as any;
 }
 
-describe('middleware', () => {
+describe('proxy', () => {
     beforeEach(() => {
         mockRedirect.mockClear();
     });
@@ -75,7 +75,7 @@ describe('middleware', () => {
     describe('protected paths', () => {
         it('redirects /profile to signin when no cookie', () => {
             const req = createMockRequest('/profile');
-            const response = middleware(req);
+            const response = proxy(req);
 
             expect(response.status).toBe(307);
             expect(mockRedirect).toHaveBeenCalled();
@@ -85,7 +85,7 @@ describe('middleware', () => {
 
         it('redirects /business to signin when no cookie (Sprint 3 §3.5 — replaces /dashboard)', () => {
             const req = createMockRequest('/business');
-            const response = middleware(req);
+            const response = proxy(req);
 
             expect(response.status).toBe(307);
             const url: URL = mockRedirect.mock.calls[0][0];
@@ -94,7 +94,7 @@ describe('middleware', () => {
 
         it('redirects /business/{slug} (nested) to signin when no cookie', () => {
             const req = createMockRequest('/business/IvanEnko');
-            const response = middleware(req);
+            const response = proxy(req);
 
             expect(response.status).toBe(307);
             const url: URL = mockRedirect.mock.calls[0][0];
@@ -106,7 +106,7 @@ describe('middleware', () => {
             // перенаправляємо на новий route. 308 (Permanent Redirect) —
             // browser кешує + зберігає метод; пошуковики оновлюють index.
             const req = createMockRequest('/dashboard');
-            const response = middleware(req);
+            const response = proxy(req);
 
             expect(response.status).toBe(308);
             const url: URL = mockRedirect.mock.calls[0][0];
@@ -115,7 +115,7 @@ describe('middleware', () => {
 
         it('/dashboard/{nested} теж redirect-иться на /business/{nested}', () => {
             const req = createMockRequest('/dashboard/some-slug');
-            const response = middleware(req);
+            const response = proxy(req);
 
             expect(response.status).toBe(308);
             const url: URL = mockRedirect.mock.calls[0][0];
@@ -124,7 +124,7 @@ describe('middleware', () => {
 
         it('Sprint 3 §3.5 §E4: /pay видалено з PROTECTED_PATHS (мертвий рудимент)', () => {
             const req = createMockRequest('/pay');
-            const response = middleware(req);
+            const response = proxy(req);
 
             expect(response.status).toBe(200);
             expect(mockRedirect).not.toHaveBeenCalled();
@@ -134,7 +134,7 @@ describe('middleware', () => {
             const req = createMockRequest('/profile', {
                 cookies: { bid_refresh: 'some-token' },
             });
-            const response = middleware(req);
+            const response = proxy(req);
 
             expect(response.status).toBe(200);
             expect(mockRedirect).not.toHaveBeenCalled();
@@ -142,7 +142,7 @@ describe('middleware', () => {
 
         it('tags missing-cookie redirect with reason=session-expired', () => {
             const req = createMockRequest('/profile');
-            middleware(req);
+            proxy(req);
 
             const url: URL = mockRedirect.mock.calls[0][0];
             expect(url.searchParams.get('reason')).toBe('session-expired');
@@ -158,7 +158,7 @@ describe('middleware', () => {
                     bid_account_deleted: 'true',
                 },
             });
-            middleware(req);
+            proxy(req);
 
             const url: URL = mockRedirect.mock.calls[0][0];
             expect(url.searchParams.get('reason')).toBeNull();
@@ -171,7 +171,7 @@ describe('middleware', () => {
             const req = createMockRequest('/profile', {
                 cookies: { bid_account_deleted: 'true' },
             });
-            middleware(req);
+            proxy(req);
 
             const url: URL = mockRedirect.mock.calls[0][0];
             expect(url.searchParams.get('reason')).toBeNull();
@@ -183,7 +183,7 @@ describe('middleware', () => {
             const req = createMockRequest('/auth/signin', {
                 cookies: { bid_refresh: 'some-token' },
             });
-            const response = middleware(req);
+            const response = proxy(req);
 
             expect(response.status).toBe(307);
             const url: URL = mockRedirect.mock.calls[0][0];
@@ -192,7 +192,7 @@ describe('middleware', () => {
 
         it('passes through /auth/signin when no cookie', () => {
             const req = createMockRequest('/auth/signin');
-            const response = middleware(req);
+            const response = proxy(req);
 
             expect(response.status).toBe(200);
         });
@@ -201,7 +201,7 @@ describe('middleware', () => {
     describe('public paths', () => {
         it('passes through public paths', () => {
             const req = createMockRequest('/');
-            const response = middleware(req);
+            const response = proxy(req);
 
             expect(response.status).toBe(200);
         });
@@ -228,7 +228,7 @@ describe('middleware', () => {
             const req = createMockRequest('/IvanEnko', {
                 host: 'pay.finly.com.ua',
             });
-            middleware(req);
+            proxy(req);
 
             expect(mockRewrite).toHaveBeenCalledTimes(1);
             const url: URL = mockRewrite.mock.calls[0][0];
@@ -239,7 +239,7 @@ describe('middleware', () => {
             const req = createMockRequest('/IvanEnko', {
                 host: 'pay.finly.local:3000',
             });
-            middleware(req);
+            proxy(req);
 
             expect(mockRewrite).toHaveBeenCalledTimes(1);
             const url: URL = mockRewrite.mock.calls[0][0];
@@ -250,7 +250,7 @@ describe('middleware', () => {
             const req = createMockRequest('/CamelCase', {
                 host: 'pay.finly.com.ua',
             });
-            middleware(req);
+            proxy(req);
 
             const url: URL = mockRewrite.mock.calls[0][0];
             expect(url.pathname).toBe('/host-pay/CamelCase');
@@ -264,7 +264,7 @@ describe('middleware', () => {
             const req = createMockRequest('/IvanEnko', {
                 host: 'finly.com.ua',
             });
-            const response = middleware(req);
+            const response = proxy(req);
 
             expect(mockRewrite).not.toHaveBeenCalled();
             expect(response.status).toBe(200); // pass-through до Next router
@@ -274,7 +274,7 @@ describe('middleware', () => {
             const req = createMockRequest('/host-pay/test', {
                 host: 'finly.com.ua',
             });
-            const response = middleware(req);
+            const response = proxy(req);
 
             expect(response.status).toBe(404);
             expect(mockRewrite).not.toHaveBeenCalled();
@@ -284,7 +284,7 @@ describe('middleware', () => {
             const req = createMockRequest('/business/foo', {
                 host: 'pay.finly.com.ua',
             });
-            const response = middleware(req);
+            const response = proxy(req);
 
             expect(response.status).toBe(404);
             expect(mockRewrite).not.toHaveBeenCalled();
@@ -294,7 +294,7 @@ describe('middleware', () => {
             const req = createMockRequest('/auth/signin', {
                 host: 'pay.finly.com.ua',
             });
-            const response = middleware(req);
+            const response = proxy(req);
 
             expect(response.status).toBe(404);
         });
@@ -303,7 +303,7 @@ describe('middleware', () => {
             const req = createMockRequest('/', {
                 host: 'pay.finly.com.ua',
             });
-            const response = middleware(req);
+            const response = proxy(req);
 
             expect(response.status).toBe(404);
         });
@@ -327,7 +327,7 @@ describe('middleware', () => {
                 host: 'pay.finly.com.ua',
                 // навмисно немає cookies — symбулює реальний browser-state
             });
-            middleware(req);
+            proxy(req);
 
             expect(mockRewrite).toHaveBeenCalled();
             // Жоден signin-redirect (з cabinet flow) не тригерився
@@ -341,7 +341,7 @@ describe('middleware', () => {
             const req = createMockRequest('/host-pay', {
                 host: 'pay.finly.com.ua',
             });
-            const response = middleware(req);
+            const response = proxy(req);
 
             expect(response.status).toBe(404);
             expect(mockRewrite).not.toHaveBeenCalled();
@@ -351,7 +351,7 @@ describe('middleware', () => {
             const req = createMockRequest('/API', {
                 host: 'pay.finly.com.ua',
             });
-            const response = middleware(req);
+            const response = proxy(req);
 
             expect(response.status).toBe(404);
             expect(mockRewrite).not.toHaveBeenCalled();
@@ -365,7 +365,7 @@ describe('middleware', () => {
             const req = createMockRequest('/IvanEnko', {
                 host: 'PAY.FINLY.COM.UA',
             });
-            middleware(req);
+            proxy(req);
 
             expect(mockRewrite).toHaveBeenCalledTimes(1);
             const url: URL = mockRewrite.mock.calls[0][0];
@@ -376,7 +376,7 @@ describe('middleware', () => {
             const req = createMockRequest('/auth/signin', {
                 host: 'PAY.FINLY.COM.UA',
             });
-            const response = middleware(req);
+            const response = proxy(req);
 
             expect(response.status).toBe(404);
             expect(mockRewrite).not.toHaveBeenCalled();
@@ -394,7 +394,7 @@ describe('middleware', () => {
             const req = createMockRequest('/IvanEnko', {
                 host: 'pay.finly.com.ua',
             });
-            const response = middleware(req);
+            const response = proxy(req);
 
             expect(response.headers.get('Cache-Control')).toBe(
                 'no-store, no-cache, must-revalidate'
@@ -410,7 +410,7 @@ describe('middleware', () => {
             const req = createMockRequest('/IvanEnko/aBc12345', {
                 host: 'pay.finly.com.ua',
             });
-            middleware(req);
+            proxy(req);
 
             expect(mockRewrite).toHaveBeenCalledTimes(1);
             const url: URL = mockRewrite.mock.calls[0][0];
@@ -421,7 +421,7 @@ describe('middleware', () => {
             const req = createMockRequest('/IvanEnko/AbCdEfGh', {
                 host: 'pay.finly.com.ua',
             });
-            middleware(req);
+            proxy(req);
 
             const url: URL = mockRewrite.mock.calls[0][0];
             expect(url.pathname).toBe('/host-pay/IvanEnko/AbCdEfGh');
@@ -431,7 +431,7 @@ describe('middleware', () => {
             const req = createMockRequest('/business/aBc12345', {
                 host: 'pay.finly.com.ua',
             });
-            const response = middleware(req);
+            const response = proxy(req);
 
             expect(response.status).toBe(404);
             expect(mockRewrite).not.toHaveBeenCalled();
@@ -441,7 +441,7 @@ describe('middleware', () => {
             const req = createMockRequest('/host-pay/IvanEnko/aBc12345', {
                 host: 'finly.com.ua',
             });
-            const response = middleware(req);
+            const response = proxy(req);
 
             expect(response.status).toBe(404);
             expect(mockRewrite).not.toHaveBeenCalled();
@@ -453,7 +453,7 @@ describe('middleware', () => {
             const req = createMockRequest('/IvanEnko/aBc12345/inv-001', {
                 host: 'pay.finly.com.ua',
             });
-            middleware(req);
+            proxy(req);
 
             expect(mockRewrite).toHaveBeenCalledTimes(1);
             const url: URL = mockRewrite.mock.calls[0][0];
@@ -466,7 +466,7 @@ describe('middleware', () => {
             const req = createMockRequest('/IvanEnko/AbCdEfGh/Inv-Vanity', {
                 host: 'pay.finly.com.ua',
             });
-            middleware(req);
+            proxy(req);
 
             const url: URL = mockRewrite.mock.calls[0][0];
             expect(url.pathname).toBe(
@@ -478,7 +478,7 @@ describe('middleware', () => {
             const req = createMockRequest('/business/aBc12345/inv-001', {
                 host: 'pay.finly.com.ua',
             });
-            const response = middleware(req);
+            const response = proxy(req);
 
             expect(response.status).toBe(404);
             expect(mockRewrite).not.toHaveBeenCalled();
@@ -488,7 +488,7 @@ describe('middleware', () => {
             const req = createMockRequest('/IvanEnko/aBc12345/inv-001', {
                 host: 'pay.finly.com.ua',
             });
-            const response = middleware(req);
+            const response = proxy(req);
 
             expect(response.headers.get('Cache-Control')).toBeUndefined();
         });
@@ -497,7 +497,7 @@ describe('middleware', () => {
             const req = createMockRequest('/biz/acc/inv/extra', {
                 host: 'pay.finly.com.ua',
             });
-            const response = middleware(req);
+            const response = proxy(req);
 
             expect(response.status).toBe(404);
             expect(mockRewrite).not.toHaveBeenCalled();
