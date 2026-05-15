@@ -21,11 +21,12 @@ import { useQrLandingDraftStore } from '@/entities/qr-landing-draft';
 type VerifyStatus = 'verifying' | 'success' | 'deleted' | 'error';
 
 /**
- * Sprint 10 §10.2 — claim-state-aware redirect-resolver. Викликається ПІСЛЯ
- * auth-finalization (`acceptTerms + getMe + setUser`). 4 гілки:
+ * Sprint 10 §10.2 + Sprint 13 — claim-state-aware redirect-resolver.
+ * Викликається ПІСЛЯ auth-finalization (`acceptTerms + getMe + setUser`).
+ * 4 гілки (Sprint 13: discriminated union тепер вкладено у `response.claim`):
  *
- *  - `claimState === undefined` → fall-through на `redirectTarget` (backwards-
- *    compat зі Sprint 8: register/login/default без claim).
+ *  - `claim == null` → fall-through на `redirectTarget` (register/login/default
+ *    без claim).
  *  - `'success'` → `clearAll()` + redirect на per-account з banner-trigger
  *    `?completed-from=landing`.
  *  - `'business-failed'` → `setFormData(failedClaimDraft)` +
@@ -41,32 +42,26 @@ function handleClaimRedirect(
     response: AuthResponse,
     fallbackRedirect: string
 ): string {
-    const store = useQrLandingDraftStore.getState();
-    if (!response.claimState) return fallbackRedirect;
+    const claim = response.claim;
+    if (!claim) return fallbackRedirect;
 
-    if (
-        response.claimState === 'success' &&
-        response.claimedBusinessSlug &&
-        response.claimedAccountSlug
-    ) {
+    const store = useQrLandingDraftStore.getState();
+
+    if (claim.state === 'success') {
         store.clearAll();
-        return `/business/${response.claimedBusinessSlug}/account/${response.claimedAccountSlug}?completed-from=landing`;
+        return `/business/${claim.claimedBusinessSlug}/account/${claim.claimedAccountSlug}?completed-from=landing`;
     }
 
-    if (response.claimState === 'business-failed' && response.failedClaimDraft) {
-        store.setFormData(response.failedClaimDraft);
+    if (claim.state === 'business-failed') {
+        store.setFormData(claim.failedClaimDraft);
         store.setIntent('claim-failed-business');
         return '/business/new?from=landing';
     }
 
-    if (
-        response.claimState === 'account-failed' &&
-        response.failedClaimDraft &&
-        response.partialBusinessSlug
-    ) {
-        store.setFormData(response.failedClaimDraft);
+    if (claim.state === 'account-failed') {
+        store.setFormData(claim.failedClaimDraft);
         store.setIntent('claim-failed-account');
-        return `/business/${response.partialBusinessSlug}/account/new?from=landing`;
+        return `/business/${claim.partialBusinessSlug}/account/new?from=landing`;
     }
 
     return fallbackRedirect;

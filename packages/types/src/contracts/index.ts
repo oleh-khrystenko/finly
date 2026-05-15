@@ -10,3 +10,4 @@ export * from './invoices';
 export * from './accounts';
 export * from './qr-preview';
 export * from './landing-draft';
+export * from './landing-claim';

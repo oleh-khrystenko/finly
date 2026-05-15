@@ -166,10 +166,7 @@ export class AuthController {
                 accessToken: tokens.accessToken,
                 purpose,
                 ...(accountDeleted && { accountDeleted }),
-                // Sprint 10 §SP-7 — claim-fields merged через spread; всі
-                // discriminated-shape-варіанти (success / business-failed /
-                // account-failed) уже несуть тільки потрібні поля.
-                ...(claimResult ?? {}),
+                claim: claimResult ?? null,
             },
         };
     }

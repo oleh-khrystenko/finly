@@ -52,7 +52,7 @@ const VALID_DRAFT = {
     purpose: 'Поповнення рахунку',
 };
 
-describe('VerifyPage — claimState branching (Sprint 10)', () => {
+describe('VerifyPage — claim branching (Sprint 10 / Sprint 13)', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         mockSearchParams = new URLSearchParams({ token: 't0k3n' });
@@ -67,11 +67,12 @@ describe('VerifyPage — claimState branching (Sprint 10)', () => {
         mockClearPendingPostLoginTarget.mockResolvedValue(undefined);
     });
 
-    it('purpose=register без claimState → fall-through на /profile (дефолтний redirectTarget)', async () => {
+    it('purpose=register без claim → fall-through на /profile (дефолтний redirectTarget)', async () => {
         mockVerifyMagicLink.mockResolvedValue({
             user: USER,
             accessToken: 'a',
             purpose: 'register',
+            claim: null,
         });
 
         render(<VerifyPage />);
@@ -81,7 +82,7 @@ describe('VerifyPage — claimState branching (Sprint 10)', () => {
         });
     });
 
-    it('purpose=login без claimState + ?redirect=/business → fall-through на /business', async () => {
+    it('purpose=login без claim + ?redirect=/business → fall-through на /business', async () => {
         mockSearchParams = new URLSearchParams({
             token: 't0k3n',
             redirect: '/business',
@@ -90,6 +91,7 @@ describe('VerifyPage — claimState branching (Sprint 10)', () => {
             user: USER,
             accessToken: 'a',
             purpose: 'login',
+            claim: null,
         });
 
         render(<VerifyPage />);
@@ -99,7 +101,7 @@ describe('VerifyPage — claimState branching (Sprint 10)', () => {
         });
     });
 
-    it('claimState=success → clearAll + redirect на per-account з ?completed-from=landing', async () => {
+    it('claim.state=success → clearAll + redirect на per-account з ?completed-from=landing', async () => {
         useQrLandingDraftStore.setState({
             formData: VALID_DRAFT,
             intent: 'claim-pending',
@@ -110,9 +112,11 @@ describe('VerifyPage — claimState branching (Sprint 10)', () => {
             user: USER,
             accessToken: 'a',
             purpose: 'register',
-            claimState: 'success',
-            claimedBusinessSlug: 'iva-X3kQ',
-            claimedAccountSlug: 'acc-aB12cD34',
+            claim: {
+                state: 'success',
+                claimedBusinessSlug: 'iva-X3kQ',
+                claimedAccountSlug: 'acc-aB12cD34',
+            },
         });
 
         render(<VerifyPage />);
@@ -128,13 +132,15 @@ describe('VerifyPage — claimState branching (Sprint 10)', () => {
         });
     });
 
-    it('claimState=business-failed → setFormData + setIntent + /business/new?from=landing', async () => {
+    it('claim.state=business-failed → setFormData + setIntent + /business/new?from=landing', async () => {
         mockVerifyMagicLink.mockResolvedValue({
             user: USER,
             accessToken: 'a',
             purpose: 'register',
-            claimState: 'business-failed',
-            failedClaimDraft: VALID_DRAFT,
+            claim: {
+                state: 'business-failed',
+                failedClaimDraft: VALID_DRAFT,
+            },
         });
 
         render(<VerifyPage />);
@@ -149,14 +155,16 @@ describe('VerifyPage — claimState branching (Sprint 10)', () => {
         });
     });
 
-    it('claimState=account-failed → setFormData + setIntent + /business/{partial}/account/new?from=landing', async () => {
+    it('claim.state=account-failed → setFormData + setIntent + /business/{partial}/account/new?from=landing', async () => {
         mockVerifyMagicLink.mockResolvedValue({
             user: USER,
             accessToken: 'a',
             purpose: 'login',
-            claimState: 'account-failed',
-            partialBusinessSlug: 'iva-X3kQ',
-            failedClaimDraft: VALID_DRAFT,
+            claim: {
+                state: 'account-failed',
+                partialBusinessSlug: 'iva-X3kQ',
+                failedClaimDraft: VALID_DRAFT,
+            },
         });
 
         render(<VerifyPage />);
@@ -171,11 +179,12 @@ describe('VerifyPage — claimState branching (Sprint 10)', () => {
         });
     });
 
-    it('Sprint 11 — clearPendingPostLoginTarget викликається ДО router.replace незалежно від claimState', async () => {
+    it('Sprint 11 — clearPendingPostLoginTarget викликається ДО router.replace незалежно від claim', async () => {
         mockVerifyMagicLink.mockResolvedValue({
             user: USER,
             accessToken: 'a',
             purpose: 'login',
+            claim: null,
         });
 
         render(<VerifyPage />);

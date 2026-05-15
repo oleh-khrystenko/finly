@@ -1183,13 +1183,13 @@ describe('AuthService', () => {
                 ).toBeUndefined();
             });
 
-            it('(b) з обома + claim-success — claimResult містить claimState=success + claimed slugs', async () => {
+            it('(b) з обома + claim-success — claimResult містить state=success + claimed slugs', async () => {
                 seedMagicPayload({
                     landingDraft: DRAFT,
                     claimIdempotencyKey: KEY,
                 });
                 mockLandingClaimService.attemptLandingClaim.mockResolvedValue({
-                    claimState: 'success',
+                    state: 'success',
                     claimedBusinessSlug: 'BizSlug1',
                     claimedAccountSlug: 'AcctSlg1',
                 });
@@ -1206,7 +1206,7 @@ describe('AuthService', () => {
                 expect(
                     'claimResult' in result ? result.claimResult : null
                 ).toEqual({
-                    claimState: 'success',
+                    state: 'success',
                     claimedBusinessSlug: 'BizSlug1',
                     claimedAccountSlug: 'AcctSlg1',
                 });
@@ -1218,7 +1218,7 @@ describe('AuthService', () => {
                     claimIdempotencyKey: KEY,
                 });
                 mockLandingClaimService.attemptLandingClaim.mockResolvedValue({
-                    claimState: 'business-failed',
+                    state: 'business-failed',
                     failedClaimDraft: DRAFT,
                 });
 
@@ -1227,7 +1227,7 @@ describe('AuthService', () => {
                 expect(
                     'claimResult' in result ? result.claimResult : null
                 ).toEqual({
-                    claimState: 'business-failed',
+                    state: 'business-failed',
                     failedClaimDraft: DRAFT,
                 });
             });
@@ -1238,7 +1238,7 @@ describe('AuthService', () => {
                     claimIdempotencyKey: KEY,
                 });
                 mockLandingClaimService.attemptLandingClaim.mockResolvedValue({
-                    claimState: 'account-failed',
+                    state: 'account-failed',
                     partialBusinessSlug: 'PartialBiz',
                     failedClaimDraft: DRAFT,
                 });
@@ -1248,7 +1248,7 @@ describe('AuthService', () => {
                 expect(
                     'claimResult' in result ? result.claimResult : null
                 ).toEqual({
-                    claimState: 'account-failed',
+                    state: 'account-failed',
                     partialBusinessSlug: 'PartialBiz',
                     failedClaimDraft: DRAFT,
                 });
@@ -1261,7 +1261,7 @@ describe('AuthService', () => {
                     termsVersion: 'v3',
                 });
                 mockLandingClaimService.attemptLandingClaim.mockResolvedValue({
-                    claimState: 'success',
+                    state: 'success',
                     claimedBusinessSlug: 'BizSlug1',
                     claimedAccountSlug: 'AcctSlg1',
                 });

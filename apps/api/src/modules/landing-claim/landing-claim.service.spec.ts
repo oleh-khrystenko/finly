@@ -65,7 +65,7 @@ describe('LandingClaimService.attemptLandingClaim (Sprint 10 §10.1)', () => {
         const result = await service.attemptLandingClaim(CTX, DRAFT, KEY);
 
         expect(result).toEqual({
-            claimState: 'success',
+            state: 'success',
             claimedBusinessSlug: 'BizSlug1',
             claimedAccountSlug: 'AcctSlg1',
         });
@@ -93,7 +93,7 @@ describe('LandingClaimService.attemptLandingClaim (Sprint 10 §10.1)', () => {
         const result = await service.attemptLandingClaim(CTX, DRAFT, KEY);
 
         expect(result).toEqual({
-            claimState: 'business-failed',
+            state: 'business-failed',
             failedClaimDraft: DRAFT,
         });
         expect(accountsService.create).not.toHaveBeenCalled();
@@ -109,7 +109,7 @@ describe('LandingClaimService.attemptLandingClaim (Sprint 10 §10.1)', () => {
         const result = await service.attemptLandingClaim(CTX, DRAFT, KEY);
 
         expect(result).toEqual({
-            claimState: 'account-failed',
+            state: 'account-failed',
             partialBusinessSlug: 'PartialBiz',
             failedClaimDraft: DRAFT,
         });
@@ -137,7 +137,7 @@ describe('LandingClaimService.attemptLandingClaim (Sprint 10 §10.1)', () => {
             const result = await service.attemptLandingClaim(CTX, DRAFT, KEY);
 
             expect(result).toEqual({
-                claimState: 'success',
+                state: 'success',
                 claimedBusinessSlug: 'BizSlug1',
                 claimedAccountSlug: 'AcctSlg1',
             });
@@ -163,7 +163,7 @@ describe('LandingClaimService.attemptLandingClaim (Sprint 10 §10.1)', () => {
             const result = await service.attemptLandingClaim(CTX, DRAFT, KEY);
 
             expect(result).toEqual({
-                claimState: 'account-failed',
+                state: 'account-failed',
                 partialBusinessSlug: 'BizSlug1',
                 failedClaimDraft: DRAFT,
             });
@@ -183,7 +183,7 @@ describe('LandingClaimService.attemptLandingClaim (Sprint 10 §10.1)', () => {
 
             const result = await service.attemptLandingClaim(CTX, DRAFT, KEY);
 
-            expect(result.claimState).toBe('account-failed');
+            expect(result.state).toBe('account-failed');
             expect(
                 accountsService.findByBusinessAndIban
             ).not.toHaveBeenCalled();
@@ -200,7 +200,7 @@ describe('LandingClaimService.attemptLandingClaim (Sprint 10 §10.1)', () => {
 
             const result = await service.attemptLandingClaim(CTX, DRAFT, KEY);
 
-            expect(result.claimState).toBe('account-failed');
+            expect(result.state).toBe('account-failed');
             expect(
                 accountsService.findByBusinessAndIban
             ).not.toHaveBeenCalled();
@@ -402,7 +402,7 @@ describe('LandingClaimService.attemptLandingClaim (Sprint 10 §10.1)', () => {
                 );
 
                 expect(result).toEqual({
-                    claimState: 'success',
+                    state: 'success',
                     claimedBusinessSlug: 'BizSlug1',
                     claimedAccountSlug: 'AcctSlg1',
                 });
@@ -445,7 +445,7 @@ describe('LandingClaimService.attemptLandingClaim (Sprint 10 §10.1)', () => {
                 );
 
                 expect(result).toEqual({
-                    claimState: 'success',
+                    state: 'success',
                     claimedBusinessSlug: 'BizSlug1',
                     claimedAccountSlug: 'AcctSlg1',
                 });

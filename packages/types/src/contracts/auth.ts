@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { UserProfileSchema } from '../entities/user';
 import { emailSchema, passwordSchema } from '../validation/common';
+import { LandingClaimResultSchema } from './landing-claim';
 import { LandingDraftSchema } from './landing-draft';
 
 // --- Magic Link Purpose ---
@@ -73,65 +74,28 @@ export const VerifyMagicLinkSchema = z.object({
 // --- Auth Response ---
 
 /**
- * Sprint 10 §SP-7 — verify-response extension з 5 optional claim-fields. На
- * не-claim-magic-link-ах (всі чотири purposes без `landingDraft`) поля
- * undefined; backwards-compat для всіх Sprint 8 callsite-ів `verifyMagicLink`.
+ * Sprint 13 — `claim` як вкладений discriminated union (single source of truth
+ * у `packages/types/src/contracts/landing-claim.ts`). До Sprint 13 claim-stan
+ * жив у 5 плоских optional-полях з refine на response-side; тепер shape
+ * гарантується самою discriminated-union-структурою.
  *
- * **Discriminated narrowing на `claimState`:**
- *  - `'success'` ⇒ `claimedBusinessSlug + claimedAccountSlug` присутні.
- *  - `'business-failed'` ⇒ `failedClaimDraft` присутній (для form-recovery
- *    через redirect на `/business/new?from=landing` з pre-filled wizard).
- *  - `'account-failed'` ⇒ `partialBusinessSlug + failedClaimDraft` присутні
- *    (Business створено, але Account-POST впав; recovery через
- *    `/business/{slug}/account/new?from=landing` з pre-filled IBAN).
+ * **Чому success-with-state, а не throw**: claim-failure НЕ блокує auth —
+ * user уже автентикований, accessToken у response body, refresh-cookie
+ * виставлено. Discriminated success-shape — uniform path для finalization
+ * (`acceptTerms + getMe + setUser`); claim-state читається post-finalization
+ * для router.replace-target-у.
  *
- * Refine reject-ить порушення на response-side (defense-in-depth, бо backend
- * формує response сам — Zod ловить регресію при drift-у controller-логіки).
- *
- * **Чому success-with-state, а не throw** (planning-questions.md): claim-
- * failure НЕ блокує auth — user уже автентикований, accessToken у response
- * body, refresh-cookie виставлено. Discriminated success-shape — uniform path
- * для finalization (`acceptTerms + getMe + setUser`); claim-state читається
- * post-finalization для router.replace-target-у.
+ * `claim` nullable+optional: `null` коли verify-magic-link виконав auth-flow
+ * без anon-claim (звичайний login/register); `undefined` коли response
+ * формується іншим endpoint-ом (login/password — claim там нерелевантний).
  */
-export const AuthResponseSchema = z
-    .object({
-        user: UserProfileSchema,
-        accessToken: z.string(),
-        purpose: MagicLinkPurposeSchema.optional(),
-        accountDeleted: z.boolean().optional(),
-        claimState: z
-            .enum(['success', 'business-failed', 'account-failed'])
-            .optional(),
-        claimedBusinessSlug: z.string().optional(),
-        claimedAccountSlug: z.string().optional(),
-        partialBusinessSlug: z.string().optional(),
-        failedClaimDraft: LandingDraftSchema.optional(),
-    })
-    .refine(
-        (data) => {
-            if (data.claimState === 'success') {
-                return (
-                    data.claimedBusinessSlug !== undefined &&
-                    data.claimedAccountSlug !== undefined
-                );
-            }
-            if (data.claimState === 'business-failed') {
-                return data.failedClaimDraft !== undefined;
-            }
-            if (data.claimState === 'account-failed') {
-                return (
-                    data.partialBusinessSlug !== undefined &&
-                    data.failedClaimDraft !== undefined
-                );
-            }
-            return true;
-        },
-        {
-            message: 'CLAIM_STATE_FIELDS_MISMATCH',
-            path: ['claimState'],
-        }
-    );
+export const AuthResponseSchema = z.object({
+    user: UserProfileSchema,
+    accessToken: z.string(),
+    purpose: MagicLinkPurposeSchema.optional(),
+    accountDeleted: z.boolean().optional(),
+    claim: LandingClaimResultSchema.nullable().optional(),
+});
 
 // --- Check Email ---
 

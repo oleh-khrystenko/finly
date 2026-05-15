@@ -111,94 +111,133 @@ describe('SendMagicLinkSchema — Sprint 10 sibling-fields', () => {
     });
 });
 
-describe('AuthResponseSchema — Sprint 10 claim-fields', () => {
+describe('AuthResponseSchema — Sprint 13 claim discriminated union', () => {
     const BASE_RESPONSE = {
         user: VALID_USER,
         accessToken: 'jwt.access.token',
     };
 
-    it('parses baseline response без claim-fields (backwards-compat)', () => {
+    it('parses baseline response без claim (login / refresh paths)', () => {
         const result = AuthResponseSchema.safeParse(BASE_RESPONSE);
         expect(result.success).toBe(true);
     });
 
-    it('parses claimState=success з slugs', () => {
+    it('parses response з claim=null (magic-link verify без anon-draft)', () => {
         const result = AuthResponseSchema.safeParse({
             ...BASE_RESPONSE,
-            claimState: 'success',
-            claimedBusinessSlug: 'aB3xQ9k7',
-            claimedAccountSlug: 'cD4yR0l8',
+            claim: null,
         });
         expect(result.success).toBe(true);
     });
 
-    it('parses claimState=business-failed з failedClaimDraft', () => {
+    it('parses claim.state=success з claimed slugs', () => {
         const result = AuthResponseSchema.safeParse({
             ...BASE_RESPONSE,
-            claimState: 'business-failed',
-            failedClaimDraft: VALID_DRAFT,
+            claim: {
+                state: 'success',
+                claimedBusinessSlug: 'aB3xQ9k7',
+                claimedAccountSlug: 'cD4yR0l8',
+            },
         });
         expect(result.success).toBe(true);
     });
 
-    it('parses claimState=account-failed з partialBusinessSlug + draft', () => {
+    it('parses claim.state=business-failed з failedClaimDraft', () => {
         const result = AuthResponseSchema.safeParse({
             ...BASE_RESPONSE,
-            claimState: 'account-failed',
-            partialBusinessSlug: 'aB3xQ9k7',
-            failedClaimDraft: VALID_DRAFT,
+            claim: {
+                state: 'business-failed',
+                failedClaimDraft: VALID_DRAFT,
+            },
         });
         expect(result.success).toBe(true);
     });
 
-    it('rejects claimState=success без claimedBusinessSlug → CLAIM_STATE_FIELDS_MISMATCH', () => {
+    it('parses claim.state=account-failed з partialBusinessSlug + draft', () => {
         const result = AuthResponseSchema.safeParse({
             ...BASE_RESPONSE,
-            claimState: 'success',
-            claimedAccountSlug: 'cD4yR0l8',
+            claim: {
+                state: 'account-failed',
+                partialBusinessSlug: 'aB3xQ9k7',
+                failedClaimDraft: VALID_DRAFT,
+            },
         });
-        expect(result.success).toBe(false);
-        if (!result.success) {
-            expect(
-                result.error.issues.some(
-                    (i) => i.message === 'CLAIM_STATE_FIELDS_MISMATCH'
-                )
-            ).toBe(true);
-        }
+        expect(result.success).toBe(true);
     });
 
-    it('rejects claimState=success без claimedAccountSlug', () => {
+    it('rejects claim.state=success без claimedBusinessSlug', () => {
         const result = AuthResponseSchema.safeParse({
             ...BASE_RESPONSE,
-            claimState: 'success',
-            claimedBusinessSlug: 'aB3xQ9k7',
-        });
-        expect(result.success).toBe(false);
-    });
-
-    it('rejects claimState=business-failed без failedClaimDraft', () => {
-        const result = AuthResponseSchema.safeParse({
-            ...BASE_RESPONSE,
-            claimState: 'business-failed',
+            claim: {
+                state: 'success',
+                claimedAccountSlug: 'cD4yR0l8',
+            },
         });
         expect(result.success).toBe(false);
     });
 
-    it('rejects claimState=account-failed без partialBusinessSlug', () => {
+    it('rejects claim.state=success без claimedAccountSlug', () => {
         const result = AuthResponseSchema.safeParse({
             ...BASE_RESPONSE,
-            claimState: 'account-failed',
-            failedClaimDraft: VALID_DRAFT,
+            claim: {
+                state: 'success',
+                claimedBusinessSlug: 'aB3xQ9k7',
+            },
         });
         expect(result.success).toBe(false);
     });
 
-    it('rejects unknown claimState value', () => {
+    it('rejects claim.state=business-failed без failedClaimDraft', () => {
         const result = AuthResponseSchema.safeParse({
             ...BASE_RESPONSE,
-            claimState: 'pending',
-            claimedBusinessSlug: 'aB3xQ9k7',
-            claimedAccountSlug: 'cD4yR0l8',
+            claim: {
+                state: 'business-failed',
+            },
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('rejects claim.state=account-failed без partialBusinessSlug', () => {
+        const result = AuthResponseSchema.safeParse({
+            ...BASE_RESPONSE,
+            claim: {
+                state: 'account-failed',
+                failedClaimDraft: VALID_DRAFT,
+            },
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('rejects claim.state=account-failed без failedClaimDraft', () => {
+        const result = AuthResponseSchema.safeParse({
+            ...BASE_RESPONSE,
+            claim: {
+                state: 'account-failed',
+                partialBusinessSlug: 'aB3xQ9k7',
+            },
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('rejects unknown claim.state value', () => {
+        const result = AuthResponseSchema.safeParse({
+            ...BASE_RESPONSE,
+            claim: {
+                state: 'pending',
+                claimedBusinessSlug: 'aB3xQ9k7',
+                claimedAccountSlug: 'cD4yR0l8',
+            },
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('rejects claim without state discriminator', () => {
+        const result = AuthResponseSchema.safeParse({
+            ...BASE_RESPONSE,
+            claim: {
+                claimedBusinessSlug: 'aB3xQ9k7',
+                claimedAccountSlug: 'cD4yR0l8',
+            },
         });
         expect(result.success).toBe(false);
     });

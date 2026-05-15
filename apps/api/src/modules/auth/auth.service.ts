@@ -14,6 +14,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import {
     MAGIC_LINK_PURPOSE,
+    type LandingClaimResult,
     type LandingDraft,
     type MagicLinkPurpose,
 } from '@finly/types';
@@ -25,10 +26,7 @@ import { ENV, parseLockoutThresholds } from '../../config/env';
 import { UserDocument } from '../users/schemas/user.schema';
 import { UsersService } from '../users/users.service';
 import { EmailService } from '../email/email.service';
-import {
-    LandingClaimService,
-    type LandingClaimResult,
-} from '../landing-claim/landing-claim.service';
+import { LandingClaimService } from '../landing-claim/landing-claim.service';
 import { StorageService } from '../storage/storage.service';
 import { GoogleValidatedUser } from './strategies/google.strategy';
 

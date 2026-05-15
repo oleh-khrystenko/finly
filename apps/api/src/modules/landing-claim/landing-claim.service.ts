@@ -2,6 +2,7 @@ import { HttpException, Injectable, Logger } from '@nestjs/common';
 import {
     RESPONSE_CODE,
     mapLandingDraftToCreateBusinessRequest,
+    type LandingClaimResult,
     type LandingDraft,
 } from '@finly/types';
 
@@ -9,27 +10,6 @@ import { AccountsService } from '../accounts/accounts.service';
 import type { BusinessDocument } from '../businesses/schemas/business.schema';
 import { BusinessesService } from '../businesses/businesses.service';
 import { UsersService } from '../users/users.service';
-
-/**
- * Sprint 10 §10.1 — discriminated tuple-result для 2-sequential anon-claim
- * flow. AuthService merge-ить ці поля у `AuthResponseSchema` (sprint §SP-7
- * discriminated narrowing на `claimState`).
- */
-export type LandingClaimResult =
-    | {
-          claimState: 'success';
-          claimedBusinessSlug: string;
-          claimedAccountSlug: string;
-      }
-    | {
-          claimState: 'business-failed';
-          failedClaimDraft: LandingDraft;
-      }
-    | {
-          claimState: 'account-failed';
-          partialBusinessSlug: string;
-          failedClaimDraft: LandingDraft;
-      };
 
 export interface LandingClaimContext {
     userId: string;
@@ -42,7 +22,8 @@ export interface LandingClaimContext {
  *
  * **Чому success-with-state, а не throw**: claim-failure НЕ блокує auth.
  * Користувач уже автентикований у `verifyMagicLink`-flow; claim — додатковий
- * post-auth step. Failure у claim повертається як discriminated `claimState`,
+ * post-auth step. Failure у claim повертається як discriminated `state`
+ * (Sprint 13 rename з `claimState` після переїзду у вкладений `claim.*`),
  * frontend читає його для form-recovery-redirect-у.
  *
  * **Залежить від `BusinessesModule` + `AccountsModule`** (one-way DAG: ці
@@ -81,7 +62,7 @@ export class LandingClaimService {
         } catch (err) {
             this.logClaimFailure('POST1', ctx.userId, err);
             return {
-                claimState: 'business-failed',
+                state: 'business-failed',
                 failedClaimDraft: draft,
             };
         }
@@ -96,7 +77,7 @@ export class LandingClaimService {
                 account.slug
             );
             return {
-                claimState: 'success',
+                state: 'success',
                 claimedBusinessSlug: business.slug,
                 claimedAccountSlug: account.slug,
             };
@@ -133,7 +114,7 @@ export class LandingClaimService {
                         existing.slug
                     );
                     return {
-                        claimState: 'success',
+                        state: 'success',
                         claimedBusinessSlug: business.slug,
                         claimedAccountSlug: existing.slug,
                     };
@@ -144,7 +125,7 @@ export class LandingClaimService {
                 business: business.slug,
             });
             return {
-                claimState: 'account-failed',
+                state: 'account-failed',
                 partialBusinessSlug: business.slug,
                 failedClaimDraft: draft,
             };

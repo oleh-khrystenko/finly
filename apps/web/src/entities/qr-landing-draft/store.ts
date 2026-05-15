@@ -18,10 +18,10 @@ import type { QrPreviewInput, QrPreviewResponse } from '@finly/types';
  *  - `claimed` — claim-flow повністю завершився; після `clearAll()` повертається
  *    у `idle`. Post-success guard, щоб mount не повторив POST.
  *  - `claim-failed-business` — POST1 впав; backend повернув
- *    `claimState='business-failed'`. Recovery через `/business/new?from=landing`
+ *    `claim.state='business-failed'`. Recovery через `/business/new?from=landing`
  *    (wizard pre-fill з draft).
  *  - `claim-failed-account` — POST1 success, POST2 впав; backend повернув
- *    `claimState='account-failed'` + `partialBusinessSlug`. Recovery через
+ *    `claim.state='account-failed'` + `partialBusinessSlug`. Recovery через
  *    `/business/{slug}/account/new?from=landing` (IBAN pre-fill).
  */
 export type ClaimIntent =
