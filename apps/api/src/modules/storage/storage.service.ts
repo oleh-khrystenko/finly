@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 
 import {
     BadRequestException,
+    forwardRef,
     HttpException,
     Inject,
     Injectable,
@@ -32,6 +33,7 @@ export class StorageService {
         @Inject(STORAGE_PROVIDER)
         private readonly storage: IStorageProvider,
 
+        @Inject(forwardRef(() => UsersService))
         private readonly usersService: UsersService
     ) {}
 
