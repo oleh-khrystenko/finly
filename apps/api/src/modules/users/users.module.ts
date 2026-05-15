@@ -2,6 +2,8 @@ import { forwardRef, Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 
 import { AuthModule } from '../auth/auth.module';
+import { StorageModule } from '../storage/storage.module';
+import { AvatarService } from './avatar.service';
 import { CleanupService } from './cleanup.service';
 import { ReservationReconcileService } from './reservation-reconcile.service';
 import {
@@ -22,9 +24,20 @@ import { UsersService } from './users.service';
             },
         ]),
         forwardRef(() => AuthModule),
+        // Sprint 13 §13 — AvatarService живе тут, отже потрібен доступ до
+        // StorageService для pure file-ops. Цикл Storage↔Users на module-graph
+        // тимчасово закритий через forwardRef у StorageModule (видаляється
+        // останнім кроком спринта; на той момент Storage вже не залежить від
+        // Users на class-level).
+        StorageModule,
     ],
     controllers: [UsersController],
-    providers: [UsersService, CleanupService, ReservationReconcileService],
-    exports: [UsersService, MongooseModule],
+    providers: [
+        UsersService,
+        AvatarService,
+        CleanupService,
+        ReservationReconcileService,
+    ],
+    exports: [UsersService, AvatarService, MongooseModule],
 })
 export class UsersModule {}

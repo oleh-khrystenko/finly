@@ -10,6 +10,7 @@ import { JwtService } from '@nestjs/jwt';
 import { REDIS_CLIENT } from '../../common/modules/redis.module';
 import { RedisCounterService } from '../../common/services/redis-counter.service';
 import { LandingClaimService } from '../landing-claim/landing-claim.service';
+import { AvatarService } from '../users/avatar.service';
 import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
 import { EmailService } from '../email/email.service';
@@ -86,6 +87,9 @@ const mockRedisCounter = {
 
 const mockStorageService = {
     isR2Url: jest.fn(),
+};
+
+const mockAvatarService = {
     reUploadExternalAvatar: jest.fn(),
 };
 
@@ -142,6 +146,10 @@ describe('AuthService', () => {
                     useValue: mockStorageService,
                 },
                 {
+                    provide: AvatarService,
+                    useValue: mockAvatarService,
+                },
+                {
                     provide: LandingClaimService,
                     useValue: mockLandingClaimService,
                 },
@@ -167,7 +175,7 @@ describe('AuthService', () => {
         mockRedisCounter.incrementSlidingWindow.mockResolvedValue(1);
         // Default: no avatar re-upload path. Individual tests override.
         mockStorageService.isR2Url.mockReturnValue(false);
-        mockStorageService.reUploadExternalAvatar.mockReset();
+        mockAvatarService.reUploadExternalAvatar.mockReset();
         // Default: no landing claim (no-op). Spring 10 claim-integration tests override.
         mockLandingClaimService.attemptLandingClaim.mockReset();
     });
@@ -493,13 +501,13 @@ describe('AuthService', () => {
                 .mockResolvedValueOnce('refresh-token');
         });
 
-        it('re-uploads avatar when it is external (non-R2) and persists new URL', async () => {
+        it('re-uploads avatar when it is external (non-R2) and reflects new URL on user doc', async () => {
             const user = buildUserWithAvatar(externalUrl);
             jest.spyOn(usersService, 'findOrCreateByGoogle').mockResolvedValue(
                 user as never
             );
             mockStorageService.isR2Url.mockReturnValue(false);
-            mockStorageService.reUploadExternalAvatar.mockResolvedValue(r2Url);
+            mockAvatarService.reUploadExternalAvatar.mockResolvedValue(r2Url);
 
             const result = await authService.handleGoogleAuth(googleProfile);
 
@@ -507,10 +515,12 @@ describe('AuthService', () => {
                 externalUrl
             );
             expect(
-                mockStorageService.reUploadExternalAvatar
+                mockAvatarService.reUploadExternalAvatar
             ).toHaveBeenCalledWith(USER_ID, externalUrl);
+            // AvatarService persists the new URL itself; AuthService only
+            // mirrors it onto the in-memory user document for the response.
             expect(user.profile.avatar).toBe(r2Url);
-            expect(user.save).toHaveBeenCalledTimes(1);
+            expect(user.save).not.toHaveBeenCalled();
             expect(result.user).toBe(user);
             expect(result.tokens).toEqual({
                 accessToken: 'access-token',
@@ -529,7 +539,7 @@ describe('AuthService', () => {
 
             expect(mockStorageService.isR2Url).toHaveBeenCalledWith(r2Url);
             expect(
-                mockStorageService.reUploadExternalAvatar
+                mockAvatarService.reUploadExternalAvatar
             ).not.toHaveBeenCalled();
             expect(user.save).not.toHaveBeenCalled();
             expect(user.profile.avatar).toBe(r2Url);
@@ -542,14 +552,14 @@ describe('AuthService', () => {
                 user as never
             );
             mockStorageService.isR2Url.mockReturnValue(false);
-            mockStorageService.reUploadExternalAvatar.mockRejectedValue(
+            mockAvatarService.reUploadExternalAvatar.mockRejectedValue(
                 new Error('R2 down')
             );
 
             const result = await authService.handleGoogleAuth(googleProfile);
 
             expect(
-                mockStorageService.reUploadExternalAvatar
+                mockAvatarService.reUploadExternalAvatar
             ).toHaveBeenCalledTimes(1);
             // Avatar mutation only happens AFTER successful re-upload — on
             // failure the external URL must remain as a functional fallback.
@@ -575,7 +585,7 @@ describe('AuthService', () => {
 
             expect(mockStorageService.isR2Url).not.toHaveBeenCalled();
             expect(
-                mockStorageService.reUploadExternalAvatar
+                mockAvatarService.reUploadExternalAvatar
             ).not.toHaveBeenCalled();
             expect(user.save).not.toHaveBeenCalled();
         });

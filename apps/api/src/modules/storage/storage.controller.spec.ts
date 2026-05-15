@@ -3,8 +3,8 @@ import { ZodValidationPipe } from 'nestjs-zod';
 import { APP_PIPE } from '@nestjs/core';
 import { RESPONSE_CODE } from '@finly/types';
 
+import { AvatarService } from '../users/avatar.service';
 import { StorageController } from './storage.controller';
-import { StorageService } from './storage.service';
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
 import { CommitAvatarUploadDto } from './dto/commit-avatar-upload.dto';
 
@@ -16,7 +16,7 @@ const mockUser = {
     _id: { toString: () => USER_ID },
 } as never;
 
-const mockStorageService = {
+const mockAvatarService = {
     createAvatarUploadUrl: jest.fn(),
     commitAvatarUpload: jest.fn(),
     deleteAvatar: jest.fn(),
@@ -29,7 +29,7 @@ describe('StorageController', () => {
         const module: TestingModule = await Test.createTestingModule({
             controllers: [StorageController],
             providers: [
-                { provide: StorageService, useValue: mockStorageService },
+                { provide: AvatarService, useValue: mockAvatarService },
                 { provide: APP_PIPE, useClass: ZodValidationPipe },
             ],
         })
@@ -43,7 +43,7 @@ describe('StorageController', () => {
 
     describe('POST /storage/avatar/upload-url', () => {
         it('returns { data: { uploadUrl, fileKey } } from the service', async () => {
-            mockStorageService.createAvatarUploadUrl.mockResolvedValue({
+            mockAvatarService.createAvatarUploadUrl.mockResolvedValue({
                 uploadUrl: 'https://signed.example/put',
                 fileKey: VALID_FILE_KEY,
             });
@@ -51,7 +51,7 @@ describe('StorageController', () => {
             const result = await controller.createAvatarUploadUrl(mockUser);
 
             expect(
-                mockStorageService.createAvatarUploadUrl
+                mockAvatarService.createAvatarUploadUrl
             ).toHaveBeenCalledWith(USER_ID);
             expect(result).toEqual({
                 data: {
@@ -64,12 +64,12 @@ describe('StorageController', () => {
 
     describe('POST /storage/avatar/commit', () => {
         it('returns { data: { avatar, code: AVATAR_UPDATED } } on success', async () => {
-            mockStorageService.commitAvatarUpload.mockResolvedValue(PUBLIC_URL);
+            mockAvatarService.commitAvatarUpload.mockResolvedValue(PUBLIC_URL);
 
             const dto = { fileKey: VALID_FILE_KEY } as CommitAvatarUploadDto;
             const result = await controller.commitAvatarUpload(mockUser, dto);
 
-            expect(mockStorageService.commitAvatarUpload).toHaveBeenCalledWith(
+            expect(mockAvatarService.commitAvatarUpload).toHaveBeenCalledWith(
                 USER_ID,
                 VALID_FILE_KEY
             );
@@ -95,11 +95,11 @@ describe('StorageController', () => {
 
     describe('DELETE /storage/avatar', () => {
         it('returns { data: { code: AVATAR_DELETED } } and invokes the service', async () => {
-            mockStorageService.deleteAvatar.mockResolvedValue(undefined);
+            mockAvatarService.deleteAvatar.mockResolvedValue(undefined);
 
             const result = await controller.deleteAvatar(mockUser);
 
-            expect(mockStorageService.deleteAvatar).toHaveBeenCalledWith(
+            expect(mockAvatarService.deleteAvatar).toHaveBeenCalledWith(
                 USER_ID
             );
             expect(result).toEqual({

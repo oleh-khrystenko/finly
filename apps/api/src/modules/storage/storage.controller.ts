@@ -16,20 +16,20 @@ import {
 
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { AvatarService } from '../users/avatar.service';
 import { UserDocument } from '../users/schemas/user.schema';
-import { StorageService } from './storage.service';
 import { CommitAvatarUploadDto } from './dto/commit-avatar-upload.dto';
 
 @Controller('storage')
 @UseGuards(JwtActiveGuard)
 export class StorageController {
-    constructor(private readonly storageService: StorageService) {}
+    constructor(private readonly avatarService: AvatarService) {}
 
     @Post('avatar/upload-url')
     async createAvatarUploadUrl(
         @CurrentUser() user: UserDocument
     ): Promise<{ data: AvatarUploadUrlResponse }> {
-        const data = await this.storageService.createAvatarUploadUrl(
+        const data = await this.avatarService.createAvatarUploadUrl(
             user._id.toString()
         );
         return { data };
@@ -41,7 +41,7 @@ export class StorageController {
         @CurrentUser() user: UserDocument,
         @Body() dto: CommitAvatarUploadDto
     ): Promise<{ data: CommitAvatarUploadResponse & { code: ResponseCode } }> {
-        const avatar = await this.storageService.commitAvatarUpload(
+        const avatar = await this.avatarService.commitAvatarUpload(
             user._id.toString(),
             dto.fileKey
         );
@@ -53,7 +53,7 @@ export class StorageController {
     async deleteAvatar(
         @CurrentUser() user: UserDocument
     ): Promise<{ data: { code: ResponseCode } }> {
-        await this.storageService.deleteAvatar(user._id.toString());
+        await this.avatarService.deleteAvatar(user._id.toString());
         return { data: { code: RESPONSE_CODE.AVATAR_DELETED } };
     }
 }

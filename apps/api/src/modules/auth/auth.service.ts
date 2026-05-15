@@ -23,6 +23,7 @@ import Redis from 'ioredis';
 import { REDIS_CLIENT } from '../../common/modules/redis.module';
 import { RedisCounterService } from '../../common/services/redis-counter.service';
 import { ENV, parseLockoutThresholds } from '../../config/env';
+import { AvatarService } from '../users/avatar.service';
 import { UserDocument } from '../users/schemas/user.schema';
 import { UsersService } from '../users/users.service';
 import { EmailService } from '../email/email.service';
@@ -75,6 +76,7 @@ export class AuthService {
         private readonly usersService: UsersService,
         private readonly emailService: EmailService,
         private readonly storageService: StorageService,
+        private readonly avatarService: AvatarService,
         private readonly landingClaimService: LandingClaimService,
         @Inject(REDIS_CLIENT) private readonly redis: Redis,
         private readonly redisCounter: RedisCounterService
@@ -206,12 +208,13 @@ export class AuthService {
             !this.storageService.isR2Url(user.profile.avatar)
         ) {
             try {
-                const r2Url = await this.storageService.reUploadExternalAvatar(
+                const r2Url = await this.avatarService.reUploadExternalAvatar(
                     user.id as string,
                     user.profile.avatar
                 );
+                // Local document reflects the persisted state — AvatarService
+                // already wrote the new URL to the user document.
                 user.profile.avatar = r2Url;
-                await user.save();
             } catch (err) {
                 this.logger.warn(
                     `Failed to re-upload Google avatar for user ${user.id as string}: ${(err as Error).message}`
