@@ -420,8 +420,7 @@ describe('AuthController', () => {
                 'v3'
             );
             const stampOrder =
-                mockUsersService.stampAcceptedTerms.mock
-                    .invocationCallOrder[0];
+                mockUsersService.stampAcceptedTerms.mock.invocationCallOrder[0];
             const claimOrder =
                 mockLandingClaimService.attemptLandingClaim.mock
                     .invocationCallOrder[0];

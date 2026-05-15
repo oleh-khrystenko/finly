@@ -3,9 +3,9 @@ import { ZodValidationPipe } from 'nestjs-zod';
 import { APP_PIPE } from '@nestjs/core';
 import { RESPONSE_CODE } from '@finly/types';
 
-import { AvatarService } from '../users/avatar.service';
-import { StorageController } from './storage.controller';
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
+import { AvatarController } from './avatar.controller';
+import { AvatarService } from './avatar.service';
 import { CommitAvatarUploadDto } from './dto/commit-avatar-upload.dto';
 
 const USER_ID = '507f1f77bcf86cd799439011';
@@ -22,12 +22,12 @@ const mockAvatarService = {
     deleteAvatar: jest.fn(),
 };
 
-describe('StorageController', () => {
-    let controller: StorageController;
+describe('AvatarController', () => {
+    let controller: AvatarController;
 
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({
-            controllers: [StorageController],
+            controllers: [AvatarController],
             providers: [
                 { provide: AvatarService, useValue: mockAvatarService },
                 { provide: APP_PIPE, useClass: ZodValidationPipe },
@@ -37,7 +37,7 @@ describe('StorageController', () => {
             .useValue({ canActivate: () => true })
             .compile();
 
-        controller = module.get(StorageController);
+        controller = module.get(AvatarController);
         jest.clearAllMocks();
     });
 

@@ -5,7 +5,6 @@ import { PassportModule } from '@nestjs/passport';
 import { ENV } from '../../config/env';
 import { LandingClaimModule } from '../landing-claim/landing-claim.module';
 import { UsersModule } from '../users/users.module';
-import { StorageModule } from '../storage/storage.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { GoogleStrategy } from './strategies/google.strategy';
@@ -19,16 +18,16 @@ import { JwtStrategy } from './strategies/jwt.strategy';
             signOptions: { expiresIn: '1h' },
         }),
         forwardRef(() => UsersModule),
-        StorageModule,
         // Sprint 10 §10.1 — без forwardRef (петлі немає: LandingClaim →
         // Businesses/Accounts, які не імпортують AuthModule напряму).
         // Sprint 13 §13 — інверсія на рівні класового знання: AuthService НЕ
         // інжектить LandingClaimService. Module-import зберігається, бо
         // AuthController (резидент AuthModule) оркеструє verify-flow і inject-
-        // ить LandingClaimService напряму. Це не косметика і не повернення
-        // петлі — реальний CJS-evaluation cycle сидів у Storage→Users, а не
-        // тут; ланцюг Auth→LandingClaim→{Businesses,Accounts,Users} directed-
-        // acyclic, AuthModule його не замикає.
+        // ить LandingClaimService напряму. Ланцюг Auth→LandingClaim→{Businesses,
+        // Accounts,Users} directed-acyclic, AuthModule його не замикає.
+        // Sprint 13 §13 — StorageModule прибрано з imports: AvatarService
+        // (UsersModule) — єдина точка контакту з R2 для auth-flow; isR2Url
+        // decision переїхав у AvatarService.syncExternalAvatar.
         LandingClaimModule,
     ],
     controllers: [AuthController],

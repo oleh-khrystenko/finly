@@ -26,7 +26,6 @@ import { AvatarService } from '../users/avatar.service';
 import { UserDocument } from '../users/schemas/user.schema';
 import { UsersService } from '../users/users.service';
 import { EmailService } from '../email/email.service';
-import { StorageService } from '../storage/storage.service';
 import { GoogleValidatedUser } from './strategies/google.strategy';
 
 /**
@@ -73,7 +72,6 @@ export class AuthService {
         private readonly jwtService: JwtService,
         private readonly usersService: UsersService,
         private readonly emailService: EmailService,
-        private readonly storageService: StorageService,
         private readonly avatarService: AvatarService,
         @Inject(REDIS_CLIENT) private readonly redis: Redis,
         private readonly redisCounter: RedisCounterService
@@ -199,19 +197,20 @@ export class AuthService {
         // Re-upload external Google avatar to R2 synchronously. The sync path
         // adds ~300-800ms to the callback but avoids a URL jump after login.
         // Failure is non-critical — the external URL remains as a functional
-        // fallback and the next login retries.
-        if (
-            user.profile.avatar &&
-            !this.storageService.isR2Url(user.profile.avatar)
-        ) {
+        // fallback and the next login retries. R2-vs-external decision lives
+        // inside AvatarService (Sprint 13) — AuthService no longer touches
+        // StorageService directly.
+        if (user.profile.avatar) {
             try {
-                const r2Url = await this.avatarService.reUploadExternalAvatar(
+                const r2Url = await this.avatarService.syncExternalAvatar(
                     user.id as string,
                     user.profile.avatar
                 );
-                // Local document reflects the persisted state — AvatarService
-                // already wrote the new URL to the user document.
-                user.profile.avatar = r2Url;
+                if (r2Url) {
+                    // Local document reflects the persisted state — AvatarService
+                    // already wrote the new URL.
+                    user.profile.avatar = r2Url;
+                }
             } catch (err) {
                 this.logger.warn(
                     `Failed to re-upload Google avatar for user ${user.id as string}: ${(err as Error).message}`

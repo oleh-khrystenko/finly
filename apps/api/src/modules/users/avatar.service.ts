@@ -155,20 +155,30 @@ export class AvatarService {
     }
 
     /**
-     * Fetch an external avatar (e.g. Google OAuth `photos[0].value`), re-encode
-     * to WebP 512×512, upload into the user's avatars namespace AND persist the
-     * resulting URL on the user profile. Caller does not touch
-     * `user.profile.avatar` afterwards — the pair is owned by this service.
+     * Sync an avatar URL into R2. If `currentUrl` is already an R2 URL, no-op
+     * and return `null` (nothing to do). If it is external (e.g. Google OAuth
+     * `photos[0].value`), fetch it, re-encode to WebP 512×512, upload into the
+     * user's avatars namespace AND persist the resulting URL on the user
+     * profile. Caller does not touch `user.profile.avatar` afterwards — the
+     * pair is owned by this service.
+     *
+     * The R2 vs external decision lives here so call sites (Google-OAuth
+     * post-login flow) need only depend on `AvatarService` — they do not have
+     * to know about R2 URL semantics or import `StorageService` themselves.
      *
      * All failure modes in the pipeline map to `AVATAR_UPLOAD_FAILED` so the
      * caller can surface a consistent, actionable code to the client.
      */
-    async reUploadExternalAvatar(
+    async syncExternalAvatar(
         userId: string,
-        externalUrl: string
-    ): Promise<string> {
+        currentUrl: string
+    ): Promise<string | null> {
+        if (this.storage.isR2Url(currentUrl)) {
+            return null;
+        }
+
         const response = await this.mapStorageError(
-            () => fetch(externalUrl),
+            () => fetch(currentUrl),
             'fetch external avatar'
         );
         if (!response.ok) {

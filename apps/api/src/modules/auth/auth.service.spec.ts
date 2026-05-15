@@ -13,7 +13,6 @@ import { AvatarService } from '../users/avatar.service';
 import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
 import { EmailService } from '../email/email.service';
-import { StorageService } from '../storage/storage.service';
 
 jest.mock('../../config/env', () => ({
     ENV: {
@@ -84,12 +83,8 @@ const mockRedisCounter = {
     incrementSlidingWindow: jest.fn(),
 };
 
-const mockStorageService = {
-    isR2Url: jest.fn(),
-};
-
 const mockAvatarService = {
-    reUploadExternalAvatar: jest.fn(),
+    syncExternalAvatar: jest.fn(),
 };
 
 describe('AuthService', () => {
@@ -134,10 +129,6 @@ describe('AuthService', () => {
                     },
                 },
                 {
-                    provide: StorageService,
-                    useValue: mockStorageService,
-                },
-                {
                     provide: AvatarService,
                     useValue: mockAvatarService,
                 },
@@ -162,8 +153,7 @@ describe('AuthService', () => {
         mockRedisCounter.incrementFixedWindow.mockResolvedValue(1);
         mockRedisCounter.incrementSlidingWindow.mockResolvedValue(1);
         // Default: no avatar re-upload path. Individual tests override.
-        mockStorageService.isR2Url.mockReturnValue(false);
-        mockAvatarService.reUploadExternalAvatar.mockReset();
+        mockAvatarService.syncExternalAvatar.mockReset();
     });
 
     describe('generateTokens', () => {
@@ -492,17 +482,14 @@ describe('AuthService', () => {
             jest.spyOn(usersService, 'findOrCreateByGoogle').mockResolvedValue(
                 user as never
             );
-            mockStorageService.isR2Url.mockReturnValue(false);
-            mockAvatarService.reUploadExternalAvatar.mockResolvedValue(r2Url);
+            mockAvatarService.syncExternalAvatar.mockResolvedValue(r2Url);
 
             const result = await authService.handleGoogleAuth(googleProfile);
 
-            expect(mockStorageService.isR2Url).toHaveBeenCalledWith(
+            expect(mockAvatarService.syncExternalAvatar).toHaveBeenCalledWith(
+                USER_ID,
                 externalUrl
             );
-            expect(
-                mockAvatarService.reUploadExternalAvatar
-            ).toHaveBeenCalledWith(USER_ID, externalUrl);
             // AvatarService persists the new URL itself; AuthService only
             // mirrors it onto the in-memory user document for the response.
             expect(user.profile.avatar).toBe(r2Url);
@@ -514,19 +501,21 @@ describe('AuthService', () => {
             });
         });
 
-        it('skips re-upload when the avatar is already an R2 URL', async () => {
+        it('no-ops when the avatar is already an R2 URL (AvatarService returns null)', async () => {
             const user = buildUserWithAvatar(r2Url);
             jest.spyOn(usersService, 'findOrCreateByGoogle').mockResolvedValue(
                 user as never
             );
-            mockStorageService.isR2Url.mockReturnValue(true);
+            mockAvatarService.syncExternalAvatar.mockResolvedValue(null);
 
             const result = await authService.handleGoogleAuth(googleProfile);
 
-            expect(mockStorageService.isR2Url).toHaveBeenCalledWith(r2Url);
-            expect(
-                mockAvatarService.reUploadExternalAvatar
-            ).not.toHaveBeenCalled();
+            expect(mockAvatarService.syncExternalAvatar).toHaveBeenCalledWith(
+                USER_ID,
+                r2Url
+            );
+            // null return signals no work was needed; AuthService leaves the
+            // doc untouched and does not call save.
             expect(user.save).not.toHaveBeenCalled();
             expect(user.profile.avatar).toBe(r2Url);
             expect(result.user).toBe(user);
@@ -537,16 +526,15 @@ describe('AuthService', () => {
             jest.spyOn(usersService, 'findOrCreateByGoogle').mockResolvedValue(
                 user as never
             );
-            mockStorageService.isR2Url.mockReturnValue(false);
-            mockAvatarService.reUploadExternalAvatar.mockRejectedValue(
+            mockAvatarService.syncExternalAvatar.mockRejectedValue(
                 new Error('R2 down')
             );
 
             const result = await authService.handleGoogleAuth(googleProfile);
 
-            expect(
-                mockAvatarService.reUploadExternalAvatar
-            ).toHaveBeenCalledTimes(1);
+            expect(mockAvatarService.syncExternalAvatar).toHaveBeenCalledTimes(
+                1
+            );
             // Avatar mutation only happens AFTER successful re-upload — on
             // failure the external URL must remain as a functional fallback.
             expect(user.save).not.toHaveBeenCalled();
@@ -569,10 +557,7 @@ describe('AuthService', () => {
 
             await authService.handleGoogleAuth(googleProfile);
 
-            expect(mockStorageService.isR2Url).not.toHaveBeenCalled();
-            expect(
-                mockAvatarService.reUploadExternalAvatar
-            ).not.toHaveBeenCalled();
+            expect(mockAvatarService.syncExternalAvatar).not.toHaveBeenCalled();
             expect(user.save).not.toHaveBeenCalled();
         });
     });

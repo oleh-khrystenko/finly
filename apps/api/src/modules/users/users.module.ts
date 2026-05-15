@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 
 import { AuthModule } from '../auth/auth.module';
 import { StorageModule } from '../storage/storage.module';
+import { AvatarController } from './avatar.controller';
 import { AvatarService } from './avatar.service';
 import { CleanupService } from './cleanup.service';
 import { ReservationReconcileService } from './reservation-reconcile.service';
@@ -24,14 +25,12 @@ import { UsersService } from './users.service';
             },
         ]),
         forwardRef(() => AuthModule),
-        // Sprint 13 §13 — AvatarService живе тут, отже потрібен доступ до
-        // StorageService для pure file-ops. Цикл Storage↔Users на module-graph
-        // тимчасово закритий через forwardRef у StorageModule (видаляється
-        // останнім кроком спринта; на той момент Storage вже не залежить від
-        // Users на class-level).
+        // Sprint 13 §13 — AvatarService + AvatarController живуть тут;
+        // потрібен доступ до StorageService для pure file-ops. StorageModule
+        // autonomous, тому імпорт безризиковий — петлі немає.
         StorageModule,
     ],
-    controllers: [UsersController],
+    controllers: [UsersController, AvatarController],
     providers: [
         UsersService,
         AvatarService,

@@ -16,13 +16,20 @@ import {
 
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { AvatarService } from '../users/avatar.service';
-import { UserDocument } from '../users/schemas/user.schema';
+import { AvatarService } from './avatar.service';
 import { CommitAvatarUploadDto } from './dto/commit-avatar-upload.dto';
+import { UserDocument } from './schemas/user.schema';
 
+/**
+ * Sprint 13 §13 — resident у `UsersModule` поруч з `AvatarService` і `User`-
+ * model. URL prefix зберігається (`/storage/avatar/*`) — клієнти не зачепило.
+ * До Sprint 13 controller жив у `StorageModule`; переїхав, щоб StorageModule
+ * став autonomous (не імпортував UsersModule). Avatar-домен — частина User-а,
+ * StorageService — лише транспорт.
+ */
 @Controller('storage')
 @UseGuards(JwtActiveGuard)
-export class StorageController {
+export class AvatarController {
     constructor(private readonly avatarService: AvatarService) {}
 
     @Post('avatar/upload-url')

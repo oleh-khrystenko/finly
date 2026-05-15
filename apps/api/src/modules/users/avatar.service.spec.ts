@@ -415,8 +415,9 @@ describe('AvatarService', () => {
         });
     });
 
-    describe('reUploadExternalAvatar', () => {
+    describe('syncExternalAvatar', () => {
         const externalUrl = 'https://lh3.googleusercontent.com/photo.jpg';
+        const r2Url = `${PUBLIC_URL}/avatars/${USER_ID}/${UUID_QUEUE[0]}.webp`;
         const sharpMock = jest.requireMock('sharp');
 
         beforeEach(() => {
@@ -441,11 +442,12 @@ describe('AvatarService', () => {
                 })
             );
 
-            const result = await service.reUploadExternalAvatar(
+            const result = await service.syncExternalAvatar(
                 USER_ID,
                 externalUrl
             );
 
+            expect(storage.isR2Url).toHaveBeenCalledWith(externalUrl);
             expect(fetchSpy).toHaveBeenCalledWith(externalUrl);
             expect(sharpMock.default).toHaveBeenCalledTimes(1);
             expect(sharpMock.__pipeline.resize).toHaveBeenCalledWith(
@@ -481,7 +483,7 @@ describe('AvatarService', () => {
             } as Response);
 
             await expect(
-                service.reUploadExternalAvatar(USER_ID, externalUrl)
+                service.syncExternalAvatar(USER_ID, externalUrl)
             ).rejects.toMatchObject({
                 response: { code: RESPONSE_CODE.AVATAR_UPLOAD_FAILED },
             });
@@ -497,7 +499,7 @@ describe('AvatarService', () => {
                 .mockRejectedValue(new Error('ECONNRESET'));
 
             await expect(
-                service.reUploadExternalAvatar(USER_ID, externalUrl)
+                service.syncExternalAvatar(USER_ID, externalUrl)
             ).rejects.toMatchObject({
                 response: { code: RESPONSE_CODE.AVATAR_UPLOAD_FAILED },
             });
@@ -515,7 +517,7 @@ describe('AvatarService', () => {
             } as unknown as Response);
 
             await expect(
-                service.reUploadExternalAvatar(USER_ID, externalUrl)
+                service.syncExternalAvatar(USER_ID, externalUrl)
             ).rejects.toMatchObject({
                 response: { code: RESPONSE_CODE.AVATAR_UPLOAD_FAILED },
             });
@@ -535,7 +537,7 @@ describe('AvatarService', () => {
             );
 
             await expect(
-                service.reUploadExternalAvatar(USER_ID, externalUrl)
+                service.syncExternalAvatar(USER_ID, externalUrl)
             ).rejects.toMatchObject({
                 response: { code: RESPONSE_CODE.AVATAR_UPLOAD_FAILED },
             });
@@ -555,7 +557,7 @@ describe('AvatarService', () => {
             );
 
             await expect(
-                service.reUploadExternalAvatar(USER_ID, externalUrl)
+                service.syncExternalAvatar(USER_ID, externalUrl)
             ).rejects.toMatchObject({
                 response: { code: RESPONSE_CODE.AVATAR_UPLOAD_FAILED },
             });
@@ -574,11 +576,25 @@ describe('AvatarService', () => {
             userModel.findByIdAndUpdate.mockReturnValue(execable(null));
 
             await expect(
-                service.reUploadExternalAvatar(USER_ID, externalUrl)
+                service.syncExternalAvatar(USER_ID, externalUrl)
             ).rejects.toBeInstanceOf(NotFoundException);
 
             const expectedKey = `avatars/${USER_ID}/${UUID_QUEUE[0]}.webp`;
             expect(storage.safeDeleteByKey).toHaveBeenCalledWith(expectedKey);
+
+            fetchSpy.mockRestore();
+        });
+
+        it('returns null without touching storage or DB when URL is already an R2 URL', async () => {
+            const fetchSpy = jest.spyOn(globalThis, 'fetch');
+
+            const result = await service.syncExternalAvatar(USER_ID, r2Url);
+
+            expect(result).toBeNull();
+            expect(storage.isR2Url).toHaveBeenCalledWith(r2Url);
+            expect(fetchSpy).not.toHaveBeenCalled();
+            expect(storage.uploadBuffer).not.toHaveBeenCalled();
+            expect(userModel.findByIdAndUpdate).not.toHaveBeenCalled();
 
             fetchSpy.mockRestore();
         });
