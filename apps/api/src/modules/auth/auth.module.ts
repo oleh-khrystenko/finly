@@ -3,13 +3,26 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 
 import { ENV } from '../../config/env';
-import { LandingClaimModule } from '../landing-claim/landing-claim.module';
 import { UsersModule } from '../users/users.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
+/**
+ * Sprint 13 §13 — AuthModule більше НЕ імпортує LandingClaimModule.
+ * `verifyMagicLink` orchestration переїхала у власний controller-резидент
+ * LandingClaimModule (`MagicLinkVerifyController`). Це інверсія на рівні
+ * module-graph, не лише класового знання: завдяки їй CJS-evaluation ланцюг
+ * `accounts → businesses → users → auth → landing-claim → businesses` більше
+ * не замикається — `auth.module.ts` завершує evaluation без імпорту
+ * `landing-claim.module.ts`, тому LandingClaim CJS-evaluating стартує лише
+ * коли businesses/accounts/users/auth уже фіналізовані.
+ *
+ * Залишковий справжній bidirectional cycle Auth ↔ Users (видалення акаунта
+ * потребує revoke токенів) тримається на двох `forwardRef` і не порушує
+ * CJS-evaluation, бо forwardRef функцію не викликає на decoration-time.
+ */
 @Module({
     imports: [
         PassportModule,
@@ -18,17 +31,6 @@ import { JwtStrategy } from './strategies/jwt.strategy';
             signOptions: { expiresIn: '1h' },
         }),
         forwardRef(() => UsersModule),
-        // Sprint 10 §10.1 — без forwardRef (петлі немає: LandingClaim →
-        // Businesses/Accounts, які не імпортують AuthModule напряму).
-        // Sprint 13 §13 — інверсія на рівні класового знання: AuthService НЕ
-        // інжектить LandingClaimService. Module-import зберігається, бо
-        // AuthController (резидент AuthModule) оркеструє verify-flow і inject-
-        // ить LandingClaimService напряму. Ланцюг Auth→LandingClaim→{Businesses,
-        // Accounts,Users} directed-acyclic, AuthModule його не замикає.
-        // Sprint 13 §13 — StorageModule прибрано з imports: AvatarService
-        // (UsersModule) — єдина точка контакту з R2 для auth-flow; isR2Url
-        // decision переїхав у AvatarService.syncExternalAvatar.
-        LandingClaimModule,
     ],
     controllers: [AuthController],
     providers: [AuthService, JwtStrategy, GoogleStrategy],
