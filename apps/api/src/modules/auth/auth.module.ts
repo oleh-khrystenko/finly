@@ -22,6 +22,13 @@ import { JwtStrategy } from './strategies/jwt.strategy';
         StorageModule,
         // Sprint 10 §10.1 — без forwardRef (петлі немає: LandingClaim →
         // Businesses/Accounts, які не імпортують AuthModule напряму).
+        // Sprint 13 §13 — інверсія на рівні класового знання: AuthService НЕ
+        // інжектить LandingClaimService. Module-import зберігається, бо
+        // AuthController (резидент AuthModule) оркеструє verify-flow і inject-
+        // ить LandingClaimService напряму. Це не косметика і не повернення
+        // петлі — реальний CJS-evaluation cycle сидів у Storage→Users, а не
+        // тут; ланцюг Auth→LandingClaim→{Businesses,Accounts,Users} directed-
+        // acyclic, AuthModule його не замикає.
         LandingClaimModule,
     ],
     controllers: [AuthController],

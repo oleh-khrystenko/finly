@@ -14,6 +14,7 @@ import {
     AuthResponse,
     CheckEmailResponse,
     DeleteAccountVerifyResponse,
+    LandingClaimResult,
     MAGIC_LINK_PURPOSE,
     RESPONSE_CODE,
     type ApiMessageResponse,
@@ -24,8 +25,10 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { SkipOnboarding } from '../../common/decorators/skip-onboarding.decorator';
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
 import { ENV } from '../../config/env';
+import { LandingClaimService } from '../landing-claim/landing-claim.service';
 import { UserDocument } from '../users/schemas/user.schema';
 import { mapUserToProfileResponse } from '../users/user-profile.mapper';
+import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
@@ -48,7 +51,11 @@ const REFRESH_COOKIE_OPTIONS: CookieOptions = {
 
 @Controller('auth')
 export class AuthController {
-    constructor(private readonly authService: AuthService) {}
+    constructor(
+        private readonly authService: AuthService,
+        private readonly usersService: UsersService,
+        private readonly landingClaimService: LandingClaimService
+    ) {}
 
     @Get('google')
     @UseGuards(AuthGuard('google'))
@@ -156,7 +163,30 @@ export class AuthController {
             };
         }
 
-        const { user, tokens, purpose, accountDeleted, claimResult } = result;
+        const { user, tokens, purpose, accountDeleted, rawPayload } = result;
+
+        // Sprint 13 §13 — orchestration. Invariant "stamp ДО claim" (Sprint 10
+        // §SP-12: terms-pre-stamp закриває acceptTerms ordering window — без
+        // нього frontend `acceptTerms()` post-claim throw на network glitch
+        // лишав би Business+Account без terms-stamp).
+        if (rawPayload.termsVersion) {
+            await this.usersService.stampAcceptedTerms(
+                user._id.toString(),
+                rawPayload.termsVersion
+            );
+        }
+
+        let claim: LandingClaimResult | null = null;
+        if (rawPayload.landingDraft && rawPayload.claimIdempotencyKey) {
+            claim = await this.landingClaimService.attemptLandingClaim(
+                {
+                    userId: user._id.toString(),
+                    isBookkeeperMode: user.worksAsBookkeeper ?? false,
+                },
+                rawPayload.landingDraft,
+                rawPayload.claimIdempotencyKey
+            );
+        }
 
         res.cookie('bid_refresh', tokens.refreshToken, REFRESH_COOKIE_OPTIONS);
 
@@ -166,7 +196,7 @@ export class AuthController {
                 accessToken: tokens.accessToken,
                 purpose,
                 ...(accountDeleted && { accountDeleted }),
-                claim: claimResult ?? null,
+                claim,
             },
         };
     }

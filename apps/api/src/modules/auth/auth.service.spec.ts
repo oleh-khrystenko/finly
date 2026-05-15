@@ -9,7 +9,6 @@ import { JwtService } from '@nestjs/jwt';
 
 import { REDIS_CLIENT } from '../../common/modules/redis.module';
 import { RedisCounterService } from '../../common/services/redis-counter.service';
-import { LandingClaimService } from '../landing-claim/landing-claim.service';
 import { AvatarService } from '../users/avatar.service';
 import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
@@ -93,10 +92,6 @@ const mockAvatarService = {
     reUploadExternalAvatar: jest.fn(),
 };
 
-const mockLandingClaimService = {
-    attemptLandingClaim: jest.fn(),
-};
-
 describe('AuthService', () => {
     let authService: AuthService;
     let jwtService: JwtService;
@@ -126,10 +121,7 @@ describe('AuthService', () => {
                         setPasswordHash: jest.fn().mockResolvedValue(undefined),
                         softDelete: jest.fn().mockResolvedValue(undefined),
                         updateTimezone: jest.fn().mockResolvedValue(undefined),
-                        // Sprint 10 §SP-12 — idempotent terms-stamp у verifyMagicLink.
-                        stampAcceptedTerms: jest
-                            .fn()
-                            .mockResolvedValue(undefined),
+                        acceptTerms: jest.fn().mockResolvedValue(undefined),
                     },
                 },
                 {
@@ -148,10 +140,6 @@ describe('AuthService', () => {
                 {
                     provide: AvatarService,
                     useValue: mockAvatarService,
-                },
-                {
-                    provide: LandingClaimService,
-                    useValue: mockLandingClaimService,
                 },
                 {
                     provide: REDIS_CLIENT,
@@ -176,8 +164,6 @@ describe('AuthService', () => {
         // Default: no avatar re-upload path. Individual tests override.
         mockStorageService.isR2Url.mockReturnValue(false);
         mockAvatarService.reUploadExternalAvatar.mockReset();
-        // Default: no landing claim (no-op). Spring 10 claim-integration tests override.
-        mockLandingClaimService.attemptLandingClaim.mockReset();
     });
 
     describe('generateTokens', () => {
@@ -1144,9 +1130,12 @@ describe('AuthService', () => {
             ).toBeUndefined();
         });
 
-        // ─── Sprint 10 §10.1 — claim-integration order-of-operations ───
+        // Sprint 13 §13 — orchestration of stamp + claim переїхала у
+        // AuthController. AuthService.verifyMagicLink сам нічого не stamp-ить
+        // і не claim-ить; повертає `rawPayload` для оркестратора. Тести цих
+        // двох викликів живуть у `auth.controller.spec.ts`.
 
-        describe('claim-integration (Sprint 10 §10.1)', () => {
+        describe('rawPayload propagation (Sprint 13)', () => {
             const DRAFT = {
                 receiverName: 'Іваненко',
                 iban: 'UA213223130000026007233566001',
@@ -1154,7 +1143,6 @@ describe('AuthService', () => {
                 purpose: 'Оплата',
             } as const;
             const KEY = '00000000-0000-4000-8000-000000000000';
-            const userIdStr = '507f1f77bcf86cd799439011';
 
             const seedMagicPayload = (extra: Record<string, unknown>) => {
                 mockRedis.getdel.mockResolvedValue(
@@ -1170,9 +1158,7 @@ describe('AuthService', () => {
                     'findOrCreateByEmail'
                 ).mockResolvedValue({
                     ...mockUser,
-                    _id: { toString: () => userIdStr },
                     deletedAt: null,
-                    worksAsBookkeeper: false,
                     save: saveMock,
                 } as never);
                 jest.spyOn(jwtService, 'signAsync')
@@ -1180,117 +1166,37 @@ describe('AuthService', () => {
                     .mockResolvedValueOnce('refresh-token');
             };
 
-            it('(a) без landingDraft+claimIdempotencyKey у Redis — no claim, baseline auth-response', async () => {
-                seedMagicPayload({});
-
-                const result = await authService.verifyMagicLink(token);
-
-                expect(
-                    mockLandingClaimService.attemptLandingClaim
-                ).not.toHaveBeenCalled();
-                expect(
-                    'claimResult' in result ? result.claimResult : 'absent'
-                ).toBeUndefined();
-            });
-
-            it('(b) з обома + claim-success — claimResult містить state=success + claimed slugs', async () => {
-                seedMagicPayload({
-                    landingDraft: DRAFT,
-                    claimIdempotencyKey: KEY,
-                });
-                mockLandingClaimService.attemptLandingClaim.mockResolvedValue({
-                    state: 'success',
-                    claimedBusinessSlug: 'BizSlug1',
-                    claimedAccountSlug: 'AcctSlg1',
-                });
-
-                const result = await authService.verifyMagicLink(token);
-
-                expect(
-                    mockLandingClaimService.attemptLandingClaim
-                ).toHaveBeenCalledWith(
-                    { userId: userIdStr, isBookkeeperMode: false },
-                    DRAFT,
-                    KEY
-                );
-                expect(
-                    'claimResult' in result ? result.claimResult : null
-                ).toEqual({
-                    state: 'success',
-                    claimedBusinessSlug: 'BizSlug1',
-                    claimedAccountSlug: 'AcctSlg1',
-                });
-            });
-
-            it('(c) з обома + business-failed — claimResult містить failedClaimDraft', async () => {
-                seedMagicPayload({
-                    landingDraft: DRAFT,
-                    claimIdempotencyKey: KEY,
-                });
-                mockLandingClaimService.attemptLandingClaim.mockResolvedValue({
-                    state: 'business-failed',
-                    failedClaimDraft: DRAFT,
-                });
-
-                const result = await authService.verifyMagicLink(token);
-
-                expect(
-                    'claimResult' in result ? result.claimResult : null
-                ).toEqual({
-                    state: 'business-failed',
-                    failedClaimDraft: DRAFT,
-                });
-            });
-
-            it('(d) з обома + account-failed (Business створено) — partialBusinessSlug + failedClaimDraft', async () => {
-                seedMagicPayload({
-                    landingDraft: DRAFT,
-                    claimIdempotencyKey: KEY,
-                });
-                mockLandingClaimService.attemptLandingClaim.mockResolvedValue({
-                    state: 'account-failed',
-                    partialBusinessSlug: 'PartialBiz',
-                    failedClaimDraft: DRAFT,
-                });
-
-                const result = await authService.verifyMagicLink(token);
-
-                expect(
-                    'claimResult' in result ? result.claimResult : null
-                ).toEqual({
-                    state: 'account-failed',
-                    partialBusinessSlug: 'PartialBiz',
-                    failedClaimDraft: DRAFT,
-                });
-            });
-
-            it('(e) terms-pre-stamp: payload з termsVersion → stampAcceptedTerms викликається ДО claim', async () => {
+            it('propagates all three optional sibling-fields from Redis payload', async () => {
                 seedMagicPayload({
                     landingDraft: DRAFT,
                     claimIdempotencyKey: KEY,
                     termsVersion: 'v3',
                 });
-                mockLandingClaimService.attemptLandingClaim.mockResolvedValue({
-                    state: 'success',
-                    claimedBusinessSlug: 'BizSlug1',
-                    claimedAccountSlug: 'AcctSlg1',
+
+                const result = await authService.verifyMagicLink(token);
+
+                expect(result.deleted).toBeFalsy();
+                expect(
+                    'rawPayload' in result ? result.rawPayload : null
+                ).toEqual({
+                    landingDraft: DRAFT,
+                    claimIdempotencyKey: KEY,
+                    termsVersion: 'v3',
                 });
+            });
 
-                await authService.verifyMagicLink(token);
+            it('returns rawPayload with undefined fields when payload had none', async () => {
+                seedMagicPayload({});
 
-                const stampFn = (
-                    usersService as unknown as {
-                        stampAcceptedTerms: jest.Mock;
-                    }
-                ).stampAcceptedTerms;
-                expect(stampFn).toHaveBeenCalledWith(userIdStr, 'v3');
-                // Order verification: stamp invoked before claim. Jest captures
-                // invocationCallOrder per mock instance.
-                const stampOrder = stampFn.mock.invocationCallOrder[0];
-                const claimOrder =
-                    mockLandingClaimService.attemptLandingClaim.mock
-                        .invocationCallOrder[0];
-                expect(stampOrder).toBeLessThan(claimOrder);
+                const result = await authService.verifyMagicLink(token);
+
+                expect(
+                    'rawPayload' in result ? result.rawPayload : null
+                ).toEqual({
+                    landingDraft: undefined,
+                    claimIdempotencyKey: undefined,
+                    termsVersion: undefined,
+                });
             });
         });
     });

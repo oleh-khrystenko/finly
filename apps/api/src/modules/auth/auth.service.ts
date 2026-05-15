@@ -14,7 +14,6 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import {
     MAGIC_LINK_PURPOSE,
-    type LandingClaimResult,
     type LandingDraft,
     type MagicLinkPurpose,
 } from '@finly/types';
@@ -27,7 +26,6 @@ import { AvatarService } from '../users/avatar.service';
 import { UserDocument } from '../users/schemas/user.schema';
 import { UsersService } from '../users/users.service';
 import { EmailService } from '../email/email.service';
-import { LandingClaimService } from '../landing-claim/landing-claim.service';
 import { StorageService } from '../storage/storage.service';
 import { GoogleValidatedUser } from './strategies/google.strategy';
 
@@ -77,7 +75,6 @@ export class AuthService {
         private readonly emailService: EmailService,
         private readonly storageService: StorageService,
         private readonly avatarService: AvatarService,
-        private readonly landingClaimService: LandingClaimService,
         @Inject(REDIS_CLIENT) private readonly redis: Redis,
         private readonly redisCounter: RedisCounterService
     ) {}
@@ -348,7 +345,11 @@ export class AuthService {
               purpose: MagicLinkPurpose;
               deleted?: false;
               accountDeleted?: boolean;
-              claimResult?: LandingClaimResult;
+              rawPayload: {
+                  termsVersion?: string;
+                  landingDraft?: LandingDraft;
+                  claimIdempotencyKey?: string;
+              };
           }
         | {
               deleted: true;
@@ -376,36 +377,14 @@ export class AuthService {
             return this.handleDeleteAccountVerification(email);
         }
 
-        // Order-of-operations Sprint 10 §10.1 (для login / register /
-        // reset-password):
-        //   1. Auth-resolve user.
-        //   2. Terms pre-stamp (SP-12) — закриває acceptTerms ordering window.
-        //   3. Landing claim (SP-7 / SP-11) — БЕЗ throw на failure (повертає
-        //      discriminated state).
-        //   4. Видача session-credentials.
+        // Sprint 13 §13 — verifyMagicLink став механічним: validate + auth-
+        // resolve + tokens. Terms-stamp і landing-claim оркеструє AuthController
+        // на основі `rawPayload`. Інваріант "stamp ДО claim" (Sprint 10 §SP-12)
+        // живе у явному порядку викликів контролера.
         const user = await this.usersService.findOrCreateByEmail(email);
 
         user.lastLoginAt = new Date();
         await user.save();
-
-        if (payload.termsVersion) {
-            await this.usersService.stampAcceptedTerms(
-                user._id.toString(),
-                payload.termsVersion
-            );
-        }
-
-        let claimResult: LandingClaimResult | undefined;
-        if (payload.landingDraft && payload.claimIdempotencyKey) {
-            claimResult = await this.landingClaimService.attemptLandingClaim(
-                {
-                    userId: user._id.toString(),
-                    isBookkeeperMode: user.worksAsBookkeeper ?? false,
-                },
-                payload.landingDraft,
-                payload.claimIdempotencyKey
-            );
-        }
 
         const tokens = await this.generateTokens(
             user._id.toString(),
@@ -417,7 +396,11 @@ export class AuthService {
             tokens,
             purpose,
             accountDeleted: user.deletedAt ? true : undefined,
-            claimResult,
+            rawPayload: {
+                termsVersion: payload.termsVersion,
+                landingDraft: payload.landingDraft,
+                claimIdempotencyKey: payload.claimIdempotencyKey,
+            },
         };
     }
 
