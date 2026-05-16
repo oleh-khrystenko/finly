@@ -39,6 +39,13 @@ const TYPE_DESCRIPTIONS: Record<BusinessType, string> = {
     organization: 'ОСББ, фонд, громадська спілка — без оподаткування',
 };
 
+const NAME_PLACEHOLDERS: Record<BusinessType, string> = {
+    individual: 'Коваленко Іван Миколайович',
+    fop: 'Коваленко Іван Миколайович',
+    tov: 'ТОВ «Ромашка»',
+    organization: 'ОСББ «Будинок 12»',
+};
+
 const TYPE_OPTIONS: ReadonlyArray<UiRadioCardGroupOption<BusinessType>> =
     BUSINESS_TYPES.map((type) => ({
         value: type,
@@ -103,7 +110,7 @@ export default function Step1TypeAndName() {
 
             <UiInput
                 label="Назва бізнесу"
-                placeholder="Іваненко"
+                placeholder={NAME_PLACEHOLDERS[selectedType ?? 'individual']}
                 {...form.register('name')}
                 error={getZodFieldError(errors.name)}
             />
