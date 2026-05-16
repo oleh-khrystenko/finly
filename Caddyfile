@@ -1,23 +1,51 @@
+# Caddy v2 — production reverse-proxy для Finly.
+#
+# Обидва домени термінують один контейнер `web` на 127.0.0.1:3000 (єдиний
+# Next.js процес); host-aware routing виконує `apps/web/src/proxy.ts`
+# (Sprint 3 §3.9): cabinet-route-и доступні тільки на apex/www, public-pay
+# route-и — тільки на `pay.`. Тому два окремі Caddy-блоки потрібні лише для
+# TLS + DNS + access-логів; обидва проксують на той самий upstream.
+#
+# Cloudflare Origin Certificate (issued via Cloudflare Dashboard:
+# SSL/TLS → Origin Server → Create Certificate; hostnames: `finly.com.ua`,
+# `*.finly.com.ua`; validity 15 years). Files on the VPS:
+#   /etc/caddy/tls/origin.pem
+#   /etc/caddy/tls/origin-key.pem
+
+(security_headers) {
+    header {
+        # Pin HTTPS for a year + preload — Cloudflare сам не шле HSTS, ми єдине джерело.
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        # Prevent MIME-type sniffing
+        X-Content-Type-Options nosniff
+        # Clickjacking protection. CSP `frame-ancestors` not shipped here —
+        # потребує coordination з Next.js inline scripts (див. playbook §06
+        # "CSP intentionally absent"). XFO retained as sole defense.
+        X-Frame-Options DENY
+        # Modern default — stop leaking full URLs on cross-origin nav
+        Referrer-Policy strict-origin-when-cross-origin
+        # Disable browser APIs the app doesn't use; allow `payment=(self)` for Stripe.js
+        Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(self)"
+        # Isolate browsing context from cross-origin `window.opener` references.
+        # NOT enough for `crossOriginIsolated` capabilities (SharedArrayBuffer,
+        # high-resolution timers) — those require COEP `require-corp` додатково,
+        # який тут НЕ доставляємо (R2/Stripe/Anthropic ресурси не аудитовані на
+        # CORP-сумісність).
+        Cross-Origin-Opener-Policy same-origin
+        # Strip server identity
+        -Server
+    }
+}
+
+# ─── Cabinet (apex) ─────────────────────────────────────────────────────────
 finly.com.ua {
     reverse_proxy 127.0.0.1:3000
 
-    # Cloudflare Origin Certificate — issued via Cloudflare Dashboard:
-    # SSL/TLS → Origin Server → Create Certificate
-    # Place the certificate and key on the VPS:
-    #   /etc/caddy/tls/origin.pem
-    #   /etc/caddy/tls/origin-key.pem
     tls /etc/caddy/tls/origin.pem /etc/caddy/tls/origin-key.pem
 
-    header {
-        # Prevent MIME-type sniffing
-        X-Content-Type-Options nosniff
-        # Clickjacking protection
-        X-Frame-Options DENY
-        # Disable referrer on cross-origin
-        Referrer-Policy strict-origin-when-cross-origin
-        # Remove server identity
-        -Server
-    }
+    encode zstd gzip
+
+    import security_headers
 
     log {
         output file /var/log/caddy/finly.log {
@@ -25,4 +53,32 @@ finly.com.ua {
             roll_keep 5
         }
     }
+}
+
+# ─── Public payment-page ────────────────────────────────────────────────────
+# Host-routing виконує middleware (`apps/web/src/proxy.ts > isPublicHost`):
+# cabinet-route-и (`/business`, `/auth/...`) на цьому хості повертають 404.
+pay.finly.com.ua {
+    reverse_proxy 127.0.0.1:3000
+
+    tls /etc/caddy/tls/origin.pem /etc/caddy/tls/origin-key.pem
+
+    encode zstd gzip
+
+    import security_headers
+
+    log {
+        output file /var/log/caddy/pay-finly.log {
+            roll_size 10mb
+            roll_keep 5
+        }
+    }
+}
+
+# ─── www → apex redirect ────────────────────────────────────────────────────
+# Cloudflare DNS може CNAME-ити www на apex (proxied); цей блок — fallback,
+# якщо запит дійшов до origin (наприклад, direct-to-origin сценарій).
+www.finly.com.ua {
+    redir https://finly.com.ua{uri} permanent
+    tls /etc/caddy/tls/origin.pem /etc/caddy/tls/origin-key.pem
 }
