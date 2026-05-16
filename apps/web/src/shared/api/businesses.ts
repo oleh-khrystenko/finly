@@ -1,26 +1,33 @@
 import { apiClient, publicFetchJson } from './client';
 import type {
     Business,
-    BusinessWithInvoicesCount,
+    BusinessWithCounts,
     CreateBusinessRequest,
     PublicBusinessView,
     UpdateBusinessRequest,
 } from '@finly/types';
-export type { BusinessWithInvoicesCount } from '@finly/types';
 
 /**
- * Sprint 3 §3.6 §3.8 + Sprint 4 §4.4 — cabinet API client для бізнесів.
- * Усі методи на `/businesses/me` під JwtActiveGuard; envelope `{ data: ... }`.
+ * Sprint 3 §3.6 §3.8 + Sprint 4 §4.4 + Sprint 9 §9.1 — cabinet API client для
+ * бізнесів. Усі методи на `/businesses/me` під JwtActiveGuard; envelope
+ * `{ data: ... }`.
  *
- * **Sprint 4 §4.4: `BusinessWithInvoicesCount`** — view-extension type
- * (`Business & { invoicesCount }`) визначений у `@finly/types/contracts/
- * businesses` як shared contract. Backend (service + controller) і frontend
- * декларують повернення цього типу — single source of truth.
+ * **Sprint 9: `BusinessWithCounts`** — single source of truth для
+ * `Business & { accountsCount, invoicesCount }`. Counter "{N} рахунків /
+ * {M} інвойсів усього" на business-картці mitigation для UX-плутанини
+ * 1-рахунок-ФОП-а (README Risk #7).
+ *
+ * **Sprint 9: delete-response shape**: `{ affectedAccounts, affectedInvoices }`.
  */
 
-export async function listBusinesses(): Promise<BusinessWithInvoicesCount[]> {
+interface CascadeDeleteResult {
+    affectedAccounts: number;
+    affectedInvoices: number;
+}
+
+export async function listBusinesses(): Promise<BusinessWithCounts[]> {
     const { data } = await apiClient.get<{
-        data: BusinessWithInvoicesCount[];
+        data: BusinessWithCounts[];
     }>('/businesses/me');
     return data.data;
 }
@@ -37,8 +44,8 @@ export async function createBusiness(
 
 export async function getBusinessBySlug(
     slug: string
-): Promise<BusinessWithInvoicesCount> {
-    const { data } = await apiClient.get<{ data: BusinessWithInvoicesCount }>(
+): Promise<BusinessWithCounts> {
+    const { data } = await apiClient.get<{ data: BusinessWithCounts }>(
         `/businesses/me/${encodeURIComponent(slug)}`
     );
     return data.data;
@@ -55,27 +62,21 @@ export async function updateBusiness(
     return data.data;
 }
 
-export async function deleteBusiness(slug: string): Promise<void> {
-    await apiClient.delete(`/businesses/me/${encodeURIComponent(slug)}`);
+export async function deleteBusiness(slug: string): Promise<CascadeDeleteResult> {
+    const { data } = await apiClient.delete<{ data: CascadeDeleteResult }>(
+        `/businesses/me/${encodeURIComponent(slug)}`
+    );
+    return data.data;
 }
 
 /**
- * Sprint 3 §3.3 + §3.8 (preview-toggle) — public-зона view. Cabinet preview-
- * mode викликає це для рендеру `<PublicBusinessView>` без leak реквізитів
- * через cabinet-endpoint.
+ * Sprint 3 §3.3 + §3.8 (preview-toggle) + Sprint 9 §SP-4 — public-зона view.
+ * Cabinet preview-mode викликає це для рендеру `<PublicBusinessView>` (Sprint 9:
+ * cards-list-view для 2+ Account / empty-state для 0; 1-Account 307-redirect
+ * живе на Server Component).
  *
- * **`publicFetchJson` (review fix), не cabinet `apiClient`.** Endpoint має
- * `Cache-Control: public, max-age=3600, SWR=86400`, тож тут на відміну від
- * invoice-варіанту обидва rationale діють:
- *   1. **CDN-cache contract** — cabinet apiClient шле `Authorization` +
- *      cookies; CDN автоматично знімає shared-cache eligibility з authed
- *      requests, навіть якщо API відповідає `Cache-Control: public`.
- *   2. **Public/cabinet isolation §3.9** — public response identical для
- *      anonymous і authed user-а; жодного session-identifier-у у public hop.
- *
- * Same-origin /api у prod-like setup-i: axios `withCredentials: false`
- * не блокує cookies (XHR-обмеження). Native fetch з `credentials: 'omit'`
- * — єдиний реальний механізм. Деталі — `client.ts`.
+ * **`publicFetchJson` (review fix), не cabinet `apiClient`** — public/cabinet
+ * isolation §3.9 + CDN-cache contract. Деталі — `client.ts`.
  */
 export async function getPublicBusinessView(
     slug: string

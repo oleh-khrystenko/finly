@@ -8,36 +8,39 @@ import UiButton from '@/shared/ui/UiButton';
 const QUERY_PARAM = 'completed-from';
 const EXPECTED_VALUE = 'landing';
 
+interface Props {
+    /**
+     * Sprint 10 §10.2 — banner переїхав з `/business/[slug]` на
+     * `/business/[slug]/account/[accountSlug]`, бо claim-flow тепер success-
+     * redirect-ить на per-account page. "Перейти до банків" CTA робить
+     * cross-page navigation на `/business/{slug}#banks` — звідси потрібен
+     * `businessSlug` для побудови link-у.
+     */
+    businessSlug: string;
+}
+
 /**
- * Sprint 8 §8.5 — banner-нагадування на business-detail-сторінці після
- * claim-flow з лендінгу (`?completed-from=landing`).
+ * Sprint 8 §8.5 / Sprint 10 §10.2 — banner-нагадування на per-account-page
+ * після claim-flow з лендінгу (`?completed-from=landing`).
  *
  * **Мета**: claim-flow проставляє `acceptedBanks=[...MVP_BANKS]` (всі 11
  * банків за замовчуванням), бо landing-форма не має UI для bank-selection.
- * Після створення бізнесу запрошуємо ФОП переглянути список і прибрати
- * банки, якими він не користується.
+ * Після створення Business + Account запрошуємо ФОП переглянути список і
+ * прибрати банки, якими він не користується.
  *
- * **Чому query-param trigger, а не localStorage flag**:
- *  - One-time UX: показ після claim → користувач або діє (Перейти до банків),
- *    або dismiss-ить → query-param знімається. На наступному відкритті
- *    /business/{slug} param відсутній → banner не з'являється.
- *  - Stateless: без localStorage-flag-у нема "кому показували / кому ні"
- *    state-management, який треба синхронізувати між browser-сесіями.
- *  - Source-of-truth — URL: shareable link з banner-ом працює (хоча й
- *    edge-case), і back-button навігації behave-ять prediктабельно.
+ * **Query-param trigger, не localStorage flag**:
+ *  - One-time UX: показ після claim → користувач діє або dismiss-ить →
+ *    query-param знімається; на наступному відкритті banner не з'являється.
+ *  - Stateless: без localStorage-flag-у нема cross-session-state-management.
+ *  - Source-of-truth — URL: back-button поведінка predictable.
  *
- * **`router.replace` без `completed-from` для dismiss**: видаляємо param
- * без створення history-entry (`replace`, не `push`) — back-button не
- * "назад до banner-варіанту URL". Pathname зберігаємо як є; preserve-имо
- * інші query-params (наприклад, якщо буде feature-flag з `?debug=...`).
- *
- * **`<a href="#banks">` для scroll-to-section**: native browser anchor
- * smooth-scroll-ить (за CSS `scroll-behavior: smooth` у root-layout або
- * default snapping). Жодного JS — anchor стандартний. Якщо `id="banks"`
- * на target-section відсутній (regression), anchor noop — banner не
- * crash-ається.
+ * **Cross-page CTA**: clicking "Перейти до банків" робить `router.push` на
+ * `/business/{slug}#banks`. Native anchor у `<a href>` дав би smooth-scroll
+ * у тій самій сторінці, але banks-section живе на business-page-і, не
+ * per-account-page-і. Next-Link не підтримує hash-anchor одночасно з
+ * scroll-restoration. `router.push` з фрагментом — найпростіший варіант.
  */
-export default function CompletedFromLandingBanner() {
+export default function CompletedFromLandingBanner({ businessSlug }: Props) {
     const router = useRouter();
     const pathname = usePathname();
     const searchParams = useSearchParams();
@@ -53,6 +56,10 @@ export default function CompletedFromLandingBanner() {
         router.replace(query ? `${pathname}?${query}` : pathname);
     };
 
+    const handleNavigateToBanks = (): void => {
+        router.push(`/business/${businessSlug}#banks`);
+    };
+
     return (
         <div
             role="status"
@@ -62,7 +69,7 @@ export default function CompletedFromLandingBanner() {
             <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
                     <h2 className="text-foreground text-base font-semibold">
-                        Дані з лендінгу збережено
+                        Бізнес і рахунок збережено з лендінгу
                     </h2>
                     <p className="text-muted-foreground mt-2 text-sm">
                         За замовчуванням бізнес приймає всі 11 банків.
@@ -70,7 +77,12 @@ export default function CompletedFromLandingBanner() {
                         використовуєте.
                     </p>
                     <div className="mt-4">
-                        <UiButton as="a" href="#banks" variant="outline" size="sm">
+                        <UiButton
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={handleNavigateToBanks}
+                        >
                             Перейти до банків
                         </UiButton>
                     </div>

@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { UserBillingSchema } from '../contracts/payments';
 import { DEFAULT_USER_ROLE, USER_ROLES } from '../enums/user-role';
+import { validateSameOriginPath } from '../utils/path';
 import { objectIdSchema } from '../validation/common';
 
 export const UserProviderSchema = z.object({
@@ -18,6 +19,11 @@ export const UserProfileDataSchema = z.object({
 export const UserExecutionsSchema = z.object({
     balance: z.number().int().min(0),
     freeReportUsed: z.boolean(),
+});
+
+export const UserProfileCompletionRemindersSchema = z.object({
+    firstReminderSentAt: z.coerce.date().nullable(),
+    finalWarningSentAt: z.coerce.date().nullable(),
 });
 
 export const UserSchema = z.object({
@@ -47,6 +53,14 @@ export const UserSchema = z.object({
     billing: UserBillingSchema.nullable().optional(),
     termsAcceptedAt: z.coerce.date().nullable().optional(),
     termsVersion: z.string().nullable().optional(),
+    pendingPostLoginTarget: z
+        .string()
+        .refine(validateSameOriginPath, { message: 'INVALID_REDIRECT_TARGET' })
+        .optional(),
+    profileCompletionReminders: UserProfileCompletionRemindersSchema.default({
+        firstReminderSentAt: null,
+        finalWarningSentAt: null,
+    }),
 });
 
 export const UserProfileSchema = UserSchema.pick({
@@ -61,6 +75,7 @@ export const UserProfileSchema = UserSchema.pick({
     accountDeletionRequestedAt: true,
     billing: true,
     termsVersion: true,
+    pendingPostLoginTarget: true,
 });
 
 export type User = z.infer<typeof UserSchema>;

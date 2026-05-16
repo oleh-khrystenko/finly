@@ -7,77 +7,64 @@ export const INVOICE_UNDO_TIMEOUT_MS = 5000;
 
 interface Args {
     businessSlug: string;
+    accountSlug: string;
     invoiceSlug: string;
     /**
      * Викликається відразу після scheduling — caller робить optimistic
-     * redirect (наприклад, `router.replace('/business/{slug}#invoices')`).
+     * redirect (наприклад, `router.replace('/business/{slug}/account/{accountSlug}')`).
      */
     onScheduled: () => void;
     /**
-     * User-initiated undo — caller повертає на cabinet інвойсу
-     * (`router.replace('/business/{slug}/invoice/{invoiceSlug}')`).
+     * User-initiated undo — caller повертає на cabinet інвойсу.
      */
     onCancelled: () => void;
 }
 
 /**
- * Sprint 4 §4.6 — той самий 5s frontend-Undo patern, що Sprint 3
- * `scheduleDeleteWithUndo`, адаптований під invoice-flow.
+ * Sprint 4 §4.6 + Sprint 9 §SP-10 — 5s frontend-Undo patern для invoice-delete.
  *
- * **Архітектурні аспекти ідентичні Sprint 3** — timer ID у closure (не
- * React ref, бо cabinet-page розмонтовується через optimistic redirect),
- * sonner toast queue живе у root layout, browser-unload вб'є setTimeout
- * автоматично.
+ * **Sprint 9 signature update**: 3-арг `(businessSlug, accountSlug, invoiceSlug)`
+ * замість 2-арг. URL `/businesses/me/{biz}/accounts/{acc}/invoices/{inv}` —
+ * `accountSlug` обовʼязковий для DELETE.
  *
- * **Optimistic UI removal на list.** `pendingInvoiceDeletesStore` отримує
- * `(businessSlug, invoiceSlug)` відразу — `InvoicesSection` filter-ить
- * відповідний key з UI до того, як 5s timer спрацює. Без цього: redirect
- * на бізнес-сторінку → fresh fetch invoices → бачимо інвойс ще присутнім
- * у списку, попри що user натиснув "Видалити".
+ * **Архітектурні аспекти ідентичні Sprint 3/4**: timer ID у closure (не React
+ * ref), sonner toast queue у root layout, browser-unload вб'є setTimeout.
  *
- * **Lifecycle pendingInvoiceDeletes:**
- *   - `add(...)` синхронно перед setTimeout — UI миттєво ховає інвойс.
- *   - User cancel (toast button) → `remove(...)` + clearTimeout +
- *     `onCancelled` callback (caller redirect-ить назад на cabinet).
- *   - Timer fire success → key **ЗАЛИШАЄТЬСЯ** у store до browser-unload
- *     (той самий інваріант, що Sprint 3): list може тримати stale items[]
- *     із попереднього fetch — видалення key зі store відкрило б filter і
- *     повернуло stale-entry у UI попри те, що backend його видалив.
- *     Subsequent navigation/refetch принесе свіжий список без інвойсу —
- *     filter природно стане no-op.
- *   - Timer fire failure → `remove(...)` повертає інвойс у UI + toast.error
- *     з mapped code.
+ * **Lifecycle pendingInvoiceDeletes:** add синхронно перед setTimeout; success
+ * → key лишається у store до browser-unload (захист від stale-item re-show);
+ * failure → remove + toast.error з mapped code.
  */
 export function scheduleInvoiceDeleteWithUndo({
     businessSlug,
+    accountSlug,
     invoiceSlug,
     onScheduled,
     onCancelled,
 }: Args): void {
-    // Optimistic remove з list UI ВІДРАЗУ.
-    usePendingInvoiceDeletesStore.getState().add(businessSlug, invoiceSlug);
+    usePendingInvoiceDeletesStore
+        .getState()
+        .add(businessSlug, accountSlug, invoiceSlug);
 
     const timerId = setTimeout(() => {
-        void deleteInvoice(businessSlug, invoiceSlug).catch((err: unknown) => {
-            // Failure path — повертаємо інвойс у UI; toast з mapped code.
-            // Success (no-catch) НЕ remove-ить key навмисно — див.
-            // "Lifecycle" у JSDoc вище.
-            usePendingInvoiceDeletesStore
-                .getState()
-                .remove(businessSlug, invoiceSlug);
-            const code =
-                err instanceof AxiosError
-                    ? ((
-                          err.response?.data as
-                              | { error?: { code?: string } }
-                              | undefined
-                      )?.error?.code ?? 'unknown')
-                    : 'unknown';
-            toast.error(getApiMessage(code, 'invoices'));
-        });
+        void deleteInvoice(businessSlug, accountSlug, invoiceSlug).catch(
+            (err: unknown) => {
+                usePendingInvoiceDeletesStore
+                    .getState()
+                    .remove(businessSlug, accountSlug, invoiceSlug);
+                const code =
+                    err instanceof AxiosError
+                        ? ((
+                              err.response?.data as
+                                  | { error?: { code?: string } }
+                                  | undefined
+                          )?.error?.code ?? 'unknown')
+                        : 'unknown';
+                toast.error(getApiMessage(code, 'invoices'));
+            }
+        );
     }, INVOICE_UNDO_TIMEOUT_MS);
 
-    const toastId = toast(`Рахунок «${invoiceSlug}» буде видалено`, {
+    const toastId = toast(`Інвойс «${invoiceSlug}» буде видалено`, {
         duration: INVOICE_UNDO_TIMEOUT_MS,
         action: {
             label: 'Скасувати',
@@ -85,7 +72,7 @@ export function scheduleInvoiceDeleteWithUndo({
                 clearTimeout(timerId);
                 usePendingInvoiceDeletesStore
                     .getState()
-                    .remove(businessSlug, invoiceSlug);
+                    .remove(businessSlug, accountSlug, invoiceSlug);
                 toast.dismiss(toastId);
                 toast.message('Видалення скасовано');
                 onCancelled();

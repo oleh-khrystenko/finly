@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import { EmailService } from './email.service';
+import { EMAIL_TEXT } from './translations';
 
 jest.mock('../../config/env', () => ({
     ENV: {
@@ -10,6 +11,7 @@ jest.mock('../../config/env', () => ({
         RESEND_FROM_EMAIL: 'Finly <test@resend.dev>',
         WEB_URL: 'http://localhost:3000',
         ACCOUNT_DELETION_GRACE_DAYS: 2,
+        ORPHAN_CLEANUP_DELETION_DAYS: 7,
     },
 }));
 
@@ -231,6 +233,149 @@ describe('EmailService', () => {
                 emailService.sendDeletionConfirmation({
                     email,
                     deletionDate,
+                })
+            ).rejects.toThrow(InternalServerErrorException);
+        });
+    });
+
+    describe('sendProfileCompletionReminder (Sprint 12 §12.1b)', () => {
+        const user = { email: 'fop@example.com' };
+
+        const buildBusiness = (name: string) => ({ name });
+
+        it('single-business render uses singleSubject and contains business name in body', async () => {
+            await emailService.sendProfileCompletionReminder({
+                user,
+                businesses: [buildBusiness('ФОП Іваненко')],
+            });
+
+            expect(sendSpy).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    to: 'fop@example.com',
+                    subject: 'Завершіть налаштування акаунту Finly',
+                })
+            );
+
+            const html = getRenderedHtml();
+            expect(html).toContain('«ФОП Іваненко»');
+            expect(html).toContain('бізнес «ФОП Іваненко»');
+            expect(html).toContain('Заповнити профіль');
+            expect(html).toContain('7 днів');
+            expect(html).toContain(
+                'http://localhost:3000/profile?mode=new&amp;next=/business'
+            );
+        });
+
+        it('multi-business (3) render uses few-form "бізнеси" and lists all names', async () => {
+            await emailService.sendProfileCompletionReminder({
+                user,
+                businesses: [
+                    buildBusiness('BizA'),
+                    buildBusiness('BizB'),
+                    buildBusiness('BizC'),
+                ],
+            });
+
+            const html = getRenderedHtml();
+            expect(html).toContain('3 бізнеси');
+            expect(html).toContain('«BizA», «BizB», «BizC»');
+            expect(html).toContain('рахунки');
+            expect(html).not.toContain('рахунків');
+        });
+
+        it('multi-business (5) render uses many-form "бізнесів" and "рахунків"', async () => {
+            await emailService.sendProfileCompletionReminder({
+                user,
+                businesses: [
+                    buildBusiness('Biz1'),
+                    buildBusiness('Biz2'),
+                    buildBusiness('Biz3'),
+                    buildBusiness('Biz4'),
+                    buildBusiness('Biz5'),
+                ],
+            });
+
+            const html = getRenderedHtml();
+            expect(html).toContain('5 бізнесів');
+            expect(html).toContain('рахунків');
+        });
+
+        it('throws InternalServerErrorException when Resend fails', async () => {
+            sendSpy.mockResolvedValue({ error: { message: 'Send failed' } });
+
+            await expect(
+                emailService.sendProfileCompletionReminder({
+                    user,
+                    businesses: [buildBusiness('ФОП Іваненко')],
+                })
+            ).rejects.toThrow(InternalServerErrorException);
+        });
+    });
+
+    describe('sendProfileCompletionFinalWarning (Sprint 12 §12.1b)', () => {
+        const user = { email: 'fop@example.com' };
+
+        const buildBusiness = (name: string) => ({ name });
+
+        it('single-business render uses singleSubject and contains "Це останнє нагадування"', async () => {
+            await emailService.sendProfileCompletionFinalWarning({
+                user,
+                businesses: [buildBusiness('ФОП Іваненко')],
+            });
+
+            expect(sendSpy).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    to: 'fop@example.com',
+                    subject: 'Останнє нагадування про незаповнений профіль',
+                })
+            );
+
+            const html = getRenderedHtml();
+            expect(html).toContain('Завтра бізнес «ФОП Іваненко»');
+            expect(html).toContain('Це останнє нагадування');
+            expect(html).toContain('Заповнити профіль');
+        });
+
+        it('multi-business (3) render uses few-form "бізнеси" and lists all names', async () => {
+            await emailService.sendProfileCompletionFinalWarning({
+                user,
+                businesses: [
+                    buildBusiness('BizA'),
+                    buildBusiness('BizB'),
+                    buildBusiness('BizC'),
+                ],
+            });
+
+            const html = getRenderedHtml();
+            expect(html).toContain('Завтра 3 бізнеси');
+            expect(html).toContain('«BizA», «BizB», «BizC»');
+        });
+
+        it('copy-strings contain no exclamation marks (tone classic-polite)', () => {
+            const reminder = EMAIL_TEXT.profileCompletion.reminder;
+            const finalWarning = EMAIL_TEXT.profileCompletion.finalWarning;
+            const allText = [
+                reminder.singleSubject,
+                reminder.multiSubject,
+                reminder.cta,
+                reminder.singleBody('Біз', 7),
+                reminder.multiBody(['A', 'B', 'C'], 7),
+                finalWarning.singleSubject,
+                finalWarning.multiSubject,
+                finalWarning.cta,
+                finalWarning.singleBody('Біз'),
+                finalWarning.multiBody(['A', 'B', 'C']),
+            ].join('\n');
+            expect(allText).not.toMatch(/[!]/);
+        });
+
+        it('throws InternalServerErrorException when Resend fails', async () => {
+            sendSpy.mockResolvedValue({ error: { message: 'Send failed' } });
+
+            await expect(
+                emailService.sendProfileCompletionFinalWarning({
+                    user,
+                    businesses: [buildBusiness('ФОП Іваненко')],
                 })
             ).rejects.toThrow(InternalServerErrorException);
         });

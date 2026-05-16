@@ -1,6 +1,7 @@
 'use client';
 
 import {
+    BANK_LABEL,
     BUSINESS_TYPE_LABEL,
     type BankCode,
     type BusinessType,
@@ -29,6 +30,17 @@ interface Props {
         acceptedBanks: BankCode[];
     };
     /**
+     * Nested account view (Sprint 9 §SP-6). Клієнт бачить через який рахунок
+     * іде платіж + `ibanMask` як disambiguator. URL-сегмент `account.slug`
+     * потрібний для QR-endpoint (3-сегментний path).
+     */
+    account: {
+        slug: string;
+        name: string;
+        bankCode: BankCode | null;
+        ibanMask: string;
+    };
+    /**
      * NBU payload-link URLs. **`null` коли invoice expired** — server-side
      * blocks payment-vector після `validUntil < now` (Sprint 4 review fix).
      * Single source of truth: client не запитує QR-зображень коли nbuLinks=null
@@ -42,29 +54,27 @@ interface Props {
 const DATE_LOCALE = 'uk-UA';
 
 /**
- * Sprint 4 §4.7 — публічна сторінка інвойсу. Reusable у двох місцях:
- *   1. Cabinet preview-toggle на `business/{slug}/invoice/{invoiceSlug}` (§4.6).
- *   2. Host-aware route `host-pay/{slug}/{invoiceSlug}` (§4.7).
+ * Sprint 4 §4.7 + Sprint 9 §SP-6 — публічна сторінка інвойсу
+ * `pay.finly.com.ua/{businessSlug}/{accountSlug}/{invoiceSlug}` (3-сегментна).
  *
- * **Layout (Sprint 4 review fix)** — 2 NBU CTAs ("Відкрити в банку" / "Запасний
- * варіант") + 2 QR. 11-bank-grid (як у Sprint 3 `PublicBusinessView`) свідомо
- * прибраний до Sprint 5 розблокування per-bank deep-links: dead-grid із
- * tooltip-only-hint-ом не давав робочого UX (на mobile tooltip invisible) і
- * приховував primary route оплати. Sprint 5 поверне grid у активному вигляді
- * як основний CTA.
+ * Reusable у двох місцях:
+ *   1. Cabinet preview-toggle на
+ *      `business/{slug}/account/{accountSlug}/invoice/{invoiceSlug}`.
+ *   2. Host-aware route `host-pay/{slug}/{accountSlug}/{invoiceSlug}`.
  *
- * Над payment-section:
- *   - Заголовок з amount (`"Рахунок на 1 500,00 ₴"` або `"Рахунок на оплату"`
- *     якщо amount=null).
- *   - Sub-info блок: "Призначення: {purpose}" + "Дійсний до: {date}".
+ * **Sprint 9 §SP-6 — account-sub-info**: heading нижче-text-line містить
+ * `"{BUSINESS_TYPE_LABEL[business.type]} {business.name} через {account.name}
+ * ({BANK_LABEL[bankCode]} {ibanMask})"`. Null-fallback rule (§SP-9):
+ *  - `bankCode === null` → BANK_LABEL-prefix drop-ається, `ibanMask` лишається.
+ *
+ * **Layout** — 2 NBU CTAs + 2 QR. 11-bank-grid свідомо прибраний до Sprint 5
+ * розблокування per-bank deep-links (review fix Sprint 4).
  *
  * **Expired-banner sanity-block** — якщо API повернув `nbuLinks: null`
- * (server-side expiry block), заміщуємо весь payment-flow (CTAs + QR)
- * попередженням "Термін рахунку минув". Раніше client-side `getInvoiceStatus`
- * порівнював `validUntil` з now, але `nbuLinks` все одно прилітали у JSON —
- * weak block (cached link, scraping). Тепер expiry-resolution живе на сервері:
- * `nbuLinks === null` — single source of truth для UI. QR endpoints у такому
- * стані повертають 410 Gone (defense-in-depth).
+ * (server-side expiry block), заміщуємо payment-flow попередженням
+ * "Термін рахунку минув". Server-side single source of truth: `nbuLinks=null`
+ * — UI signal; client сам не порівнює `validUntil` (weak block, cached link,
+ * scraping). QR endpoints у такому стані повертають 410 Gone.
  */
 export default function InvoicePublicView({
     amount,
@@ -73,6 +83,7 @@ export default function InvoicePublicView({
     validUntil,
     invoiceSlug,
     business,
+    account,
     nbuLinks,
     apiBase = '/api',
 }: Props) {
@@ -81,24 +92,33 @@ export default function InvoicePublicView({
         ? `Рахунок на ${formattedAmount}`
         : 'Рахунок на оплату';
 
-    const qrPrimary = `${apiBase}/businesses/public/${encodeURIComponent(business.slug)}/invoices/${encodeURIComponent(invoiceSlug)}/qr/nbu.png?host=primary`;
-    const qrLegacy = `${apiBase}/businesses/public/${encodeURIComponent(business.slug)}/invoices/${encodeURIComponent(invoiceSlug)}/qr/nbu.png?host=legacy`;
+    // §SP-9 null-fallback: bank-label лише на non-null bankCode; ibanMask
+    // unconditional як server-derived disambiguator.
+    const bankLabel =
+        account.bankCode !== null ? BANK_LABEL[account.bankCode] : null;
+    const accountParenthetical = bankLabel
+        ? `(${bankLabel} ${account.ibanMask})`
+        : `(${account.ibanMask})`;
+
+    const qrPath = `${apiBase}/businesses/public/${encodeURIComponent(business.slug)}/account/${encodeURIComponent(account.slug)}/invoices/${encodeURIComponent(invoiceSlug)}/qr/nbu.png`;
+    const qrPrimary = `${qrPath}?host=primary`;
+    const qrLegacy = `${qrPath}?host=legacy`;
 
     return (
         <div className="mx-auto max-w-xl space-y-6 px-4 py-8">
             <header className="space-y-2 text-center">
                 {/*
-                 * `break-words` (overflow-wrap: break-word) — захист від
-                 * довгого user-controlled тексту (`business.name`,
-                 * `paymentPurpose`) на 320px-екрані: без break-rule довгий
-                 * рядок без пробілів дав би horizontal scroll і зламав
-                 * mobile-first layout (responsive policy §1).
+                 * `break-words` — захист від довгого user-controlled тексту
+                 * (`business.name`, `account.name`, `paymentPurpose`) на 320px-
+                 * екрані: без break-rule довгий рядок без пробілів дає
+                 * horizontal scroll і ламає mobile-first layout.
                  */}
                 <h1 className="text-foreground text-2xl font-bold tracking-tight break-words md:text-3xl">
                     {heading}
                 </h1>
                 <p className="text-muted-foreground text-sm break-words">
-                    {BUSINESS_TYPE_LABEL[business.type]} {business.name}
+                    {BUSINESS_TYPE_LABEL[business.type]} {business.name} через{' '}
+                    {account.name} {accountParenthetical}
                 </p>
             </header>
 
@@ -167,13 +187,6 @@ function PaymentSection({
 }) {
     return (
         <div className="space-y-6">
-            {/*
-             * Sprint 4 — 11-bank-grid НЕ показуємо до Sprint 5 розблокування
-             * per-bank deep-links (раніше тут був dead-grid із title="Незабаром"
-             * tooltip-ом, що на mobile invisible). Натомість єдиний universal
-             * NBU CTA + QR — обидва робочі шляхи. Sprint 5 поверне grid у
-             * активному вигляді як primary CTA.
-             */}
             <div className="space-y-3">
                 <h2 className="text-foreground text-center text-base font-semibold">
                     Відкрити в банк-додатку
@@ -206,7 +219,6 @@ function PaymentSection({
                 </p>
             </div>
 
-            {/* 2 QR images */}
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                 <figure className="space-y-2 text-center">
                     <UiQrImage

@@ -12,12 +12,16 @@ import {
     VAT_ALLOWED_TAXATION_SYSTEMS,
     isTaxIdValidForType,
     requiresTaxation,
-    type BusinessWithInvoicesCount,
+    type BusinessWithCounts,
     type CreateBusinessRequest,
     type UpdateBusinessRequest,
 } from '@finly/types';
 
 import { isTransactionsUnsupportedError } from '../../common/mongoose/transactions-unsupported';
+import {
+    Account,
+    type AccountDocument,
+} from '../accounts/schemas/account.schema';
 import {
     InvoiceSlugCounter,
     type InvoiceSlugCounterDocument,
@@ -66,6 +70,8 @@ export class BusinessesService {
     constructor(
         @InjectModel(Business.name)
         private readonly businessModel: Model<BusinessDocument>,
+        @InjectModel(Account.name)
+        private readonly accountModel: Model<AccountDocument>,
         @InjectModel(Invoice.name)
         private readonly invoiceModel: Model<InvoiceDocument>,
         @InjectModel(InvoiceSlugCounter.name)
@@ -81,11 +87,36 @@ export class BusinessesService {
         isBookkeeperMode: boolean
     ): Promise<BusinessDocument> {
         const userObjectId = new Types.ObjectId(userId);
-        const slug = await this.slugGenerator.generateRandomSlug();
 
         const ownership = isBookkeeperMode
             ? { ownerId: null, managers: [userObjectId] }
             : { ownerId: userObjectId, managers: [] as Types.ObjectId[] };
+
+        // Sprint 10 §SP-11 — anon-claim replay через partial-unique-index
+        // `(ownerId, claimIdempotencyKey)`. Pre-check уникає вторинного insert
+        // у happy-path; partial-unique-index ловить race-window між findOne
+        // та create. **Ownership-aware filter** покриває обидва режими:
+        // owned (`ownerId=userId`) і bookkeeper (`ownerId=null` +
+        // `managers ∋ userId`); plain `{ownerId: userId}`-filter не
+        // спрацював би для bookkeeper-документа, де ownerId зберігається як
+        // null.
+        const replayFilter = dto.claimIdempotencyKey
+            ? this.buildClaimReplayFilter(
+                  userObjectId,
+                  isBookkeeperMode,
+                  dto.claimIdempotencyKey
+              )
+            : null;
+        if (replayFilter) {
+            const existing = await this.businessModel
+                .findOne(replayFilter)
+                .exec();
+            if (existing) {
+                return existing;
+            }
+        }
+
+        const slug = await this.slugGenerator.generateRandomSlug();
 
         // Sprint 7 §SP-3 — discriminated-union variants `individual` /
         // `organization` фізично не містять taxation-полів у DTO-shape. Mongoose
@@ -114,17 +145,28 @@ export class BusinessesService {
                 ...ownership,
             });
         } catch (err) {
-            // Race condition: SlugGenerator щойно перевірив `slugLower` як
-            // вільний, але паралельний create зайняв його раніше за наш
-            // insert. Для 8-char × 62-alphabet алфавіту вірогідність ≈ 0,
-            // але defensively ловимо MongoServerError 11000 і кидаємо
-            // SLUG_GENERATION_FAILED з логом — це сигнал для алерту, не
-            // user-facing помилка.
-            if (
-                err instanceof Error &&
-                'code' in err &&
-                (err as { code: number }).code === 11000
-            ) {
+            if (isDuplicateKeyError(err)) {
+                const keyPattern = readKeyPattern(err);
+                // Sprint 10 §SP-11 — race-window між pre-check findOne і
+                // insert: concurrent claim з тим самим (userId, key) дойшов
+                // до insert-а раніше. Partial-unique-index блокує другий
+                // insert; ловимо 11000 на саме цьому компоунд-ключі і
+                // повертаємо existing-документ як replay-shape (та сама
+                // contract-семантика, що у pre-check-гілці вище).
+                if (replayFilter && keyPattern.claimIdempotencyKey === 1) {
+                    const existing = await this.businessModel
+                        .findOne(replayFilter)
+                        .exec();
+                    if (existing) {
+                        return existing;
+                    }
+                }
+                // Sprint 3 — race condition: SlugGenerator щойно перевірив
+                // `slugLower` як вільний, але паралельний create зайняв його
+                // раніше за наш insert. Для 8-char × 62-alphabet алфавіту
+                // вірогідність ≈ 0, але defensively ловимо і кидаємо
+                // SLUG_GENERATION_FAILED — сигнал для алерту, не user-facing
+                // помилка.
                 this.logger.error(
                     `Slug collision race for "${slug}" (slugLower=${slug.toLowerCase()})`
                 );
@@ -135,6 +177,20 @@ export class BusinessesService {
             }
             throw err;
         }
+    }
+
+    private buildClaimReplayFilter(
+        userObjectId: Types.ObjectId,
+        isBookkeeperMode: boolean,
+        claimIdempotencyKey: string
+    ): FilterQuery<BusinessDocument> {
+        return isBookkeeperMode
+            ? {
+                  ownerId: null,
+                  managers: userObjectId,
+                  claimIdempotencyKey,
+              }
+            : { ownerId: userObjectId, claimIdempotencyKey };
     }
 
     async getOwnedAndManaged(
@@ -149,29 +205,23 @@ export class BusinessesService {
     }
 
     /**
-     * Sprint 4 §4.4 — list з `invoicesCount` per item у **одному round-trip**
-     * (single aggregation pipeline, не N+1).
+     * Sprint 9 §9.1 — list з **двома counters** `accountsCount` +
+     * `invoicesCount` per item у одному round-trip. Раніше Sprint 4
+     * `getOwnedAndManagedWithInvoicesCount` повертав тільки `invoicesCount`.
      *
-     * **`$lookup` + nested `$count`-pipeline.** Default-варіант
-     * `from/localField/foreignField` повертає повні invoice-документи, після
-     * чого ми робили б `$size` — memory-hungry на businesses з 100+ інвойсів.
-     * Nested-pipeline з `$count`-stage повертає одне число замість масиву
-     * документів — індексний read через `(businessId, createdAt)` index без
-     * read-fan-out-у документів.
+     * **Два `$lookup`-stage:**
+     *  - `accounts` collection через `businessId` → `$count` → `accountsCount`.
+     *  - `invoices` collection напряму через `businessId` (denormalized field,
+     *    Sprint 9 §SP-6 збережений) → `$count` → `invoicesCount`. Прямий
+     *    lookup без trip через accounts.
      *
-     * **Повертає plain-objects (aggregate output), не Mongoose-документи.**
-     * Aggregate output не проходить через Mongoose `toJSON`-transform, тож
-     * `_id → id`-mapping робиться прямо у pipeline (`$addFields` +
-     * `$unset`) — output shape матчить `Business`-entity (`id: string`,
-     * без `_id`/`__v`). Return-type — `BusinessWithInvoicesCount`
-     * (`Business & { invoicesCount }`), а не `BusinessDocument & ...` —
-     * чесний контракт: caller не може покликати document-методи (`.save()`,
-     * `.toJSON()`) на plain-object-i.
+     * **Повертає plain-objects** (aggregate output не проходить через
+     * Mongoose `toJSON`-transform); `_id → id`-mapping робиться у pipeline.
      */
-    async getOwnedAndManagedWithInvoicesCount(
+    async getOwnedAndManagedWithCounts(
         userId: string,
         isBookkeeperMode: boolean
-    ): Promise<BusinessWithInvoicesCount[]> {
+    ): Promise<BusinessWithCounts[]> {
         const userObjectId = new Types.ObjectId(userId);
         const matchFilter = isBookkeeperMode
             ? { ownerId: null, managers: userObjectId }
@@ -181,14 +231,27 @@ export class BusinessesService {
                 { $match: matchFilter },
                 {
                     $lookup: {
+                        from: 'accounts',
+                        let: { bid: '$_id' },
+                        pipeline: [
+                            {
+                                $match: {
+                                    $expr: { $eq: ['$businessId', '$$bid'] },
+                                },
+                            },
+                            { $count: 'count' },
+                        ],
+                        as: '__accountsCount',
+                    },
+                },
+                {
+                    $lookup: {
                         from: 'invoices',
                         let: { bid: '$_id' },
                         pipeline: [
                             {
                                 $match: {
-                                    $expr: {
-                                        $eq: ['$businessId', '$$bid'],
-                                    },
+                                    $expr: { $eq: ['$businessId', '$$bid'] },
                                 },
                             },
                             { $count: 'count' },
@@ -198,6 +261,14 @@ export class BusinessesService {
                 },
                 {
                     $addFields: {
+                        accountsCount: {
+                            $ifNull: [
+                                {
+                                    $arrayElemAt: ['$__accountsCount.count', 0],
+                                },
+                                0,
+                            ],
+                        },
                         invoicesCount: {
                             $ifNull: [
                                 {
@@ -206,31 +277,21 @@ export class BusinessesService {
                                 0,
                             ],
                         },
-                        // Mongoose toJSON-transform не виконується для
-                        // aggregate-output. Робимо `_id → id`-mapping
-                        // explicitly у pipeline.
                         id: { $toString: '$_id' },
-                        // Sprint 4 §4.1 — `invoiceSlugPresetDefault` додане
-                        // після первинної BusinessSchema (May 6). Mongoose
-                        // `default: null` спрацьовує лише на insert; legacy-
-                        // документи (створені до May 6) мають це поле
-                        // відсутнім у БД. `findOne`-path викликає Mongoose
-                        // doc-init, який attach-ить default; aggregation
-                        // bypass-ить Mongoose повністю → undefined leak до
-                        // frontend-у. `BusinessWithInvoicesCount` контракт
-                        // вимагає `SlugPreset | null` (NOT undefined) —
-                        // нормалізуємо тут, щоб aggregation і `getBySlug`
-                        // повертали той самий shape.
-                        invoiceSlugPresetDefault: {
-                            $ifNull: ['$invoiceSlugPresetDefault', null],
-                        },
                     },
                 },
-                { $unset: ['__invoicesCount', '_id', '__v'] },
+                {
+                    $unset: [
+                        '__accountsCount',
+                        '__invoicesCount',
+                        '_id',
+                        '__v',
+                    ],
+                },
                 { $sort: { createdAt: -1 } },
             ])
             .exec();
-        return result as BusinessWithInvoicesCount[];
+        return result as BusinessWithCounts[];
     }
 
     /**
@@ -257,7 +318,7 @@ export class BusinessesService {
         // binding) — single round-trip перед write.
         const dtoTouchesTaxation =
             dto.taxationSystem !== undefined || dto.isVatPayer !== undefined;
-        const dtoTouchesTaxId = dto.requisites?.taxId !== undefined;
+        const dtoTouchesTaxId = dto.taxId !== undefined;
 
         if (dtoTouchesTaxation || dtoTouchesTaxId) {
             const existing = await this.businessModel
@@ -303,7 +364,7 @@ export class BusinessesService {
             }
 
             if (dtoTouchesTaxId) {
-                const newTaxId = dto.requisites!.taxId;
+                const newTaxId = dto.taxId!;
                 if (!isTaxIdValidForType(existingType, newTaxId)) {
                     throw new BadRequestException({
                         code: RESPONSE_CODE.TAX_ID_FORMAT_MISMATCH_TYPE,
@@ -397,7 +458,7 @@ export class BusinessesService {
      * перевів production-Mongo (Atlas) і test-suite (`MongoMemoryReplSet`)
      * на replica-set; dev — три documented шляхи у root README. На
      * misconfigured infra ми ловимо помилку і кидаємо
-     * `CASCADE_DELETE_REQUIRES_REPLICA_SET` 500 — жодного `delete` не
+     * `TRANSACTION_REQUIRES_REPLICA_SET` 500 — жодного `delete` не
      * виконано, ніяких orphan-invoices не дозволяємо.
      *
      * **Pre-count поза транзакцією.** План §4.0 §SP-5: count для
@@ -413,22 +474,22 @@ export class BusinessesService {
      */
     async delete(
         business: BusinessDocument
-    ): Promise<{ affectedInvoices: number }> {
+    ): Promise<{ affectedAccounts: number; affectedInvoices: number }> {
         const businessId = business._id;
-        const affectedInvoices = await this.invoiceModel.countDocuments({
-            businessId,
-        });
+        // Pre-count counters — informative для response toast. Stale by ~tick
+        // на concurrent-create-у не блокує atomic-or-nothing invariant.
+        const [affectedAccounts, affectedInvoices] = await Promise.all([
+            this.accountModel.countDocuments({ businessId }),
+            this.invoiceModel.countDocuments({ businessId }),
+        ]);
 
         const session = await this.connection.startSession();
         try {
             await session.withTransaction(async () => {
+                // Sprint 9 §SP-5 cascade — три collections + business у тій
+                // самій TX. Atomic-or-nothing: або повністю, або нічого.
                 await this.invoiceModel.deleteMany({ businessId }, { session });
-                // Sprint 4 review fix — cascade-видалення counter-doc-ів того
-                // самого business-у. Без цього counter-доки залишалися б
-                // orphan-ами per business _id з-під видаленого бізнесу
-                // (нешкідливо для коректності, бо _id unique і не reuse-ається,
-                // але засмічує колекцію). Атомарно у тій самій TX-сесії —
-                // якщо TX abort-ить, counters лишаються разом з invoices.
+                await this.accountModel.deleteMany({ businessId }, { session });
                 await this.counterModel.deleteMany({ businessId }, { session });
                 await this.businessModel.deleteOne(
                     { _id: businessId },
@@ -443,7 +504,7 @@ export class BusinessesService {
                     }`
                 );
                 throw new InternalServerErrorException({
-                    code: RESPONSE_CODE.CASCADE_DELETE_REQUIRES_REPLICA_SET,
+                    code: RESPONSE_CODE.TRANSACTION_REQUIRES_REPLICA_SET,
                     message:
                         'Cascade delete requires Mongo replica-set; check MONGODB_URI',
                 });
@@ -453,6 +514,24 @@ export class BusinessesService {
             await session.endSession();
         }
 
-        return { affectedInvoices };
+        return { affectedAccounts, affectedInvoices };
     }
+}
+
+function isDuplicateKeyError(err: unknown): err is Error & { code: number } {
+    return (
+        err instanceof Error &&
+        'code' in err &&
+        (err as { code: unknown }).code === 11000
+    );
+}
+
+function readKeyPattern(err: unknown): Record<string, number> {
+    if (err && typeof err === 'object' && 'keyPattern' in err) {
+        const kp = (err as { keyPattern?: unknown }).keyPattern;
+        if (kp && typeof kp === 'object') {
+            return kp as Record<string, number>;
+        }
+    }
+    return {};
 }

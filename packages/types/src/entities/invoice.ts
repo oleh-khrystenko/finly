@@ -5,14 +5,22 @@ import { isWithinNbuCharset } from '../qr/charset';
 import { effectiveLimit, isWithinByteLimit } from '../qr/limits';
 import { objectIdSchema } from '../validation/common';
 import { ibanZod } from '../validation/iban';
-import { individualTaxIdZod } from '../validation/tax-id';
+import { payerTaxIdZod } from '../validation/tax-id';
 import { businessNameSchema } from './business';
 
 /**
- * Інвойс — одноразова платіжка під конкретний бізнес.
+ * Інвойс — одноразова платіжка під конкретний рахунок.
+ *
+ * Sprint 9 §SP-6 — інвойсна нумерація переїхала з business-namespace на
+ * account-namespace. compound-unique `(accountId, slug)` замість `(businessId,
+ * slug)`. `payeeSnapshot.iban` тепер береться з Account на момент create
+ * (recipientName/taxId — далі з Business). `businessId` лишається як
+ * denormalized field (set on insert з `account.businessId`, immutable) — для
+ * прямого cascade-delete-business filter-у і analytical-запитів без зайвого
+ * `$lookup` через accounts.
  *
  * **Що Zod-схема НЕ перевіряє** (свідомо):
- * - Унікальність `(businessId, slug)` — compound unique index у Block 3.
+ * - Унікальність `(accountId, slug)` — compound unique index у Mongoose.
  * - `validUntil >= now` (Sprint 4 review fix) — time-relative rule живе у
  *   `InvoicesService.create`/`.update`, бо Zod-refine отримав би "now" на
  *   момент Read існуючого invoice-а: stale документ із минулим `validUntil`
@@ -21,6 +29,8 @@ import { businessNameSchema } from './business';
  *   enforcement, не schema-level.
  * - Зв'язок `slugPreset === null` ⇔ slug-генератор не використовувався —
  *   аналітичне поле, без data-integrity invariant.
+ * - `accountId.businessId === invoice.businessId` — структурна invariant
+ *   ставиться у service-layer на create, далі immutable.
  *
  * **Length-обмеження `paymentPurpose` derived-from-spec** через `effectiveLimit`
  * (Sprint 2 §2.2). Той самий MIN-по-версіях інваріант, що в `Business.name` /
@@ -45,8 +55,10 @@ const PURPOSE_LIMIT = effectiveLimit('purpose');
  * Хвіст — alphanum **case-sensitive** (62 символи на позицію, ~218T комбінацій).
  * Людська частина — lowercase kebab-case (як у бізнесі).
  *
- * Унікальність — у межах одного `businessId` (compound index у Block 3),
- * не глобально.
+ * Унікальність — у межах одного `accountId` (Sprint 9 §SP-6 — compound index
+ * `(accountId, slug)`), не глобально і не per-business. Two account-и одного
+ * business-у дозволено мати інвойс з однаковим slug-string-ом (per-account
+ * counter-namespace; Privat має inv-001..N, Mono — теж inv-001..M).
  */
 export const invoiceSlugSchema = z
     .string()
@@ -78,6 +90,11 @@ export const invoicePaymentPurposeSchema = z
  * створення інвойсу. Public NBU/QR payload будується з цього snapshot-у, а
  * не з runtime-mutable Business.
  *
+ * **Sprint 9 рефакторинг:** `iban` тепер береться з Account на create
+ * (раніше — з `Business.requisites.iban`). `recipientName` / `taxId` — далі
+ * з Business (юр-property платника, не банківського рахунку). `paymentPurpose`
+ * — як раніше, resolved через `effectiveInvoicePurpose`.
+ *
  * **Чому окремий subdoc.** Payment instruction — атомарна одиниця: усі
  * чотири поля разом утворюють "хто отримує + за що". Embedded subdoc
  * робить snapshot semantically-explicit (vs flat fields, де неясно, які
@@ -92,28 +109,31 @@ export const invoicePaymentPurposeSchema = z
  * **`.nullable()` на entity-level** — для backwards-compat з legacy invoices,
  * створеними до Sprint 4 review fix. `payload-mapper` fallback-ить на
  * `effectiveInvoicePurpose(invoice.paymentPurpose, business.paymentPurposeTemplate)`
- * + live business reqs коли `payeeSnapshot === null`. Migration script
- * `2026-05-08-invoices-payee-snapshot.ts` backfill-ить snapshot для
- * existing invoices з current business state (best-effort на migration
- * boundary; всі post-deploy invoices мають snapshot з-під service-create).
- */
-/**
- * Sprint 8 fix — `recipientName` тепер reuse `businessNameSchema` напряму
- * (раніше — inline `payeeNameSchema`-дублікат). Snapshot kładeться у NBU
- * payload через invoice flow, тому **мусить** мати ту саму charset/length-
- * валідацію, що live business name. Inline-дублікат drift-нув від business
- * після додавання NBU-charset refine: snapshot пропускав emoji у NBU payload,
- * викликаючи 500 на render. Reuse через single-source гарантує, що всі
- * майбутні зміни businessNameSchema автоматично propagat-ять у snapshot.
+ * + live business reqs коли `payeeSnapshot === null`. Sprint 9 production-data
+ * немає (`dropDatabase` вступний контракт) — legacy-fallback застосовується
+ * лише у dev-environment-i.
  *
- * Циркулярна залежність `business ↔ invoice` усунена через перенесення
- * `slugPresetSchema` у `enums/slug-preset.ts` — тепер `invoice.ts` може
- * імпортувати з `business.ts` без зворотного імпорту.
+ * **`taxId: payerTaxIdZod` (Sprint 9 widening):** до Sprint 9 snapshot.taxId
+ * приймав лише `individualTaxIdZod` (10-digit RNOKPP — Sprint 4 era з єдиним
+ * `'fop'`-типом). Sprint 7 розширив enum business-types на 4 значення, серед
+ * них `tov` / `organization` з 8-digit ЄДРПОУ; snapshot.taxId не оновили
+ * синхронно — це залишилось як неявний bug-trap для tov-інвойсів. Sprint 9
+ * вирівнює: `payerTaxIdZod` (union RNOKPP ∪ ЄДРПОУ) — той самий validator, що
+ * `Business.taxId`. Drift-guard: майбутні зміни `Business.taxId` validator-а
+ * автоматично propagate-уються у snapshot.
+ *
+ * **`recipientName` reuse `businessNameSchema`** (Sprint 8 fix): snapshot
+ * kładeться у NBU payload через invoice flow, тому **мусить** мати ту саму
+ * charset/length-валідацію, що live business name. Inline-дублікат drift-нув
+ * від business після додавання NBU-charset refine: snapshot пропускав emoji
+ * у NBU payload, викликаючи 500 на render. Циркулярна залежність
+ * `business ↔ invoice` усунена через перенесення `slugPresetSchema` у
+ * `enums/slug-preset.ts`.
  */
 export const InvoicePayeeSnapshotSchema = z.object({
     recipientName: businessNameSchema,
     iban: ibanZod,
-    taxId: individualTaxIdZod,
+    taxId: payerTaxIdZod,
     paymentPurpose: invoicePaymentPurposeSchema,
 });
 
@@ -122,7 +142,18 @@ export type InvoicePayeeSnapshot = z.infer<typeof InvoicePayeeSnapshotSchema>;
 export const InvoiceSchema = z
     .object({
         id: objectIdSchema,
+        /**
+         * Sprint 9 §SP-6 — invoice nest-иться під Account (`accountId`
+         * required). `businessId` залишається як denormalized field
+         * (set on insert з `account.businessId`, immutable після — Invoice.
+         * accountId immutable, Account.businessId immutable, отже
+         * Invoice.businessId структурно invariant). Тримаємо для прямого
+         * `Invoice.deleteMany({businessId})` у cascade-delete-business flow і
+         * прямих аналітичних запитів "сума інвойсів по бізнесу" без додаткового
+         * `$lookup` через accounts.
+         */
         businessId: objectIdSchema,
+        accountId: objectIdSchema,
         slug: invoiceSlugSchema,
         amount: z.number().int().nonnegative().nullable(),
         amountLocked: z.boolean(),
@@ -136,6 +167,11 @@ export const InvoiceSchema = z
          * режимів. Парний з `slugCounter` (обидва non-null або обидва null);
          * compound-unique partial-index у Mongoose-схемі race-блокує
          * counter-collision на write-path.
+         *
+         * **Sprint 9 namespace-shift:** counter-index переходить з
+         * `(businessId, slugCounterScope, slugCounter)` на `(accountId,
+         * slugCounterScope, slugCounter)`. Privat і Mono account-и одного
+         * бізнесу мають незалежні counter-namespace-и.
          *
          * **`.default(null)` страхує** від retroactive missing-field-on-load
          * для документів, створених до Sprint 4 (Mongoose default спрацьовує

@@ -3,18 +3,14 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { Business, BusinessType } from '@finly/types';
 import RequisitesSection from './RequisitesSection';
 
-const VALID_IBAN = 'UA213223130000026007233566001';
 const VALID_RNOKPP = '1234567899';
 const VALID_EDRPOU = '12345678';
 
 /**
- * Sprint 7 §SP-3 — `Business.taxationSystem` / `isVatPayer` тепер `nullable`,
- * тож фікстура передає `null` напряму без casts. `acceptedBanks` інстанс — щоб
- * TS звузив до `BankCode[]` (а не `string[]`), використовуємо `as const`-tuple.
- *
- * Окремий factory для taxation-required (fop/tov) і non-taxation-required
- * (individual/organization) типів — readability краще, ніж conditional spread
- * у єдиній функції.
+ * Sprint 7 §SP-3 + Sprint 9 §9.2 — Business shape:
+ *  - taxId top-level (раніше requisites.taxId);
+ *  - без iban (живе на Account);
+ *  - без invoiceSlugPresetDefault.
  */
 function makeBusiness(
     overrides: Partial<Business> & { type: BusinessType } = { type: 'fop' }
@@ -27,7 +23,7 @@ function makeBusiness(
         slug: 'IvanEnko',
         slugLower: 'ivanenko',
         name: 'Іваненко',
-        requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+        taxId: VALID_RNOKPP,
         taxationSystem:
             overrides.type === 'fop' || overrides.type === 'tov'
                 ? 'simplified-3'
@@ -37,7 +33,6 @@ function makeBusiness(
         paymentPurposeTemplate: 'Оплата',
         acceptedBanks: ['privatbank'],
         seoIndexEnabled: false,
-        invoiceSlugPresetDefault: null,
         deletedAt: null,
         createdAt: new Date('2026-05-01'),
         updatedAt: new Date('2026-05-01'),
@@ -45,7 +40,7 @@ function makeBusiness(
     return { ...base, ...overrides };
 }
 
-describe('RequisitesSection — Sprint 7 §SP-4 type-aware taxId', () => {
+describe('RequisitesSection — Sprint 7 §SP-4 + Sprint 9 §9.2 (taxId only)', () => {
     it.each([
         ['individual', 'РНОКПП', VALID_RNOKPP, '10'],
         ['fop', 'РНОКПП', VALID_RNOKPP, '10'],
@@ -54,10 +49,7 @@ describe('RequisitesSection — Sprint 7 §SP-4 type-aware taxId', () => {
     ] as const)(
         '%s бізнес — label "%s", maxLength=%s',
         async (type, expectedLabel, validValue, expectedMaxLength) => {
-            const business = makeBusiness({
-                type,
-                requisites: { iban: VALID_IBAN, taxId: validValue },
-            });
+            const business = makeBusiness({ type, taxId: validValue });
             render(
                 <RequisitesSection business={business} onSave={jest.fn()} />
             );
@@ -95,10 +87,7 @@ describe('RequisitesSection — Sprint 7 §SP-4 type-aware taxId', () => {
 
     it('tov валідатор приймає 8-digit ЄДРПОУ', async () => {
         const onSave = jest.fn().mockResolvedValue(undefined);
-        const business = makeBusiness({
-            type: 'tov',
-            requisites: { iban: VALID_IBAN, taxId: VALID_EDRPOU },
-        });
+        const business = makeBusiness({ type: 'tov', taxId: VALID_EDRPOU });
         render(<RequisitesSection business={business} onSave={onSave} />);
 
         fireEvent.click(screen.getByLabelText('Редагувати: ЄДРПОУ'));
@@ -108,9 +97,7 @@ describe('RequisitesSection — Sprint 7 §SP-4 type-aware taxId', () => {
         fireEvent.click(screen.getByText('Зберегти'));
 
         await waitFor(() => {
-            expect(onSave).toHaveBeenCalledWith({
-                requisites: { iban: VALID_IBAN, taxId: '87654321' },
-            });
+            expect(onSave).toHaveBeenCalledWith({ taxId: '87654321' });
         });
     });
 });

@@ -12,17 +12,43 @@ import {
     UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { MAGIC_LINK_PURPOSE, type MagicLinkPurpose } from '@finly/types';
+import {
+    MAGIC_LINK_PURPOSE,
+    type LandingDraft,
+    type MagicLinkPurpose,
+} from '@finly/types';
 import Redis from 'ioredis';
 
 import { REDIS_CLIENT } from '../../common/modules/redis.module';
 import { RedisCounterService } from '../../common/services/redis-counter.service';
 import { ENV, parseLockoutThresholds } from '../../config/env';
+import { AvatarService } from '../users/avatar.service';
 import { UserDocument } from '../users/schemas/user.schema';
 import { UsersService } from '../users/users.service';
 import { EmailService } from '../email/email.service';
-import { StorageService } from '../storage/storage.service';
 import { GoogleValidatedUser } from './strategies/google.strategy';
+
+/**
+ * Sprint 10 §SP-7/§SP-11/§SP-12 — anon-claim sibling-fields у magic-link
+ * payload. Усі три optional. Cross-field-coexistence (`landingDraft ↔
+ * claimIdempotencyKey`) забезпечена `SendMagicLinkSchema`-refine на write-side,
+ * service отримує уже-валідовані pair-и; `termsVersion` — окремий optional-
+ * field без cross-coupling.
+ */
+export interface SendMagicLinkOptions {
+    landingDraft?: LandingDraft;
+    claimIdempotencyKey?: string;
+    termsVersion?: string;
+}
+
+interface MagicLinkPayload {
+    email: string;
+    purpose: MagicLinkPurpose;
+    redirectTo?: string;
+    landingDraft?: LandingDraft;
+    claimIdempotencyKey?: string;
+    termsVersion?: string;
+}
 
 interface TokenPair {
     accessToken: string;
@@ -46,7 +72,7 @@ export class AuthService {
         private readonly jwtService: JwtService,
         private readonly usersService: UsersService,
         private readonly emailService: EmailService,
-        private readonly storageService: StorageService,
+        private readonly avatarService: AvatarService,
         @Inject(REDIS_CLIENT) private readonly redis: Redis,
         private readonly redisCounter: RedisCounterService
     ) {}
@@ -171,18 +197,20 @@ export class AuthService {
         // Re-upload external Google avatar to R2 synchronously. The sync path
         // adds ~300-800ms to the callback but avoids a URL jump after login.
         // Failure is non-critical — the external URL remains as a functional
-        // fallback and the next login retries.
-        if (
-            user.profile.avatar &&
-            !this.storageService.isR2Url(user.profile.avatar)
-        ) {
+        // fallback and the next login retries. R2-vs-external decision lives
+        // inside AvatarService (Sprint 13) — AuthService no longer touches
+        // StorageService directly.
+        if (user.profile.avatar) {
             try {
-                const r2Url = await this.storageService.reUploadExternalAvatar(
+                const r2Url = await this.avatarService.syncExternalAvatar(
                     user.id as string,
                     user.profile.avatar
                 );
-                user.profile.avatar = r2Url;
-                await user.save();
+                if (r2Url) {
+                    // Local document reflects the persisted state — AvatarService
+                    // already wrote the new URL.
+                    user.profile.avatar = r2Url;
+                }
             } catch (err) {
                 this.logger.warn(
                     `Failed to re-upload Google avatar for user ${user.id as string}: ${(err as Error).message}`
@@ -202,7 +230,8 @@ export class AuthService {
     async sendMagicLink(
         email: string,
         purpose: MagicLinkPurpose = MAGIC_LINK_PURPOSE.LOGIN,
-        redirectTo?: string
+        redirectTo?: string,
+        options?: SendMagicLinkOptions
     ): Promise<void> {
         const normalizedEmail = email.trim().toLowerCase();
         const rateLimitKey = `ratelimit:magic:${normalizedEmail}`;
@@ -220,23 +249,57 @@ export class AuthService {
             throw new TooManyRequestsException();
         }
 
-        // Anti-spam dedup: skip sending if recent token exists for same email+purpose
+        // Anti-spam dedup + Sprint 10 §SP-8 overwrite-flow.
         const dedupKey = `magic_dedup:${normalizedEmail}:${purpose}`;
-        const existingDedup = await this.redis.get(dedupKey);
-        if (existingDedup) {
-            return;
+        const existingDedupToken = await this.redis.get(dedupKey);
+        if (existingDedupToken) {
+            const existingMagicKey = `magic:${existingDedupToken}`;
+            const existingRaw = await this.redis.get(existingMagicKey);
+            if (existingRaw) {
+                // Sprint 10 §SP-8 symmetric overwrite/drop трьох sibling-fields:
+                // повний rebuild payload-у з нового request input-у (existing
+                // email/purpose + поточний redirectTo + поточні sibling-fields).
+                // Жоден з трьох НЕ "залипає" — якщо новий запит без поля, воно
+                // зникає з Redis-payload-у; якщо з — overwrite-ується.
+                const existing = JSON.parse(existingRaw) as MagicLinkPayload;
+                const overwritten = this.buildMagicLinkPayload(
+                    existing.email,
+                    existing.purpose,
+                    redirectTo,
+                    options
+                );
+                // KEEPTTL критично: без нього SET reset-нув би TTL і відкрив
+                // vector "n→∞ overwrites продовжують magic-link до нескінченності".
+                await this.redis.set(
+                    existingMagicKey,
+                    JSON.stringify(overwritten),
+                    'KEEPTTL'
+                );
+                // anti-spam invariant збережено: лист повторно НЕ відправляємо.
+                return;
+            }
+            // Race: dedup-key пережив magic-record-у. Структурно неможливо
+            // при env-invariant AUTH_MAGIC_LINK_TTL_MIN * 60 ≥
+            // AUTH_MAGIC_LINK_DEDUP_SEC (fail-fast у config/env.ts). Fall-
+            // through на normal-flow як defense-in-depth.
         }
 
         const token = randomBytes(32).toString('hex');
-        const payload = JSON.stringify({
-            email: normalizedEmail,
+        const payload = this.buildMagicLinkPayload(
+            normalizedEmail,
             purpose,
-            ...(redirectTo && { redirectTo }),
-        });
+            redirectTo,
+            options
+        );
         const magicLinkTtl = ENV.AUTH_MAGIC_LINK_TTL_MIN * 60;
 
         const pipeline = this.redis.pipeline();
-        pipeline.set(`magic:${token}`, payload, 'EX', magicLinkTtl);
+        pipeline.set(
+            `magic:${token}`,
+            JSON.stringify(payload),
+            'EX',
+            magicLinkTtl
+        );
         pipeline.set(dedupKey, token, 'EX', ENV.AUTH_MAGIC_LINK_DEDUP_SEC);
         await pipeline.exec();
 
@@ -248,6 +311,32 @@ export class AuthService {
         });
     }
 
+    private buildMagicLinkPayload(
+        email: string,
+        purpose: MagicLinkPurpose,
+        redirectTo: string | undefined,
+        options: SendMagicLinkOptions | undefined
+    ): MagicLinkPayload {
+        // landingDraft + claimIdempotencyKey мусять coexist — SendMagicLinkSchema
+        // cross-field-refine reject-ить mismatched-pair на write-side, тому
+        // service гарантовано отримує валідну пару або обидва undefined.
+        const hasClaim =
+            options?.landingDraft !== undefined &&
+            options?.claimIdempotencyKey !== undefined;
+        return {
+            email,
+            purpose,
+            ...(redirectTo && { redirectTo }),
+            ...(hasClaim && {
+                landingDraft: options.landingDraft,
+                claimIdempotencyKey: options.claimIdempotencyKey,
+            }),
+            ...(options?.termsVersion && {
+                termsVersion: options.termsVersion,
+            }),
+        };
+    }
+
     async verifyMagicLink(token: string): Promise<
         | {
               user: UserDocument;
@@ -255,6 +344,11 @@ export class AuthService {
               purpose: MagicLinkPurpose;
               deleted?: false;
               accountDeleted?: boolean;
+              rawPayload: {
+                  termsVersion?: string;
+                  landingDraft?: LandingDraft;
+                  claimIdempotencyKey?: string;
+              };
           }
         | {
               deleted: true;
@@ -271,15 +365,21 @@ export class AuthService {
             );
         }
 
-        const { email, purpose } = JSON.parse(raw) as {
-            email: string;
-            purpose: MagicLinkPurpose;
-        };
+        const payload = JSON.parse(raw) as MagicLinkPayload;
+        const { email, purpose } = payload;
 
         if (purpose === MAGIC_LINK_PURPOSE.DELETE_ACCOUNT) {
+            // Sprint 10 — combination `purpose=delete-account + landingDraft`
+            // структурно неможлива (public endpoint reject-ає delete-account
+            // purpose у SendMagicLinkDto). Тому terms-stamp + claim тут не
+            // викликаємо — delete-flow повністю окремий.
             return this.handleDeleteAccountVerification(email);
         }
 
+        // Sprint 13 §13 — verifyMagicLink став механічним: validate + auth-
+        // resolve + tokens. Terms-stamp і landing-claim оркеструє AuthController
+        // на основі `rawPayload`. Інваріант "stamp ДО claim" (Sprint 10 §SP-12)
+        // живе у явному порядку викликів контролера.
         const user = await this.usersService.findOrCreateByEmail(email);
 
         user.lastLoginAt = new Date();
@@ -295,6 +395,11 @@ export class AuthService {
             tokens,
             purpose,
             accountDeleted: user.deletedAt ? true : undefined,
+            rawPayload: {
+                termsVersion: payload.termsVersion,
+                landingDraft: payload.landingDraft,
+                claimIdempotencyKey: payload.claimIdempotencyKey,
+            },
         };
     }
 

@@ -1,153 +1,146 @@
-'use client';
-
-import { BANK_LABEL, type BankCode, type BusinessType } from '@finly/types';
-import { BANK_DISPLAY } from '@/shared/icons';
-import UiQrImage from '@/shared/ui/UiQrImage';
+import { ArrowRight } from 'lucide-react';
+import {
+    BANK_LABEL,
+    type BusinessType,
+    type PublicAccountListItem,
+} from '@finly/types';
+import UiButton from '@/shared/ui/UiButton';
 
 interface Props {
     /**
      * Sprint 7 §SP-5 — `type` лишається у Props для майбутніх SEO-meta /
-     * aria-label use-case-ів (cabinet preview-toggle передає його з cabinet
-     * fetch-у). H1-heading його **не** використовує — Sprint 7 уніфікував
-     * heading до type-нейтрального формулювання.
+     * aria-label use-case-ів. H1-heading його не використовує (тип-нейтральне
+     * формулювання Sprint 7 §SP-5).
      */
     type: BusinessType;
     name: string;
     slug: string;
-    acceptedBanks: BankCode[];
     /**
-     * NBU payload-link URLs (Sprint 3 рішення A2). Тап → ОС ловить через
-     * app-link і відкриває банк-додаток з заповненими реквізитами.
+     * Sprint 9 §SP-4: server-side already відрізнив 0/1/2+ → цей view рендериться
+     * тільки для `accounts.length === 0` (empty-state) або `>= 2` (list-of-cards).
+     * 1-Account випадок резолвиться `redirect()` у Server Component перед render-ом.
      */
-    nbuLinks: { primary: string; legacy: string };
-    /** API endpoint origin для QR-картинок (`/api` для same-origin proxy). */
-    apiBase?: string;
+    accounts: PublicAccountListItem[];
 }
 
 /**
- * Sprint 3 §3.9 + Sprint 7 §SP-5 — публічна вивіска бізнесу. Reusable у двох
- * місцях:
- *   1. Cabinet preview-toggle (Sprint 3 B2 "Перегляд як клієнт").
- *   2. Host-aware route (`app/host-pay/[slug]/page.tsx` через middleware-
- *      rewrite з `pay.finly.com.ua/{slug}`).
+ * Sprint 9 §SP-4 — публічна root-вивіска бізнесу `pay.finly.com.ua/{businessSlug}`.
  *
- * **Sprint 7 §SP-5 — heading type-нейтральний**: `'Платіж на користь {name}'`
- * для всіх 4 типів. До Sprint 7 був `'Оплата на ${BUSINESS_TYPE_LABEL[type]}
- * ${name}'`, але після розширення enum-у до 4 типів цей формат давав
- * лінгвістично незграбні комбінації ("Оплата на фізособа Іваненко"); крім
- * того, назва бізнесу зазвичай вже містить юр-форму ("ФОП Іваненко І.І.",
- * "ТОВ Каса Здоров'я") — type-префікс дублював інформацію. "Платіж на користь
- * {name}" — нейтральне юр-формулювання, що працює для всіх кейсів.
+ * **До Sprint 9** був full-payment view з QR-кодами на business-level (IBAN жив
+ * на Business). **Після Sprint 9** — root-вивіска зі списком рахунків, у якій
+ * клієнт обирає, через який IBAN робити переказ; QR живе глибше — на
+ * per-account-вивісці `pay.finly.com.ua/{businessSlug}/{accountSlug}`.
  *
- * **Type залишається у Props** — SEO meta-tag і aria-label-ам потрібен для
- * `<title>` пошукової видачі ("Оплата на ФОП Іваненко — Finly"); але h1 його
- * не використовує (sprint plan §SP-5 явно фіксує цей trade-off).
+ * **Branching живе у Server Component** (`host-pay/[slug]/page.tsx`):
+ *  - `accounts.length === 0` → render empty-state нижче ("Власник ще не
+ *    налаштував рахунки").
+ *  - `accounts.length === 1` → Next.js `redirect(307)` на
+ *    `/{businessSlug}/{accountSlug}` (відбувається в Server Component, цей view
+ *    не отримує 1-Account-payload).
+ *  - `accounts.length >= 2` → render list-of-cards.
  *
- * Layout (E7 рішення):
- *   - Заголовок "Платіж на користь {name}".
- *   - Сітка 11 generic bank-tile (B1: неактивні, grayscale, з підписом
- *     "Незабаром"). Sprint 5 розблокує per-bank deep-links.
- *   - 2 активні CTA з `nbuLinks.primary`/`.legacy` href — ОС handle через
- *     app-link, відкриває банк з реквізитами (рішення A2).
- *   - 2 QR-картинки на API endpoints (host=primary | legacy).
+ * Чому 307 (а не 308) — `accounts.length === 1` стан **умовно** (ФОП додасть
+ * 2-й рахунок → редірект перестане бути коректним). Chrome агресивно кешує 308
+ * in-memory навіть з `Cache-Control: no-cache`. Деталі — README §SP-4.
+ *
+ * **Null-bankCode UI-rule (§SP-9):** на `bankCode === null` bank-label-row
+ * ховається повністю — без fallback-у на "Невідомий банк". Symmetric до
+ * cabinet `AccountsSection` cards (`features/business-edit/AccountsSection.tsx`).
  */
 export default function PublicBusinessView({
     type: _type,
     name,
     slug,
-    acceptedBanks,
-    nbuLinks,
-    apiBase = '/api',
+    accounts,
 }: Props) {
+    if (accounts.length === 0) {
+        return <EmptyState name={name} />;
+    }
+
     const heading = `Платіж на користь ${name}`;
-
-    const qrPrimary = `${apiBase}/businesses/public/${encodeURIComponent(slug)}/qr/nbu.png?host=primary`;
-    const qrLegacy = `${apiBase}/businesses/public/${encodeURIComponent(slug)}/qr/nbu.png?host=legacy`;
-
     return (
         <div className="mx-auto max-w-xl space-y-8 px-4 py-8">
-            <h1 className="text-foreground text-center text-2xl font-bold tracking-tight md:text-3xl">
-                {heading}
-            </h1>
-
-            <div className="space-y-3">
-                <h2 className="text-foreground text-center text-base font-semibold">
-                    Оберіть банк, з якого бажаєте оплатити
-                </h2>
-                {/* 11 inactive bank tiles (B1). Іконка з `BANK_DISPLAY` map
-                    (`apps/web/src/shared/icons/banks/`). Grayscale + opacity-70
-                    + cursor-not-allowed маркують inactive стан; Sprint 5 розблокує
-                    per-bank deep-links без зміни цього layout. */}
-                <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
-                    {acceptedBanks.map((bank) => {
-                        const Icon = BANK_DISPLAY[bank];
-                        return (
-                            <div
-                                key={bank}
-                                aria-disabled
-                                className="border-border bg-muted/30 text-muted-foreground flex h-20 cursor-not-allowed flex-col items-center justify-center gap-1.5 rounded-md border px-2 text-center opacity-70 grayscale"
-                                title="Незабаром"
-                            >
-                                <div className="size-10">
-                                    <Icon />
-                                </div>
-                                <span className="text-[10px] leading-tight">
-                                    {BANK_LABEL[bank]}
-                                </span>
-                            </div>
-                        );
-                    })}
-                </div>
-            </div>
-
-            {/* 2 active CTAs (A2 + E7). href = NBU payload-link URL.
-                rel="external" — підказка браузеру не пробувати prefetch і
-                не вшивати у history як internal nav (це OS-handle target). */}
-            <div className="space-y-3">
-                <a
-                    href={nbuLinks.primary}
-                    rel="external"
-                    className="bg-primary text-primary-foreground hover:bg-primary/90 flex w-full items-center justify-center rounded-md px-4 py-3 text-sm font-semibold transition-colors"
-                >
-                    Інший банк
-                </a>
-                <a
-                    href={nbuLinks.legacy}
-                    rel="external"
-                    className="border-border text-muted-foreground hover:bg-accent flex w-full items-center justify-center rounded-md border px-4 py-3 text-sm font-medium transition-colors"
-                >
-                    Інший банк (запасний варіант)
-                </a>
-                <p className="text-muted-foreground text-center text-xs">
-                    Якщо ваш банк не відкрився — спробуйте запасний варіант
+            <header className="space-y-2 text-center">
+                <h1 className="text-foreground text-2xl font-bold tracking-tight md:text-3xl">
+                    {heading}
+                </h1>
+                <p className="text-muted-foreground text-sm">
+                    Оберіть рахунок для оплати
                 </p>
-            </div>
+            </header>
 
-            {/* 2 QR images (E7). next/image не використовуємо — re-encode
-                ламає precision raster QR + cross-origin remotePatterns
-                overhead без виграшу (HTTP-кеш на API уже є). */}
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                <figure className="space-y-2 text-center">
-                    <UiQrImage
-                        src={qrPrimary}
-                        alt="QR на основну адресу"
-                        className="border-border mx-auto w-full max-w-[240px] rounded-md border bg-white p-2"
-                    />
-                    <figcaption className="text-muted-foreground text-xs">
-                        Або відскануйте з вашого банк-додатка
-                    </figcaption>
-                </figure>
-                <figure className="space-y-2 text-center">
-                    <UiQrImage
-                        src={qrLegacy}
-                        alt="QR на запасну адресу"
-                        className="border-border mx-auto w-full max-w-[240px] rounded-md border bg-white p-2"
-                    />
-                    <figcaption className="text-muted-foreground text-xs">
-                        Запасний варіант — якщо перший QR не відкрився
-                    </figcaption>
-                </figure>
+            <ul className="space-y-3">
+                {accounts.map((account) => (
+                    <li key={account.slug}>
+                        <AccountCard businessSlug={slug} account={account} />
+                    </li>
+                ))}
+            </ul>
+        </div>
+    );
+}
+
+function AccountCard({
+    businessSlug,
+    account,
+}: {
+    businessSlug: string;
+    account: PublicAccountListItem;
+}) {
+    const href = `/${encodeURIComponent(businessSlug)}/${encodeURIComponent(account.slug)}`;
+    // §SP-9 null-fallback rule — bank-label рендериться лише на non-null
+    // bankCode; ibanMask завжди показуємо як disambiguator.
+    const bankLabel =
+        account.bankCode !== null ? BANK_LABEL[account.bankCode] : null;
+    // Pattern symmetric Sprint 9 §9.2 cabinet `features/business-edit/
+    // AccountsSection > AccountCard`: card — звичайний `<div>`-контейнер,
+    // navigation інкапсульована у `UiButton as="link"` всередині (повна
+    // ширина, повноцінний CTA). Raw `<a href>` на цілу картку був би
+    // порушенням `docs/conventions/ui-primitives.md` §1 (UiButton як єдина
+    // точка стилізації для всіх інтерактивних посилань). UiButton-only
+    // також сидрить single-anchor-per-tap UX (mobile: уся ширина CTA —
+    // комфортна tap-target).
+    return (
+        <div className="border-border bg-card flex flex-col gap-3 rounded-lg border p-4">
+            <div className="flex min-w-0 flex-col gap-0.5">
+                <span className="text-foreground truncate text-base font-semibold">
+                    {account.name}
+                </span>
+                {bankLabel !== null && (
+                    <span className="text-muted-foreground truncate text-xs">
+                        {bankLabel}
+                    </span>
+                )}
+                <span className="text-muted-foreground font-mono text-xs">
+                    {account.ibanMask}
+                </span>
             </div>
+            <UiButton
+                as="link"
+                href={href}
+                variant="filled"
+                size="md"
+                IconRight={<ArrowRight />}
+                className="w-full justify-center"
+            >
+                Сплатити
+            </UiButton>
+        </div>
+    );
+}
+
+function EmptyState({ name }: { name: string }) {
+    return (
+        <div className="mx-auto max-w-xl px-4 py-16 text-center">
+            <h1 className="text-foreground text-2xl font-bold tracking-tight md:text-3xl">
+                Платіж на користь {name}
+            </h1>
+            <p className="text-muted-foreground mt-4 text-sm">
+                Власник ще не налаштував жодного рахунку для прийому платежів.
+            </p>
+            <p className="text-muted-foreground mt-2 text-sm">
+                Зверніться до отримувача за реквізитами.
+            </p>
         </div>
     );
 }

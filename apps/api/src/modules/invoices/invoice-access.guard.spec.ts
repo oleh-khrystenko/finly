@@ -1,16 +1,16 @@
 import { ExecutionContext, NotFoundException } from '@nestjs/common';
 import { Types } from 'mongoose';
 
-import type { BusinessDocument } from '../businesses/schemas/business.schema';
+import type { AccountDocument } from '../accounts/schemas/account.schema';
 import { InvoiceAccessGuard } from './invoice-access.guard';
 import type { InvoicesService } from './invoices.service';
 import type { InvoiceDocument } from './schemas/invoice.schema';
 
-describe('InvoiceAccessGuard (Sprint 4 §4.2)', () => {
+describe('InvoiceAccessGuard (Sprint 9 §SP-6 — lookup by accountId)', () => {
     let invoicesService: jest.Mocked<Pick<InvoicesService, 'getBySlug'>>;
     let guard: InvoiceAccessGuard;
-    const businessId = new Types.ObjectId();
-    const business = { _id: businessId } as BusinessDocument;
+    const accountId = new Types.ObjectId();
+    const account = { _id: accountId } as AccountDocument;
 
     /** Helper: побудувати ExecutionContext stub з кастомним request. */
     const buildContext = (
@@ -32,7 +32,7 @@ describe('InvoiceAccessGuard (Sprint 4 §4.2)', () => {
         );
     });
 
-    it('успіх: lookup за (business._id, invoiceSlug) → attach request.invoice', async () => {
+    it('успіх: lookup за (account._id, invoiceSlug) → attach request.invoice', async () => {
         const invoice = {
             _id: new Types.ObjectId(),
             slug: 'inv-001-aB3xQ9k7',
@@ -40,15 +40,15 @@ describe('InvoiceAccessGuard (Sprint 4 §4.2)', () => {
         invoicesService.getBySlug.mockResolvedValue(invoice);
 
         const request = {
-            business,
-            params: { slug: 'IvanEnko', invoiceSlug: 'inv-001-aB3xQ9k7' },
+            account,
+            params: { invoiceSlug: 'inv-001-aB3xQ9k7' },
         };
         const ctx = buildContext(request);
 
         const result = await guard.canActivate(ctx);
         expect(result).toBe(true);
         expect(invoicesService.getBySlug).toHaveBeenCalledWith(
-            businessId,
+            accountId,
             'inv-001-aB3xQ9k7'
         );
         expect(request).toMatchObject({ invoice });
@@ -57,37 +57,37 @@ describe('InvoiceAccessGuard (Sprint 4 §4.2)', () => {
     it('case-sensitive: lookup передає exact slug без to-lower', async () => {
         invoicesService.getBySlug.mockResolvedValue(null);
         const request = {
-            business,
-            params: { invoiceSlug: 'INV-001-aB3xQ9k7' }, // uppercase у середині
+            account,
+            params: { invoiceSlug: 'INV-001-aB3xQ9k7' },
         };
         await expect(
             guard.canActivate(buildContext(request))
         ).rejects.toBeInstanceOf(NotFoundException);
         expect(invoicesService.getBySlug).toHaveBeenCalledWith(
-            businessId,
-            'INV-001-aB3xQ9k7' // ← без модифікації; SP-8: case-sensitive
+            accountId,
+            'INV-001-aB3xQ9k7'
         );
     });
 
-    it('програмерська помилка: відсутній request.business → throw Error (не 404)', async () => {
+    it('програмерська помилка: відсутній request.account → throw Error (не 404)', async () => {
         const request = {
-            // ⚠ business undefined — попередній guard не запущений
+            // ⚠ account undefined — попередній guard не запущений
             params: { invoiceSlug: 'foo' },
         };
         await expect(guard.canActivate(buildContext(request))).rejects.toThrow(
-            /requires BusinessAccessGuard/
+            /requires AccountAccessGuard/
         );
     });
 
     it('відсутній invoiceSlug у params → 404 INVOICE_NOT_FOUND', async () => {
-        const request = { business, params: {} };
+        const request = { account, params: {} };
         await expect(
             guard.canActivate(buildContext(request))
         ).rejects.toBeInstanceOf(NotFoundException);
     });
 
     it('порожній invoiceSlug → 404', async () => {
-        const request = { business, params: { invoiceSlug: '' } };
+        const request = { account, params: { invoiceSlug: '' } };
         await expect(
             guard.canActivate(buildContext(request))
         ).rejects.toBeInstanceOf(NotFoundException);
@@ -96,7 +96,7 @@ describe('InvoiceAccessGuard (Sprint 4 §4.2)', () => {
     it('invoice не знайдено → 404 INVOICE_NOT_FOUND', async () => {
         invoicesService.getBySlug.mockResolvedValue(null);
         const request = {
-            business,
+            account,
             params: { invoiceSlug: 'missing-aaaaaaaa' },
         };
         await expect(

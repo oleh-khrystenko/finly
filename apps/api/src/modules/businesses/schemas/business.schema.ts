@@ -3,11 +3,9 @@ import { HydratedDocument, Types } from 'mongoose';
 import {
     BUSINESS_TYPES,
     MVP_BANKS,
-    SLUG_PRESETS,
     TAXATION_SYSTEMS,
     type BankCode,
     type BusinessType,
-    type SlugPreset,
     type TaxationSystem,
 } from '@finly/types';
 
@@ -16,23 +14,11 @@ import { applyJsonTransform } from '../../../common/mongoose/json-transform';
 export type BusinessDocument = HydratedDocument<Business>;
 
 /**
- * Реквізити бізнесу. У MVP підтримуємо лише ФОП-варіант (`iban` + `taxId`).
- * Розширення під ТОВ/ВАТ (`edrpou`, `vatNumber`, …) — Phase 1.5+; для цього
- * subdoc живе як окремий клас, а не inline-fields у `Business`.
- *
- * Format-валідація IBAN/ІПН (MOD-97, control-digit) виконується Zod-шаром
- * `@finly/types/validation` на write-paths (DTO, форми). Mongoose тут не дублює
- * перевірку — single source of truth уникає розходжень при майбутніх змінах
- * правил.
+ * Sprint 9 §SP-1 — `requisites`-subdoc видалено. `iban` переїхав на окрему
+ * сутність `Account`; `taxId` — top-level поле Business (юр-property платника,
+ * не банківського рахунку). `invoiceSlugPresetDefault` теж переїхав на Account
+ * (інвойсна нумерація per-account, §SP-6).
  */
-@Schema({ _id: false })
-class BusinessRequisites {
-    @Prop({ required: true, trim: true })
-    iban!: string;
-
-    @Prop({ required: true, trim: true })
-    taxId!: string;
-}
 
 @Schema({ timestamps: true })
 export class Business {
@@ -81,8 +67,15 @@ export class Business {
     @Prop({ required: true, trim: true })
     name!: string;
 
-    @Prop({ type: BusinessRequisites, required: true })
-    requisites!: BusinessRequisites;
+    /**
+     * Sprint 9 §SP-1 — top-level `taxId` (раніше `requisites.taxId`). Format-
+     * валідація (RNOKPP 10-digit з checksum для individual/fop; ЄДРПОУ 8-digit
+     * для tov/organization) — на Zod write-DTO (`payerTaxIdZod` union) +
+     * service-layer cross-check проти document-resident `type` (Sprint 7 §SP-4).
+     * Mongoose не дублює — single source of truth.
+     */
+    @Prop({ required: true, trim: true })
+    taxId!: string;
 
     /**
      * Система оподаткування ФОП / ТОВ. Coupled-валідація з `isVatPayer` (ПДВ
@@ -135,20 +128,6 @@ export class Business {
     seoIndexEnabled!: boolean;
 
     /**
-     * Sprint 4 §4.1 — bizness-level дефолт slug-preset для нових інвойсів.
-     * `null = "не визначено"` → форма створення фолбеком використовує global
-     * system default `simple` (§4.5). Migration не потрібна: `default: null`
-     * на нові documents + Mongoose-load existing-docs дає `undefined` для
-     * відсутнього поля, що Zod entity-схема трактує через `.default(null)`.
-     *
-     * **Чому не дефолт `'simple'` тут**: семантично відрізняти "ФОП явно обрав
-     * simple" від "ФОП ще не торкався налаштування" — потрібно для майбутнього
-     * onboarding-prompt-у у Sprint 6.
-     */
-    @Prop({ type: String, enum: SLUG_PRESETS, default: null })
-    invoiceSlugPresetDefault!: SlugPreset | null;
-
-    /**
      * Soft-delete. Sprint 3 рішення C2 робить hard-delete + 5s frontend-Undo;
      * це поле залишене **навмисно невикористаним** на майбутнє — нульовий
      * coст у схемі, дає опцію передумати без міграції. Якщо у Phase 1.5+
@@ -156,6 +135,20 @@ export class Business {
      */
     @Prop({ type: Date, default: null })
     deletedAt!: Date | null;
+
+    /**
+     * Sprint 10 §SP-11 — anti-duplicate-Business UUID v4 token для anon-claim
+     * flow. Frontend генерує `crypto.randomUUID()` на CTA-click "Зберегти у
+     * кабінет" і прокидає у `POST /businesses/me` (через magic-link Redis-record-у
+     * або напряму на same-device-flow). Backend дедуплікує через partial-unique-
+     * compound-index `(ownerId, claimIdempotencyKey)` нижче.
+     *
+     * **Optional у документі**, бо cabinet-wizard-create НЕ передає key —
+     * поле відсутнє у документі, не входить у `partialFilterExpression`, не
+     * блокує множинні cabinet-create без anon-claim-context-у.
+     */
+    @Prop({ type: String, required: false })
+    claimIdempotencyKey?: string;
 
     // Declared for TypeScript visibility; managed by Mongoose `timestamps: true`.
     createdAt!: Date;
@@ -176,3 +169,19 @@ applyJsonTransform(BusinessSchema);
 BusinessSchema.index({ slugLower: 1 }, { unique: true });
 BusinessSchema.index({ ownerId: 1 }, { sparse: true });
 BusinessSchema.index({ managers: 1 });
+
+// Sprint 10 §SP-11 — partial-unique `(ownerId, claimIdempotencyKey)` для
+// anon-claim dedup. `partialFilterExpression: { claimIdempotencyKey: { $type:
+// 'string' } }` критично: без нього sparse-index плутав би null-key документи
+// (cabinet wizard-create) у один null-bucket → друге wizard-create без anon-
+// claim упало б на 11000. Partial-filter включає тільки документи з
+// claimIdempotencyKey-string-ом — anon-claim-flow єдиний consumer.
+BusinessSchema.index(
+    { ownerId: 1, claimIdempotencyKey: 1 },
+    {
+        unique: true,
+        partialFilterExpression: {
+            claimIdempotencyKey: { $type: 'string' },
+        },
+    }
+);

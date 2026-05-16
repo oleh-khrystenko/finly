@@ -12,7 +12,6 @@ import PrivatbankIcon from './PrivatbankIcon';
 import PumbIcon from './PumbIcon';
 import RaiffeisenIcon from './RaiffeisenIcon';
 import SenseIcon from './SenseIcon';
-import SportbankIcon from './SportbankIcon';
 import UkrgazbankIcon from './UkrgazbankIcon';
 
 export {
@@ -25,7 +24,6 @@ export {
     PumbIcon,
     RaiffeisenIcon,
     SenseIcon,
-    SportbankIcon,
     UkrgazbankIcon,
 };
 
@@ -43,7 +41,6 @@ export const BANK_DISPLAY: Record<BankCode, ComponentType<IconProps>> = {
     oschadbank: OschadbankIcon,
     sense: SenseIcon,
     ukrgazbank: UkrgazbankIcon,
-    sportbank: SportbankIcon,
     izibank: IzibankIcon,
     raiffeisen: RaiffeisenIcon,
     abank: AbankIcon,

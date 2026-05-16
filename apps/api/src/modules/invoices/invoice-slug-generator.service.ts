@@ -32,11 +32,13 @@ import { slugifyPurpose } from './transliterate';
  *   create`) робить collision-protected insert; race-handling — ідентичний
  *   Sprint 3 patern (see SP-1 "Counter behavior" + Ризик #2).
  *
- * **Counter monotonic per (business, scope) — окрема counter-колекція**
- * (Sprint 4 review fix). Попередній підхід `MAX(slugCounter)+1` over invoice-
- * документами був зламаний на hard-delete: видалили inv-003 → MAX=2 → counter
- * стрибав назад на 3. Тепер counter живе у `InvoiceSlugCounter`-doc з
- * unique compound `(businessId, scope)`. Hard-delete invoice не торкає
+ * **Counter monotonic per (account, scope) — окрема counter-колекція**
+ * (Sprint 4 review fix + Sprint 9 §SP-6 namespace shift). Попередній підхід
+ * `MAX(slugCounter)+1` over invoice-документами був зламаний на hard-delete:
+ * видалили inv-003 → MAX=2 → counter стрибав назад на 3. Тепер counter живе
+ * у `InvoiceSlugCounter`-doc з unique compound `(accountId, scope)` (Sprint 9
+ * переніс namespace з businessId на accountId — Privat-account і Mono-account
+ * одного бізнесу мають незалежні послідовності). Hard-delete invoice не торкає
  * counter-doc → monotonic invariant виконано.
  *
  * **`session: ClientSession | null` параметр.** Counter increment виконується
@@ -62,19 +64,20 @@ import { slugifyPurpose } from './transliterate';
  *
  * **Tail — DRY-helper `generateRandomTail()`** з `businesses/slug-generator.service.ts`.
  *
- * **Collision-перевірка по `(businessId, slug)` compound-unique** на 11-й
- * спробі — `INVOICE_SLUG_GENERATION_FAILED` 500. Counter-collision (при atomic
- * $inc) теоретично unreachable; partial-unique compound лишається як defense-
- * in-depth + legacy-bootstrap-trip-wire.
+ * **Collision-перевірка по `(accountId, slug)` compound-unique** (Sprint 9 §SP-6)
+ * на 11-й спробі — `INVOICE_SLUG_GENERATION_FAILED` 500. Counter-collision (при
+ * atomic $inc) теоретично unreachable; partial-unique compound лишається як
+ * defense-in-depth + legacy-bootstrap-trip-wire.
  */
 
 export interface GenerateInvoiceSlugInput {
     /**
-     * Namespace для counter-aggregation і compound-unique-check. Передається
-     * як ObjectId (а не string), бо `InvoicesService.create` уже має
-     * `business._id` після `BusinessAccessGuard`-attach-у.
+     * Sprint 9 §SP-6 — `accountId` як primary namespace для counter-aggregation
+     * і compound-unique-check `(accountId, slug)`. `businessId` denormalized
+     * для counter-doc-у (cascade-business-delete prefix-match).
      */
     businessId: Types.ObjectId;
+    accountId: Types.ObjectId;
     /**
      * Discriminated union — explicit | preset | random. Type narrowing у
      * `composeCandidate`-switch дає TS-driven exhaustiveness check.
@@ -146,16 +149,10 @@ export class InvoiceSlugGeneratorService {
             attempt++
         ) {
             const candidate = await this.composeCandidate(input, session);
-            // Read-only collision-pre-check виконуємо поза session — fresh
-            // committed view достатній. Race-correctness забезпечена write-
-            // path-ом: partial-unique compound `(businessId, slug)` блокує
-            // colliding concurrent insert на commit-time, retry-on-11000 у
-            // `InvoicesService.create` re-allocate-ить. Якби читали через
-            // session — побачили б snapshot-моменту-старту-TX (без видимих
-            // commit-нутих concurrent inserts), ризик collision-у на commit-i
-            // тільки виріс би.
+            // Sprint 9 §SP-6 — compound lookup переходить на `(accountId, slug)`
+            // (per-account invoice-uniqueness scope).
             const exists = await this.invoiceModel.exists({
-                businessId: input.businessId,
+                accountId: input.accountId,
                 slug: candidate.slug,
             });
             if (!exists) {
@@ -163,7 +160,7 @@ export class InvoiceSlugGeneratorService {
             }
         }
         this.logger.error(
-            `Failed to generate invoice slug for business ${input.businessId.toString()} after ${InvoiceSlugGeneratorService.MAX_ATTEMPTS} attempts; database may be saturated or RNG broken`
+            `Failed to generate invoice slug for account ${input.accountId.toString()} after ${InvoiceSlugGeneratorService.MAX_ATTEMPTS} attempts; database may be saturated or RNG broken`
         );
         throw new InternalServerErrorException({
             code: RESPONSE_CODE.INVOICE_SLUG_GENERATION_FAILED,
@@ -199,6 +196,7 @@ export class InvoiceSlugGeneratorService {
             case 'preset':
                 return this.composeForPreset(
                     input.businessId,
+                    input.accountId,
                     input.slugInput.preset,
                     effectiveInvoicePurpose(
                         input.paymentPurpose,
@@ -212,6 +210,7 @@ export class InvoiceSlugGeneratorService {
 
     private async composeForPreset(
         businessId: Types.ObjectId,
+        accountId: Types.ObjectId,
         preset: SlugPreset,
         effectivePurpose: string,
         tail: string,
@@ -222,6 +221,7 @@ export class InvoiceSlugGeneratorService {
                 const scope = 'simple';
                 const next = await this.allocateNextCounter(
                     businessId,
+                    accountId,
                     scope,
                     session
                 );
@@ -243,6 +243,7 @@ export class InvoiceSlugGeneratorService {
                 const scope = `${yyyy}-${mm}`;
                 const next = await this.allocateNextCounter(
                     businessId,
+                    accountId,
                     scope,
                     session
                 );
@@ -261,6 +262,7 @@ export class InvoiceSlugGeneratorService {
                 const scope = String(year);
                 const next = await this.allocateNextCounter(
                     businessId,
+                    accountId,
                     scope,
                     session
                 );
@@ -296,15 +298,17 @@ export class InvoiceSlugGeneratorService {
     }
 
     /**
-     * Atomic counter allocation per `(businessId, scope)` — окрема counter-
-     * колекція, незалежна від invoice lifecycle. Hard-delete invoice не
-     * торкає counter-doc → monotonic invariant зберігається крізь deletes.
+     * Atomic counter allocation per `(accountId, scope)` (Sprint 9 §SP-6) —
+     * окрема counter-колекція, незалежна від invoice lifecycle. Hard-delete
+     * invoice не торкає counter-doc → monotonic invariant зберігається крізь
+     * deletes. `businessId` denormalized у counter-doc-і для прямого
+     * cascade-business-delete filter-у без `$lookup` через accounts.
      *
      * **Two-step з lazy bootstrap.**
      *
-     *  Step 1 — fast path. `findOneAndUpdate({...}, {$inc: { last: 1 }})`
-     *  без `upsert`. Якщо counter-doc існує (нормальний steady-state) —
-     *  атомарний інкремент, повертаємо нову `last`-value. Concurrent
+     *  Step 1 — fast path. `findOneAndUpdate({accountId, scope}, {$inc: {
+     *  last: 1 }})` без `upsert`. Якщо counter-doc існує (нормальний steady-
+     *  state) — атомарний інкремент, повертаємо нову `last`-value. Concurrent
      *  `$inc`-запити серіалізуються Mongo write-conflict detection-ом.
      *
      *  Step 2 — bootstrap path. Doc не знайдено → можливі два сценарії:
@@ -313,13 +317,13 @@ export class InvoiceSlugGeneratorService {
      *    (b) post-deploy на existing data: invoices з counter-значеннями
      *        вже існують, але counter-doc ще не bootstrap-нутий — counter
      *        стартує з `legacyMax + 1`, де `legacyMax = MAX(slugCounter)`
-     *        over committed invoices у тому ж scope-i.
+     *        over committed invoices у тому ж `(accountId, scope)`.
      *  Для обох — atomically insert counter-doc з `last = legacyMax + 1`.
      *
      * **Bootstrap-race propagate-иться назовні (review re-fix).**
      * Concurrent bootstrap (два паралельні перші create-и в одному scope-i):
      * один insert проходить, інший падає на `code: 11000` (unique compound
-     * `(businessId, scope)`). 11000 НЕ ретраї-имо тут у тій самій сесії —
+     * `(accountId, scope)`). 11000 НЕ ретраї-имо тут у тій самій сесії —
      * у Mongo TX duplicate-key abort-ить транзакцію server-side, наступний
      * write у тій самій сесії впаде з `TransactionAborted` (а не з committed-
      * counter-state переможця race-у), і ми втратили б correctness. Той
@@ -332,7 +336,7 @@ export class InvoiceSlugGeneratorService {
      * **Чому `legacyMax` з invoices, а не лише `0`.** Без bootstrap-у з
      * existing invoices: counter стартує 1, але інвойс з counter=1 вже
      * існує у legacy data → invoice insert падає на partial-unique
-     * compound `(businessId, slugCounterScope, slugCounter)` 11000 →
+     * compound `(accountId, slugCounterScope, slugCounter)` 11000 →
      * retry-on-11000 у `InvoicesService.create` перерахує counter (вже
      * через fast-path $inc → 2) → ще раз collision → retry → ... до
      * MAX_RETRIES=3. Якщо у scope-i 4+ legacy-invoices, перший новий
@@ -347,54 +351,52 @@ export class InvoiceSlugGeneratorService {
      */
     private async allocateNextCounter(
         businessId: Types.ObjectId,
+        accountId: Types.ObjectId,
         scope: string,
         session: ClientSession | null
     ): Promise<number> {
-        // Step 1: fast path — atomic $inc on existing counter-doc.
+        // Step 1: fast path — atomic $inc на existing counter-doc (per
+        // accountId, scope). Sprint 9 §SP-6.
         const incremented = await this.counterModel
             .findOneAndUpdate(
-                { businessId, scope },
+                { accountId, scope },
                 { $inc: { last: 1 } },
                 { new: true, session: session ?? undefined }
             )
             .exec();
         if (incremented) return incremented.last;
 
-        // Step 2: bootstrap. Compute legacy MAX, insert counter-doc.
-        // 11000 propagate назовні — НЕ ретраї-имо тут (у TX-сесії duplicate-
-        // key abort-ить транзакцію; outer-loop у `InvoicesService.create`
-        // відкриває fresh session, де counter-doc уже існує і fast-path
-        // step 1 повертає коректне значення).
-        const legacyMax = await this.computeLegacyMax(businessId, scope);
+        // Step 2: bootstrap. Compute legacy MAX over invoices у тому ж
+        // (accountId, scope), insert counter-doc з denormalized businessId
+        // для cascade-business-delete prefix-match.
+        const legacyMax = await this.computeLegacyMax(accountId, scope);
         const created = await this.counterModel.create(
-            [{ businessId, scope, last: legacyMax + 1 }],
+            [{ businessId, accountId, scope, last: legacyMax + 1 }],
             { session: session ?? undefined }
         );
         return created[0].last;
     }
 
     /**
-     * `MAX(slugCounter)` over invoice-документів у заданому `(businessId,
-     * scope)`. Викликається ТІЛЬКИ при bootstrap-i counter-doc-у (one-time
-     * per scope per business). На steady-state не торкається — fast-path $inc
-     * обходить legacy-aggregation повністю.
+     * `MAX(slugCounter)` over invoice-документів у заданому `(accountId,
+     * scope)` (Sprint 9 §SP-6). Викликається ТІЛЬКИ при bootstrap-i counter-
+     * doc-у (one-time per scope per account). На steady-state не торкається —
+     * fast-path $inc обходить legacy-aggregation повністю.
      *
      * **Index-prefix-match.** Query використовує prefix двох перших ключів
-     * partial-unique compound-index `(businessId, slugCounterScope, slug-
+     * partial-unique compound-index `(accountId, slugCounterScope, slug-
      * Counter)` — Mongo автоматично hits index, без додаткового index-у.
      */
     private async computeLegacyMax(
-        businessId: Types.ObjectId,
+        accountId: Types.ObjectId,
         scope: string
     ): Promise<number> {
         // Bootstrap-read (one-time per scope) — committed view достатній.
-        // Концurrent TX-у, що пише новий counter-doc у тому ж scope-і,
-        // серіалізується unique compound `(businessId, scope)` на counter-
-        // collection: один пройде, інший впаде на 11000 і потрапить у
-        // retry-fast-path-у `allocateNextCounter`-у.
+        // Concurrent counter-doc-bootstrap у тому ж (accountId, scope) →
+        // unique compound 11000, retry у fast-path-у `allocateNextCounter`.
         const docs = await this.invoiceModel
             .find(
-                { businessId, slugCounterScope: scope },
+                { accountId, slugCounterScope: scope },
                 { slugCounter: 1, _id: 0 }
             )
             .lean()

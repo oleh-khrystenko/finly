@@ -294,6 +294,36 @@ API стартує нормально (connection-string не валідуєть
 
 ---
 
+## Sprint 9 deploy-prep — обов'язковий `dropDatabase`
+
+**Sprint 9 розщепив `Business` на `Business + Account + Invoice` несумісно з моделлю Sprint 1-8** (IBAN переїхав з `Business.requisites` на окрему колекцію `Account`; `Invoice.businessId` доповнено `accountId`; counter-doc namespace переїхав з `businessId` на `accountId`; нові compound-unique-індекси). Production-data ще немає — `dropDatabase` був свідомо прийнятим способом замість migration-script-у (вступний контракт Sprint 9 README §Migrations).
+
+**Перед deploy виконати на staging/production:**
+
+```bash
+# Atlas (через mongosh):
+mongosh "$MONGODB_URI" --eval 'db.dropDatabase()'
+
+# Docker Mongo (варіант (б) з §Mongo replica-set):
+docker exec finly-mongo-dev mongosh --quiet finly_dev --eval 'db.dropDatabase()'
+
+# Local mongod:
+mongosh "$MONGODB_URI" --eval 'db.dropDatabase()'
+```
+
+**Symptoms якщо НЕ виконати:**
+
+- `BusinessesService.delete` cascade падає на `(accountId, slug)` unique-index conflict при намаганні видалити legacy-invoice через старий index `(businessId, slug)`.
+- `POST /businesses/me/{slug}/accounts` створення першого account на legacy-business падає, бо `Business.requisites.iban` залишився required у старій версії schema і Mongoose validation rejects на новий save.
+- Public-сторінка `/businesses/public/:slug` повертає `nbuLinks` у JSON-shape (legacy), тоді як frontend (Sprint 9) очікує `accounts: PublicAccountListItem[]` — UI крашиться на `accounts.map is not a function`.
+
+**Dev environment** — те ж саме (Sprint 9 README §Risks §2 "middleware Branch A2 семантичний flip" + §6 "payeeSnapshot.iban legacy fallback"). На dev-Mongo без `dropDatabase`:
+
+- Тестові інвойсні посилання Sprint 4 (`/{biz}/{inv}`) тепер інтерпретуються як account-URL — middleware Branch A2 семантичний flip. На staging — 404 (account-slug не існує). Mitigation: dropDatabase перед тестуванням.
+- Legacy invoices без `accountId`-поля у payload-mapper-і дадуть undefined → payload-build падає з некоректним повідомленням.
+
+---
+
 ## Документація
 
 - [Conventions](docs/conventions/README.md) — правила та конвенції для розробки

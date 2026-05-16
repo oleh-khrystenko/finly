@@ -117,8 +117,10 @@ export const payerTaxIdZod = z.union([individualTaxIdZod, legalEntityTaxIdZod]);
 export type PayerTaxId = z.infer<typeof payerTaxIdZod>;
 
 /**
- * Sprint 7 §SP-4 — discriminator-helper для перевірки `requisites.taxId`
- * у контексті відомого `BusinessType`.
+ * Sprint 7 §SP-4 — discriminator-helper для перевірки `taxId` у контексті
+ * відомого `BusinessType`. Sprint 9 §SP-1 path-update: `taxId` тепер top-level
+ * поле Business-документа (раніше `requisites.taxId`); semantics helper-а
+ * незмінні.
  *
  * Single source of truth для трьох callsite-ів:
  *  1. `BusinessSchema` entity-refine (`TAX_ID_FORMAT_MISMATCH_TYPE`) — read-side

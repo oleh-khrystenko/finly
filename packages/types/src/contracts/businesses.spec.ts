@@ -4,13 +4,12 @@ import {
     UpdateBusinessSchema,
 } from './businesses';
 
-const VALID_IBAN = 'UA213223130000026007233566001';
 const VALID_TAX_ID = '1234567899';
 
 const VALID_CREATE = {
     type: 'fop',
     name: 'Іваненко',
-    requisites: { iban: VALID_IBAN, taxId: VALID_TAX_ID },
+    taxId: VALID_TAX_ID,
     taxationSystem: 'simplified-3',
     isVatPayer: false,
     paymentPurposeTemplate: 'Оплата за послуги',
@@ -18,14 +17,14 @@ const VALID_CREATE = {
 };
 
 describe('CreateBusinessSchema', () => {
-    it('parses valid full payload', () => {
+    it('parses valid full payload (Sprint 9 — flat taxId, no requisites/iban)', () => {
         const result = CreateBusinessSchema.safeParse(VALID_CREATE);
         expect(result.success).toBe(true);
     });
 
     it.each([
         'name',
-        'requisites',
+        'taxId',
         'taxationSystem',
         'isVatPayer',
         'paymentPurposeTemplate',
@@ -38,6 +37,25 @@ describe('CreateBusinessSchema', () => {
         >;
         void _omit;
         const result = CreateBusinessSchema.safeParse(without);
+        expect(result.success).toBe(false);
+    });
+
+    it('Sprint 9 — rejects requisites-wrapper (видалено повністю)', () => {
+        const result = CreateBusinessSchema.safeParse({
+            ...VALID_CREATE,
+            requisites: {
+                iban: 'UA213223130000026007233566001',
+                taxId: VALID_TAX_ID,
+            },
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('Sprint 9 — rejects iban на top-level (IBAN живе на Account, не Business)', () => {
+        const result = CreateBusinessSchema.safeParse({
+            ...VALID_CREATE,
+            iban: 'UA213223130000026007233566001',
+        });
         expect(result.success).toBe(false);
     });
 
@@ -102,12 +120,11 @@ describe('CreateBusinessSchema', () => {
     });
 
     // -------------------------------------------------------------------------
-    // Sprint 7 §SP-3 + §SP-4 — discriminatedUnion per `type`. Кожен variant
-    // експонує лише ті поля, що мають юр-сенс. 4 positive (один на тип),
-    // 4 negative (per-variant strictness violations).
+    // Sprint 7 §SP-3 + §SP-4 + Sprint 9 — discriminatedUnion per `type` з
+    // flat taxId per-variant. 4 positive (один на тип), kілька negative.
     // -------------------------------------------------------------------------
 
-    describe('Sprint 7 — discriminated union per type', () => {
+    describe('Sprint 7 §SP-3/SP-4 + Sprint 9 — discriminated union per type', () => {
         const VALID_RNOKPP = '1234567899';
         const VALID_EDRPOU = '12345678';
 
@@ -121,7 +138,7 @@ describe('CreateBusinessSchema', () => {
             const result = CreateBusinessSchema.safeParse({
                 ...baseFields,
                 type: 'individual',
-                requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+                taxId: VALID_RNOKPP,
             });
             expect(result.success).toBe(true);
         });
@@ -130,7 +147,7 @@ describe('CreateBusinessSchema', () => {
             const result = CreateBusinessSchema.safeParse({
                 ...baseFields,
                 type: 'fop',
-                requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+                taxId: VALID_RNOKPP,
                 taxationSystem: 'simplified-3',
                 isVatPayer: false,
             });
@@ -141,7 +158,7 @@ describe('CreateBusinessSchema', () => {
             const result = CreateBusinessSchema.safeParse({
                 ...baseFields,
                 type: 'tov',
-                requisites: { iban: VALID_IBAN, taxId: VALID_EDRPOU },
+                taxId: VALID_EDRPOU,
                 taxationSystem: 'general',
                 isVatPayer: true,
             });
@@ -152,7 +169,7 @@ describe('CreateBusinessSchema', () => {
             const result = CreateBusinessSchema.safeParse({
                 ...baseFields,
                 type: 'organization',
-                requisites: { iban: VALID_IBAN, taxId: VALID_EDRPOU },
+                taxId: VALID_EDRPOU,
             });
             expect(result.success).toBe(true);
         });
@@ -161,7 +178,7 @@ describe('CreateBusinessSchema', () => {
             const result = CreateBusinessSchema.safeParse({
                 ...baseFields,
                 type: 'individual',
-                requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+                taxId: VALID_RNOKPP,
                 taxationSystem: 'simplified-3',
                 isVatPayer: false,
             });
@@ -172,7 +189,7 @@ describe('CreateBusinessSchema', () => {
             const result = CreateBusinessSchema.safeParse({
                 ...baseFields,
                 type: 'organization',
-                requisites: { iban: VALID_IBAN, taxId: VALID_EDRPOU },
+                taxId: VALID_EDRPOU,
                 taxationSystem: 'simplified-3',
                 isVatPayer: false,
             });
@@ -183,7 +200,7 @@ describe('CreateBusinessSchema', () => {
             const result = CreateBusinessSchema.safeParse({
                 ...baseFields,
                 type: 'fop',
-                requisites: { iban: VALID_IBAN, taxId: VALID_EDRPOU },
+                taxId: VALID_EDRPOU,
                 taxationSystem: 'simplified-3',
                 isVatPayer: false,
             });
@@ -194,7 +211,7 @@ describe('CreateBusinessSchema', () => {
             const result = CreateBusinessSchema.safeParse({
                 ...baseFields,
                 type: 'organization',
-                requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+                taxId: VALID_RNOKPP,
             });
             expect(result.success).toBe(false);
         });
@@ -203,7 +220,7 @@ describe('CreateBusinessSchema', () => {
             const result = CreateBusinessSchema.safeParse({
                 ...baseFields,
                 type: 'fop',
-                requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+                taxId: VALID_RNOKPP,
                 isVatPayer: false,
             });
             expect(result.success).toBe(false);
@@ -213,7 +230,7 @@ describe('CreateBusinessSchema', () => {
             const result = CreateBusinessSchema.safeParse({
                 ...baseFields,
                 type: 'tov',
-                requisites: { iban: VALID_IBAN, taxId: VALID_EDRPOU },
+                taxId: VALID_EDRPOU,
                 isVatPayer: true,
             });
             expect(result.success).toBe(false);
@@ -223,11 +240,61 @@ describe('CreateBusinessSchema', () => {
             const result = CreateBusinessSchema.safeParse({
                 ...baseFields,
                 type: 'startup',
-                requisites: { iban: VALID_IBAN, taxId: VALID_RNOKPP },
+                taxId: VALID_RNOKPP,
             });
             expect(result.success).toBe(false);
         });
     });
+});
+
+describe('Sprint 10 — CreateBusinessSchema.claimIdempotencyKey', () => {
+    const VALID_UUID = '550e8400-e29b-41d4-a716-446655440000';
+
+    it('accepts create без claimIdempotencyKey (cabinet wizard)', () => {
+        const result = CreateBusinessSchema.safeParse(VALID_CREATE);
+        expect(result.success).toBe(true);
+    });
+
+    it('accepts create з claimIdempotencyKey (anon-claim)', () => {
+        const result = CreateBusinessSchema.safeParse({
+            ...VALID_CREATE,
+            claimIdempotencyKey: VALID_UUID,
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('rejects невалідний UUID format у claimIdempotencyKey', () => {
+        const result = CreateBusinessSchema.safeParse({
+            ...VALID_CREATE,
+            claimIdempotencyKey: 'not-a-uuid',
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it.each(['individual', 'fop', 'tov', 'organization'] as const)(
+        'accepts claimIdempotencyKey у %s variant',
+        (type) => {
+            const VALID_RNOKPP = '1234567899';
+            const VALID_EDRPOU = '12345678';
+            const isLegal = type === 'tov' || type === 'organization';
+            const isTaxation = type === 'fop' || type === 'tov';
+            const result = CreateBusinessSchema.safeParse({
+                type,
+                name: 'Іваненко',
+                taxId: isLegal ? VALID_EDRPOU : VALID_RNOKPP,
+                paymentPurposeTemplate: 'Збір',
+                acceptedBanks: ['privatbank'],
+                claimIdempotencyKey: VALID_UUID,
+                ...(isTaxation
+                    ? {
+                          taxationSystem: 'simplified-3' as const,
+                          isVatPayer: false,
+                      }
+                    : {}),
+            });
+            expect(result.success).toBe(true);
+        }
+    );
 });
 
 describe('UpdateBusinessSchema', () => {
@@ -256,6 +323,18 @@ describe('UpdateBusinessSchema', () => {
         expect(result.success).toBe(true);
     });
 
+    it('Sprint 9 — accepts top-level taxId update', () => {
+        const result = UpdateBusinessSchema.safeParse({
+            taxId: '1234567899',
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('Sprint 9 — accepts ЄДРПОУ taxId на PATCH (payerTaxIdZod union)', () => {
+        const result = UpdateBusinessSchema.safeParse({ taxId: '12345678' });
+        expect(result.success).toBe(true);
+    });
+
     it.each([
         'slug',
         'slugLower',
@@ -264,8 +343,11 @@ describe('UpdateBusinessSchema', () => {
         'managers',
         'id',
         'createdAt',
+        'requisites',
+        'invoiceSlugPresetDefault',
+        'claimIdempotencyKey',
     ])(
-        'rejects невідомий ключ %s через .strict() (slug-mutation захист)',
+        'rejects невідомий ключ %s через .strict() (slug-mutation / Sprint 9 видалені ключі / Sprint 10 immutable claim-key)',
         (key) => {
             const result = UpdateBusinessSchema.safeParse({
                 [key]: 'whatever',
@@ -310,47 +392,101 @@ describe('UpdateBusinessSchema', () => {
     });
 });
 
-describe('PublicBusinessSchema', () => {
+describe('PublicBusinessSchema (Sprint 9 — list-view замість single-account-view)', () => {
     const VALID_PUBLIC = {
         type: 'fop',
         name: 'Іваненко',
         slug: 'IvanEnko',
         acceptedBanks: ['privatbank'],
         seoIndexEnabled: true,
-        nbuLinks: {
-            primary: 'https://qr.bank.gov.ua/abc123',
-            legacy: 'https://bank.gov.ua/qr/abc123',
-        },
+        accounts: [
+            {
+                slug: 'aB3xQ9k7',
+                name: 'ПриватБанк •6001',
+                bankCode: 'privatbank' as const,
+                ibanMask: '•6001',
+            },
+            {
+                slug: 'cD4yR0l8',
+                name: 'monobank •8104',
+                bankCode: 'monobank' as const,
+                ibanMask: '•8104',
+            },
+        ],
     };
 
-    it('parses усі whitelist-поля включно з nbuLinks (рішення A2)', () => {
+    it('parses усі whitelist-поля включно з accounts array (Sprint 9 §SP-4)', () => {
         const result = PublicBusinessSchema.safeParse(VALID_PUBLIC);
         expect(result.success).toBe(true);
     });
 
-    it('виносить рівно 6 ключів у parsed-output (whitelist інваріант — рішення C4)', () => {
+    it('parses empty accounts array (0-account empty-state, §SP-4)', () => {
+        const result = PublicBusinessSchema.safeParse({
+            ...VALID_PUBLIC,
+            accounts: [],
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('parses single-account array (1-account 307-redirect source-data, §SP-4)', () => {
+        const result = PublicBusinessSchema.safeParse({
+            ...VALID_PUBLIC,
+            accounts: [VALID_PUBLIC.accounts[0]],
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('parses account з null bankCode (§SP-9 нерозпізнаний МФО)', () => {
+        const result = PublicBusinessSchema.safeParse({
+            ...VALID_PUBLIC,
+            accounts: [
+                {
+                    slug: 'aB3xQ9k7',
+                    name: 'Банк •6001',
+                    bankCode: null,
+                    ibanMask: '•6001',
+                },
+            ],
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('виносить рівно 6 ключів у parsed-output (whitelist інваріант)', () => {
         // Гарантія, що у public JSON клієнт ніколи не побачить реквізити /
-        // ownership / timestamps напряму. nbuLinks — це той самий leak-vector
-        // як QR PNG (payload у Base64URL), тож додання allowed; інше — strip.
+        // ownership / timestamps напряму. accounts-array — це той самий
+        // leak-vector, що окремий PublicAccountListItemSchema whitelist
+        // (тестується там).
         const result = PublicBusinessSchema.safeParse({
             ...VALID_PUBLIC,
             // Симулюємо backend, що випадково додав leak-поля у view-shape:
-            requisites: { iban: VALID_IBAN, taxId: VALID_TAX_ID },
+            taxId: '1234567899',
             taxationSystem: 'general',
             isVatPayer: true,
             ownerId: '507f1f77bcf86cd799439011',
+            paymentPurposeTemplate: 'Оплата за послуги',
         });
         expect(result.success).toBe(true);
         if (result.success) {
             expect(Object.keys(result.data).sort()).toEqual([
                 'acceptedBanks',
+                'accounts',
                 'name',
-                'nbuLinks',
                 'seoIndexEnabled',
                 'slug',
                 'type',
             ]);
         }
+    });
+
+    it('Sprint 9 — більше не містить nbuLinks (переїхали на per-account-view)', () => {
+        const result = PublicBusinessSchema.parse({
+            ...VALID_PUBLIC,
+            nbuLinks: {
+                primary: 'https://qr.bank.gov.ua/abc123',
+                legacy: 'https://bank.gov.ua/qr/abc123',
+            },
+        });
+        expect(result).not.toHaveProperty('nbuLinks');
     });
 
     it('accepts case-preserved slug у view (E1)', () => {

@@ -89,6 +89,19 @@ export const ENV = {
         10
     ),
 
+    ORPHAN_REMINDER_FIRST_DAYS: parseInt(
+        getEnvVar('ORPHAN_REMINDER_FIRST_DAYS'),
+        10
+    ),
+    ORPHAN_REMINDER_FINAL_DAYS: parseInt(
+        getEnvVar('ORPHAN_REMINDER_FINAL_DAYS'),
+        10
+    ),
+    ORPHAN_CLEANUP_DELETION_DAYS: parseInt(
+        getEnvVar('ORPHAN_CLEANUP_DELETION_DAYS'),
+        10
+    ),
+
     ANTHROPIC_API_KEY: getEnvVar('ANTHROPIC_API_KEY'),
     AI_CHAT_MAX_TOKENS: parseInt(getEnvVar('AI_CHAT_MAX_TOKENS'), 10),
     AI_CHAT_IP_LIMIT: parseInt(getEnvVar('AI_CHAT_IP_LIMIT'), 10),
@@ -111,6 +124,21 @@ if (!ENV.PAYMENTS_SUBSCRIPTION_ENABLED && !ENV.PAYMENTS_ONE_OFF_ENABLED) {
     );
 }
 
+// Sprint 10 §10.1 — dedup-overwrite-flow (sendMagicLink SP-8) припускає, що
+// magic-record-у живий поки існує dedup-key. Інваріант: TTL magic-record-у
+// (хвилини → секунди) ≥ TTL dedup-key-у (секунди). Якщо інверсія — dedup-key
+// переживе magic-record-у, redis.get(`magic:${existingToken}`) поверне null,
+// dedup-overwrite-flow упаде у fallthrough на normal-flow (новий token + лист)
+// замість silent-overwrite — anti-spam invariant порушено.
+if (ENV.AUTH_MAGIC_LINK_TTL_MIN * 60 < ENV.AUTH_MAGIC_LINK_DEDUP_SEC) {
+    throw new Error(
+        `❌ AUTH_MAGIC_LINK_DEDUP_SEC (${ENV.AUTH_MAGIC_LINK_DEDUP_SEC}s) ` +
+            `must not exceed AUTH_MAGIC_LINK_TTL_MIN converted to seconds ` +
+            `(${ENV.AUTH_MAGIC_LINK_TTL_MIN}min = ${ENV.AUTH_MAGIC_LINK_TTL_MIN * 60}s). ` +
+            'Otherwise dedup-key outlives magic-record and overwrite-flow breaks.'
+    );
+}
+
 // Парсинг AUTH_LOCKOUT_THRESHOLDS="5:1,10:5,20:15" → [{ attempts: 5, blockMin: 1 }, ...]
 export function parseLockoutThresholds(
     raw: string
@@ -120,3 +148,43 @@ export function parseLockoutThresholds(
         return { attempts, blockMin };
     });
 }
+
+// Sprint 12 §12.1a — cross-field invariant для orphan-cleanup pipeline.
+// Stage-thresholds мусять монотонно зростати: first < final < deletion. Інакше
+// 3-stage email-pipeline колапсує в один день (наприклад, first=final=deletion=2
+// → один cron-run fires і reminder, і final-warning, і cascade-delete у race),
+// порушуючи compliance-invariant "user попереджений 2 рази перед видаленням".
+// first ≥ 1 — фіксує мінімальний grace-period між створенням Business і першим
+// reminder-листом (нульовий day-0 fire ламає UX — лист приходить раніше за
+// перший вход у кабінет після magic-link-claim).
+export function validateOrphanCleanupSchedule(
+    firstDays: number,
+    finalDays: number,
+    deletionDays: number
+): void {
+    if (!Number.isInteger(firstDays) || firstDays < 1) {
+        throw new Error(
+            `❌ ORPHAN_REMINDER_FIRST_DAYS must be an integer ≥ 1 (got ${firstDays}).`
+        );
+    }
+    if (!Number.isInteger(finalDays) || !Number.isInteger(deletionDays)) {
+        throw new Error(
+            `❌ ORPHAN_REMINDER_FINAL_DAYS and ORPHAN_CLEANUP_DELETION_DAYS must be integers ` +
+                `(got ${finalDays}, ${deletionDays}).`
+        );
+    }
+    if (!(firstDays < finalDays && finalDays < deletionDays)) {
+        throw new Error(
+            `❌ Orphan-cleanup schedule must satisfy ` +
+                `ORPHAN_REMINDER_FIRST_DAYS < ORPHAN_REMINDER_FINAL_DAYS < ORPHAN_CLEANUP_DELETION_DAYS ` +
+                `(got ${firstDays} < ${finalDays} < ${deletionDays}). ` +
+                'Otherwise email-pipeline stages overlap and "user warned twice before deletion" invariant breaks.'
+        );
+    }
+}
+
+validateOrphanCleanupSchedule(
+    ENV.ORPHAN_REMINDER_FIRST_DAYS,
+    ENV.ORPHAN_REMINDER_FINAL_DAYS,
+    ENV.ORPHAN_CLEANUP_DELETION_DAYS
+);

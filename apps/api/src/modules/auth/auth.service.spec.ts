@@ -9,10 +9,10 @@ import { JwtService } from '@nestjs/jwt';
 
 import { REDIS_CLIENT } from '../../common/modules/redis.module';
 import { RedisCounterService } from '../../common/services/redis-counter.service';
+import { AvatarService } from '../users/avatar.service';
 import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
 import { EmailService } from '../email/email.service';
-import { StorageService } from '../storage/storage.service';
 
 jest.mock('../../config/env', () => ({
     ENV: {
@@ -83,9 +83,8 @@ const mockRedisCounter = {
     incrementSlidingWindow: jest.fn(),
 };
 
-const mockStorageService = {
-    isR2Url: jest.fn(),
-    reUploadExternalAvatar: jest.fn(),
+const mockAvatarService = {
+    syncExternalAvatar: jest.fn(),
 };
 
 describe('AuthService', () => {
@@ -117,6 +116,7 @@ describe('AuthService', () => {
                         setPasswordHash: jest.fn().mockResolvedValue(undefined),
                         softDelete: jest.fn().mockResolvedValue(undefined),
                         updateTimezone: jest.fn().mockResolvedValue(undefined),
+                        acceptTerms: jest.fn().mockResolvedValue(undefined),
                     },
                 },
                 {
@@ -129,8 +129,8 @@ describe('AuthService', () => {
                     },
                 },
                 {
-                    provide: StorageService,
-                    useValue: mockStorageService,
+                    provide: AvatarService,
+                    useValue: mockAvatarService,
                 },
                 {
                     provide: REDIS_CLIENT,
@@ -153,8 +153,7 @@ describe('AuthService', () => {
         mockRedisCounter.incrementFixedWindow.mockResolvedValue(1);
         mockRedisCounter.incrementSlidingWindow.mockResolvedValue(1);
         // Default: no avatar re-upload path. Individual tests override.
-        mockStorageService.isR2Url.mockReturnValue(false);
-        mockStorageService.reUploadExternalAvatar.mockReset();
+        mockAvatarService.syncExternalAvatar.mockReset();
     });
 
     describe('generateTokens', () => {
@@ -478,24 +477,23 @@ describe('AuthService', () => {
                 .mockResolvedValueOnce('refresh-token');
         });
 
-        it('re-uploads avatar when it is external (non-R2) and persists new URL', async () => {
+        it('re-uploads avatar when it is external (non-R2) and reflects new URL on user doc', async () => {
             const user = buildUserWithAvatar(externalUrl);
             jest.spyOn(usersService, 'findOrCreateByGoogle').mockResolvedValue(
                 user as never
             );
-            mockStorageService.isR2Url.mockReturnValue(false);
-            mockStorageService.reUploadExternalAvatar.mockResolvedValue(r2Url);
+            mockAvatarService.syncExternalAvatar.mockResolvedValue(r2Url);
 
             const result = await authService.handleGoogleAuth(googleProfile);
 
-            expect(mockStorageService.isR2Url).toHaveBeenCalledWith(
+            expect(mockAvatarService.syncExternalAvatar).toHaveBeenCalledWith(
+                USER_ID,
                 externalUrl
             );
-            expect(
-                mockStorageService.reUploadExternalAvatar
-            ).toHaveBeenCalledWith(USER_ID, externalUrl);
+            // AvatarService persists the new URL itself; AuthService only
+            // mirrors it onto the in-memory user document for the response.
             expect(user.profile.avatar).toBe(r2Url);
-            expect(user.save).toHaveBeenCalledTimes(1);
+            expect(user.save).not.toHaveBeenCalled();
             expect(result.user).toBe(user);
             expect(result.tokens).toEqual({
                 accessToken: 'access-token',
@@ -503,19 +501,21 @@ describe('AuthService', () => {
             });
         });
 
-        it('skips re-upload when the avatar is already an R2 URL', async () => {
+        it('no-ops when the avatar is already an R2 URL (AvatarService returns null)', async () => {
             const user = buildUserWithAvatar(r2Url);
             jest.spyOn(usersService, 'findOrCreateByGoogle').mockResolvedValue(
                 user as never
             );
-            mockStorageService.isR2Url.mockReturnValue(true);
+            mockAvatarService.syncExternalAvatar.mockResolvedValue(null);
 
             const result = await authService.handleGoogleAuth(googleProfile);
 
-            expect(mockStorageService.isR2Url).toHaveBeenCalledWith(r2Url);
-            expect(
-                mockStorageService.reUploadExternalAvatar
-            ).not.toHaveBeenCalled();
+            expect(mockAvatarService.syncExternalAvatar).toHaveBeenCalledWith(
+                USER_ID,
+                r2Url
+            );
+            // null return signals no work was needed; AuthService leaves the
+            // doc untouched and does not call save.
             expect(user.save).not.toHaveBeenCalled();
             expect(user.profile.avatar).toBe(r2Url);
             expect(result.user).toBe(user);
@@ -526,16 +526,15 @@ describe('AuthService', () => {
             jest.spyOn(usersService, 'findOrCreateByGoogle').mockResolvedValue(
                 user as never
             );
-            mockStorageService.isR2Url.mockReturnValue(false);
-            mockStorageService.reUploadExternalAvatar.mockRejectedValue(
+            mockAvatarService.syncExternalAvatar.mockRejectedValue(
                 new Error('R2 down')
             );
 
             const result = await authService.handleGoogleAuth(googleProfile);
 
-            expect(
-                mockStorageService.reUploadExternalAvatar
-            ).toHaveBeenCalledTimes(1);
+            expect(mockAvatarService.syncExternalAvatar).toHaveBeenCalledTimes(
+                1
+            );
             // Avatar mutation only happens AFTER successful re-upload — on
             // failure the external URL must remain as a functional fallback.
             expect(user.save).not.toHaveBeenCalled();
@@ -558,10 +557,7 @@ describe('AuthService', () => {
 
             await authService.handleGoogleAuth(googleProfile);
 
-            expect(mockStorageService.isR2Url).not.toHaveBeenCalled();
-            expect(
-                mockStorageService.reUploadExternalAvatar
-            ).not.toHaveBeenCalled();
+            expect(mockAvatarService.syncExternalAvatar).not.toHaveBeenCalled();
             expect(user.save).not.toHaveBeenCalled();
         });
     });
@@ -695,8 +691,16 @@ describe('AuthService', () => {
         });
 
         it('should skip sending email if dedup key exists (anti-spam)', async () => {
+            // Sprint 10 §SP-8 — dedup-hit йде у overwrite-flow з валідним
+            // magic-record-payload-ом (anti-spam invariant збережено: лист
+            // повторно не відправляється; replace TTL через KEEPTTL).
             mockRedisCounter.incrementFixedWindow.mockResolvedValue(1);
-            mockRedis.get.mockResolvedValue('existing-token');
+            mockRedis.get
+                .mockResolvedValueOnce('existing-token')
+                .mockResolvedValueOnce(
+                    JSON.stringify({ email, purpose: 'login' })
+                );
+            mockRedis.set.mockResolvedValue('OK');
 
             await authService.sendMagicLink(email);
 
@@ -727,6 +731,163 @@ describe('AuthService', () => {
                 `magic_dedup:${email}:login`
             );
             expect(emailService.sendMagicLink).toHaveBeenCalled();
+        });
+
+        // ─── Sprint 10 §SP-8 — dedup-overwrite з трьома sibling-fields ───
+
+        describe('dedup-overwrite (Sprint 10 §SP-8)', () => {
+            const DRAFT = {
+                receiverName: 'Іваненко',
+                iban: 'UA213223130000026007233566001',
+                taxId: '1234567899',
+                purpose: 'Оплата',
+            } as const;
+            const KEY = '00000000-0000-4000-8000-000000000000';
+            const DRAFT_DRIFT = { ...DRAFT, receiverName: 'Петренко' };
+
+            it('(a) перший виклик з 3 полями — write у новий record (no dedup hit)', async () => {
+                mockRedisCounter.incrementFixedWindow.mockResolvedValue(1);
+                mockRedis.get.mockResolvedValue(null); // no dedup key
+
+                await authService.sendMagicLink(email, 'login', undefined, {
+                    landingDraft: DRAFT,
+                    claimIdempotencyKey: KEY,
+                    termsVersion: 'v2',
+                });
+
+                const setCall = mockPipeline.set.mock.calls.find(
+                    (c: unknown[]) =>
+                        typeof c[0] === 'string' && c[0].startsWith('magic:')
+                );
+                expect(setCall).toBeDefined();
+                const payload = JSON.parse(setCall![1] as string) as Record<
+                    string,
+                    unknown
+                >;
+                expect(payload).toMatchObject({
+                    email,
+                    purpose: 'login',
+                    landingDraft: DRAFT,
+                    claimIdempotencyKey: KEY,
+                    termsVersion: 'v2',
+                });
+                expect(emailService.sendMagicLink).toHaveBeenCalledTimes(1);
+            });
+
+            it('(b) повторний з тими самими 3 полями — KEEPTTL overwrite, лист НЕ відправлено', async () => {
+                mockRedisCounter.incrementFixedWindow.mockResolvedValue(1);
+                // 1-й get → dedup-key value (existingToken); 2-й get → existing magic-record payload
+                mockRedis.get
+                    .mockResolvedValueOnce('existing-token-abc')
+                    .mockResolvedValueOnce(
+                        JSON.stringify({
+                            email,
+                            purpose: 'login',
+                            landingDraft: DRAFT,
+                            claimIdempotencyKey: KEY,
+                            termsVersion: 'v2',
+                        })
+                    );
+                mockRedis.set.mockResolvedValue('OK');
+
+                await authService.sendMagicLink(email, 'login', undefined, {
+                    landingDraft: DRAFT,
+                    claimIdempotencyKey: KEY,
+                    termsVersion: 'v2',
+                });
+
+                expect(mockRedis.set).toHaveBeenCalledWith(
+                    'magic:existing-token-abc',
+                    expect.any(String),
+                    'KEEPTTL'
+                );
+                expect(emailService.sendMagicLink).not.toHaveBeenCalled();
+            });
+
+            it('(c) повторний з drift-нутим landingDraft — record оновлено новим draft, лист НЕ відправлено', async () => {
+                mockRedisCounter.incrementFixedWindow.mockResolvedValue(1);
+                mockRedis.get
+                    .mockResolvedValueOnce('existing-token-abc')
+                    .mockResolvedValueOnce(
+                        JSON.stringify({
+                            email,
+                            purpose: 'login',
+                            landingDraft: DRAFT,
+                            claimIdempotencyKey: KEY,
+                        })
+                    );
+                mockRedis.set.mockResolvedValue('OK');
+
+                await authService.sendMagicLink(email, 'login', undefined, {
+                    landingDraft: DRAFT_DRIFT,
+                    claimIdempotencyKey: KEY,
+                });
+
+                const setArg = mockRedis.set.mock.calls[0][1] as string;
+                const payload = JSON.parse(setArg) as Record<string, unknown>;
+                expect(payload.landingDraft).toEqual(DRAFT_DRIFT);
+                expect(emailService.sendMagicLink).not.toHaveBeenCalled();
+            });
+
+            it('(d) повторний без landingDraft+key (reset-password-resend) — drop sibling-fields, termsVersion overwrite-нуто', async () => {
+                mockRedisCounter.incrementFixedWindow.mockResolvedValue(1);
+                mockRedis.get
+                    .mockResolvedValueOnce('existing-token-abc')
+                    .mockResolvedValueOnce(
+                        JSON.stringify({
+                            email,
+                            purpose: 'reset-password',
+                            landingDraft: DRAFT,
+                            claimIdempotencyKey: KEY,
+                            termsVersion: 'v1',
+                        })
+                    );
+                mockRedis.set.mockResolvedValue('OK');
+
+                await authService.sendMagicLink(
+                    email,
+                    'reset-password',
+                    undefined,
+                    { termsVersion: 'v2' }
+                );
+
+                const setArg = mockRedis.set.mock.calls[0][1] as string;
+                const payload = JSON.parse(setArg) as Record<string, unknown>;
+                expect(payload.landingDraft).toBeUndefined();
+                expect(payload.claimIdempotencyKey).toBeUndefined();
+                expect(payload.termsVersion).toBe('v2');
+                expect(emailService.sendMagicLink).not.toHaveBeenCalled();
+            });
+
+            it('(e) змішаний flow — перший без sibling-fields, потім з; overwrite додає у той самий token-record', async () => {
+                mockRedisCounter.incrementFixedWindow.mockResolvedValue(1);
+                mockRedis.get
+                    .mockResolvedValueOnce('existing-token-abc')
+                    .mockResolvedValueOnce(
+                        JSON.stringify({
+                            email,
+                            purpose: 'login',
+                        })
+                    );
+                mockRedis.set.mockResolvedValue('OK');
+
+                await authService.sendMagicLink(email, 'login', undefined, {
+                    landingDraft: DRAFT,
+                    claimIdempotencyKey: KEY,
+                    termsVersion: 'v2',
+                });
+
+                const setArg = mockRedis.set.mock.calls[0][1] as string;
+                const payload = JSON.parse(setArg) as Record<string, unknown>;
+                expect(payload).toMatchObject({
+                    email,
+                    purpose: 'login',
+                    landingDraft: DRAFT,
+                    claimIdempotencyKey: KEY,
+                    termsVersion: 'v2',
+                });
+                expect(emailService.sendMagicLink).not.toHaveBeenCalled();
+            });
         });
     });
 
@@ -952,6 +1113,76 @@ describe('AuthService', () => {
             expect(
                 'accountDeleted' in result ? result.accountDeleted : undefined
             ).toBeUndefined();
+        });
+
+        // Sprint 13 §13 — orchestration of stamp + claim переїхала у
+        // AuthController. AuthService.verifyMagicLink сам нічого не stamp-ить
+        // і не claim-ить; повертає `rawPayload` для оркестратора. Тести цих
+        // двох викликів живуть у `auth.controller.spec.ts`.
+
+        describe('rawPayload propagation (Sprint 13)', () => {
+            const DRAFT = {
+                receiverName: 'Іваненко',
+                iban: 'UA213223130000026007233566001',
+                taxId: '1234567899',
+                purpose: 'Оплата',
+            } as const;
+            const KEY = '00000000-0000-4000-8000-000000000000';
+
+            const seedMagicPayload = (extra: Record<string, unknown>) => {
+                mockRedis.getdel.mockResolvedValue(
+                    JSON.stringify({
+                        email: 'user@example.com',
+                        purpose: 'login',
+                        ...extra,
+                    })
+                );
+                const saveMock = jest.fn().mockResolvedValue(mockUser);
+                jest.spyOn(
+                    usersService,
+                    'findOrCreateByEmail'
+                ).mockResolvedValue({
+                    ...mockUser,
+                    deletedAt: null,
+                    save: saveMock,
+                } as never);
+                jest.spyOn(jwtService, 'signAsync')
+                    .mockResolvedValueOnce('access-token')
+                    .mockResolvedValueOnce('refresh-token');
+            };
+
+            it('propagates all three optional sibling-fields from Redis payload', async () => {
+                seedMagicPayload({
+                    landingDraft: DRAFT,
+                    claimIdempotencyKey: KEY,
+                    termsVersion: 'v3',
+                });
+
+                const result = await authService.verifyMagicLink(token);
+
+                expect(result.deleted).toBeFalsy();
+                expect(
+                    'rawPayload' in result ? result.rawPayload : null
+                ).toEqual({
+                    landingDraft: DRAFT,
+                    claimIdempotencyKey: KEY,
+                    termsVersion: 'v3',
+                });
+            });
+
+            it('returns rawPayload with undefined fields when payload had none', async () => {
+                seedMagicPayload({});
+
+                const result = await authService.verifyMagicLink(token);
+
+                expect(
+                    'rawPayload' in result ? result.rawPayload : null
+                ).toEqual({
+                    landingDraft: undefined,
+                    claimIdempotencyKey: undefined,
+                    termsVersion: undefined,
+                });
+            });
         });
     });
 

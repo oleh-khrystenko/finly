@@ -1,8 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Connection, Model, Types } from 'mongoose';
 
-import { EXECUTION_TRANSACTION_TYPE } from '@finly/types';
+import {
+    EXECUTION_TRANSACTION_TYPE,
+    RESPONSE_CODE,
+    validateSameOriginPath,
+} from '@finly/types';
 import {
     ExecutionTransaction,
     ExecutionTransactionDocument,
@@ -293,6 +297,156 @@ export class UsersService {
                     termsAcceptedAt: new Date(),
                     termsVersion,
                 },
+            }
+        );
+    }
+
+    /**
+     * Sprint 10 §SP-12 — terms-pre-stamp у magic-link verify-flow ДО claim.
+     * Idempotent: filter `termsVersion: $ne: version` блокує перезапис того
+     * самого значення; на новий version — overwrite. Викликається з
+     * `AuthService.verifyMagicLink` order-step (2), uniform across `login` /
+     * `register` / `reset-password` purpose-ів (`delete-account` структурно
+     * виключений: terms-stamp до видалення акаунту не має сенсу).
+     *
+     * Відрізняється від `acceptTerms` саме idempotency-семантикою: `acceptTerms`
+     * — public user-action endpoint (POST /users/me/accept-terms), завжди
+     * стемпить новий `termsAcceptedAt`; `stampAcceptedTerms` — server-side
+     * automatic у magic-link flow, не повинен оновлювати `termsAcceptedAt`
+     * якщо version не змінилася (іначе верифікація поверни-знов-знов сторінки
+     * безпідставно пере-стемпило б дату).
+     */
+    async stampAcceptedTerms(
+        userId: string,
+        termsVersion: string
+    ): Promise<void> {
+        await this.userModel.updateOne(
+            { _id: userId, termsVersion: { $ne: termsVersion } },
+            {
+                $set: {
+                    termsAcceptedAt: new Date(),
+                    termsVersion,
+                },
+            }
+        );
+    }
+
+    /**
+     * Sprint 11 — write-once stamp на success-claim (`LandingClaimService`).
+     * Runtime validation через shared helper зберігає invariant навіть на
+     * прямих сервіс-call-сайтах поза DTO-pipeline. Невалідний target — throw
+     * `INVALID_REDIRECT_TARGET` як programming-error-marker: caller
+     * (`LandingClaimService.stampPostLoginTarget`) розрізняє його від
+     * infra-failures і пише у `logger.error` (alertable severity), без
+     * re-throw — stamp non-blocking за дизайном claim-flow.
+     */
+    async setPendingPostLoginTarget(
+        userId: string,
+        target: string
+    ): Promise<void> {
+        if (!validateSameOriginPath(target)) {
+            throw new BadRequestException({
+                code: RESPONSE_CODE.INVALID_REDIRECT_TARGET,
+                message: 'Invalid pending post-login target',
+            });
+        }
+        await this.userModel.updateOne(
+            { _id: userId },
+            { $set: { pendingPostLoginTarget: target } }
+        );
+    }
+
+    /**
+     * Sprint 11 — consume-and-clear; викликається frontend через PATCH
+     * `/users/me { pendingPostLoginTarget: null }` (verify-handler same-device
+     * + AuthInitializer cold-login). Sprint 12 cron Stage 3 cleanup-flow теж
+     * скористається цим методом напряму. Idempotent — `$unset` на відсутньому
+     * полі — no-op.
+     */
+    async clearPendingPostLoginTarget(userId: string): Promise<void> {
+        await this.userModel.updateOne(
+            { _id: userId },
+            { $unset: { pendingPostLoginTarget: 1 } }
+        );
+    }
+
+    /**
+     * Sprint 12 §12.1a — atomic claim-first stamp для 3-stage orphan-cleanup
+     * email-pipeline. Conditional-filter включає prereq-guard для `'final'`
+     * (stamp finalWarningSentAt дозволено тільки якщо firstReminderSentAt уже
+     * non-null). Caller отримує boolean: `true` → ми claim-нули і мусимо
+     * відправити лист; `false` → інший concurrent cron-instance уже claim-нув
+     * АБО prereq-guard відхилив (Stage 2 без Stage 1 stamp у race-window).
+     */
+    async stampProfileCompletionReminder(
+        userId: string,
+        stage: 'first' | 'final'
+    ): Promise<boolean> {
+        const filter: Record<string, unknown> =
+            stage === 'first'
+                ? {
+                      _id: userId,
+                      'profileCompletionReminders.firstReminderSentAt': null,
+                  }
+                : {
+                      _id: userId,
+                      'profileCompletionReminders.finalWarningSentAt': null,
+                      'profileCompletionReminders.firstReminderSentAt': {
+                          $ne: null,
+                      },
+                  };
+        const fieldPath =
+            stage === 'first'
+                ? 'profileCompletionReminders.firstReminderSentAt'
+                : 'profileCompletionReminders.finalWarningSentAt';
+        const result = await this.userModel.updateOne(filter, {
+            $set: { [fieldPath]: new Date() },
+        });
+        return result.matchedCount > 0;
+    }
+
+    /**
+     * Sprint 12 §12.1a — revert щойно-claim-нутого stamp-а на email-send-
+     * failure path-у. Non-conditional `$set:null` — caller гарантує що
+     * викликається тільки після successful claim і failed email-send (поза
+     * цим контекстом використовувати не можна — стерти non-null stamp без
+     * перевірки prereq-у Stage 2/3 порушить email-trail invariant).
+     */
+    async resetSingleStamp(
+        userId: string,
+        stage: 'first' | 'final'
+    ): Promise<void> {
+        const fieldPath =
+            stage === 'first'
+                ? 'profileCompletionReminders.firstReminderSentAt'
+                : 'profileCompletionReminders.finalWarningSentAt';
+        await this.userModel.updateOne(
+            { _id: userId },
+            { $set: { [fieldPath]: null } }
+        );
+    }
+
+    /**
+     * Sprint 12 §12.1a — post-Stage-3 atomic housekeeping. Викликається ТІЛЬКИ
+     * після cascade-deletion full-success (history-bucket consumed; цикл
+     * рестартує якщо user знову створить orphan-Business). Partial-cascade
+     * failure → метод НЕ викликається, наступний cron-cycle ретраїть Stage 3.
+     *
+     * Single `updateOne` з комбінованим `$set` + `$unset` — atomic-within-doc
+     * write. Альтернатива (два sequential update-и) ризикує stuck-stamps-станом
+     * на transient Mongo-failure між ними: cascade committed, reminders stuck,
+     * наступний цикл silent-видалить новий orphan-Business без листа (порушує
+     * compliance-invariant "warned twice before deletion").
+     */
+    async finalizeOrphanCleanup(userId: string): Promise<void> {
+        await this.userModel.updateOne(
+            { _id: userId },
+            {
+                $set: {
+                    'profileCompletionReminders.firstReminderSentAt': null,
+                    'profileCompletionReminders.finalWarningSentAt': null,
+                },
+                $unset: { pendingPostLoginTarget: 1 },
             }
         );
     }

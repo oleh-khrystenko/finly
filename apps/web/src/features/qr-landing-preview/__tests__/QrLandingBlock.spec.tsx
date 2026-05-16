@@ -19,15 +19,20 @@ jest.mock('sonner', () => ({
 
 jest.mock('../api', () => ({
     fetchQrPreview: jest.fn(),
-    claimLandingDraftAsBusiness: jest.fn(),
+    createBusinessFromDraft: jest.fn(),
+    createAccountFromDraft: jest.fn(),
 }));
 
 // Mock useHasHydrated як ручний controller — даємо тестам моментально
 // перемикати hydration-state без імітації Zustand persist-механіки.
 let mockHasHydratedValue = true;
-jest.mock('../lib/useHasHydrated', () => ({
-    useHasHydrated: () => mockHasHydratedValue,
-}));
+jest.mock('@/shared/lib', () => {
+    const actual = jest.requireActual('@/shared/lib');
+    return {
+        ...actual,
+        useHasHydrated: () => mockHasHydratedValue,
+    };
+});
 
 import { QrLandingBlock } from '../QrLandingBlock';
 import { useQrLandingDraftStore } from '@/entities/qr-landing-draft';

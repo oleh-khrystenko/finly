@@ -6,6 +6,8 @@ import AmountSection from './AmountSection';
 const baseInvoice: Invoice = {
     id: '507f1f77bcf86cd799439021',
     businessId: '507f1f77bcf86cd799439011',
+    // Sprint 9 — invoice nested під account (compound-unique scope `(accountId, slug)`).
+    accountId: '507f1f77bcf86cd799439055',
     slug: 'inv-001-aB3xQ9k7',
     amount: 150000,
     amountLocked: true,
@@ -14,6 +16,7 @@ const baseInvoice: Invoice = {
     slugPreset: 'simple',
     slugCounterScope: 'simple',
     slugCounter: 1,
+    payeeSnapshot: null,
     deletedAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),

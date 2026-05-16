@@ -2,7 +2,6 @@ import { z } from 'zod';
 
 import { MVP_BANKS } from '../constants/banks';
 import { BUSINESS_TYPES, requiresTaxation } from '../enums/business-type';
-import { slugPresetSchema } from '../enums/slug-preset';
 import {
     TAXATION_SYSTEMS,
     isVatAllowedTaxationSystem,
@@ -10,12 +9,14 @@ import {
 import { isWithinNbuCharset } from '../qr/charset';
 import { effectiveLimit, isWithinByteLimit } from '../qr/limits';
 import { objectIdSchema } from '../validation/common';
-import { ibanZod } from '../validation/iban';
 import { isTaxIdValidForType, payerTaxIdZod } from '../validation/tax-id';
 
 /**
- * Бізнес — постійна сутність з унікальною публічною сторінкою
- * (`pay.finly.com.ua/{slug}`). Успадковується інвойсами.
+ * Бізнес — юр-особа з унікальною публічною сторінкою (`pay.finly.com.ua/{slug}`).
+ * Sprint 9 §SP-1 рефакторинг: IBAN переїхав на окрему сутність `Account`
+ * (`packages/types/src/entities/account.ts`); Business зберігає тільки
+ * юр-property платника (type, name, taxId, taxationSystem, isVatPayer,
+ * paymentPurposeTemplate, acceptedBanks, slug, ownership).
  *
  * **Що Zod-схема НЕ перевіряє** (свідомо, бо це write-side / runtime-time):
  * - Унікальність `slugLower` глобально — Mongoose unique index.
@@ -35,7 +36,8 @@ import { isTaxIdValidForType, payerTaxIdZod } from '../validation/tax-id';
  *    `individual`/`organization` мусять мати їх null. Backward-direction
  *    (garbage-taxation у не-taxation-type) блокує data-corruption-state.
  * 3. `taxId-формат відповідає type` — Sprint 7 §SP-4 RNOKPP+checksum для
- *    individual/fop, ЄДРПОУ 8-digit без checksum для tov/organization.
+ *    individual/fop, ЄДРПОУ 8-digit без checksum для tov/organization. Sprint 9
+ *    переніс `taxId` з `requisites.taxId` на top-level; refine path оновлений.
  * 4. `isVatPayer === true ⇒ taxationSystem ∈ VAT_ALLOWED_TAXATION_SYSTEMS`
  *    (Sprint 3 рішення C1) — ПДВ legitимно платять лише на спрощеній-3 чи
  *    загальній. Активний лише коли обидва поля не-null (для individual /
@@ -86,30 +88,6 @@ export const businessSlugLowerSchema = z
     });
 
 /**
- * Sub-схема реквізитів. Sprint 7 §SP-4 — type-binding (10-digit для individual/
- * fop vs 8-digit для tov/organization) живе на parent-рівні `BusinessSchema`
- * (read-side refine `TAX_ID_FORMAT_MISMATCH_TYPE`) і на write-DTO рівні
- * `CreateBusinessSchema` per-variant requisites-shape. На рівні БД
- * `BusinessRequisites.taxId: string` — без розгалуження за форматом.
- *
- * **`taxId: payerTaxIdZod`, не `z.string()` plain** — defense-in-depth для
- * read-side і `UpdateBusinessSchema` (partial PATCH без `type`-context-у).
- * Sub-schema reject-ить structurally garbage (`'abc'`, 5/9/11-digit, …)
- * незалежно від parent-context-у. Parent-refine `TAX_ID_FORMAT_MISMATCH_TYPE`
- * спрацьовує лише на pass object-shape: за слабкої sub-схеми невалідний taxId
- * у PATCH прослизав би до service-layer-у, де type-binding-перевірка живе
- * як cross-check, але structural перевірка має зайти раніше.
- *
- * Sub-schema приймає union {RNOKPP, ЄДРПОУ}; type-binding дискримінує всередині
- * (read-refine + service cross-check для PATCH; create-DTO discriminated union
- * вибирає konkrétний валідатор per-variant).
- */
-export const BusinessRequisitesSchema = z.object({
-    iban: ibanZod,
-    taxId: payerTaxIdZod,
-});
-
-/**
  * NBU-charset refine — закриває інваріант "будь-який валідно збережений
  * Business може згенерувати валідний QR" (Sprint 2 §2.2). До Sprint 8 цей
  * валідатор жив internal-only у payload-builder-і; невалідний-для-NBU символ
@@ -153,7 +131,29 @@ export const BusinessSchema = z
         slug: businessSlugSchema,
         slugLower: businessSlugLowerSchema,
         name: businessNameSchema,
-        requisites: BusinessRequisitesSchema,
+        /**
+         * Sprint 10 §SP-11 — anti-duplicate-Business token для anon-claim-flow.
+         * UUID v4, генерований frontend-side на CTA-click "Зберегти у кабінет".
+         * Backend `BusinessesService.create` має partial-unique-compound-index
+         * `(ownerId, claimIdempotencyKey)` з `partialFilterExpression:
+         * { claimIdempotencyKey: { $type: 'string' } }` — повторний POST з
+         * тим самим (userId, key) повертає existing Business replay-shape
+         * замість дубльованого insert.
+         *
+         * **Optional у entity-shape**, бо cabinet-wizard-create НЕ передає
+         * це поле (відсутнє у документі → не входить у partial-index → не
+         * блокує множинні cabinet-create без anon-claim-context-у).
+         */
+        claimIdempotencyKey: z.string().uuid().optional(),
+        /**
+         * Sprint 9 §SP-1 — `taxId` як top-level поле (раніше `requisites.taxId`).
+         * `requisites`-wrapper повністю прибраний разом з міграцією IBAN на
+         * окрему сутність `Account`. Defense-in-depth structural-валідатор
+         * `payerTaxIdZod` (union RNOKPP ∪ ЄДРПОУ) reject-ить garbage до того,
+         * як parent-refine `TAX_ID_FORMAT_MISMATCH_TYPE` дістанеться до
+         * type-binding-перевірки.
+         */
+        taxId: payerTaxIdZod,
         /**
          * Sprint 7 §SP-3 — nullable. `null` для типів, що не мають оподаткування
          * (`individual`, `organization`); non-null для `fop`/`tov` (enforced
@@ -167,24 +167,6 @@ export const BusinessSchema = z
         paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
         acceptedBanks: z.array(bankCodeSchema),
         seoIndexEnabled: z.boolean(),
-        /**
-         * Sprint 4 §4.1 — дефолтний slug-preset, що буде попередньо обраний у
-         * формі створення інвойсу для цього бізнесу. `null = "не визначено"`
-         * → форма стартує з global system fallback `simple` (Sprint 4 §4.5
-         * read-spilling default).
-         *
-         * **Default `null`, не `'simple'`**: бізнес без явного налаштування
-         * семантично "не вказав уподобання"; UI робить fallback окремо. Це
-         * дозволяє відрізнити "ФОП явно обрав simple" від "ФОП ще не торкався
-         * налаштування" — потрібно для майбутнього onboarding-prompt-у
-         * у Sprint 6 (Paid вільний вибір).
-         *
-         * **Existing-doc compatibility:** `.default(null)` на Zod-парсингу
-         * страхує від retroactive missing-field-on-load для документів,
-         * створених до Sprint 4 (Mongoose default спрацьовує лише при create,
-         * не на read existing-doc).
-         */
-        invoiceSlugPresetDefault: slugPresetSchema.nullable().default(null),
         deletedAt: z.coerce.date().nullable(),
         createdAt: z.coerce.date(),
         updatedAt: z.coerce.date(),
@@ -214,12 +196,13 @@ export const BusinessSchema = z
         }
     )
     .refine(
-        // Sprint 7 §SP-4 — taxId-формат за `type`. Path `requisites.taxId` —
-        // щоб RHF inline-помилка з'явилася саме під полем введення.
-        (b) => isTaxIdValidForType(b.type, b.requisites.taxId),
+        // Sprint 7 §SP-4 — taxId-формат за `type`. Sprint 9 path-оновлення:
+        // `requisites.taxId` → top-level `taxId` після видалення requisites-
+        // wrapper-у. Path вживається у RHF inline-помилці під полем введення.
+        (b) => isTaxIdValidForType(b.type, b.taxId),
         {
             message: 'TAX_ID_FORMAT_MISMATCH_TYPE',
-            path: ['requisites', 'taxId'],
+            path: ['taxId'],
         }
     )
     .refine(
@@ -239,4 +222,3 @@ export const BusinessSchema = z
     );
 
 export type Business = z.infer<typeof BusinessSchema>;
-export type BusinessRequisites = z.infer<typeof BusinessRequisitesSchema>;

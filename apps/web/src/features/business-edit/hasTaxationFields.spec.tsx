@@ -3,7 +3,6 @@ import { render, screen } from '@testing-library/react';
 import type { Business, BusinessType, TaxationSystem } from '@finly/types';
 import TaxationSection, { hasTaxationFields } from './TaxationSection';
 
-const VALID_IBAN = 'UA213223130000026007233566001';
 const VALID_RNOKPP = '1234567899';
 const VALID_EDRPOU = '12345678';
 
@@ -28,19 +27,15 @@ function makeBusiness(
         slug: 'IvanEnko',
         slugLower: 'ivanenko',
         name: 'Іваненко',
-        requisites: {
-            iban: VALID_IBAN,
-            taxId:
-                overrides.type === 'tov' || overrides.type === 'organization'
-                    ? VALID_EDRPOU
-                    : VALID_RNOKPP,
-        },
+        taxId:
+            overrides.type === 'tov' || overrides.type === 'organization'
+                ? VALID_EDRPOU
+                : VALID_RNOKPP,
         taxationSystem: isTaxationType ? 'simplified-3' : null,
         isVatPayer: isTaxationType ? false : null,
         paymentPurposeTemplate: 'Оплата',
         acceptedBanks: ['privatbank'],
         seoIndexEnabled: false,
-        invoiceSlugPresetDefault: null,
         deletedAt: null,
         createdAt: new Date('2026-05-01'),
         updatedAt: new Date('2026-05-01'),

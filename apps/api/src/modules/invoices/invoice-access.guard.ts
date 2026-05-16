@@ -8,6 +8,7 @@ import {
 import { Request } from 'express';
 import { RESPONSE_CODE } from '@finly/types';
 
+import type { AccountDocument } from '../accounts/schemas/account.schema';
 import type { BusinessDocument } from '../businesses/schemas/business.schema';
 import type { UserDocument } from '../users/schemas/user.schema';
 import { InvoicesService } from './invoices.service';
@@ -44,10 +45,10 @@ export class InvoiceAccessGuard implements CanActivate {
         const request = context
             .switchToHttp()
             .getRequest<RequestWithInvoiceContext>();
-        const business = request.business;
-        if (!business) {
+        const account = request.account;
+        if (!account) {
             throw new Error(
-                'InvoiceAccessGuard requires BusinessAccessGuard before it'
+                'InvoiceAccessGuard requires AccountAccessGuard before it'
             );
         }
 
@@ -59,8 +60,10 @@ export class InvoiceAccessGuard implements CanActivate {
             });
         }
 
+        // Sprint 9 §SP-6 — lookup compound `(accountId, slug)`. Cross-account
+        // access blocked structurally by compound-unique-index.
         const invoice = await this.invoicesService.getBySlug(
-            business._id,
+            account._id,
             invoiceSlug
         );
         if (!invoice) {
@@ -92,5 +95,6 @@ export const CurrentInvoice = createParamDecorator(
 interface RequestWithInvoiceContext extends Request {
     user?: UserDocument;
     business?: BusinessDocument;
+    account?: AccountDocument;
     invoice?: InvoiceDocument;
 }

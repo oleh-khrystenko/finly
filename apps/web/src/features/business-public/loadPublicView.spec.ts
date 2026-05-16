@@ -1,6 +1,12 @@
 /**
- * Sprint 3 §3.9 — server-side fetch helper для Server Component
- * `app/host-pay/[slug]/page.tsx`. Тестуємо loadPublicView через mock-fetch.
+ * Sprint 9 §SP-4 — server-side fetch root-вивіски бізнесу для Server
+ * Component `app/host-pay/[slug]/page.tsx`. Тестуємо loadPublicView через
+ * mock-fetch.
+ *
+ * Sprint 9 переписаний: shape повертає `accounts: PublicAccountListItem[]`
+ * замість `nbuLinks` (Sprint 3 single-account-view зник); fetch-strategy
+ * перейшов з ISR `revalidate: 60` на `cache: 'no-store'` (1→2-Account
+ * redirect-flip requires fresh state — UAT ACC-2).
  */
 
 import { loadPublicView } from './loadPublicView';
@@ -22,31 +28,72 @@ beforeEach(() => {
     fetchMock.mockReset();
 });
 
-describe('loadPublicView', () => {
-    it('успіх: fetch /api/businesses/public/{slug} + повертає data', async () => {
-        const view = {
-            type: 'fop',
-            name: 'Іваненко',
-            slug: 'IvanEnko',
-            acceptedBanks: ['privatbank'],
-            seoIndexEnabled: false,
-            nbuLinks: {
-                primary: 'https://qr.bank.gov.ua/...',
-                legacy: 'https://bank.gov.ua/qr/...',
-            },
-        };
+const sampleView = {
+    type: 'fop',
+    name: 'Іваненко',
+    slug: 'IvanEnko',
+    acceptedBanks: ['privatbank'],
+    seoIndexEnabled: false,
+    accounts: [
+        {
+            slug: 'aBc12345',
+            name: 'ПриватБанк •2580',
+            bankCode: 'privatbank',
+            ibanMask: '•2580',
+        },
+    ],
+};
+
+describe('loadPublicView (Sprint 9 — accounts list)', () => {
+    it('успіх: fetch /api/businesses/public/{slug} + повертає parsed shape з accounts[]', async () => {
         fetchMock.mockResolvedValue({
             ok: true,
             status: 200,
-            json: async () => ({ data: view }),
+            json: async () => ({ data: sampleView }),
         });
 
         const result = await loadPublicView('IvanEnko');
         expect(fetchMock).toHaveBeenCalledWith(
             'http://api:4000/api/businesses/public/IvanEnko',
-            { next: { revalidate: 60 } }
+            { cache: 'no-store' }
         );
-        expect(result).toEqual(view);
+        expect(result).toEqual(sampleView);
+        expect(result?.accounts).toHaveLength(1);
+    });
+
+    it('успіх: empty accounts[] — 0-Account business валідний shape', async () => {
+        fetchMock.mockResolvedValue({
+            ok: true,
+            status: 200,
+            json: async () => ({ data: { ...sampleView, accounts: [] } }),
+        });
+
+        const result = await loadPublicView('IvanEnko');
+        expect(result?.accounts).toEqual([]);
+    });
+
+    it('успіх: 2+ accounts — root-list-view shape', async () => {
+        fetchMock.mockResolvedValue({
+            ok: true,
+            status: 200,
+            json: async () => ({
+                data: {
+                    ...sampleView,
+                    accounts: [
+                        sampleView.accounts[0],
+                        {
+                            slug: 'dEf67890',
+                            name: 'monobank •8104',
+                            bankCode: 'monobank',
+                            ibanMask: '•8104',
+                        },
+                    ],
+                },
+            }),
+        });
+
+        const result = await loadPublicView('IvanEnko');
+        expect(result?.accounts).toHaveLength(2);
     });
 
     it('404 → null (caller робить notFound() у Server Component)', async () => {
@@ -90,14 +137,14 @@ describe('loadPublicView', () => {
         process.env.API_INTERNAL_URL = 'http://api:4000';
     });
 
-    it('використовує ISR revalidate: 60 (Sprint 3 §F4)', async () => {
+    it("використовує `cache: 'no-store'` — Sprint 9 §SP-4 fresh state для 1→2-Account redirect-flip", async () => {
         fetchMock.mockResolvedValue({
             ok: true,
             status: 200,
-            json: async () => ({ data: {} }),
+            json: async () => ({ data: sampleView }),
         });
-        await loadPublicView('x');
+        await loadPublicView('IvanEnko');
         const opts = fetchMock.mock.calls[0]![1];
-        expect(opts).toEqual({ next: { revalidate: 60 } });
+        expect(opts).toEqual({ cache: 'no-store' });
     });
 });

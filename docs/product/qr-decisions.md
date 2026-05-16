@@ -19,31 +19,38 @@
 - Розподіл: публічна зона — `pay.finly.com.ua` (для клієнтів), кабінет — `finly.com.ua` (для ФОП). Конкретна структура URL — у розділі 4.3.
 - Це частина бренду і MVP будується саме на цьому.
 
-### 1.3 Ієрархія платіжних об'єктів: бізнес → інвойси
+### 1.3 Ієрархія платіжних об'єктів: бізнес → рахунок → інвойс (Sprint 9)
 
-У продукті є **дворівнева ієрархія**:
+У продукті **трирівнева ієрархія** (до Sprint 9 була дворівнева "бізнес → інвойс"; Sprint 9 виніс банківський рахунок в окрему сутність — деталі у §1.14):
 
-**Рівень 1 — Бізнес (постійна сутність).**
+**Рівень 1 — Бізнес (юр-особа).**
 
 - Має унікальний slug (наприклад, `ivanenko-fop`).
-- Має свою **постійну публічну сторінку** ("Загальний QR / вивіска"): без суми, без терміну дії, валідна завжди. Підходить для розміщення на касі кафе, у візитці, на сайті.
-- Реквізити (IBAN, ІПН/ЄДРПОУ, тип оподаткування) — задаються один раз на бізнесі.
+- Юр-property: `type` (4 типи — §1.13), `taxId` (РНОКПП/ЄДРПОУ), `taxationSystem`, `isVatPayer`, `paymentPurposeTemplate`, `acceptedBanks`.
+- **НЕ має IBAN** — IBAN живе на рівні 2 (Account). Sprint 9 §SP-1.
 
-**Рівень 2 — Інвойси (одноразові сутності під бізнесом).**
+**Рівень 2 — Account (банківський рахунок під бізнесом).**
 
-- Кожен інвойс **належить конкретному бізнесу** і успадковує його реквізити.
-- Має свою унікальну публічну сторінку (під slug-ом бізнесу).
+- 0..N рахунків під одним бізнесом. Один IBAN належить рівно одному бізнесу через FK.
+- Має свою **постійну публічну сторінку** ("Загальний QR / вивіска для цього рахунку"): без суми, без терміну дії, валідна завжди. Підходить для розміщення на касі кафе, у візитці, на сайті.
+- IBAN immutable post-creation (Sprint 9 §SP-2).
+
+**Рівень 3 — Інвойс (одноразова платіжка під рахунком).**
+
+- Кожен інвойс **належить конкретному рахунку** (`accountId`) і успадковує його IBAN + юр-property бізнесу.
+- Має свою унікальну публічну сторінку (під slug-ом рахунку, який під slug-ом бізнесу).
 - Має конкретну суму (можливо лок-нуту) / конкретне призначення / можливо термін дії.
-- Один бізнес може мати скільки завгодно інвойсів одночасно.
+- Один рахунок може мати скільки завгодно інвойсів одночасно; нумерація per-account (Sprint 9 §SP-6).
 
 **Резюме у вигляді таблиці:**
 
-| Сутність   | Що це                                       | Сума                                            | Термін дії                   | URL                             |
-| ---------- | ------------------------------------------- | ----------------------------------------------- | ---------------------------- | ------------------------------- |
-| **Бізнес** | Стабільна публічна сторінка-вивіска бізнесу | Без суми — клієнт вводить сам                   | Без терміну дії              | `…/{slug-бізнесу}`              |
-| **Інвойс** | Конкретна платіжка під замовлення/договір   | Зафіксована або редагована — обирає підприємець | Опційно — обирає підприємець | `…/{slug-бізнесу}/{id-інвойсу}` |
+| Сутність    | Що це                                            | Сума                                            | Термін дії                   | URL                                                       |
+| ----------- | ------------------------------------------------ | ----------------------------------------------- | ---------------------------- | --------------------------------------------------------- |
+| **Бізнес**  | Список рахунків / empty-state (0) / 307→Account (1) | —                                               | —                            | `…/{businessSlug}`                                        |
+| **Account** | Стабільна публічна вивіска з QR для цього рахунку | Без суми — клієнт вводить сам                   | Без терміну дії              | `…/{businessSlug}/{accountSlug}`                          |
+| **Інвойс**  | Конкретна платіжка під замовлення/договір        | Зафіксована або редагована — обирає підприємець | Опційно — обирає підприємець | `…/{businessSlug}/{accountSlug}/{invoiceSlug}`            |
 
-**Деталі внутрішньої структури URL інвойсу** (формат сегмента, формат id, приватність) — зафіксовані в розділах 4.3 і 4.3.1.
+**Деталі внутрішньої структури URL** (формат сегментів, slug-генератор, кеш-семантика 307-redirect) — зафіксовані в розділах 4.3, 4.3.1, та у §1.14 (`Sprint 9 §SP-4/§SP-10`).
 
 ### 1.4 Гнучкість редагування суми
 
@@ -70,7 +77,9 @@
 
 **Стартовий MVP-набір банків (продуктовий підбір, не повний ринковий перелік):**
 
-- PrivatBank, Monobank, PUMB, Oschadbank, Sense, Ukrgazbank (EcoBank), SportBank, IZIBank, Raiffeisen, Abank, Credit Dnipro.
+- PrivatBank, Monobank, PUMB, Oschadbank, Sense, Ukrgazbank (EcoBank), IZIBank, Raiffeisen, Abank, Credit Dnipro.
+
+> **SportBank — прибрано у Sprint 9.** Проєкт закрито 06.05.2024 (Таскомбанк припинив розвиток); клієнти переведені у ТАСКОМБАНК на ту саму ліцензію + МФО, на якому працює IZIBank (339500). Колишній SportBank-IBAN тепер автодетектиться як `izibank`.
 
 **Контекст.** Офіційний список українських банків, що інтегровані з платіжним QR-стандартом НБУ, **ширший за наш MVP-набір** (актуальний перелік — на сторінці bank.gov.ua). Наш стартовий набір — фокус на банках з найбільшою часткою користувачів. Перелік розширюється за фактом попиту після релізу.
 
@@ -157,6 +166,47 @@ Discriminator живе у Zod write-DTO (`CreateBusinessSchema` discriminated un
 - ❌ Type-change post-creation flow — `type` immutable.
 - ❌ Free-text legal-form-label для public — Sprint 6+.
 
+### 1.14 Banking Accounts — розщеплення Business на Business + Account (закрито у Sprint 9)
+
+> ✅ **Закрито Sprint 9** (`docs/sprints/09-accounts/README.md`).
+> Рішення: банківський рахунок (IBAN) виноситься з `Business.requisites` в окрему сутність `Account`. Один бізнес → 0..N рахунків. Public URL стає матрьошковим (Business → Account → Invoice). Маркетинговий нарратив: "ФОП з 2 рахунками не зобов'язаний дублювати юр-особу".
+
+**Доменна мотивація.** До Sprint 9 сутність `Business` плутала юр-особу (тип, ІПН, оподаткування) і банківський рахунок (IBAN). ФОП з 2 рахунками (типовий кейс: Privat для оборотів + Mono для дрібних) мусив створювати "два бізнеси" з ідентичним ІПН і назвою. Це некоректно семантично (юр-особа одна), плутає public-вивіску ("який з двох цей сканований QR?"), засмічує cabinet-список, блокує природний use-case "ФОП веде через основний рахунок, на резервний приймає рідко".
+
+**Розщеплено на 3 сутності:**
+
+- **Business** — юр-особа: `type`, `name`, `taxId` (top-level, flatten-нутий з `requisites.taxId`), `taxationSystem`, `isVatPayer`, `paymentPurposeTemplate`, `acceptedBanks`, `slug`, ownership.
+- **Account** — банківський рахунок: `iban` (immutable), `name` (auto-default з МФО+last4), `slug` (case-sensitive 8-char random), `bankCode` (stored derived з МФО), `invoiceSlugPresetDefault` (переїхав з Business — нумерація інвойсів per-account).
+- **Invoice** — одноразова платіжка: `accountId` (required), `businessId` (denormalized для cascade), amount/lockMask/validUntil/purpose/slug.
+
+**Public URL стає матрьошковим:**
+
+- `pay.finly.com.ua/{businessSlug}` — корінь: список рахунків (2+) / **307 Temporary Redirect** на per-account (1) / empty-state (0). 307 (а не 308) — `Cache-Control` не дає Chrome закешувати "1-Account state" in-memory; ФОП додасть 2-й рахунок → root показує список, а не застряє на старій per-account-вивісці (§SP-4).
+- `pay.finly.com.ua/{businessSlug}/{accountSlug}` — per-account вивіска (11 банків + 2 NBU кнопки + 2 QR — поточна Sprint 3 функціональність переїхала з кореня сюди).
+- `pay.finly.com.ua/{businessSlug}/{accountSlug}/{invoiceSlug}` — інвойс.
+
+**Ключові архітектурні рішення Sprint 9:**
+
+- **§SP-2 IBAN immutable + unique per business.** Помилився — видали рахунок і створи новий. Compound-unique `(businessId, iban)` блокує typo-дублікати. Cross-business duplicate дозволено (ФОП + його ТОВ ділять рахунок).
+- **§SP-3 Account delete консервативний.** 0 інвойсів — обов'язкова передумова. > 0 → 409 з UA-message "Цей рахунок має N виставлений інвойс. Спочатку видаліть їх або весь бізнес". Без cascade на Invoice (на відміну від Business cascade-delete §SP-5). Race-protection через `withTransaction` + touch-account pattern на InvoicesService.create.
+- **§SP-4 Public-вивіска 307-redirect-at-1.** Не 308, бо стан "1 Account" non-permanent.
+- **§SP-5 Cabinet матрьошка через 4 рівні URL.** business → account → invoice. Кожен рівень — list-view + single-detail-view. Без вкладок.
+- **§SP-6 Інвойсна нумерація per-account.** Compound-unique invoice-slug `(accountId, slug)`. Counter-doc namespace переїхав з `businessId` на `accountId`. Privat має `inv-001..N`, Mono — `inv-001..M`, незалежно. `invoiceSlugPresetDefault` переїхав з Business на Account.
+- **§SP-9 Account.bankCode як stored derived value.** Обчислюється раз через `bankCodeFromIban(iban)` при create і пишеться у документ. IBAN immutable → drift неможливий. На null-bankCode (нерозпізнаний МФО) bank-label-row ховається повністю у 4 UI-точках (НЕ "Невідомий банк").
+- **§SP-10 Account-slug case-sensitive як invoice-slug.** Модель invoice-slug, не business-slug. 8-char A-Za-z0-9 random, без `slugLower`-поля, без canonical-redirect.
+
+**Що Sprint 9 НЕ закрив (винесено у окремі спринти 2026-05-11):**
+
+- ❌ Sprint 8 anon-claim flow refactor (через 2 sequential POST: Business + Account) — Sprint 10. Sprint 9 тимчасово вимкнув CTA "Зберегти у кабінет" на лендінгу.
+- ❌ Deep-link UX-recovery після abandoned claim — Sprint 11.
+- ❌ Orphan-Business cleanup-cron + email-pipeline — Sprint 12.
+- ❌ `Account.providerLink` placeholder для Phase 1.5 (Mono Acquiring API). Архітектурно nullable-add у майбутньому non-breaking.
+- ❌ Account custom-logo у QR (Sprint 6+ Paid).
+- ❌ Account vanity-slug (Sprint 6+ Paid).
+- ❌ Cross-account invoice-move ("перенести інвойс з Privat на Mono") — invoice immutable з `accountId`.
+- ❌ Multi-business shared account — Account належить рівно одному businessId через FK.
+- ❌ Free vs Paid гейти на кількість Account на бізнес — Sprint 6.
+
 ---
 
 ## 2. Відкладені питання (повертаємось пізніше)
@@ -200,7 +250,7 @@ Discriminator живе у Zod write-DTO (`CreateBusinessSchema` discriminated un
 ### 3.1 [КРИТИЧНЕ] Per-bank deep links — як примусово відкривати конкретний банк
 
 **Постановка задачі.**
-На публічній сторінці клієнт бачить кнопки/іконки для кожного підтримуваного українського банку (Privat24, Monobank, PUMB, Oschad, Sense, Ukrgazbank, SportBank, IZIBank, Raiffeisen, Abank, Credit Dnipro).
+На публічній сторінці клієнт бачить кнопки/іконки для кожного підтримуваного українського банку (Privat24, Monobank, PUMB, Oschad, Sense, Ukrgazbank, IZIBank, Raiffeisen, Abank, Credit Dnipro).
 
 При натисканні на конкретний банк **повинен відкритись саме цей банк** з попередньо заповненими реквізитами і сумою. **НЕ системний пікер**, **НЕ "оберіть, у якому додатку відкрити"**.
 
@@ -429,3 +479,4 @@ Discriminator живе у Zod write-DTO (`CreateBusinessSchema` discriminated un
 | 2026-05-01 | Зафіксовано 1.12 — Модель А (тупий генератор), без трекінгу оплат у MVP. Продуктовий ризик відмічено. Модель Б — потенційна Phase 1.5, архітектура моделі даних закладається з можливістю еволюції.                                                                                                                                                                                                                                                                                       |
 | 2026-05-01 | Чистка документа: видалено дубль 4.3.2, виправлено опечатки ("по domeku", "treba фігурити", "тонший value gap"), оновлено застарілі перехресні посилання в 1.2/1.3/1.4/1.5/1.6, перенесено 1.12 у кінець розділу 1, security-планка хвоста slug-а збільшена з 6 до 8 символів, перейменовано заголовок розділу 4.                                                                                                                                                                         |
 | 2026-05-01 | Зовнішнє ревʼю — 4 правки: (1) синтетичні дані в `docs/example/generate.ts` замість реальних реквізитів конкретного ФОП; (2) понижено статус `generate.ts` з "джерела істини" до "ілюстративного прикладу", додано примітку про незадекларовані залежності; (3) переписано 1.7 — per-bank кнопки тепер сформульовані як продуктова мета, що залежить від research 3.1, без категоричного "тільки per-bank"; (4) "усі відомі банки" → "стартовий MVP-набір" з примітками про ширший ринок. |
+| 2026-05-12 | Додано 1.14 — Banking Accounts (Sprint 9). Розщеплення `Business` на `Business + Account + Invoice`: IBAN виносіть з `Business.requisites` в окрему сутність `Account`. 3-рівнева ієрархія, матрьошковий public URL `pay.finly.com.ua/{biz}/{acc}/{inv}` з 307 redirect-at-1-Account. §1.3 переписано під 3-рівневу ієрархію. SportBank прибрано з MVP_BANKS (проєкт закрито 06.05.2024, клієнти на ТАСКОМБАНК / IZIBank). |

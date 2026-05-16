@@ -287,6 +287,12 @@ describe('PublicInvoiceSchema (whitelist invariant)', () => {
             slug: 'IvanEnko',
             acceptedBanks: ['privatbank', 'monobank'] as const,
         },
+        account: {
+            slug: 'aB3xQ9k7',
+            name: 'ПриватБанк •6001',
+            bankCode: 'privatbank' as const,
+            ibanMask: '•6001',
+        },
         nbuLinks: {
             primary: 'https://qr.bank.gov.ua/payload',
             legacy: 'https://bank.gov.ua/qr/payload',
@@ -298,23 +304,44 @@ describe('PublicInvoiceSchema (whitelist invariant)', () => {
         expect(r.success).toBe(true);
     });
 
+    it('Sprint 9 — rejects view без account (required для 3-segment URL)', () => {
+        const { account: _omit, ...without } = VALID_PUBLIC;
+        void _omit;
+        const r = PublicInvoiceSchema.safeParse(without);
+        expect(r.success).toBe(false);
+    });
+
+    it('Sprint 9 — parses account з null bankCode (§SP-9)', () => {
+        const r = PublicInvoiceSchema.safeParse({
+            ...VALID_PUBLIC,
+            account: {
+                ...VALID_PUBLIC.account,
+                bankCode: null,
+                name: 'Банк •6001',
+            },
+        });
+        expect(r.success).toBe(true);
+    });
+
     it('whitelist: strip extra leak-кандидатів через `.parse` (без `.strict()`)', () => {
         // Zod default (без .strict) робить strip, не reject — це і є whitelist
         // механіка: нові leak-поля у БД тихо випадають з response.
         const result = PublicInvoiceSchema.parse({
             ...VALID_PUBLIC,
             // Спроба leak-нути:
-            requisites: { iban: VALID_IBAN, taxId: VALID_TAX_ID },
+            taxId: VALID_TAX_ID,
             taxationSystem: 'simplified-3',
             isVatPayer: false,
             ownerId: '507f1f77bcf86cd799439012',
+            accountId: '507f1f77bcf86cd799439031',
             slugPreset: 'simple',
             createdAt: '2026-05-01T10:00:00.000Z',
         });
-        expect(result).not.toHaveProperty('requisites');
+        expect(result).not.toHaveProperty('taxId');
         expect(result).not.toHaveProperty('taxationSystem');
         expect(result).not.toHaveProperty('isVatPayer');
         expect(result).not.toHaveProperty('ownerId');
+        expect(result).not.toHaveProperty('accountId');
         expect(result).not.toHaveProperty('slugPreset');
         expect(result).not.toHaveProperty('createdAt');
     });
@@ -324,7 +351,7 @@ describe('PublicInvoiceSchema (whitelist invariant)', () => {
             ...VALID_PUBLIC,
             business: {
                 ...VALID_PUBLIC.business,
-                requisites: { iban: VALID_IBAN, taxId: VALID_TAX_ID },
+                taxId: VALID_TAX_ID,
                 ownerId: '507f1f77bcf86cd799439012',
                 managers: [],
                 slugLower: 'ivanenko',
@@ -334,7 +361,7 @@ describe('PublicInvoiceSchema (whitelist invariant)', () => {
                 seoIndexEnabled: false,
             },
         });
-        expect(result.business).not.toHaveProperty('requisites');
+        expect(result.business).not.toHaveProperty('taxId');
         expect(result.business).not.toHaveProperty('ownerId');
         expect(result.business).not.toHaveProperty('managers');
         expect(result.business).not.toHaveProperty('slugLower');
@@ -342,6 +369,23 @@ describe('PublicInvoiceSchema (whitelist invariant)', () => {
         expect(result.business).not.toHaveProperty('isVatPayer');
         expect(result.business).not.toHaveProperty('paymentPurposeTemplate');
         expect(result.business).not.toHaveProperty('seoIndexEnabled');
+    });
+
+    it('Sprint 9 — nested account теж whitelist (iban / businessId / createdAt strip)', () => {
+        const result = PublicInvoiceSchema.parse({
+            ...VALID_PUBLIC,
+            account: {
+                ...VALID_PUBLIC.account,
+                iban: VALID_IBAN,
+                businessId: '507f1f77bcf86cd799439011',
+                invoiceSlugPresetDefault: 'simple',
+                createdAt: '2026-05-01T10:00:00.000Z',
+            },
+        });
+        expect(result.account).not.toHaveProperty('iban');
+        expect(result.account).not.toHaveProperty('businessId');
+        expect(result.account).not.toHaveProperty('invoiceSlugPresetDefault');
+        expect(result.account).not.toHaveProperty('createdAt');
     });
 
     it('rejects invalid nbuLinks URL', () => {

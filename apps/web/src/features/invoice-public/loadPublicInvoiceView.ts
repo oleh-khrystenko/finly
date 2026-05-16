@@ -1,23 +1,27 @@
 import { PublicInvoiceSchema, type PublicInvoiceView } from '@finly/types';
 
 /**
- * Sprint 4 §4.7 — server-side fetch публічного view інвойсу для Server
- * Component на `app/host-pay/[slug]/[invoiceSlug]/page.tsx`.
+ * Sprint 4 §4.7 + Sprint 9 §SP-6 — server-side fetch публічного view інвойсу
+ * для Server Component на
+ * `app/host-pay/[slug]/[accountSlug]/[invoiceSlug]/page.tsx`.
  *
- * Server-only native fetch до `API_INTERNAL_URL`. На відміну від Sprint 3
- * `loadPublicView` (бізнес — vanity вивіска з ISR `revalidate: 60`), invoice —
- * mutable payment-команда: `cache: 'no-store'` гарантує fresh fetch на кожен
- * request. Stale-кеш ламає payment correctness (видалений рахунок ще видно,
- * стара сума показується після редагування). CDN-relief, якщо знадобиться, —
- * через ETag, не через time-based cache window.
+ * **Sprint 9 URL ремайнінг**: 3-сегментний path
+ * `/businesses/public/:slug/account/:accountSlug/invoices/:invoiceSlug` —
+ * інвойси переїхали під account-namespace через §SP-6 per-account-counter
+ * (compound-unique invoice-slug став `(accountId, slug)`, не `(businessId, slug)`).
  *
- * **Zod-parse на boundary** (Sprint 4 review fix): API JSON містить дати як
- * ISO-strings; `PublicInvoiceSchema` (`z.coerce.date()`) нормалізує `validUntil`
- * у `Date` instance, що очікують consumer-и (`InvoicePublicView`,
- * `getInvoiceStatus`).
+ * Server-only native fetch до `API_INTERNAL_URL`. `cache: 'no-store'`
+ * (Sprint 4 review fix): invoice — mutable payment-команда; видалений
+ * рахунок ще видно з ISR-кешу, стара сума показується після редагування.
+ * CDN-relief через ETag, якщо знадобиться, — не через time-based ISR.
+ *
+ * **Zod-parse на boundary** — API JSON містить дати як ISO-strings;
+ * `PublicInvoiceSchema` (`z.coerce.date()`) нормалізує `validUntil` у `Date`
+ * instance, що очікують consumer-и (`InvoicePublicView`, `getInvoiceStatus`).
  */
 export async function loadPublicInvoiceView(
     businessSlug: string,
+    accountSlug: string,
     invoiceSlug: string
 ): Promise<PublicInvoiceView | null> {
     const apiBase = process.env.API_INTERNAL_URL;
@@ -26,11 +30,7 @@ export async function loadPublicInvoiceView(
             '❌ API_INTERNAL_URL is not defined (server-side env required for public page rendering)'
         );
     }
-    const url = `${apiBase}/api/businesses/public/${encodeURIComponent(businessSlug)}/invoices/${encodeURIComponent(invoiceSlug)}`;
-    // `cache: 'no-store'` — invoice mutable (Sprint 4 review fix). Stale-кеш
-    // ламає payment correctness: видалений рахунок ще видно клієнту, або
-    // показується стара сума після редагування. CDN-relief, якщо знадобиться,
-    // — через ETag, не через time-based ISR.
+    const url = `${apiBase}/api/businesses/public/${encodeURIComponent(businessSlug)}/account/${encodeURIComponent(accountSlug)}/invoices/${encodeURIComponent(invoiceSlug)}`;
     const res = await fetch(url, { cache: 'no-store' });
     if (res.status === 404) return null;
     if (!res.ok) {

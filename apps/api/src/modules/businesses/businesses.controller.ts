@@ -9,16 +9,25 @@ import {
     Post,
     UseGuards,
 } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
 import { ZodValidationPipe } from 'nestjs-zod';
 import {
     CreateBusinessSchema,
-    type BusinessWithInvoicesCount,
+    type BusinessWithCounts,
     type CreateBusinessRequest,
 } from '@finly/types';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
-import { InvoicesService } from '../invoices/invoices.service';
+import {
+    Account,
+    type AccountDocument,
+} from '../accounts/schemas/account.schema';
+import {
+    Invoice,
+    type InvoiceDocument,
+} from '../invoices/schemas/invoice.schema';
 import type { UserDocument } from '../users/schemas/user.schema';
 import { BusinessAccessGuard, CurrentBusiness } from './business-access.guard';
 import { BusinessesService } from './businesses.service';
@@ -26,44 +35,47 @@ import { UpdateBusinessDto } from './dto/update-business.dto';
 import type { BusinessDocument } from './schemas/business.schema';
 
 /**
- * Sprint 3 §3.2 — cabinet endpoints для бізнесів. Префікс `/businesses/me`.
+ * Sprint 3 §3.2 + Sprint 9 §9.1 — cabinet endpoints для бізнесів. Префікс
+ * `/businesses/me`.
  *
  * Усі маршрути під `JwtActiveGuard`. Маршрути з `:slug` додатково під
  * `BusinessAccessGuard`, що (1) лукапить бізнес case-insensitively через
  * `slugLower`, (2) перевіряє ownership/managers, (3) attach-ить resolved
  * document до `request.business` для `@CurrentBusiness()`.
  *
- * **Slug — primary route-param** (не `:id`). Frontend знає бізнес по slug-у;
- * resolve через `slugLower` unique-index — O(1). Окремий `/resolve?slug=...`
- * як проксі для `:id` — зайвий round-trip і додаткова поверхня помилок.
- *
- * **QR endpoints — НЕ тут.** Cabinet рендерить QR через ті самі public-URL
- * (`<img src='/api/businesses/public/{slug}/qr/...'>`); реальні endpoints
- * живуть у `PublicBusinessesController` (§3.3) — рішення про cache-safety
- * на shared CDN детально пояснене там. Cabinet просто реюзає public URL без
- * auth-у; жодних cabinet-only QR endpoints не існує навмисно.
+ * **Counter-aggregation через direct model query** (Sprint 9 review fix):
+ * cabinet `getBySlug` потребує `accountsCount` + `invoicesCount` як cheap
+ * counter aggregate. Sprint 4 Pattern був "повторна реєстрація `InvoicesService`
+ * як provider у BusinessesModule" — це створювало duplicate DI-instance і
+ * вимагало `forwardRef(() => AccountsModule)` для AccountsService, що
+ * формувало JS-import-cycle (`businesses ↔ accounts ↔ invoices`). Sprint 9
+ * розв'язує: BusinessesController inject-ить `accountModel` + `invoiceModel`
+ * напряму через `@InjectModel` (моделі вже зареєстровані у `BusinessesModule.
+ * forFeature` для cascade-delete-business §SP-5). One-way dependency tree:
+ * `Users ← Businesses ← Accounts ← Invoices`, без cycle.
  */
 @Controller('businesses/me')
 @UseGuards(JwtActiveGuard)
 export class BusinessesController {
     constructor(
         private readonly businessesService: BusinessesService,
-        private readonly invoicesService: InvoicesService
+        @InjectModel(Account.name)
+        private readonly accountModel: Model<AccountDocument>,
+        @InjectModel(Invoice.name)
+        private readonly invoiceModel: Model<InvoiceDocument>
     ) {}
 
     @Get()
     async list(
         @CurrentUser() user: UserDocument
-    ): Promise<{ data: BusinessWithInvoicesCount[] }> {
-        // Sprint 4 §4.4 — single-aggregation pipeline через
-        // `getOwnedAndManagedWithInvoicesCount` (`$lookup` + nested `$count`).
-        // Один Mongo round-trip незалежно від кількості бізнесів — масштабується
-        // до бухгалтерів з 500+ клієнтами без linear-degradation.
-        const items =
-            await this.businessesService.getOwnedAndManagedWithInvoicesCount(
-                user._id.toString(),
-                user.worksAsBookkeeper
-            );
+    ): Promise<{ data: BusinessWithCounts[] }> {
+        // Sprint 9 §9.1 — single-aggregation pipeline з двома counters
+        // (`accountsCount` + `invoicesCount`) per item. Один Mongo round-trip
+        // незалежно від кількості бізнесів.
+        const items = await this.businessesService.getOwnedAndManagedWithCounts(
+            user._id.toString(),
+            user.worksAsBookkeeper
+        );
         return { data: items };
     }
 
@@ -80,12 +92,6 @@ export class BusinessesController {
         // return type ... is not an object type), тому використовуємо
         // **public param-level pipe** з конструктором `ZodValidationPipe
         // (schema)` — стандартний flow nestjs-zod без DTO-class wrapper-у.
-        //
-        // Глобальний `ZodValidationPipe` (зареєстрований у `main.ts`)
-        // пропускає payload (metatype = primitive `Object` без `isZodDto`),
-        // param-level pipe виконує `validate(value, CreateBusinessSchema)` —
-        // повна discriminated-union-валідація. `dto` тип-narrow-ається через
-        // `dto.type` discriminator без cast-ів.
         const business = await this.businessesService.create(
             user._id.toString(),
             dto,
@@ -98,25 +104,21 @@ export class BusinessesController {
     @UseGuards(BusinessAccessGuard)
     async getBySlug(
         @CurrentBusiness() business: BusinessDocument
-    ): Promise<{ data: BusinessWithInvoicesCount }> {
-        // Sprint 4 §4.2 — додаємо `invoicesCount` до response, щоб cabinet UI
-        // показував counter активних інвойсів (Sprint 4 §4.4 secondary CTA на
-        // `/business`-листі) і delete-confirm warning (Sprint 4 §SP-5: ФОП
-        // знає цифру **до** натискання "Видалити", не після). Cheap aggregate
-        // через `(businessId, createdAt)`-index prefix-match.
-        const invoicesCount = await this.invoicesService.countByBusinessId(
-            business._id
-        );
-        // `business.toJSON()` тригерить `applyJsonTransform` (`_id → id`,
-        // strip `__v`), повертає plain-object матчить `Business`-entity-shape.
-        // Type-cast через `as` — bridge від generic Mongoose `toJSON()`
-        // return-type (`Record<string, unknown>`) до strongly-typed contract.
+    ): Promise<{ data: BusinessWithCounts }> {
+        // Sprint 9 §9.1 — direct `countDocuments({businessId})` через моделі,
+        // зареєстровані у власному `forFeature`. Без cross-module service-
+        // injection — нема DI-cycle. Index `(businessId, createdAt)` (Sprint 9
+        // schema) покриває обидва filter-и prefix-match-ом.
+        const [accountsCount, invoicesCount] = await Promise.all([
+            this.accountModel.countDocuments({ businessId: business._id }),
+            this.invoiceModel.countDocuments({ businessId: business._id }),
+        ]);
         const plain = business.toJSON() as unknown as Omit<
-            BusinessWithInvoicesCount,
-            'invoicesCount'
+            BusinessWithCounts,
+            'accountsCount' | 'invoicesCount'
         >;
         return {
-            data: { ...plain, invoicesCount },
+            data: { ...plain, accountsCount, invoicesCount },
         };
     }
 
@@ -133,13 +135,12 @@ export class BusinessesController {
     @Delete(':slug')
     @UseGuards(BusinessAccessGuard)
     @HttpCode(HttpStatus.OK)
-    async delete(
-        @CurrentBusiness() business: BusinessDocument
-    ): Promise<{ data: { affectedInvoices: number } }> {
-        // Sprint 4 §SP-5 — повертаємо counter cascade-видалених інвойсів,
-        // щоб frontend показав warning у success-toast ("Видалено бізнес і
-        // {N} рахунків"). Atomic-or-nothing через `withTransaction` —
-        // деталі у `BusinessesService.delete`.
+    async delete(@CurrentBusiness() business: BusinessDocument): Promise<{
+        data: { affectedAccounts: number; affectedInvoices: number };
+    }> {
+        // Sprint 9 §SP-5 — повертаємо обидва counters cascade-видалених
+        // (accounts + invoices). Frontend toast: "Видалено бізнес, {N}
+        // рахунків і {M} інвойсів".
         const result = await this.businessesService.delete(business);
         return { data: result };
     }

@@ -1,9 +1,6 @@
 import { z } from 'zod';
 
-import { slugPresetSchema } from '../enums/slug-preset';
-import { isVatAllowedTaxationSystem } from '../enums/taxation-system';
 import {
-    BusinessRequisitesSchema,
     bankCodeSchema,
     businessNameSchema,
     businessPaymentPurposeTemplateSchema,
@@ -12,13 +9,26 @@ import {
     taxationSystemSchema,
     type Business,
 } from '../entities/business';
-import { ibanZod } from '../validation/iban';
-import { individualTaxIdZod, legalEntityTaxIdZod } from '../validation/tax-id';
+import { isVatAllowedTaxationSystem } from '../enums/taxation-system';
+import {
+    individualTaxIdZod,
+    legalEntityTaxIdZod,
+    payerTaxIdZod,
+} from '../validation/tax-id';
+import { PublicAccountListItemSchema } from './accounts';
 
 /**
- * Sprint 3 §3.1 + Sprint 7 §SP-3/§SP-4 — write-side контракти Business для
- * cabinet endpoint-ів і public-фетчу. Single source of truth для API DTO
- * (`createZodDto`) і frontend RHF-resolver-ів.
+ * Sprint 3 §3.1 + Sprint 7 §SP-3/§SP-4 + Sprint 9 §SP-1 — write-side контракти
+ * Business для cabinet endpoint-ів і public-фетчу. Single source of truth для
+ * API DTO (`createZodDto`) і frontend RHF-resolver-ів.
+ *
+ * **Sprint 9 рефакторинг:**
+ *  - `requisites`-wrapper видалено повністю. `iban` переїхав на Account; `taxId`
+ *    flatten-ується у top-level field-у Business (write-DTO + read-entity).
+ *  - `invoiceSlugPresetDefault` видалено з Update-DTO (переїжджає на Account-DTO,
+ *    бо нумерація інвойсів per-account, §SP-6).
+ *  - `PublicBusinessSchema` переписаний: був `nbuLinks` (single-account payment-
+ *    view) → стає `accounts: PublicAccountListItem[]` (root-list-view).
  *
  * **Що жодна з write-схем (Create/Update) не приймає** — поля, що генеруються
  * БД або сервісом, або керуються окремими flow:
@@ -48,6 +58,23 @@ const acceptedBanksField = z.array(bankCodeSchema).min(1, {
 });
 
 /**
+ * Sprint 10 §SP-11 — UUID v4 anti-duplicate token для anon-claim-flow. Optional
+ * у write-DTO: cabinet wizard НЕ передає це поле (відсутнє у payload-і →
+ * `.strict()` пропускає, бо поле задекларовано optional). Anon-claim прокидає
+ * UUID v4, згенерований frontend `crypto.randomUUID()` на CTA-click "Зберегти
+ * у кабінет"; backend `BusinessesService.create` робить dedup через partial-
+ * unique-compound-index `(ownerId, claimIdempotencyKey)`.
+ *
+ * Single source of truth для 4 discriminated-union variants — drift двох
+ * `claimIdempotencyKey`-полів у `individual`/`fop`/`tov`/`organization`
+ * variants виключений.
+ */
+const claimIdempotencyKeyField = z
+    .string()
+    .uuid({ message: 'INVALID_CLAIM_IDEMPOTENCY_KEY' })
+    .optional();
+
+/**
  * Coupled VAT × taxationSystem refine — застосовується **per-variant** у
  * fop / tov create-варіантах. Для individual / organization variants поля
  * фізично відсутні, refine не потрібен.
@@ -64,17 +91,21 @@ const taxationVatRefineOptions = {
 };
 
 /**
- * Sprint 7 §SP-3 + §SP-4 — `CreateBusinessSchema` як `z.discriminatedUnion`
- * по `type`. Кожен variant явно описує **тільки ті поля, що мають юридичний
- * сенс для цього типу**:
+ * Sprint 7 §SP-3 + §SP-4 + Sprint 9 §SP-1 — `CreateBusinessSchema` як
+ * `z.discriminatedUnion` по `type`. Кожен variant явно описує **тільки ті поля,
+ * що мають юридичний сенс для цього типу**:
  *  - `individual` / `organization` — без taxation-полів (поля фізично
  *    відсутні у TS-типі; frontend handler-и не зможуть передати їх без
  *    compile-error).
  *  - `fop` / `tov` — з `taxationSystem` + `isVatPayer` + per-variant
  *    coupled-refine.
- *  - `requisites.taxId` валідатор обирається per-variant: `individualTaxIdZod`
- *    (10 цифр + checksum) для individual / fop; `legalEntityTaxIdZod`
- *    (8 цифр) для tov / organization.
+ *  - `taxId` — top-level per-variant validator:
+ *    `individualTaxIdZod` (10 цифр + checksum) для individual / fop;
+ *    `legalEntityTaxIdZod` (8 цифр) для tov / organization.
+ *
+ * **Sprint 9 рефакторинг:** `requisites: { iban, taxId }` видалено — `iban`
+ * створюється окремо через `POST /businesses/me/{slug}/accounts` (2 sequential
+ * claim, §SP-1); `taxId` flatten-ується у top-level field.
  *
  * **Чому discriminatedUnion, а не single-shape з conditional refine**: TS-
  * exhaustiveness — додавання нового `BusinessType` без оновлення схеми дає
@@ -89,12 +120,10 @@ const createIndividualVariant = z
     .object({
         type: z.literal('individual'),
         name: businessNameSchema,
-        requisites: z.object({
-            iban: ibanZod,
-            taxId: individualTaxIdZod,
-        }),
+        taxId: individualTaxIdZod,
         paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
         acceptedBanks: acceptedBanksField,
+        claimIdempotencyKey: claimIdempotencyKeyField,
     })
     .strict();
 
@@ -102,14 +131,12 @@ const createFopVariant = z
     .object({
         type: z.literal('fop'),
         name: businessNameSchema,
-        requisites: z.object({
-            iban: ibanZod,
-            taxId: individualTaxIdZod,
-        }),
+        taxId: individualTaxIdZod,
         taxationSystem: taxationSystemSchema,
         isVatPayer: z.boolean(),
         paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
         acceptedBanks: acceptedBanksField,
+        claimIdempotencyKey: claimIdempotencyKeyField,
     })
     .strict()
     .refine(taxationVatCheck, taxationVatRefineOptions);
@@ -118,14 +145,12 @@ const createTovVariant = z
     .object({
         type: z.literal('tov'),
         name: businessNameSchema,
-        requisites: z.object({
-            iban: ibanZod,
-            taxId: legalEntityTaxIdZod,
-        }),
+        taxId: legalEntityTaxIdZod,
         taxationSystem: taxationSystemSchema,
         isVatPayer: z.boolean(),
         paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
         acceptedBanks: acceptedBanksField,
+        claimIdempotencyKey: claimIdempotencyKeyField,
     })
     .strict()
     .refine(taxationVatCheck, taxationVatRefineOptions);
@@ -134,12 +159,10 @@ const createOrganizationVariant = z
     .object({
         type: z.literal('organization'),
         name: businessNameSchema,
-        requisites: z.object({
-            iban: ibanZod,
-            taxId: legalEntityTaxIdZod,
-        }),
+        taxId: legalEntityTaxIdZod,
         paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
         acceptedBanks: acceptedBanksField,
+        claimIdempotencyKey: claimIdempotencyKeyField,
     })
     .strict();
 
@@ -157,21 +180,23 @@ export type CreateBusinessRequest = z.infer<typeof CreateBusinessSchema>;
  * **single-shape `.partial().strict()`** (НЕ discriminated union), бо partial-
  * PATCH не несе `type` (immutable post-creation, §SP-8).
  *
+ * **Sprint 9 рефакторинг:**
+ *  - `requisites` видалено; `taxId` як top-level optional-field у PATCH.
+ *  - `invoiceSlugPresetDefault` видалено — переїхав на Account-DTO
+ *    (`UpdateAccountSchema`).
+ *
  * **`.strict()` modifier** обов'язковий — невідомі ключі payload-а (`slug`,
- * `type`, `ownerId`, `managers`, `slugLower`) повинні бути reject-ом, не
- * silent-ignore. Sprint 3 §3.2 фіксує цей контракт як **єдиний layer**
- * захисту від slug-mutation: schema → ZodValidationPipe → 400; service
- * не дублює перевірку, бо TypeScript `UpdateBusinessRequest` просто не
- * містить цих ключів.
+ * `type`, `ownerId`, `managers`, `slugLower`, `requisites`, `invoiceSlugPreset-
+ * Default`) повинні бути reject-ом, не silent-ignore.
  *
- * **Type-binding для `requisites.taxId` і `taxation-fields`** — на service-
- * layer (`BusinessesService.update` читає document-resident `type` з БД,
- * валідує проти PATCH-payload-у). DTO-Zod не має `type`-context-у; перевірки
- * живуть там, де `type` доступний без додаткового round-trip.
+ * **Type-binding для `taxId` і `taxation-fields`** — на service-layer
+ * (`BusinessesService.update` читає document-resident `type` з БД, валідує
+ * проти PATCH-payload-у). DTO-Zod не має `type`-context-у; перевірки живуть
+ * там, де `type` доступний без додаткового round-trip.
  *
- * Sub-schema `BusinessRequisitesSchema.taxId: payerTaxIdZod` (union
- * RNOKPP ∪ ЄДРПОУ) reject-ить **structurally** garbage таксайди; type-
- * binding (RNOKPP-on-tov, EDRPOU-on-individual) додає service-layer.
+ * Sub-schema `payerTaxIdZod` (union RNOKPP ∪ ЄДРПОУ) reject-ить **structurally**
+ * garbage таксайди; type-binding (RNOKPP-on-tov, EDRPOU-on-individual) додає
+ * service-layer.
  *
  * **Coupled-валідація `taxationSystem × isVatPayer`** активується тільки
  * якщо клієнт передав **обидва** поля у одному PATCH — щоб inline-edit
@@ -185,7 +210,7 @@ export type CreateBusinessRequest = z.infer<typeof CreateBusinessSchema>;
 export const UpdateBusinessSchema = z
     .object({
         name: businessNameSchema,
-        requisites: BusinessRequisitesSchema,
+        taxId: payerTaxIdZod,
         /**
          * Sprint 7 §SP-3 — `nullable()` пропускає `null` через DTO-рівень,
          * щоб service-layer міг кинути type-aware код замість generic
@@ -208,15 +233,6 @@ export const UpdateBusinessSchema = z
         paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
         acceptedBanks: acceptedBanksField,
         seoIndexEnabled: z.boolean(),
-        /**
-         * Sprint 4 §4.1 — bizness-level дефолт slug-preset для нових інвойсів.
-         * Без цього розширення SP-1-рішення про business-level дефолт пресету
-         * (Q §2.3 #2 closure) — dead config. `null` = "не визначено", форма
-         * створення фолбеком використовує global system default `simple`
-         * (§4.5). Поле незалежне (без cross-field rules) — service-layer
-         * coupled-check не потрібен.
-         */
-        invoiceSlugPresetDefault: slugPresetSchema.nullable(),
     })
     .partial()
     .strict()
@@ -248,44 +264,56 @@ export const UpdateBusinessSchema = z
 export type UpdateBusinessRequest = z.infer<typeof UpdateBusinessSchema>;
 
 /**
- * `PublicBusinessSchema` — view-схема для public endpoint
- * (`GET /businesses/public/:slug`). Sprint 3 рішення C4 + E3 + A2:
- *   - Visible-поля: `type`, `name`, `slug`, `acceptedBanks`,
- *     `seoIndexEnabled`. Реквізити (IBAN, ІПН) **не** віддаються JSON-ом
- *     напряму — leak-сурфейс лишається через NBU payload-link (той самий
- *     vector як QR PNG; payload містить реквізити у Base64URL).
- *   - `seoIndexEnabled` для рендеру `<meta name="robots">` у Server Component.
- *   - `nbuLinks` — pre-built NBU payload-link URLs для двох host-варіантів
- *     (Sprint 3 рішення A2: дві активні CTA "Інший банк"). Frontend рендерить
- *     `<a href={nbuLinks.primary}>` → ОС ловить через app-link і відкриває
- *     банк-додаток з реквізитами. Без цих URLs кнопки не функціональні.
- *     Server-side побудова: `QrService.buildNbuPayloadLinkForInput(input, host)`.
- */
-/**
- * Sprint 4 §4.4 — list/getBySlug response shape для cabinet-зони.
- * `Business` (entity-Zod) + cheap aggregate `invoicesCount: number`.
+ * Sprint 9 §SP-4 + §4.4 — list/getBySlug response shape для cabinet-зони.
+ * `Business` (entity-Zod) + **два counters**: `accountsCount` + `invoicesCount`.
+ *
+ * **Раніше `BusinessWithInvoicesCount`** (Sprint 4) — рефакторингується на
+ * `BusinessWithCounts` з додаванням `accountsCount`. Frontend cabinet-list
+ * рендерить "{accountsCount} рахунків / {invoicesCount} інвойсів" на картці
+ * бізнесу — UX-важливо для ФОП з 1 рахунком, що не drill-down-ує (Risk #7
+ * mitigation).
  *
  * **View-only поле**, не частина `Business`-entity (entity ≠ persistence-shape;
  * entity описує invariants single-document-state). Окремий contract-тип
  * робить shape явною для обох сторін: backend `BusinessesService.getOwnedAnd-
- * ManagedWithInvoicesCount`/`BusinessesController.getBySlug` декларують
- * повернення цього типу; frontend `shared/api/businesses` re-exports замість
- * локального alias.
+ * ManagedWithCounts`/`BusinessesController.getBySlug` декларують повернення
+ * цього типу; frontend `shared/api/businesses` re-exports замість локального
+ * alias.
  */
-export type BusinessWithInvoicesCount = Business & {
+export type BusinessWithCounts = Business & {
+    accountsCount: number;
     invoicesCount: number;
 };
 
+/**
+ * `PublicBusinessSchema` — view-схема для public endpoint
+ * (`GET /businesses/public/:slug`). Sprint 9 §SP-4 рефакторинг:
+ *
+ *   - **Раніше:** `nbuLinks: {primary, legacy}` — single-account payment-view
+ *     на корені (Sprint 3 модель, коли IBAN жив на Business).
+ *   - **Тепер:** `accounts: PublicAccountListItem[]` — root-list-view. Frontend
+ *     server component (`host-pay/[slug]/page.tsx`) робить switch:
+ *     `accounts.length === 0 → empty-state`; `=== 1 → 307-redirect на
+ *     {accounts[0].slug}`; `>= 2 → render list-of-cards`.
+ *
+ * **Visible-поля:** `type`, `name`, `slug`, `acceptedBanks`, `seoIndexEnabled`,
+ * `accounts`. Реквізити (IBAN, ІПН) **не** віддаються JSON-ом напряму — leak-
+ * сурфейс лишається через NBU payload-link на per-account-view (той самий
+ * vector як QR PNG; payload містить реквізити у Base64URL).
+ *
+ * `seoIndexEnabled` для рендеру `<meta name="robots">` у Server Component.
+ *
+ * `accounts: PublicAccountListItem[]` — кожен item має `slug`, `name`,
+ * `bankCode | null`, `ibanMask` (`•{last4}`). UI рендерить картки з bank-label-
+ * row conditional на `bankCode !== null` (§SP-9 null-fallback rule).
+ */
 export const PublicBusinessSchema = z.object({
     type: businessTypeSchema,
     name: businessNameSchema,
     slug: businessSlugSchema,
     acceptedBanks: z.array(bankCodeSchema),
     seoIndexEnabled: z.boolean(),
-    nbuLinks: z.object({
-        primary: z.string().url(),
-        legacy: z.string().url(),
-    }),
+    accounts: z.array(PublicAccountListItemSchema),
 });
 
 export type PublicBusinessView = z.infer<typeof PublicBusinessSchema>;

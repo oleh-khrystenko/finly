@@ -34,6 +34,7 @@ export function mapUserToProfileResponse(user: UserDocument): UserProfile {
         deletedAt: user.deletedAt ?? null,
         accountDeletionRequestedAt: user.accountDeletionRequestedAt ?? null,
         termsVersion: user.termsVersion ?? null,
+        pendingPostLoginTarget: user.pendingPostLoginTarget,
         billing: user.billing
             ? {
                   provider: user.billing.provider,

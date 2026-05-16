@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 import { UserProfileSchema } from '../entities/user';
 import { emailSchema, passwordSchema } from '../validation/common';
+import { LandingClaimResultSchema } from './landing-claim';
+import { LandingDraftSchema } from './landing-draft';
 
 // --- Magic Link Purpose ---
 
@@ -24,11 +26,46 @@ export const MagicLinkPurposeSchema = z.enum([
 
 // --- Magic Link ---
 
-export const SendMagicLinkSchema = z.object({
-    email: z.string().email(),
-    purpose: MagicLinkPurposeSchema.optional(),
-    redirectTo: z.string().startsWith('/').max(2048).optional(),
-});
+/**
+ * Sprint 10 §SP-7/§SP-11/§SP-12 — magic-link endpoint приймає **три optional
+ * sibling-fields** для anon-claim cross-device flow:
+ *
+ *  - `landingDraft` — anon-payload (receiverName / iban / taxId / purpose) для
+ *    серверного claim після verify.
+ *  - `claimIdempotencyKey` — UUID v4, anti-duplicate token (Sprint 10 §SP-11).
+ *  - `termsVersion` — версія terms, прийнятих anon-користувачем на signin-step
+ *    (Sprint 10 §SP-12 terms-pre-stamp; backend stamps `acceptedTermsVersion`
+ *    ДО claim, що закриває acceptTerms ordering window).
+ *
+ * **Cross-field-coexistence invariant** (`landingDraft <-> claimIdempotencyKey`):
+ * draft без idempotency-key не має сенсу — backend не може дедуплікувати POST1
+ * без token-а; key без draft не має payload-у. Refine reject-ить mismatched-pair
+ * на write-side через `LANDING_DRAFT_AND_KEY_MUST_COEXIST`. `termsVersion` —
+ * окремий optional-field, БЕЗ cross-coupling: він прокидається на всіх 4
+ * frontend-call-site-ах `sendMagicLink` коли user прийняв terms (включно з
+ * reset-password-flow, де `landingDraft` не передається).
+ */
+export const SendMagicLinkSchema = z
+    .object({
+        email: z.string().email(),
+        purpose: MagicLinkPurposeSchema.optional(),
+        redirectTo: z.string().startsWith('/').max(2048).optional(),
+        landingDraft: LandingDraftSchema.optional(),
+        claimIdempotencyKey: z
+            .string()
+            .uuid({ message: 'INVALID_CLAIM_IDEMPOTENCY_KEY' })
+            .optional(),
+        termsVersion: z.string().optional(),
+    })
+    .refine(
+        (data) =>
+            (data.landingDraft !== undefined) ===
+            (data.claimIdempotencyKey !== undefined),
+        {
+            message: 'LANDING_DRAFT_AND_KEY_MUST_COEXIST',
+            path: ['claimIdempotencyKey'],
+        }
+    );
 
 export const VerifyMagicLinkSchema = z.object({
     token: z.string().min(1),
@@ -36,11 +73,28 @@ export const VerifyMagicLinkSchema = z.object({
 
 // --- Auth Response ---
 
+/**
+ * Sprint 13 — `claim` як вкладений discriminated union (single source of truth
+ * у `packages/types/src/contracts/landing-claim.ts`). До Sprint 13 claim-stan
+ * жив у 5 плоских optional-полях з refine на response-side; тепер shape
+ * гарантується самою discriminated-union-структурою.
+ *
+ * **Чому success-with-state, а не throw**: claim-failure НЕ блокує auth —
+ * user уже автентикований, accessToken у response body, refresh-cookie
+ * виставлено. Discriminated success-shape — uniform path для finalization
+ * (`acceptTerms + getMe + setUser`); claim-state читається post-finalization
+ * для router.replace-target-у.
+ *
+ * `claim` nullable+optional: `null` коли verify-magic-link виконав auth-flow
+ * без anon-claim (звичайний login/register); `undefined` коли response
+ * формується іншим endpoint-ом (login/password — claim там нерелевантний).
+ */
 export const AuthResponseSchema = z.object({
     user: UserProfileSchema,
     accessToken: z.string(),
     purpose: MagicLinkPurposeSchema.optional(),
     accountDeleted: z.boolean().optional(),
+    claim: LandingClaimResultSchema.nullable().optional(),
 });
 
 // --- Check Email ---

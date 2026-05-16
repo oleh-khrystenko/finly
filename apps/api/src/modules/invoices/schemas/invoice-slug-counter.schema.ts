@@ -65,8 +65,17 @@ export type InvoiceSlugCounterDocument = HydratedDocument<InvoiceSlugCounter>;
  */
 @Schema({ timestamps: true })
 export class InvoiceSlugCounter {
+    /**
+     * Sprint 9 §SP-6 — counter переїхав з business-namespace на account-
+     * namespace. `businessId` залишається як denormalized field для прямого
+     * cascade-business-delete filter-у (`InvoiceSlugCounter.deleteMany({
+     * businessId})` без `$lookup` через accounts).
+     */
     @Prop({ required: true, type: Types.ObjectId })
     businessId!: Types.ObjectId;
+
+    @Prop({ required: true, type: Types.ObjectId })
+    accountId!: Types.ObjectId;
 
     /**
      * Counter namespace per `Invoice.slugCounterScope` semantics:
@@ -97,11 +106,15 @@ export const InvoiceSlugCounterSchema =
 applyJsonTransform(InvoiceSlugCounterSchema);
 
 /**
- * Unique compound `(businessId, scope)` — один counter-doc per scope per
- * business. Concurrent bootstrap-`create`-и на одну й ту саму пару
- * серіалізуються через цей index: один проходить, інший падає з 11000
- * (propagate-иться у `InvoicesService.create` outer-loop — fresh session
- * на retry). На subsequent `$inc`-ах одного й того ж doc-у — write-write-
- * conflict-detection (Mongo TX retry-ить TransientTransactionError автоматично).
+ * Sprint 9 §SP-6 — unique compound переходить на `(accountId, scope)` —
+ * counter живе у per-account namespace. Concurrent bootstrap-create-и на ту
+ * саму пару серіалізуються через цей index (один проходить, інший падає з
+ * 11000 — propagate-иться у `InvoicesService.create` outer-loop).
  */
-InvoiceSlugCounterSchema.index({ businessId: 1, scope: 1 }, { unique: true });
+InvoiceSlugCounterSchema.index({ accountId: 1, scope: 1 }, { unique: true });
+
+/**
+ * Sprint 9 — non-unique `(businessId)` залишається для cascade-business-delete
+ * filter-у (`InvoiceSlugCounter.deleteMany({businessId})`).
+ */
+InvoiceSlugCounterSchema.index({ businessId: 1 });

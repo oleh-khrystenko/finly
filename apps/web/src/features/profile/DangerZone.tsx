@@ -5,7 +5,7 @@ import { AxiosError } from 'axios';
 import { toast } from 'sonner';
 import UiButton from '@/shared/ui/UiButton';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
-import { deleteAccount } from '@/shared/api';
+import { deleteUserAccount } from '@/shared/api';
 import { useAuthStore } from '@/entities/user';
 import { useDeleteAccountDialogStore } from './deleteAccountDialogStore';
 
@@ -38,7 +38,7 @@ const DangerZone = () => {
     const handleDelete = async () => {
         setLoading(true);
         try {
-            const result = await deleteAccount();
+            const result = await deleteUserAccount();
 
             if (result.requiresPassword) {
                 openDeleteDialog();

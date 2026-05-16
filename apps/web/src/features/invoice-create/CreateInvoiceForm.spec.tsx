@@ -6,7 +6,7 @@ import {
     screen,
     waitFor,
 } from '@testing-library/react';
-import type { Business, Invoice } from '@finly/types';
+import type { Account, Business, Invoice } from '@finly/types';
 
 const mockCreateInvoice = jest.fn();
 const mockReplace = jest.fn();
@@ -36,6 +36,10 @@ import CreateInvoiceForm from './CreateInvoiceForm';
 const VALID_IBAN = 'UA213223130000026007233566001';
 const VALID_TAX_ID = '1234567899';
 
+/**
+ * Sprint 9 §9.2 — Business shape без `requisites` (taxId top-level, IBAN на
+ * Account); `invoiceSlugPresetDefault` переніс власника на Account.
+ */
 const baseBusiness: Business = {
     id: '507f1f77bcf86cd799439011',
     type: 'fop',
@@ -44,21 +48,46 @@ const baseBusiness: Business = {
     slug: 'IvanEnko',
     slugLower: 'ivanenko',
     name: 'ФОП Іваненко',
-    requisites: { iban: VALID_IBAN, taxId: VALID_TAX_ID },
+    taxId: VALID_TAX_ID,
     taxationSystem: 'simplified-3',
     isVatPayer: false,
     paymentPurposeTemplate: 'Оплата за послуги',
     acceptedBanks: ['privatbank'],
     seoIndexEnabled: false,
+    deletedAt: null,
+    createdAt: new Date('2026-05-01T10:00:00Z'),
+    updatedAt: new Date('2026-05-01T10:00:00Z'),
+};
+
+const baseAccount: Account = {
+    id: '507f1f77bcf86cd799439055',
+    businessId: baseBusiness.id,
+    iban: VALID_IBAN,
+    name: 'ПриватБанк •6001',
+    slug: 'aB3xQ9k7',
+    bankCode: 'privatbank',
     invoiceSlugPresetDefault: null,
     deletedAt: null,
     createdAt: new Date('2026-05-01T10:00:00Z'),
     updatedAt: new Date('2026-05-01T10:00:00Z'),
 };
 
+function renderForm(overrides?: {
+    business?: Business;
+    account?: Account;
+}): void {
+    render(
+        <CreateInvoiceForm
+            business={overrides?.business ?? baseBusiness}
+            account={overrides?.account ?? baseAccount}
+        />
+    );
+}
+
 const ROBUST_INVOICE: Invoice = {
     id: '507f1f77bcf86cd799439021',
     businessId: baseBusiness.id,
+    accountId: baseAccount.id,
     slug: 'inv-001-aB3xQ9k7',
     amount: null,
     amountLocked: false,
@@ -67,6 +96,7 @@ const ROBUST_INVOICE: Invoice = {
     slugPreset: 'simple',
     slugCounterScope: 'simple',
     slugCounter: 1,
+    payeeSnapshot: null,
     deletedAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -81,18 +111,14 @@ beforeEach(() => {
 });
 
 /**
- * Sprint 4 §4.5 DoD: усі 6 dropdown-опцій (explicit + 4 пресети + random)
- * дають valid POST з правильним `slugInput.kind` discriminator-ом.
+ * Sprint 4 §4.5 DoD + Sprint 9 §SP-6: усі 6 dropdown-опцій (explicit +
+ * 4 пресети + random) дають valid POST з правильним `slugInput.kind`
+ * discriminator-ом. Sprint 9 — `createInvoice(businessSlug, accountSlug, ...)`
+ * 3-arg signature.
  */
-describe('CreateInvoiceForm — slugInput happy paths (Sprint 4 §4.5 DoD a/b/c/d)', () => {
-    /**
-     * Helper: знаходимо select-button за поточним label-ом всередині dropdown-у.
-     * UiSelect рендериться через Headless Listbox — кожен button має
-     * `data-variant`/`data-size`, але стабільніше шукати за role + name.
-     */
+describe('CreateInvoiceForm — slugInput happy paths', () => {
     async function selectSlugOption(label: RegExp | string): Promise<void> {
         const triggers = screen.getAllByRole('button');
-        // Перший button — "Як назвати рахунок"; точніше — той, що має SLUG_OPTIONS-label.
         const slugTrigger = triggers.find((b) =>
             /Автоматично|Ввести самому|Випадковий код/.test(b.textContent ?? '')
         );
@@ -100,7 +126,6 @@ describe('CreateInvoiceForm — slugInput happy paths (Sprint 4 §4.5 DoD a/b/c/
         await act(async () => {
             fireEvent.click(slugTrigger);
         });
-        // Розкритий listbox — шукаємо потрібну опцію.
         const option = await screen.findByRole('option', { name: label });
         await act(async () => {
             fireEvent.click(option);
@@ -109,59 +134,53 @@ describe('CreateInvoiceForm — slugInput happy paths (Sprint 4 §4.5 DoD a/b/c/
 
     async function clickSubmit(): Promise<void> {
         const submitBtn = screen.getByRole('button', {
-            name: /Створити рахунок/,
+            name: /Створити інвойс/,
         });
         await act(async () => {
             fireEvent.click(submitBtn);
         });
     }
 
-    it('default: kind="preset", preset="simple" коли invoiceSlugPresetDefault=null', async () => {
-        render(<CreateInvoiceForm business={baseBusiness} />);
+    it('default: kind="preset", preset="simple" коли account.invoiceSlugPresetDefault=null', async () => {
+        renderForm();
         await clickSubmit();
         await waitFor(() => expect(mockCreateInvoice).toHaveBeenCalled());
 
-        const [businessSlug, payload] = mockCreateInvoice.mock.calls[0]!;
-        expect(businessSlug).toBe('IvanEnko');
+        const [businessSlug, accountSlug, payload] =
+            mockCreateInvoice.mock.calls[0]!;
+        expect(businessSlug).toBe(baseBusiness.slug);
+        expect(accountSlug).toBe(baseAccount.slug);
         expect(payload.slugInput).toEqual({
             kind: 'preset',
             preset: 'simple',
         });
     });
 
-    it('default mount = "with-month" коли invoiceSlugPresetDefault="with-month" (DoD б)', async () => {
-        render(
-            <CreateInvoiceForm
-                business={{
-                    ...baseBusiness,
-                    invoiceSlugPresetDefault: 'with-month',
-                }}
-            />
-        );
+    it('default mount = "with-month" коли account.invoiceSlugPresetDefault="with-month"', async () => {
+        renderForm({
+            account: { ...baseAccount, invoiceSlugPresetDefault: 'with-month' },
+        });
         await clickSubmit();
         await waitFor(() => expect(mockCreateInvoice).toHaveBeenCalled());
-        expect(mockCreateInvoice.mock.calls[0]![1].slugInput).toEqual({
+        expect(mockCreateInvoice.mock.calls[0]![2].slugInput).toEqual({
             kind: 'preset',
             preset: 'with-month',
         });
     });
 
-    it('default mount = "with-purpose" БЕЗ автоматичного warning-modal (DoD в — edge-case)', async () => {
-        render(
-            <CreateInvoiceForm
-                business={{
-                    ...baseBusiness,
-                    invoiceSlugPresetDefault: 'with-purpose',
-                    paymentPurposeTemplate: 'Послуги',
-                }}
-            />
-        );
-        // Жодного автоматичного warning не тригериться на mount.
+    it('default mount = "with-purpose" БЕЗ автоматичного warning-modal (DoD edge-case)', async () => {
+        renderForm({
+            account: {
+                ...baseAccount,
+                invoiceSlugPresetDefault: 'with-purpose',
+            },
+            business: { ...baseBusiness, paymentPurposeTemplate: 'Послуги' },
+        });
         expect(mockOpenWarning).not.toHaveBeenCalled();
 
         await clickSubmit();
         await waitFor(() => expect(mockCreateInvoice).toHaveBeenCalled());
-        expect(mockCreateInvoice.mock.calls[0]![1].slugInput).toEqual({
+        expect(mockCreateInvoice.mock.calls[0]![2].slugInput).toEqual({
             kind: 'preset',
             preset: 'with-purpose',
         });
@@ -175,18 +194,18 @@ describe('CreateInvoiceForm — slugInput happy paths (Sprint 4 §4.5 DoD a/b/c/
     ] as const)(
         'manual select "%s" → POST.slugInput shape correct',
         async (label, expected) => {
-            render(<CreateInvoiceForm business={baseBusiness} />);
+            renderForm();
             await selectSlugOption(label);
             await clickSubmit();
             await waitFor(() => expect(mockCreateInvoice).toHaveBeenCalled());
-            expect(mockCreateInvoice.mock.calls[0]![1].slugInput).toEqual(
+            expect(mockCreateInvoice.mock.calls[0]![2].slugInput).toEqual(
                 expected
             );
         }
     );
 
     it('"Ввести самому" + valid humanPart → POST {kind:"explicit", humanPart}', async () => {
-        render(<CreateInvoiceForm business={baseBusiness} />);
+        renderForm();
         await selectSlugOption(/Ввести самому/);
         const input = await screen.findByPlaceholderText(/order-2026-may/);
         await act(async () => {
@@ -196,21 +215,16 @@ describe('CreateInvoiceForm — slugInput happy paths (Sprint 4 §4.5 DoD a/b/c/
         });
         await clickSubmit();
         await waitFor(() => expect(mockCreateInvoice).toHaveBeenCalled());
-        expect(mockCreateInvoice.mock.calls[0]![1].slugInput).toEqual({
+        expect(mockCreateInvoice.mock.calls[0]![2].slugInput).toEqual({
             kind: 'explicit',
             humanPart: 'order-2026-may',
         });
     });
 });
 
-/**
- * Sprint 4 §4.5 DoD: humanSlugPartSchema live-validation — invalid input
- * (uppercase, дефіс на краях, послідовні дефіси, > 60 chars) → submit blocked.
- */
 describe('CreateInvoiceForm — humanPart live-validation', () => {
     async function chooseExplicit(): Promise<HTMLElement> {
-        render(<CreateInvoiceForm business={baseBusiness} />);
-        // Open dropdown
+        renderForm();
         const triggers = screen.getAllByRole('button');
         const slugTrigger = triggers.find((b) =>
             /Автоматично|Ввести самому|Випадковий код/.test(b.textContent ?? '')
@@ -243,11 +257,10 @@ describe('CreateInvoiceForm — humanPart live-validation', () => {
             await act(async () => {
                 fireEvent.click(
                     screen.getByRole('button', {
-                        name: /Створити рахунок/,
+                        name: /Створити інвойс/,
                     })
                 );
             });
-            // Submit заблокований — createInvoice не викликається.
             expect(mockCreateInvoice).not.toHaveBeenCalled();
         }
     );
@@ -262,7 +275,7 @@ describe('CreateInvoiceForm — humanPart live-validation', () => {
         await act(async () => {
             fireEvent.click(
                 screen.getByRole('button', {
-                    name: /Створити рахунок/,
+                    name: /Створити інвойс/,
                 })
             );
         });
@@ -270,35 +283,27 @@ describe('CreateInvoiceForm — humanPart live-validation', () => {
     });
 });
 
-/**
- * Sprint 4 §4.5 DoD: Coupled `amount=null + amountLocked` UI lock (SP-6).
- */
 describe('CreateInvoiceForm — coupled amount × amountLocked (SP-6)', () => {
-    it('amount=null → switch disabled, аria-checked=true (allowEdit-display force-ON у signage)', () => {
-        render(<CreateInvoiceForm business={baseBusiness} />);
+    it('amount=null → switch disabled, aria-checked=true', () => {
+        renderForm();
         const lockSwitch = document.getElementById('amount-lock-switch')!;
         expect(lockSwitch).toBeDisabled();
-        // SP-6 — у signage UI завжди показує allow-edit ON (бо без суми
-        // клієнт de-facto завжди вводить її сам). Submit-normalizer теж
-        // перетворить wire-shape на amountLocked=false для signage.
         expect(lockSwitch).toHaveAttribute('aria-checked', 'true');
     });
 
-    it('amount=number → switch enabled, default aria-checked=false (locked за SP-6)', async () => {
-        render(<CreateInvoiceForm business={baseBusiness} />);
+    it('amount=number → switch enabled, default aria-checked=false', async () => {
+        renderForm();
         const amountInput = screen.getByPlaceholderText('1500,50');
         await act(async () => {
             fireEvent.change(amountInput, { target: { value: '1500' } });
         });
         const lockSwitch = document.getElementById('amount-lock-switch')!;
         expect(lockSwitch).not.toBeDisabled();
-        // SP-6 default: amountLocked=true ⇒ allow-edit OFF ⇒ aria-checked=false.
-        // Це "швидкий шлях" фіксованої суми (як у класичному інвойсі).
         expect(lockSwitch).toHaveAttribute('aria-checked', 'false');
     });
 
-    it('UA-кома приймається: 1500,50 → switch enabled, default locked', async () => {
-        render(<CreateInvoiceForm business={baseBusiness} />);
+    it('UA-кома: 1500,50 → switch enabled, default locked', async () => {
+        renderForm();
         const amountInput = screen.getByPlaceholderText('1500,50');
         await act(async () => {
             fireEvent.change(amountInput, { target: { value: '1500,50' } });
@@ -308,46 +313,28 @@ describe('CreateInvoiceForm — coupled amount × amountLocked (SP-6)', () => {
         expect(lockSwitch).toHaveAttribute('aria-checked', 'false');
     });
 
-    /**
-     * Sprint 4 review fix — критичний регресійний тест:
-     * **Transient parse-error НЕ повинен скидати `amountLocked`.**
-     *
-     * Раніше `parsedAmount === null` мав подвійний сенс (signage АБО invalid),
-     * тож useEffect SP-6 reset-ив amountLocked при будь-якому невалідному
-     * вводі під час набору. Сценарій: ФОП ввів 1500 → toggle "Дозволити
-     * правити" ON (amountLocked=false) → виправляє суму на 1500,50, але між
-     * цим transient input "1500,abc" парсився як invalid → reset state →
-     * submit ішов з не тим intent-ом, попри початковий намір ФОПа.
-     */
     it('transient invalid input → amountLocked НЕ скидається', async () => {
-        render(<CreateInvoiceForm business={baseBusiness} />);
+        renderForm();
         const amountInput = screen.getByPlaceholderText('1500,50');
         const lockSwitch = document.getElementById('amount-lock-switch')!;
 
-        // 1. Ввести валідну суму. Default — locked (aria-checked=false).
         await act(async () => {
             fireEvent.change(amountInput, { target: { value: '1500' } });
         });
         expect(lockSwitch).not.toBeDisabled();
         expect(lockSwitch).toHaveAttribute('aria-checked', 'false');
 
-        // 2. Toggle на "Дозволити правити" ON (allowEdit=true ⇒ amountLocked=false).
         await act(async () => {
             fireEvent.click(lockSwitch);
         });
         expect(lockSwitch).toHaveAttribute('aria-checked', 'true');
 
-        // 3. Введемо transient invalid input.
         await act(async () => {
             fireEvent.change(amountInput, { target: { value: '1500abc' } });
         });
-
-        // 4. Перевірка: stored intent НЕ скинувся. Switch стає disabled
-        //    (transient invalid), але aria-checked відображає stored=true.
         expect(lockSwitch).toBeDisabled();
         expect(lockSwitch).toHaveAttribute('aria-checked', 'true');
 
-        // 5. Виправимо ввід — switch знову enabled і intent intact.
         await act(async () => {
             fireEvent.change(amountInput, { target: { value: '1500,50' } });
         });
@@ -355,24 +342,16 @@ describe('CreateInvoiceForm — coupled amount × amountLocked (SP-6)', () => {
         expect(lockSwitch).toHaveAttribute('aria-checked', 'true');
     });
 
-    /**
-     * Sanity-counterpart: signage-mode (parse-ok, empty input) **візуально**
-     * показує allow-edit ON, але stored intent зберігається — повернення до
-     * валідної суми відновлює попередній user-toggle. Це SP-6 + win над
-     * raw `useEffect`-reset, що губив намір ФОПа.
-     */
     it('semantic signage → візуально ON, stored intent зберігається', async () => {
-        render(<CreateInvoiceForm business={baseBusiness} />);
+        renderForm();
         const amountInput = screen.getByPlaceholderText('1500,50');
         const lockSwitch = document.getElementById('amount-lock-switch')!;
 
-        // Ввели суму — default locked (aria-checked=false).
         await act(async () => {
             fireEvent.change(amountInput, { target: { value: '1500' } });
         });
         expect(lockSwitch).toHaveAttribute('aria-checked', 'false');
 
-        // Очистили input — справжній signage. UI force-показує ON.
         await act(async () => {
             fireEvent.change(amountInput, { target: { value: '' } });
         });
@@ -381,7 +360,6 @@ describe('CreateInvoiceForm — coupled amount × amountLocked (SP-6)', () => {
         });
         expect(lockSwitch).toBeDisabled();
 
-        // Повернення до has-amount → stored intent (locked) знову видимий.
         await act(async () => {
             fireEvent.change(amountInput, { target: { value: '2000' } });
         });
@@ -390,13 +368,9 @@ describe('CreateInvoiceForm — coupled amount × amountLocked (SP-6)', () => {
     });
 });
 
-/**
- * Sprint 4 §4.5 DoD: with-purpose warning-modal flow (показ при першому
- * виборі через dropdown; не показ на page-load default).
- */
 describe('CreateInvoiceForm — with-purpose warning modal', () => {
     it('manual select preset:with-purpose → openWarning викликається', async () => {
-        render(<CreateInvoiceForm business={baseBusiness} />);
+        renderForm();
         const triggers = screen.getAllByRole('button');
         const slugTrigger = triggers.find((b) =>
             /Автоматично|Ввести самому|Випадковий код/.test(b.textContent ?? '')
@@ -411,32 +385,24 @@ describe('CreateInvoiceForm — with-purpose warning modal', () => {
             fireEvent.click(option);
         });
         expect(mockOpenWarning).toHaveBeenCalledTimes(1);
-        // Перший аргумент — onConfirm callback; другий — onCancel.
         expect(typeof mockOpenWarning.mock.calls[0]![0]).toBe('function');
         expect(typeof mockOpenWarning.mock.calls[0]![1]).toBe('function');
     });
 
-    it('mount з business.invoiceSlugPresetDefault="with-purpose" → openWarning НЕ викликається (page-load)', () => {
-        render(
-            <CreateInvoiceForm
-                business={{
-                    ...baseBusiness,
-                    invoiceSlugPresetDefault: 'with-purpose',
-                }}
-            />
-        );
+    it('mount з account.invoiceSlugPresetDefault="with-purpose" → openWarning НЕ викликається (page-load)', () => {
+        renderForm({
+            account: {
+                ...baseAccount,
+                invoiceSlugPresetDefault: 'with-purpose',
+            },
+        });
         expect(mockOpenWarning).not.toHaveBeenCalled();
     });
 });
 
-/**
- * Sprint 4 §4.5 DoD: required-fields validation. Тут тестуємо submit-blocking
- * edge-case: validUntilMode='date' з порожньою датою → submit blocked.
- */
 describe('CreateInvoiceForm — required-fields validation', () => {
     it('validUntilMode="date" + empty date → submit blocked', async () => {
-        render(<CreateInvoiceForm business={baseBusiness} />);
-        // Знаходимо dropdown "Термін дії"
+        renderForm();
         const triggers = screen.getAllByRole('button');
         const validUntilTrigger = triggers.find((b) =>
             /Без терміну|До конкретної дати/.test(b.textContent ?? '')
@@ -450,11 +416,10 @@ describe('CreateInvoiceForm — required-fields validation', () => {
         await act(async () => {
             fireEvent.click(option);
         });
-        // Дату не заповнюємо. Submit має блокуватись.
         await act(async () => {
             fireEvent.click(
                 screen.getByRole('button', {
-                    name: /Створити рахунок/,
+                    name: /Створити інвойс/,
                 })
             );
         });
@@ -463,16 +428,16 @@ describe('CreateInvoiceForm — required-fields validation', () => {
     });
 
     it('purpose-overflow → submit-кнопка disabled', async () => {
-        render(<CreateInvoiceForm business={baseBusiness} />);
+        renderForm();
         const purposeTextarea = screen.getByPlaceholderText(/Якщо порожньо/);
-        const longPurpose = 'a'.repeat(500); // > 420 chars
+        const longPurpose = 'a'.repeat(500);
         await act(async () => {
             fireEvent.change(purposeTextarea, {
                 target: { value: longPurpose },
             });
         });
         const submitBtn = screen.getByRole('button', {
-            name: /Створити рахунок/,
+            name: /Створити інвойс/,
         });
         expect(submitBtn).toBeDisabled();
     });

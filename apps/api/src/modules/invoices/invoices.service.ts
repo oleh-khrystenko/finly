@@ -15,9 +15,10 @@ import {
 
 import { isTransactionsUnsupportedError } from '../../common/mongoose/transactions-unsupported';
 import {
-    Business,
-    type BusinessDocument,
-} from '../businesses/schemas/business.schema';
+    Account,
+    type AccountDocument,
+} from '../accounts/schemas/account.schema';
+import type { BusinessDocument } from '../businesses/schemas/business.schema';
 import { InvoiceSlugGeneratorService } from './invoice-slug-generator.service';
 import { effectiveInvoicePurpose } from './purpose-resolver';
 import { Invoice, InvoiceDocument } from './schemas/invoice.schema';
@@ -64,8 +65,8 @@ export class InvoicesService {
     constructor(
         @InjectModel(Invoice.name)
         private readonly invoiceModel: Model<InvoiceDocument>,
-        @InjectModel(Business.name)
-        private readonly businessModel: Model<BusinessDocument>,
+        @InjectModel(Account.name)
+        private readonly accountModel: Model<AccountDocument>,
         @InjectConnection()
         private readonly connection: Connection,
         private readonly slugGenerator: InvoiceSlugGeneratorService
@@ -106,16 +107,16 @@ export class InvoicesService {
      *
      * **Replica-set requirement.** Той самий гард, що `BusinessesService.delete`:
      * на standalone mongod ловимо `Transaction numbers are only allowed on a
-     * replica set` і кидаємо `CASCADE_DELETE_REQUIRES_REPLICA_SET` 500.
+     * replica set` і кидаємо `TRANSACTION_REQUIRES_REPLICA_SET` 500.
      * Reuse `isTransactionsUnsupportedError`-helper з `common/mongoose`.
      */
     async create(
         business: BusinessDocument,
+        account: AccountDocument,
         dto: CreateInvoiceRequest
     ): Promise<InvoiceDocument> {
         // Sprint 4 review fix — `validUntil >= now` enforce-имо тут (write-
-        // side); raison-d'etre у doc-блоці на схемі. Перевіряємо ДО старту
-        // транзакції, щоб 400-error не запускав session machinery.
+        // side). Перевіряємо ДО старту транзакції.
         assertValidUntilNotInPast(dto.validUntil);
 
         let lastError: unknown;
@@ -125,12 +126,12 @@ export class InvoicesService {
             attempt++
         ) {
             try {
-                return await this.createOneAttempt(business, dto);
+                return await this.createOneAttempt(business, account, dto);
             } catch (err) {
                 if (isDuplicateKeyError(err)) {
                     lastError = err;
                     this.logger.warn(
-                        `Invoice insert attempt ${attempt}/${InvoicesService.CREATE_MAX_RETRIES} hit duplicate-key; retrying with fresh session for business ${business._id.toString()}`
+                        `Invoice insert attempt ${attempt}/${InvoicesService.CREATE_MAX_RETRIES} hit duplicate-key; retrying with fresh session for account ${account._id.toString()}`
                     );
                     continue;
                 }
@@ -138,7 +139,7 @@ export class InvoicesService {
             }
         }
         this.logger.error(
-            `Failed to create invoice for business ${business._id.toString()} after ${InvoicesService.CREATE_MAX_RETRIES} retries; last error: ${
+            `Failed to create invoice for account ${account._id.toString()} after ${InvoicesService.CREATE_MAX_RETRIES} retries; last error: ${
                 lastError instanceof Error
                     ? lastError.message
                     : String(lastError)
@@ -162,61 +163,47 @@ export class InvoicesService {
      */
     private async createOneAttempt(
         business: BusinessDocument,
+        account: AccountDocument,
         dto: CreateInvoiceRequest
     ): Promise<InvoiceDocument> {
         const session = await this.connection.startSession();
         try {
             let created: InvoiceDocument | undefined;
             await session.withTransaction(async () => {
-                // Touch business у тій самій сесії — створює write-intent на
-                // business document; concurrent cascade-delete deleteOne на
-                // тому самому _id тригерить write-conflict (Mongo abort-ить
-                // одну з TX, withTransaction робить retry автоматично через
-                // TransientTransactionError-label).
-                const touch = await this.businessModel
+                // Sprint 9 §SP-3 — touch-account замість touch-business
+                // (symmetric Sprint 4 touch-business pattern). Concurrent
+                // `AccountsService.delete` робить `deleteOne({_id: account._id},
+                // {session})` у власній TX; Mongo write-write-conflict
+                // serialize-ить два TX.
+                const touch = await this.accountModel
                     .updateOne(
-                        { _id: business._id },
+                        { _id: account._id },
                         { $currentDate: { updatedAt: true } },
                         { session }
                     )
                     .exec();
                 if (touch.matchedCount === 0) {
-                    // Cascade-delete виграв race: business більше нема.
-                    // NotFoundException не має TransientTransactionError-
-                    // label-у, тож withTransaction abort-ить TX і re-throw-ить
-                    // до нас. Outer-loop у `create()` НЕ retry-ить такі
-                    // помилки (тільки 11000) — кидаємо назовні.
+                    // Account cascade-delete виграв race — account більше нема.
                     throw new NotFoundException({
-                        code: RESPONSE_CODE.BUSINESS_NOT_FOUND,
-                        message: 'Business deleted during invoice creation',
+                        code: RESPONSE_CODE.ACCOUNT_NOT_FOUND,
+                        message: 'Account deleted during invoice creation',
                     });
                 }
                 const slugInfo = await this.slugGenerator.generateInvoiceSlug(
                     {
                         businessId: business._id,
+                        accountId: account._id,
                         slugInput: dto.slugInput,
                         paymentPurpose: dto.paymentPurpose,
                         businessPaymentPurposeTemplate:
                             business.paymentPurposeTemplate,
                     },
-                    // Counter $inc живе у тій самій сесії, що invoice insert
-                    // (Sprint 4 review fix). TX abort → counter rollback
-                    // разом з invoice; counter-allocation і invoice insert —
-                    // atomically-or-nothing. Це гарантує monotonic
-                    // invariant навіть на retry-paths (cascade-delete won
-                    // race, validation failure post-allocate).
                     session
                 );
-                // Sprint 4 review fix — snapshot платіжних реквізитів на
-                // момент create. Public NBU/QR-payload public-зони
-                // будується з цього snapshot-у, не з runtime-mutable
-                // Business: ФОП не може тіньово підмінити IBAN/ім'я/
-                // призначення на вже виданих рахунках через редагування
-                // налаштувань бізнесу. `effectiveInvoicePurpose` resolve-ить
-                // null-inheritance до конкретного рядка — той самий
-                // resolved-purpose, що використає slug-генератор для
-                // `with-purpose`-пресета (single source of truth: URL і
-                // payload показують ідентичний текст без drift-у).
+                // Sprint 9 §SP-6 — `payeeSnapshot.iban` тепер з Account
+                // (раніше з `business.requisites.iban`). recipientName/taxId
+                // далі з Business (юр-property платника). effectivePurpose
+                // resolved через `effectiveInvoicePurpose` як раніше.
                 const effectivePurpose = effectiveInvoicePurpose(
                     dto.paymentPurpose,
                     business.paymentPurposeTemplate
@@ -225,6 +212,7 @@ export class InvoicesService {
                     [
                         {
                             businessId: business._id,
+                            accountId: account._id,
                             slug: slugInfo.slug,
                             amount: dto.amount,
                             amountLocked: dto.amountLocked,
@@ -235,8 +223,8 @@ export class InvoicesService {
                             slugCounter: slugInfo.slugCounter,
                             payeeSnapshot: {
                                 recipientName: business.name,
-                                iban: business.requisites.iban,
-                                taxId: business.requisites.taxId,
+                                iban: account.iban,
+                                taxId: business.taxId,
                                 paymentPurpose: effectivePurpose,
                             },
                         },
@@ -245,18 +233,16 @@ export class InvoicesService {
                 );
                 created = docs[0]!;
             });
-            // `withTransaction` resolve-иться після успішного commit-у. `created`
-            // обовʼязково присвоєний — або callback заповнив, або кинув.
             return created!;
         } catch (err) {
             if (isTransactionsUnsupportedError(err)) {
                 this.logger.error(
-                    `Invoice create failed: replica-set required. Business ${business._id.toString()}. Original: ${
+                    `Invoice create failed: replica-set required. Account ${account._id.toString()}. Original: ${
                         err instanceof Error ? err.message : String(err)
                     }`
                 );
                 throw new InternalServerErrorException({
-                    code: RESPONSE_CODE.CASCADE_DELETE_REQUIRES_REPLICA_SET,
+                    code: RESPONSE_CODE.TRANSACTION_REQUIRES_REPLICA_SET,
                     message:
                         'Invoice create requires Mongo replica-set; check MONGODB_URI',
                 });
@@ -292,44 +278,34 @@ export class InvoicesService {
      * `total` повертається разом з items, щоб frontend "Завантажити ще"-trigger
      * знав, коли зупинятись (без зайвого round-trip-у).
      */
-    async getByBusinessId(
-        businessId: Types.ObjectId,
+    async getByAccountId(
+        accountId: Types.ObjectId,
         pagination: PaginationParams
     ): Promise<PaginatedInvoices> {
         const { page, limit } = pagination;
         const skip = (page - 1) * limit;
         const [items, total] = await Promise.all([
             this.invoiceModel
-                .find({ businessId })
+                .find({ accountId })
                 .sort({ createdAt: -1, _id: -1 })
                 .skip(skip)
                 .limit(limit)
                 .exec(),
-            this.invoiceModel.countDocuments({ businessId }),
+            this.invoiceModel.countDocuments({ accountId }),
         ]);
         return { items, total, page, limit };
     }
 
     /**
-     * Cheap aggregate для cabinet `getBySlug`-extension (`invoicesCount`) і
-     * delete-confirm warning. Index `(businessId, createdAt)` (Sprint 1)
-     * покриває фільтр через prefix-match.
-     */
-    async countByBusinessId(businessId: Types.ObjectId): Promise<number> {
-        return this.invoiceModel.countDocuments({ businessId });
-    }
-
-    /**
-     * Compound-keyed lookup `(businessId, slug)` — case-sensitive (SP-8).
-     * `null` повертається якщо не знайдено — caller (`InvoiceAccessGuard`)
-     * вирішує, як перетворити на 404.
+     * Sprint 9 §SP-6 — compound-keyed lookup `(accountId, slug)` case-sensitive.
+     * `null` якщо не знайдено — caller (`InvoiceAccessGuard`) обертає у 404.
      */
     async getBySlug(
-        businessId: Types.ObjectId,
+        accountId: Types.ObjectId,
         invoiceSlug: string
     ): Promise<InvoiceDocument | null> {
         return this.invoiceModel
-            .findOne({ businessId, slug: invoiceSlug })
+            .findOne({ accountId, slug: invoiceSlug })
             .exec();
     }
 
@@ -367,19 +343,16 @@ export class InvoicesService {
      */
     async update(
         business: BusinessDocument,
+        account: AccountDocument,
         invoiceSlug: string,
         dto: UpdateInvoiceRequest
     ): Promise<InvoiceDocument> {
-        // Sprint 4 review fix — той самий invariant, що у create. PATCH без
-        // `validUntil` пропускаємо (`undefined` = поле не зачіпають), `null`
-        // — explicit "без терміну дії", дозволено. Перевіряємо тільки коли
-        // приходить Date.
         if (dto.validUntil !== undefined) {
             assertValidUntilNotInPast(dto.validUntil);
         }
-        const businessId = business._id;
+        const accountId = account._id;
         const filter: FilterQuery<InvoiceDocument> = {
-            businessId,
+            accountId,
             slug: invoiceSlug,
         };
         const hasCoupledFields =
@@ -439,18 +412,14 @@ export class InvoicesService {
                           new: true,
                       })
                       .exec()
-                : // No-op PATCH — DTO порожній (Zod strip-нув усі ключі).
-                  // Повертаємо поточний документ через single read.
-                  await this.invoiceModel
-                      .findOne({ businessId, slug: invoiceSlug })
+                : await this.invoiceModel
+                      .findOne({ accountId, slug: invoiceSlug })
                       .exec();
         if (updated) return updated;
 
-        // Filter не пропустив update. Розрізняємо 400 (coupled violation) vs
-        // 404 одним додатковим `exists`-запитом — тільки на error-path.
         if (hasCoupledFields) {
             const exists = await this.invoiceModel.exists({
-                businessId,
+                accountId,
                 slug: invoiceSlug,
             });
             if (exists) {
@@ -474,11 +443,11 @@ export class InvoicesService {
      * delete не падає (race з паралельним delete-ом — тихо OK).
      */
     async delete(
-        businessId: Types.ObjectId,
+        accountId: Types.ObjectId,
         invoiceSlug: string
     ): Promise<void> {
         const result = await this.invoiceModel
-            .deleteOne({ businessId, slug: invoiceSlug })
+            .deleteOne({ accountId, slug: invoiceSlug })
             .exec();
         if (result.deletedCount === 0) {
             throw new NotFoundException({

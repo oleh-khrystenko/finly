@@ -15,6 +15,11 @@ import {
 
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
 import {
+    AccountAccessGuard,
+    CurrentAccount,
+} from '../accounts/account-access.guard';
+import type { AccountDocument } from '../accounts/schemas/account.schema';
+import {
     BusinessAccessGuard,
     CurrentBusiness,
 } from '../businesses/business-access.guard';
@@ -26,35 +31,26 @@ import { InvoicesService, type PaginatedInvoices } from './invoices.service';
 import type { InvoiceDocument } from './schemas/invoice.schema';
 
 /**
- * Sprint 4 §4.2 — cabinet endpoints для invoices під префіксом
- * `/businesses/me/:slug/invoices`.
+ * Sprint 4 §4.2 + Sprint 9 §9.1 — cabinet endpoints для invoices під префіксом
+ * `/businesses/me/:slug/accounts/:accountSlug/invoices`.
  *
- * **Route-param бізнесу — `:slug`, не `:businessSlug`** (consistency з Sprint 3
- * `BusinessAccessGuard`, що читає `request.params.slug`). Invoice slug —
- * `:invoiceSlug` (різне ім'я, щоб NestJS не плутав і `InvoiceAccessGuard` мав
- * окремий route-param для read).
- *
- * **Guard-chain**:
- *  - `JwtActiveGuard` (auth + soft-delete check) — на класі.
- *  - `BusinessAccessGuard` — на класі (resolve `:slug` → attach `request.business`).
- *  - `InvoiceAccessGuard` — на route-методах з `:invoiceSlug` (read/update/delete).
- *
- * Class-level `@UseGuards` гарантує, що всі route-методи (включно з list/create)
- * проходять через business-access — без цього зловмисник міг би list-нути
- * invoices чужого business.
+ * **Guard-chain** (Sprint 9 рефакторинг):
+ *  - `JwtActiveGuard` (auth + soft-delete check) + `BusinessAccessGuard`
+ *    (resolve `:slug`) + `AccountAccessGuard` (resolve `:accountSlug`) — на класі.
+ *  - `InvoiceAccessGuard` на route-методах з `:invoiceSlug` (read/update/delete).
  */
-@Controller('businesses/me/:slug/invoices')
-@UseGuards(JwtActiveGuard, BusinessAccessGuard)
+@Controller('businesses/me/:slug/accounts/:accountSlug/invoices')
+@UseGuards(JwtActiveGuard, BusinessAccessGuard, AccountAccessGuard)
 export class InvoicesController {
     constructor(private readonly invoicesService: InvoicesService) {}
 
     @Get()
     async list(
-        @CurrentBusiness() business: BusinessDocument,
+        @CurrentAccount() account: AccountDocument,
         @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
         @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number
     ): Promise<{ data: PaginatedInvoices }> {
-        const data = await this.invoicesService.getByBusinessId(business._id, {
+        const data = await this.invoicesService.getByAccountId(account._id, {
             page: Math.max(page, 1),
             limit: Math.min(Math.max(limit, 1), 50),
         });
@@ -65,9 +61,14 @@ export class InvoicesController {
     @HttpCode(HttpStatus.CREATED)
     async create(
         @CurrentBusiness() business: BusinessDocument,
+        @CurrentAccount() account: AccountDocument,
         @Body() dto: CreateInvoiceDto
     ): Promise<{ data: InvoiceDocument }> {
-        const invoice = await this.invoicesService.create(business, dto);
+        const invoice = await this.invoicesService.create(
+            business,
+            account,
+            dto
+        );
         return { data: invoice };
     }
 
@@ -76,7 +77,6 @@ export class InvoicesController {
     getOne(@CurrentInvoice() invoice: InvoiceDocument): {
         data: InvoiceDocument;
     } {
-        // Lookup уже зробив guard; controller просто обгортає у envelope.
         return { data: invoice };
     }
 
@@ -84,11 +84,13 @@ export class InvoicesController {
     @UseGuards(InvoiceAccessGuard)
     async update(
         @CurrentBusiness() business: BusinessDocument,
+        @CurrentAccount() account: AccountDocument,
         @CurrentInvoice() invoice: InvoiceDocument,
         @Body() dto: UpdateInvoiceDto
     ): Promise<{ data: InvoiceDocument }> {
         const updated = await this.invoicesService.update(
             business,
+            account,
             invoice.slug,
             dto
         );
@@ -99,10 +101,10 @@ export class InvoicesController {
     @UseGuards(InvoiceAccessGuard)
     @HttpCode(HttpStatus.OK)
     async delete(
-        @CurrentBusiness() business: BusinessDocument,
+        @CurrentAccount() account: AccountDocument,
         @CurrentInvoice() invoice: InvoiceDocument
     ): Promise<{ data: null }> {
-        await this.invoicesService.delete(business._id, invoice.slug);
+        await this.invoicesService.delete(account._id, invoice.slug);
         return { data: null };
     }
 }

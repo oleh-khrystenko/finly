@@ -64,6 +64,15 @@ class UserExecutions {
     activeReservation!: ActiveReservation | null;
 }
 
+@Schema({ _id: false })
+class ProfileCompletionReminders {
+    @Prop({ type: Date, default: null })
+    firstReminderSentAt!: Date | null;
+
+    @Prop({ type: Date, default: null })
+    finalWarningSentAt!: Date | null;
+}
+
 @Schema({ timestamps: true })
 export class User {
     @Prop({ required: true, unique: true, lowercase: true, trim: true })
@@ -125,6 +134,34 @@ export class User {
 
     @Prop({ type: String, default: null })
     termsVersion!: string | null;
+
+    /**
+     * Sprint 11 — single-stamp post-login deep-link target. Write-once на
+     * `LandingClaimService` success-claim, consume-and-clear на verify-handler
+     * (same-device) АБО `AuthInitializer` (cold-login resume). Більшість юзерів
+     * ніколи не торкають це поле, тож sparse-by-default; окремий index не
+     * додаємо — поле читається тільки через per-user `getMe()`-flow, без
+     * queries-by-target.
+     */
+    @Prop({ type: String, required: false })
+    pendingPostLoginTarget?: string;
+
+    /**
+     * Sprint 12 — 3-stage orphan-cleanup email-pipeline stamps. Cron-only read
+     * path, без queries-by-stamp → index не потрібен. Factory-default обох-null
+     * на insert; cron оновлює через atomic `findOneAndUpdate` з conditional-
+     * filter (claim-first pattern). Field-path-и (`...firstReminderSentAt`,
+     * `...finalWarningSentAt`) — частина public-API сервіс-методів і aggregation
+     * pipeline cron-а; перейменування ламає обидва.
+     */
+    @Prop({
+        type: ProfileCompletionReminders,
+        default: () => ({
+            firstReminderSentAt: null,
+            finalWarningSentAt: null,
+        }),
+    })
+    profileCompletionReminders!: ProfileCompletionReminders;
 
     @Prop()
     lastLoginAt?: Date;

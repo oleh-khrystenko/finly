@@ -2,73 +2,97 @@
 
 import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { AxiosError } from 'axios';
 import { toast } from 'sonner';
 import {
     isOnboardingComplete,
-    QrPreviewInputSchema,
+    LandingDraftSchema,
 } from '@finly/types';
 
 import { useAuthStore } from '@/entities/user';
 import { useQrLandingDraftStore } from '@/entities/qr-landing-draft';
-import { getApiMessage } from '@/shared/api/mapApiCode';
 
-import { claimLandingDraftAsBusiness } from './api';
+import { runClaimChain } from './runClaimChain';
 
 /**
- * Sprint 8 §8.4 — пост-auth тригер для claim-у landing-draft-у.
+ * Sprint 10 §10.2 — пост-auth тригер для 2-sequential anon-claim flow.
  *
- * **Спрацьовує один раз**, коли всі чотири умови true:
+ * **Sprint 8 → Sprint 10 еволюція**: Sprint 8 робив 1 POST на `/businesses/me`
+ * з `requisites.iban` shape. Sprint 9 розщепив Business+Account; Sprint 10
+ * замінює одиночний POST на 2-step chain (Business → Account) через спільний
+ * `runClaimChain`-helper, що використовується і inline-CTA у
+ * `QrLandingResult`.
+ *
+ * **Спрацьовує**, коли:
  *   1. `isAuthenticated === true` — користувач завершив auth-flow.
- *   2. `isOnboardingComplete(user.profile)` — профіль повний.
- *      Sprint plan §8.4 critical gate: AuthGuard примусово редіректить
- *      incomplete-profile-користувача на `/profile?mode=new`. Backend
- *      `OnboardingInterceptor` блокує `POST /businesses/me` до завершення
- *      профілю. Hook чекає на цей флаг — після успішного PATCH `/users/me`
- *      authStore оновлюється, useEffect re-fires автоматично.
+ *   2. `isOnboardingComplete(user.profile)` — backend `OnboardingInterceptor`
+ *      блокує `POST /businesses/me` до завершення профілю.
  *   3. `intent === 'claim-pending'` — користувач явно запросив claim
- *      натисканням "Зберегти у кабінет" на лендінгу.
- *   4. Не in-progress (race-protection через ref).
+ *      натисканням "Зберегти у кабінет".
+ *   4. `claimIdempotencyKey` непорожній (sanity).
+ *   5. Не in-progress (`inProgressRef`).
  *
- * **Race-protection через `inProgressRef`** (sprint plan §8.4): два render-и
- * підряд з тими самими (true, true, claim-pending) — API має викликатись один
- * раз. Without the ref, `useEffect` deps include `formData` (object identity
- * changes on every store update) → fires twice → дублікат бізнесу. ref
- * блокує другий вхід; success-path робить `clearAll()` (intent='idle'), тож
- * наступних effect-fires вже не буде.
+ * **Tab-close mid-flight resumption** (Sprint 10 §SP-7): persisted `intent ∈
+ * {'claim-business-pending', 'claim-account-pending'}` означає, що попередня
+ * сесія crash-нула посеред 2-step flow. `inProgressRef` НЕ переживає mount-
+ * цикл; auto-retry без `claimIdempotencyKey` створив би дублікат. Recovery-
+ * gate **mount-only** (через snapshot `getState().intent` у `[]`-deps effect):
+ * перевіряємо стан рівно на mount, а не реагуємо на live-transition. Без
+ * mount-only-gate effect re-fired би при legitimate `setIntent('claim-
+ * business-pending')` всередині `runClaimChain` і показував би false-positive
+ * recovery-toast одразу перед success-toast того самого claim-flow.
  *
- * **Schema-drift guard через `safeParse`** (sprint plan §8.4): `formData`
- * у localStorage збережений при попередній версії застосунку; якщо схема
- * змінилась між версіями, persisted shape може не пройти `QrPreviewInputSchema`.
- * Тоді не викликаємо API (інакше backend reject-не з 400 без UA-копії),
- * а ставимо `intent='claim-failed'` + toast і даємо користувачу продовжити
- * з кабінету вручну.
+ * **Race-protection через `inProgressRef`**: store-updates (`formData` у deps)
+ * можуть re-fire-нути effect; ref блокує другий вхід.
  *
- * **Failure не очищає formData**: користувач не втрачає введене. Empty-state
- * списку бізнесів (Sprint 8.5 follow-up) читає `intent === 'claim-failed'`
- * і показує "Продовжити чернетку з лендінгу" CTA.
+ * **Schema-drift guard через `safeParse`**: `formData` у localStorage міг
+ * лежати ще від попередньої версії застосунку.
  */
 export function useClaimLandingDraft(): void {
     const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
     const profile = useAuthStore((s) => s.user?.profile);
     const intent = useQrLandingDraftStore((s) => s.intent);
     const formData = useQrLandingDraftStore((s) => s.formData);
+    const claimIdempotencyKey = useQrLandingDraftStore(
+        (s) => s.claimIdempotencyKey
+    );
     const setIntent = useQrLandingDraftStore((s) => s.setIntent);
+    const setFormData = useQrLandingDraftStore((s) => s.setFormData);
     const clearAll = useQrLandingDraftStore((s) => s.clearAll);
     const router = useRouter();
     const inProgressRef = useRef(false);
 
     const onboardingDone = profile ? isOnboardingComplete(profile) : false;
 
+    // Sprint 10 §SP-7 — mount-only resumption-gate. Snapshot intent on mount
+    // через `getState()` (не reactive selector). Якщо persisted значення вже
+    // *-pending з попередньої crash-нутої сесії — reset на 'idle' + info-toast,
+    // user тригерить retry свідомо. **Не реагує на live setIntent** під час
+    // in-flight claim — інакше main-effect нижче, перейшовши у
+    // 'claim-business-pending', тригернув би лжетост на тому самому
+    // успішному flow.
+    useEffect(() => {
+        const persistedIntent = useQrLandingDraftStore.getState().intent;
+        if (
+            persistedIntent === 'claim-business-pending' ||
+            persistedIntent === 'claim-account-pending'
+        ) {
+            useQrLandingDraftStore.getState().setIntent('idle');
+            toast.info(
+                'Збереження було перервано. Натисніть «Зберегти у кабінет» ще раз'
+            );
+        }
+    }, []);
+
     useEffect(() => {
         if (!isAuthenticated) return;
         if (!onboardingDone) return;
         if (intent !== 'claim-pending') return;
+        if (!claimIdempotencyKey) return;
         if (inProgressRef.current) return;
 
-        const parsed = QrPreviewInputSchema.safeParse(formData);
+        const parsed = LandingDraftSchema.safeParse(formData);
         if (!parsed.success) {
-            setIntent('claim-failed');
+            setIntent('claim-failed-business');
             toast.error(
                 'Не вдалося відновити чернетку — створіть бізнес вручну'
             );
@@ -76,31 +100,22 @@ export function useClaimLandingDraft(): void {
         }
 
         inProgressRef.current = true;
-        claimLandingDraftAsBusiness(parsed.data)
-            .then(({ slug }) => {
-                clearAll();
-                toast.success('Бізнес створено');
-                router.replace(`/business/${slug}?completed-from=landing`);
-            })
-            .catch((err: unknown) => {
-                inProgressRef.current = false;
-                setIntent('claim-failed');
-                const code =
-                    err instanceof AxiosError
-                        ? ((
-                              err.response?.data as
-                                  | { error?: { code?: string } }
-                                  | undefined
-                          )?.error?.code ?? 'unknown')
-                        : 'unknown';
-                toast.error(getApiMessage(code, 'businesses'));
-            });
+        void runClaimChain(parsed.data, claimIdempotencyKey, {
+            setIntent,
+            setFormData,
+            clearAll,
+            router,
+        }).finally(() => {
+            inProgressRef.current = false;
+        });
     }, [
         isAuthenticated,
         onboardingDone,
         intent,
         formData,
+        claimIdempotencyKey,
         setIntent,
+        setFormData,
         clearAll,
         router,
     ]);

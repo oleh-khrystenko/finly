@@ -21,7 +21,7 @@ import {
     changePassword,
     verifyPassword,
     updateProfile,
-    deleteAccount,
+    deleteUserAccount,
     confirmDeleteAccount,
     restoreAccount,
     refreshToken,
@@ -173,12 +173,12 @@ describe('auth API functions', () => {
         });
     });
 
-    describe('deleteAccount', () => {
+    describe('deleteUserAccount', () => {
         it('sends POST to /users/account/delete and returns flags', async () => {
             const response = { requiresPassword: true };
             mockPost.mockResolvedValue({ data: { data: response } });
 
-            const result = await deleteAccount();
+            const result = await deleteUserAccount();
 
             expect(mockPost).toHaveBeenCalledWith('/users/account/delete');
             expect(result).toEqual(response);

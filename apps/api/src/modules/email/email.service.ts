@@ -20,6 +20,9 @@ import {
     DeletionReminderEmail,
     DELETION_REMINDER_SUBJECT,
 } from './templates/deletion-reminder';
+import { ProfileCompletionReminderEmail } from './templates/profile-completion-reminder';
+import { ProfileCompletionFinalWarningEmail } from './templates/profile-completion-final-warning';
+import { EMAIL_TEXT, PROFILE_COMPLETION_CTA_PATH } from './translations';
 
 const DATE_LOCALE = 'uk-UA';
 
@@ -81,6 +84,53 @@ export class EmailService {
         });
 
         this.logger.log(`Deletion reminder sent to ${email}`);
+    }
+
+    async sendProfileCompletionReminder(params: {
+        user: { email: string };
+        businesses: ReadonlyArray<{ name: string }>;
+    }): Promise<void> {
+        const { user, businesses } = params;
+        const mapped = businesses.map((b) => ({ name: b.name }));
+        const copy = EMAIL_TEXT.profileCompletion.reminder;
+        const subject =
+            mapped.length === 1 ? copy.singleSubject : copy.multiSubject;
+
+        await this.send({
+            to: user.email,
+            subject,
+            react: ProfileCompletionReminderEmail({
+                businesses: mapped,
+                deletionDays: ENV.ORPHAN_CLEANUP_DELETION_DAYS,
+                ctaHref: `${ENV.WEB_URL}${PROFILE_COMPLETION_CTA_PATH}`,
+            }),
+        });
+
+        this.logger.log(`Profile completion reminder sent to ${user.email}`);
+    }
+
+    async sendProfileCompletionFinalWarning(params: {
+        user: { email: string };
+        businesses: ReadonlyArray<{ name: string }>;
+    }): Promise<void> {
+        const { user, businesses } = params;
+        const mapped = businesses.map((b) => ({ name: b.name }));
+        const copy = EMAIL_TEXT.profileCompletion.finalWarning;
+        const subject =
+            mapped.length === 1 ? copy.singleSubject : copy.multiSubject;
+
+        await this.send({
+            to: user.email,
+            subject,
+            react: ProfileCompletionFinalWarningEmail({
+                businesses: mapped,
+                ctaHref: `${ENV.WEB_URL}${PROFILE_COMPLETION_CTA_PATH}`,
+            }),
+        });
+
+        this.logger.log(
+            `Profile completion final warning sent to ${user.email}`
+        );
     }
 
     private formatDate(date: Date): string {

@@ -2,21 +2,16 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { AxiosError } from 'axios';
 import { toast } from 'sonner';
-import {
-    isOnboardingComplete,
-    QrPreviewInputSchema,
-} from '@finly/types';
+import { isOnboardingComplete, LandingDraftSchema } from '@finly/types';
 
 import { useAuthStore } from '@/entities/user';
 import { useQrLandingDraftStore } from '@/entities/qr-landing-draft';
-import { getApiMessage } from '@/shared/api/mapApiCode';
 import UiButton from '@/shared/ui/UiButton';
 import UiQrImage from '@/shared/ui/UiQrImage';
 
-import { claimLandingDraftAsBusiness } from './api';
 import type { QrLandingFormInstance } from './QrLandingBlock';
+import { runClaimChain } from './runClaimChain';
 import { truncateLink } from './lib/truncateLink';
 
 const EMPTY_FORM_VALUES = {
@@ -31,36 +26,25 @@ interface QrLandingResultProps {
 }
 
 /**
- * Sprint 8 §8.3 — result-pane (sibling до `QrLandingForm`).
- *
- * **Empty-state vs Filled-state**: rendering розгалужено за `result === null`.
- * Empty показує decorative placeholder + microcopy "Ваш QR з'явиться тут".
- * Filled — реальний QR + truncated link + copy CTA + warning + claim CTA.
+ * Sprint 8 §8.3 / Sprint 10 §10.2 — result-pane (sibling до `QrLandingForm`).
  *
  * **Anon vs Logged-in CTA-семантика**:
- *  - Anon (`isAuthenticated === false`): `setIntent('claim-pending')` +
- *    `router.push('/auth/signin')`. Після auth `useClaimLandingDraft`
- *    (§8.4) зчитує intent і автоматично створює бізнес.
- *  - Logged-in + complete profile: прямий виклик `claimLandingDraftAsBusiness()`.
- *  - Logged-in + incomplete profile: backend `OnboardingInterceptor` поверне
- *    403; перенаправляємо на `/profile?mode=new` зі збереженим intent —
- *    hook §8.4 продовжить claim після PATCH `/users/me`.
- *
- * **`form` prop замість read-only callback**: clear-action скидає і store, і
- * RHF-state в одному місці. Без form-handle clear лишав би `<input>`-и
- * з frozen `defaultValues` (RHF uncontrolled). Sprint plan §8.3 explicit:
- * "→ `clearAll()` + `form.reset()`".
- *
- * **`navigator.clipboard` без feature-detection**: усі сучасні browsers
- * у secure contexts (HTTPS / localhost) підтримують Clipboard API.
- * Fail-degrade на toast.error при API-throw (security restrictions,
- * відмова дозволу). Sprint 8 не implement-ить fallback через
- * `<input>` + execCommand (deprecated).
+ *  - Anon: `setIntent('claim-pending')` → `router.push('/auth/signin')`. Atomic
+ *    `setIntent('claim-pending')` генерує `claimIdempotencyKey` через
+ *    `crypto.randomUUID()`. Sprint 10 signin-page прокине draft + key +
+ *    termsVersion у `sendMagicLink` — backend виконає claim після verify.
+ *  - Logged-in + complete profile: 2-step claim chain через спільний
+ *    `runClaimChain`-helper (той самий, що `useClaimLandingDraft` для
+ *    post-magic-link-flow).
+ *  - Logged-in + incomplete profile: redirect на `/profile?mode=new` зі
+ *    збереженим intent — `useClaimLandingDraft` у protected-layout продовжить
+ *    claim після PATCH `/users/me`.
  */
 export function QrLandingResult({ form }: QrLandingResultProps) {
     const result = useQrLandingDraftStore((s) => s.result);
     const formData = useQrLandingDraftStore((s) => s.formData);
     const setIntent = useQrLandingDraftStore((s) => s.setIntent);
+    const setFormData = useQrLandingDraftStore((s) => s.setFormData);
     const clearAll = useQrLandingDraftStore((s) => s.clearAll);
     const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
     const profile = useAuthStore((s) => s.user?.profile);
@@ -113,7 +97,7 @@ export function QrLandingResult({ form }: QrLandingResultProps) {
             return;
         }
 
-        const parsed = QrPreviewInputSchema.safeParse(formData);
+        const parsed = LandingDraftSchema.safeParse(formData);
         if (!parsed.success) {
             toast.error(
                 'Не вдалося відновити чернетку. Створіть бізнес вручну з кабінету'
@@ -121,32 +105,32 @@ export function QrLandingResult({ form }: QrLandingResultProps) {
             return;
         }
 
+        // Stamp idempotency-key через ту саму atomic setIntent-транзицію,
+        // що anon-CTA — той самий lifecycle-pattern на обох code-paths.
+        setIntent('claim-pending');
+        const idempotencyKey =
+            useQrLandingDraftStore.getState().claimIdempotencyKey;
+        if (!idempotencyKey) {
+            toast.error('Не вдалося ініціалізувати збереження. Спробуйте ще раз');
+            return;
+        }
+
         setIsClaiming(true);
         try {
-            const { slug } = await claimLandingDraftAsBusiness(parsed.data);
-            clearAll();
-            form.reset(EMPTY_FORM_VALUES);
-            toast.success('Бізнес створено');
-            router.replace(`/business/${slug}?completed-from=landing`);
-        } catch (err) {
-            const code =
-                err instanceof AxiosError
-                    ? (
-                          err.response?.data as
-                              | { error?: { code?: string } }
-                              | undefined
-                      )?.error?.code
-                    : undefined;
-            toast.error(getApiMessage(code ?? 'unknown', 'businesses'));
+            await runClaimChain(parsed.data, idempotencyKey, {
+                setIntent,
+                setFormData,
+                clearAll,
+                router,
+                onSuccessFormReset: () => form.reset(EMPTY_FORM_VALUES),
+            });
+        } finally {
             setIsClaiming(false);
         }
     };
 
     const handleClear = (): void => {
         clearAll();
-        // form.reset з explicit empty-defaults — без аргумента RHF reset-ить
-        // до initial defaultValues, які містять persisted snapshot з mount-у
-        // Block-у. Нам потрібен явний "очистити до порожнього" для UX.
         form.reset(EMPTY_FORM_VALUES);
         toast.success('Дані очищено');
     };

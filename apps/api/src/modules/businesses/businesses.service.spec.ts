@@ -12,6 +12,7 @@ import type {
     UpdateBusinessRequest,
 } from '@finly/types';
 
+import { Account } from '../accounts/schemas/account.schema';
 import { InvoiceSlugCounter } from '../invoices/schemas/invoice-slug-counter.schema';
 import { Invoice } from '../invoices/schemas/invoice.schema';
 import { BusinessesService } from './businesses.service';
@@ -28,6 +29,14 @@ describe('BusinessesService', () => {
         findOneAndUpdate: jest.Mock;
         exists: jest.Mock;
         deleteOne: jest.Mock;
+    }>;
+    // Sprint 10 §SP-11 — pre-check / race-protection replay використовує
+    // findOne з компаунд-фільтром. У existing-spec findOne уже мокається
+    // окремо у update-блоці; create-block тестів використовує власний
+    // helper-mock для замикання findOne-chain.
+    let accountModel: jest.Mocked<{
+        countDocuments: jest.Mock;
+        deleteMany: jest.Mock;
     }>;
     let invoiceModel: jest.Mocked<{
         countDocuments: jest.Mock;
@@ -48,10 +57,7 @@ describe('BusinessesService', () => {
     const VALID_CREATE: CreateBusinessRequest = {
         type: 'fop',
         name: 'Іваненко',
-        requisites: {
-            iban: 'UA213223130000026007233566001',
-            taxId: '1234567899',
-        },
+        taxId: '1234567899',
         taxationSystem: 'simplified-3',
         isVatPayer: false,
         paymentPurposeTemplate: 'Оплата',
@@ -66,6 +72,10 @@ describe('BusinessesService', () => {
             findOneAndUpdate: jest.fn(),
             exists: jest.fn(),
             deleteOne: jest.fn(),
+        };
+        accountModel = {
+            countDocuments: jest.fn().mockResolvedValue(0),
+            deleteMany: jest.fn().mockResolvedValue({ deletedCount: 0 }),
         };
         invoiceModel = {
             countDocuments: jest.fn().mockResolvedValue(0),
@@ -96,6 +106,10 @@ describe('BusinessesService', () => {
                 {
                     provide: getModelToken(Business.name),
                     useValue: businessModel,
+                },
+                {
+                    provide: getModelToken(Account.name),
+                    useValue: accountModel,
                 },
                 {
                     provide: getModelToken(Invoice.name),
@@ -168,6 +182,126 @@ describe('BusinessesService', () => {
             await expect(
                 service.create(userId.toString(), VALID_CREATE, false)
             ).rejects.toThrow('Mongo timeout');
+        });
+
+        // ─── Sprint 10 §SP-11 — claimIdempotencyKey replay ───
+
+        describe('claimIdempotencyKey (Sprint 10 §SP-11)', () => {
+            const KEY = '00000000-0000-4000-8000-000000000000';
+            const mockFindOneExec = (returnValue: unknown) => {
+                businessModel.findOne.mockReturnValue({
+                    exec: jest.fn().mockResolvedValue(returnValue),
+                });
+            };
+
+            it('(a) без claimIdempotencyKey — cabinet-create працює як зараз; findOne не викликається', async () => {
+                businessModel.create.mockResolvedValue({} as never);
+                await service.create(userId.toString(), VALID_CREATE, false);
+                expect(businessModel.findOne).not.toHaveBeenCalled();
+                expect(businessModel.create).toHaveBeenCalledTimes(1);
+            });
+
+            it('(b) з claimIdempotencyKey новим — pre-check не знаходить, insert створює документ зі stored key', async () => {
+                mockFindOneExec(null);
+                businessModel.create.mockResolvedValue({} as never);
+
+                await service.create(
+                    userId.toString(),
+                    { ...VALID_CREATE, claimIdempotencyKey: KEY },
+                    false
+                );
+
+                // Pre-check ownership-aware filter (owned-mode).
+                const findArg = businessModel.findOne.mock.calls[0]![0];
+                expect(findArg.claimIdempotencyKey).toBe(KEY);
+                expect((findArg.ownerId as Types.ObjectId).toString()).toBe(
+                    userId.toString()
+                );
+                expect(findArg.managers).toBeUndefined();
+
+                // Insert містить key у документі.
+                expect(businessModel.create.mock.calls[0]![0]).toMatchObject({
+                    claimIdempotencyKey: KEY,
+                });
+            });
+
+            it('(b2) з claimIdempotencyKey + bookkeeper-mode — pre-check filter містить ownerId: null + managers', async () => {
+                mockFindOneExec(null);
+                businessModel.create.mockResolvedValue({} as never);
+
+                await service.create(
+                    userId.toString(),
+                    { ...VALID_CREATE, claimIdempotencyKey: KEY },
+                    true
+                );
+
+                const findArg = businessModel.findOne.mock.calls[0]![0];
+                expect(findArg.ownerId).toBeNull();
+                expect((findArg.managers as Types.ObjectId).toString()).toBe(
+                    userId.toString()
+                );
+                expect(findArg.claimIdempotencyKey).toBe(KEY);
+            });
+
+            it('(c) з claimIdempotencyKey existing — pre-check повертає existing, insert НЕ викликається', async () => {
+                const existingDoc = {
+                    _id: 'existing-business-id',
+                    slug: 'AbCd',
+                };
+                mockFindOneExec(existingDoc);
+
+                const result = await service.create(
+                    userId.toString(),
+                    { ...VALID_CREATE, claimIdempotencyKey: KEY },
+                    false
+                );
+
+                expect(result).toBe(existingDoc);
+                expect(businessModel.create).not.toHaveBeenCalled();
+            });
+
+            it('(c2) race-protection: insert падає на 11000 з keyPattern.claimIdempotencyKey → re-fetch existing', async () => {
+                // 1-й findOne (pre-check) → null; 2-й findOne (post-11000 re-fetch) → existing.
+                const existingDoc = { _id: 'racing-business-id', slug: 'XyZw' };
+                businessModel.findOne
+                    .mockReturnValueOnce({
+                        exec: jest.fn().mockResolvedValue(null),
+                    })
+                    .mockReturnValueOnce({
+                        exec: jest.fn().mockResolvedValue(existingDoc),
+                    });
+                const dupErr = Object.assign(new Error('E11000'), {
+                    code: 11000,
+                    keyPattern: { ownerId: 1, claimIdempotencyKey: 1 },
+                });
+                businessModel.create.mockRejectedValue(dupErr);
+
+                const result = await service.create(
+                    userId.toString(),
+                    { ...VALID_CREATE, claimIdempotencyKey: KEY },
+                    false
+                );
+
+                expect(result).toBe(existingDoc);
+                expect(businessModel.findOne).toHaveBeenCalledTimes(2);
+            });
+
+            it('(c3) slug-collision 11000 (без claimIdempotencyKey у keyPattern) — продовжує кидати SLUG_GENERATION_FAILED', async () => {
+                mockFindOneExec(null);
+                const dupErr = Object.assign(new Error('E11000'), {
+                    code: 11000,
+                    keyPattern: { slugLower: 1 },
+                });
+                businessModel.create.mockRejectedValue(dupErr);
+
+                await expect(
+                    service.create(
+                        userId.toString(),
+                        { ...VALID_CREATE, claimIdempotencyKey: KEY },
+                        false
+                    )
+                ).rejects.toBeInstanceOf(InternalServerErrorException);
+            });
         });
     });
 
@@ -459,10 +593,7 @@ describe('BusinessesService', () => {
                 mockExistingType('fop');
                 await expect(
                     service.update('IvanEnko', {
-                        requisites: {
-                            iban: 'UA213223130000026007233566001',
-                            taxId: '12345678', // ЄДРПОУ для tov, не для fop
-                        },
+                        taxId: '12345678', // ЄДРПОУ для tov, не для fop
                     })
                 ).rejects.toMatchObject({
                     response: {
@@ -475,10 +606,7 @@ describe('BusinessesService', () => {
                 mockExistingType('tov');
                 await expect(
                     service.update('IvanEnko', {
-                        requisites: {
-                            iban: 'UA213223130000026007233566001',
-                            taxId: '1234567899', // RNOKPP для fop, не для tov
-                        },
+                        taxId: '1234567899', // RNOKPP для fop, не для tov
                     })
                 ).rejects.toMatchObject({
                     response: {
@@ -487,15 +615,12 @@ describe('BusinessesService', () => {
                 });
             });
 
-            it('individual + PATCH valid 10-digit RNOKPP → проходить cross-check (далі $expr-update)', async () => {
+            it('individual + PATCH valid 10-digit RNOKPP → проходить cross-check', async () => {
                 mockExistingType('individual');
                 mockUpdateReturn({ name: 'X' });
                 await expect(
                     service.update('IvanEnko', {
-                        requisites: {
-                            iban: 'UA213223130000026007233566001',
-                            taxId: '1234567899',
-                        },
+                        taxId: '1234567899',
                     })
                 ).resolves.toBeDefined();
             });
@@ -503,19 +628,13 @@ describe('BusinessesService', () => {
             it('fop + valid PATCH (RNOKPP + taxation) → cross-check passes', async () => {
                 mockExistingType('fop');
                 mockUpdateReturn({
-                    requisites: {
-                        iban: 'UA213223130000026007233566001',
-                        taxId: '1234567899',
-                    },
+                    taxId: '1234567899',
                     taxationSystem: 'simplified-3',
                     isVatPayer: false,
                 });
                 await expect(
                     service.update('IvanEnko', {
-                        requisites: {
-                            iban: 'UA213223130000026007233566001',
-                            taxId: '1234567899',
-                        },
+                        taxId: '1234567899',
                         taxationSystem: 'simplified-3',
                         isVatPayer: false,
                     } as UpdateBusinessRequest)
@@ -566,13 +685,20 @@ describe('BusinessesService', () => {
             });
         };
 
-        it('повертає affectedInvoices (counter перед transaction)', async () => {
+        it('Sprint 9 §SP-5 — повертає {affectedAccounts, affectedInvoices}', async () => {
             invoiceModel.countDocuments.mockResolvedValue(3);
+            accountModel.countDocuments.mockResolvedValue(2);
             mockDeleteOne(1);
 
             const result = await service.delete(businessFixture);
-            expect(result).toEqual({ affectedInvoices: 3 });
+            expect(result).toEqual({
+                affectedAccounts: 2,
+                affectedInvoices: 3,
+            });
             expect(invoiceModel.countDocuments).toHaveBeenCalledWith({
+                businessId,
+            });
+            expect(accountModel.countDocuments).toHaveBeenCalledWith({
                 businessId,
             });
         });
@@ -604,12 +730,13 @@ describe('BusinessesService', () => {
             mockDeleteOne(0); // race з паралельним delete-ом
 
             await expect(service.delete(businessFixture)).resolves.toEqual({
+                affectedAccounts: 0,
                 affectedInvoices: 0,
             });
             expect(session.endSession).toHaveBeenCalledTimes(1);
         });
 
-        it('replica-set absence: ловить "Transaction... replica set" → CASCADE_DELETE_REQUIRES_REPLICA_SET', async () => {
+        it('replica-set absence: ловить "Transaction... replica set" → TRANSACTION_REQUIRES_REPLICA_SET', async () => {
             invoiceModel.countDocuments.mockResolvedValue(0);
             const replSetErr = new Error(
                 'Transaction numbers are only allowed on a replica set member or mongos'

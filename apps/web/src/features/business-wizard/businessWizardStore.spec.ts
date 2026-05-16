@@ -14,12 +14,12 @@ describe('useBusinessWizardStore', () => {
         expect(useBusinessWizardStore.getState().currentStep).toBe('type-name');
     });
 
-    it('initial formData — type undefined, всі 11 банків (Sprint 7 §SP-6)', () => {
+    it('initial formData — type undefined, всі банки з MVP_BANKS (Sprint 9 §9.0 — 10 банків після SportBank-консолідації)', () => {
         const data = useBusinessWizardStore.getState().formData;
         expect(data.type).toBeUndefined();
         expect(data.taxationSystem).toBeUndefined();
         expect(data.isVatPayer).toBeUndefined();
-        expect(data.acceptedBanks).toHaveLength(11);
+        expect(data.acceptedBanks).toHaveLength(10);
     });
 
     it('setStep змінює currentStep на named-літерал', () => {
@@ -31,15 +31,11 @@ describe('useBusinessWizardStore', () => {
         const { patchFormData, setType } = useBusinessWizardStore.getState();
         setType('fop');
         patchFormData({ name: 'Іваненко' });
-        patchFormData({
-            requisites: {
-                iban: 'UA213223130000026007233566001',
-                taxId: '1234567899',
-            },
-        });
+        patchFormData({ taxId: '1234567899' });
         const data = useBusinessWizardStore.getState().formData;
         expect(data.name).toBe('Іваненко');
-        expect(data.requisites?.iban).toBe('UA213223130000026007233566001');
+        // Sprint 9 §9.2 — taxId flatten з requisites.taxId → top-level.
+        expect(data.taxId).toBe('1234567899');
         expect(data.type).toBe('fop'); // setType вище зафіксував
     });
 
@@ -198,21 +194,87 @@ describe('useBusinessWizardStore', () => {
             );
         });
 
-        it('vNext persist (named currentStep вже валідний) — passthrough без змін', async () => {
+        it('v3 persist (named currentStep + top-level taxId) — passthrough', async () => {
             sessionStorage.setItem(
                 STORAGE_KEY,
                 JSON.stringify({
                     state: {
                         currentStep: 'taxation',
-                        formData: { type: 'fop', name: 'Іваненко' },
+                        formData: {
+                            type: 'fop',
+                            name: 'Іваненко',
+                            taxId: '1234567899',
+                        },
+                    },
+                    version: 3,
+                })
+            );
+            await useBusinessWizardStore.persist.rehydrate();
+            const s = useBusinessWizardStore.getState();
+            expect(s.currentStep).toBe('taxation');
+            expect(s.formData.taxId).toBe('1234567899');
+        });
+    });
+
+    // ─── Sprint 9 §9.2 — persist migration v2→v3 (requisites flatten) ───
+
+    describe('persist migration v2→v3 (requisites.taxId → taxId, drop iban + invoiceSlugPresetDefault)', () => {
+        const STORAGE_KEY = 'finly:business-wizard';
+
+        beforeEach(() => {
+            sessionStorage.clear();
+        });
+
+        it('v2 з requisites.taxId → flatten у top-level taxId; requisites.iban drop-ається; invoiceSlugPresetDefault drop-ається', async () => {
+            sessionStorage.setItem(
+                STORAGE_KEY,
+                JSON.stringify({
+                    state: {
+                        currentStep: 'taxation',
+                        formData: {
+                            type: 'fop',
+                            name: 'Іваненко',
+                            requisites: {
+                                iban: 'UA213223130000026007233566001',
+                                taxId: '1234567899',
+                            },
+                            invoiceSlugPresetDefault: 'with-month',
+                        },
                     },
                     version: 2,
                 })
             );
             await useBusinessWizardStore.persist.rehydrate();
-            expect(useBusinessWizardStore.getState().currentStep).toBe(
-                'taxation'
+            const data = useBusinessWizardStore.getState().formData;
+            expect(data.taxId).toBe('1234567899');
+            // iban i invoiceSlugPresetDefault — поза новою shape.
+            expect((data as Record<string, unknown>).iban).toBeUndefined();
+            expect(
+                (data as Record<string, unknown>).requisites
+            ).toBeUndefined();
+            expect(
+                (data as Record<string, unknown>).invoiceSlugPresetDefault
+            ).toBeUndefined();
+            // Не-зачеплені поля проходять без змін.
+            expect(data.type).toBe('fop');
+            expect(data.name).toBe('Іваненко');
+        });
+
+        it('v2 без requisites — formData без taxId (юзер ще не дійшов до Step 2)', async () => {
+            sessionStorage.setItem(
+                STORAGE_KEY,
+                JSON.stringify({
+                    state: {
+                        currentStep: 'type-name',
+                        formData: { type: 'individual', name: 'Партія' },
+                    },
+                    version: 2,
+                })
             );
+            await useBusinessWizardStore.persist.rehydrate();
+            const data = useBusinessWizardStore.getState().formData;
+            expect(data.taxId).toBeUndefined();
+            expect(data.type).toBe('individual');
         });
     });
 

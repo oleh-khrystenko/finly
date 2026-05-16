@@ -2,6 +2,7 @@ import {
     CURRENT_TERMS_VERSION,
     type AuthResponse,
     type CheckEmailResponse,
+    type LandingDraft,
     type MagicLinkPurpose,
     type UpdateProfileDto,
     type UserProfile,
@@ -33,15 +34,36 @@ export async function loginWithPassword(
     return data.data;
 }
 
+/**
+ * Sprint 10 §SP-7/§SP-11/§SP-12 — `options` 4-й optional argument для
+ * anon-claim cross-device flow.
+ *
+ *  - `landingDraft` + `claimIdempotencyKey` мусять coexist (backend reject-ає
+ *    mismatched pair через `LANDING_DRAFT_AND_KEY_MUST_COEXIST` refine на
+ *    `SendMagicLinkSchema`).
+ *  - `termsVersion` — окремий, прокидається коли user прийняв terms на
+ *    signin-step; backend stamps `user.acceptedTermsVersion` ДО claim (закриває
+ *    acceptTerms ordering window).
+ */
+interface SendMagicLinkOptions {
+    landingDraft?: LandingDraft;
+    claimIdempotencyKey?: string;
+    termsVersion?: string;
+}
+
 export async function sendMagicLink(
     email: string,
     purpose?: MagicLinkPurpose,
-    redirectTo?: string
+    redirectTo?: string,
+    options?: SendMagicLinkOptions
 ): Promise<void> {
     await apiClient.post('/auth/magic-link/send', {
         email,
         purpose,
         redirectTo,
+        landingDraft: options?.landingDraft,
+        claimIdempotencyKey: options?.claimIdempotencyKey,
+        termsVersion: options?.termsVersion,
     });
 }
 
@@ -95,7 +117,7 @@ export async function updateProfile(
     return data.data;
 }
 
-export async function deleteAccount(): Promise<{
+export async function deleteUserAccount(): Promise<{
     requiresPassword?: boolean;
     requiresMagicLink?: boolean;
 }> {

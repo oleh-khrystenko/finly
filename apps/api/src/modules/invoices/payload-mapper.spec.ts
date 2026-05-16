@@ -1,25 +1,30 @@
 import { Types } from 'mongoose';
 
+import type { AccountDocument } from '../accounts/schemas/account.schema';
 import type { BusinessDocument } from '../businesses/schemas/business.schema';
 import { buildPayloadInputFromInvoice } from './payload-mapper';
 import type { InvoiceDocument } from './schemas/invoice.schema';
 
-/** Helper: minimal business stub (тільки fields, які реально читає mapper). */
 function makeBusiness(
     overrides: Partial<BusinessDocument> = {}
 ): BusinessDocument {
     return {
         name: 'ФОП Іваненко',
-        requisites: {
-            iban: 'UA213223130000026007233566001',
-            taxId: '1234567899',
-        },
+        taxId: '1234567899',
         paymentPurposeTemplate: 'Оплата за послуги',
         ...overrides,
     } as unknown as BusinessDocument;
 }
 
-/** Helper: minimal invoice stub. */
+function makeAccount(
+    overrides: Partial<AccountDocument> = {}
+): AccountDocument {
+    return {
+        iban: 'UA213223130000026007233566001',
+        ...overrides,
+    } as unknown as AccountDocument;
+}
+
 function makeInvoice(
     overrides: Partial<InvoiceDocument> = {}
 ): InvoiceDocument {
@@ -34,21 +39,16 @@ function makeInvoice(
     } as unknown as InvoiceDocument;
 }
 
-describe('buildPayloadInputFromInvoice (Sprint 4 §4.3)', () => {
-    describe('payeeSnapshot пріоритет над live business (Sprint 4 review fix)', () => {
-        it('snapshot-fields перекривають current business — receiver name/iban/taxId не drift-ять при редагуванні business', () => {
-            // КРИТИЧНИЙ INVARIANT: ФОП виставив рахунок на ім'я "ФОП Іваненко"
-            // з IBAN-1, потім перейменувався і поміняв IBAN. Старе посилання
-            // ОБОВʼЯЗКОВО має вести на оригінальні реквізити (snapshot),
-            // інакше клієнт сплачує на нові реквізити, які вже не відповідають
-            // фактичному рахунку.
+describe('buildPayloadInputFromInvoice (Sprint 9 §9.1 — приймає 3 параметри)', () => {
+    describe('payeeSnapshot пріоритет над live business/account', () => {
+        it('snapshot-fields перекривають current business+account', () => {
             const business = makeBusiness({
                 name: 'ФОП Петренко (renamed)',
-                requisites: {
-                    iban: 'UA903052992990004149999999999', // new IBAN
-                    taxId: '9876543210',
-                },
+                taxId: '9876543210',
             } as Partial<BusinessDocument>);
+            const account = makeAccount({
+                iban: 'UA903052992990004149999999999', // new IBAN
+            } as Partial<AccountDocument>);
             const invoice = makeInvoice({
                 payeeSnapshot: {
                     recipientName: 'ФОП Іваненко (frozen)',
@@ -57,7 +57,11 @@ describe('buildPayloadInputFromInvoice (Sprint 4 §4.3)', () => {
                     paymentPurpose: 'Frozen purpose',
                 },
             } as Partial<InvoiceDocument>);
-            const result = buildPayloadInputFromInvoice(business, invoice);
+            const result = buildPayloadInputFromInvoice(
+                business,
+                account,
+                invoice
+            );
 
             expect(result.receiverName).toBe('ФОП Іваненко (frozen)');
             expect(result.iban).toBe('UA213223130000026007233566001');
@@ -66,16 +70,12 @@ describe('buildPayloadInputFromInvoice (Sprint 4 §4.3)', () => {
         });
 
         it('snapshot.paymentPurpose пріоритет — runtime-template-edit не торкає payload', () => {
-            // Особливо поганий кейс з review feedback-у: with-purpose slug
-            // генерується на момент create з effectivePurpose, але payload
-            // потім читав live business.paymentPurposeTemplate. URL fixed на
-            // старе призначення, payload — нове. Snapshot фрозить purpose
-            // у тому самому місці, де slug-генератор його використав.
             const business = makeBusiness({
                 paymentPurposeTemplate: 'New template after edit',
             });
+            const account = makeAccount();
             const invoice = makeInvoice({
-                paymentPurpose: null, // user не задав, мав inherit
+                paymentPurpose: null,
                 payeeSnapshot: {
                     recipientName: 'ФОП Іваненко',
                     iban: 'UA213223130000026007233566001',
@@ -83,25 +83,28 @@ describe('buildPayloadInputFromInvoice (Sprint 4 §4.3)', () => {
                     paymentPurpose: 'Original template at create',
                 },
             } as Partial<InvoiceDocument>);
-            const result = buildPayloadInputFromInvoice(business, invoice);
+            const result = buildPayloadInputFromInvoice(
+                business,
+                account,
+                invoice
+            );
             expect(result.purpose).toBe('Original template at create');
         });
     });
 
-    describe('legacy fallback на live business (payeeSnapshot=null/missing)', () => {
-        it('маппить receiver-fields з business для legacy invoices', () => {
-            // Existing-pre-Sprint-4-review-fix invoices не мають snapshot —
-            // fallback на business поки migration не backfill-ить.
+    describe('legacy fallback на live business/account (payeeSnapshot=null)', () => {
+        it('маппить receiver-fields з business + account для legacy invoices', () => {
             const business = makeBusiness({
                 name: 'ФОП Петренко',
-                requisites: {
-                    iban: 'UA903052992990004149123456789',
-                    taxId: '9876543210',
-                },
+                taxId: '9876543210',
             } as Partial<BusinessDocument>);
+            const account = makeAccount({
+                iban: 'UA903052992990004149123456789',
+            } as Partial<AccountDocument>);
             const result = buildPayloadInputFromInvoice(
                 business,
-                makeInvoice() // payeeSnapshot undefined
+                account,
+                makeInvoice()
             );
 
             expect(result.receiverName).toBe('ФОП Петренко');
@@ -112,6 +115,7 @@ describe('buildPayloadInputFromInvoice (Sprint 4 §4.3)', () => {
         it('explicit payeeSnapshot=null теж тригерить fallback', () => {
             const result = buildPayloadInputFromInvoice(
                 makeBusiness(),
+                makeAccount(),
                 makeInvoice({
                     payeeSnapshot: null,
                 } as Partial<InvoiceDocument>)
@@ -123,6 +127,7 @@ describe('buildPayloadInputFromInvoice (Sprint 4 §4.3)', () => {
     it('amountKopecks: бере з invoice.amount (число у копійках)', () => {
         const result = buildPayloadInputFromInvoice(
             makeBusiness(),
+            makeAccount(),
             makeInvoice({ amount: 250000 })
         );
         expect(result.amountKopecks).toBe(250000);
@@ -131,6 +136,7 @@ describe('buildPayloadInputFromInvoice (Sprint 4 §4.3)', () => {
     it('amountKopecks: null → null (signage mode "клієнт вводить суму")', () => {
         const result = buildPayloadInputFromInvoice(
             makeBusiness(),
+            makeAccount(),
             makeInvoice({ amount: null, amountLocked: false })
         );
         expect(result.amountKopecks).toBeNull();
@@ -140,6 +146,7 @@ describe('buildPayloadInputFromInvoice (Sprint 4 §4.3)', () => {
         it('amountLocked=true → FFFF (все locked)', () => {
             const result = buildPayloadInputFromInvoice(
                 makeBusiness(),
+                makeAccount(),
                 makeInvoice({ amountLocked: true, amount: 100000 })
             );
             expect(result.fieldLockMask).toBe('FFFF');
@@ -148,16 +155,18 @@ describe('buildPayloadInputFromInvoice (Sprint 4 §4.3)', () => {
         it('amountLocked=false → FEFF (сума editable)', () => {
             const result = buildPayloadInputFromInvoice(
                 makeBusiness(),
+                makeAccount(),
                 makeInvoice({ amountLocked: false, amount: 100000 })
             );
             expect(result.fieldLockMask).toBe('FEFF');
         });
     });
 
-    describe('purpose-inheritance (single helper з purpose-resolver)', () => {
+    describe('purpose-inheritance', () => {
         it('invoice.paymentPurpose != null → бере з invoice', () => {
             const result = buildPayloadInputFromInvoice(
                 makeBusiness({ paymentPurposeTemplate: 'Default biz' }),
+                makeAccount(),
                 makeInvoice({ paymentPurpose: 'Per-invoice override' })
             );
             expect(result.purpose).toBe('Per-invoice override');
@@ -168,6 +177,7 @@ describe('buildPayloadInputFromInvoice (Sprint 4 §4.3)', () => {
                 makeBusiness({
                     paymentPurposeTemplate: 'Послуги web-розробки',
                 }),
+                makeAccount(),
                 makeInvoice({ paymentPurpose: null })
             );
             expect(result.purpose).toBe('Послуги web-розробки');
@@ -178,16 +188,17 @@ describe('buildPayloadInputFromInvoice (Sprint 4 §4.3)', () => {
         it('null → null', () => {
             const result = buildPayloadInputFromInvoice(
                 makeBusiness(),
+                makeAccount(),
                 makeInvoice({ validUntil: null })
             );
             expect(result.validUntil).toBeNull();
         });
 
         it('Date → YYMMDDHHmmss формат у Kyiv-tz', () => {
-            // Sprint-plan example: 23:59:59 Kyiv (DST) = UTC 20:59:59
             const dst = new Date('2026-05-04T20:59:59.000Z');
             const result = buildPayloadInputFromInvoice(
                 makeBusiness(),
+                makeAccount(),
                 makeInvoice({ validUntil: dst })
             );
             expect(result.validUntil).toBe('260504235959');
@@ -197,6 +208,7 @@ describe('buildPayloadInputFromInvoice (Sprint 4 §4.3)', () => {
             const winter = new Date('2026-12-15T22:30:00.000Z');
             const result = buildPayloadInputFromInvoice(
                 makeBusiness(),
+                makeAccount(),
                 makeInvoice({ validUntil: winter })
             );
             expect(result.validUntil).toBe('261216003000');
@@ -205,18 +217,19 @@ describe('buildPayloadInputFromInvoice (Sprint 4 §4.3)', () => {
 
     it('full output shape (smoke): усі fields присутні', () => {
         const business = makeBusiness();
+        const account = makeAccount();
         const invoice = makeInvoice({
             amount: 150000,
             amountLocked: true,
             paymentPurpose: 'Оплата',
             validUntil: new Date('2026-12-31T21:59:59.000Z'),
         });
-        const result = buildPayloadInputFromInvoice(business, invoice);
+        const result = buildPayloadInputFromInvoice(business, account, invoice);
 
         expect(result).toEqual({
             receiverName: business.name,
-            iban: business.requisites.iban,
-            receiverTaxId: business.requisites.taxId,
+            iban: account.iban,
+            receiverTaxId: business.taxId,
             amountKopecks: 150000,
             purpose: 'Оплата',
             fieldLockMask: 'FFFF',

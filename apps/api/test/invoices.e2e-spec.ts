@@ -14,15 +14,27 @@ import { createReplSetMongo } from '../src/test-utils/mongo';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 import { REDIS_CLIENT } from '../src/common/modules/redis.module';
 import { RedisCounterService } from '../src/common/services/redis-counter.service';
+// Import order matters: AuthModule ↔ UsersModule ↔ StorageModule — це
+// pre-existing JS-cycle (`CLAUDE.md` Known Complexities `AuthModule ↔
+// UsersModule circular`). Якщо AccountsModule / BusinessesModule / InvoicesModule
+// імпортуються до AuthModule — UsersModule resolves у undefined на eval-time
+// StorageModule.imports → Nest "imports[0] of StorageModule is undefined".
+// AuthModule першим: повністю eval-ить циклічну трійку перед business/account
+// modules-graph.
 import { AuthModule } from '../src/modules/auth/auth.module';
-import { BusinessesModule } from '../src/modules/businesses/businesses.module';
 import { EmailModule } from '../src/modules/email/email.module';
 import { EmailService } from '../src/modules/email/email.service';
+import { StorageModule } from '../src/modules/storage/storage.module';
+import { UsersModule } from '../src/modules/users/users.module';
+import { AccountsModule } from '../src/modules/accounts/accounts.module';
+import {
+    Account,
+    AccountDocument,
+} from '../src/modules/accounts/schemas/account.schema';
+import { BusinessesModule } from '../src/modules/businesses/businesses.module';
 import { InvoicesModule } from '../src/modules/invoices/invoices.module';
 import { InvoicesService } from '../src/modules/invoices/invoices.service';
 import { QrModule } from '../src/modules/qr/qr.module';
-import { StorageModule } from '../src/modules/storage/storage.module';
-import { UsersModule } from '../src/modules/users/users.module';
 import { User, UserDocument } from '../src/modules/users/schemas/user.schema';
 import {
     Business,
@@ -162,11 +174,15 @@ const VALID_TAX_ID = '1234567899';
 const VALID_BUSINESS_PAYLOAD = {
     type: 'fop',
     name: 'ФОП Іваненко',
-    requisites: { iban: VALID_IBAN, taxId: VALID_TAX_ID },
+    taxId: VALID_TAX_ID,
     taxationSystem: 'simplified-3',
     isVatPayer: false,
     paymentPurposeTemplate: 'Оплата за послуги',
     acceptedBanks: ['privatbank', 'monobank'],
+};
+
+const VALID_ACCOUNT_PAYLOAD = {
+    iban: VALID_IBAN,
 };
 
 // ─── Test ───
@@ -181,6 +197,7 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
     let mongo: Awaited<ReturnType<typeof createReplSetMongo>>;
     let userModel: Model<UserDocument>;
     let businessModel: Model<BusinessDocument>;
+    let accountModel: Model<AccountDocument>;
     let invoiceModel: Model<InvoiceDocument>;
     let jwtService: JwtService;
 
@@ -202,6 +219,7 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                 UsersModule,
                 StorageModule,
                 BusinessesModule,
+                AccountsModule,
                 InvoicesModule,
                 QrModule,
             ],
@@ -228,6 +246,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
         businessModel = moduleFixture.get<Model<BusinessDocument>>(
             getModelToken(Business.name)
         );
+        accountModel = moduleFixture.get<Model<AccountDocument>>(
+            getModelToken(Account.name)
+        );
         invoiceModel = moduleFixture.get<Model<InvoiceDocument>>(
             getModelToken(Invoice.name)
         );
@@ -242,6 +263,7 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
     beforeEach(async () => {
         await userModel.deleteMany({});
         await businessModel.deleteMany({});
+        await accountModel.deleteMany({});
         await invoiceModel.deleteMany({});
     });
 
@@ -267,12 +289,27 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
         )}`;
     }
 
-    async function createBusinessFor(user: UserDocument): Promise<string> {
-        const res = await supertest(app.getHttpServer())
+    /**
+     * Sprint 9 §SP-1 — створює business + перший account (Sprint 9 invoice-flow
+     * вимагає account-namespace). Повертає обидва slug-и для URL-побудови.
+     */
+    async function createBusinessFor(
+        user: UserDocument,
+        opts: { accountIban?: string } = {}
+    ): Promise<{ slug: string; accountSlug: string }> {
+        const bizRes = await supertest(app.getHttpServer())
             .post('/api/businesses/me')
             .set('Authorization', bearerFor(user))
             .send(VALID_BUSINESS_PAYLOAD);
-        return (res.body as { data: { slug: string } }).data.slug;
+        const slug = (bizRes.body as { data: { slug: string } }).data.slug;
+        const accRes = await supertest(app.getHttpServer())
+            .post(`/api/businesses/me/${slug}/accounts`)
+            .set('Authorization', bearerFor(user))
+            .send({ iban: opts.accountIban ?? VALID_IBAN })
+            .expect(201);
+        const accountSlug = (accRes.body as { data: { slug: string } }).data
+            .slug;
+        return { slug, accountSlug };
     }
 
     // ─── POST /businesses/me/:slug/invoices ───
@@ -280,10 +317,12 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
     describe('POST /businesses/me/:slug/invoices', () => {
         it('створює invoice з пресетом simple — 201 + slug "inv-001-..." + counter-fields', async () => {
             const user = await createUser();
-            const slug = await createBusinessFor(user);
+            const { slug, accountSlug } = await createBusinessFor(user);
 
             const res = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: 150000,
@@ -314,10 +353,12 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
         it('створює signage-mode invoice (amount=null, amountLocked=false)', async () => {
             const user = await createUser();
-            const slug = await createBusinessFor(user);
+            const { slug, accountSlug } = await createBusinessFor(user);
 
             const res = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: null,
@@ -341,10 +382,12 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             // мапиться у `INVOICE_AMOUNT_LOCKED_REQUIRES_AMOUNT` через
             // `AllExceptionsFilter` (раніше падало як generic `VALIDATION_ERROR`).
             const user = await createUser();
-            const slug = await createBusinessFor(user);
+            const { slug, accountSlug } = await createBusinessFor(user);
 
             const res = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: null,
@@ -362,11 +405,13 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
         it('reject validUntil у минулому — 400 INVOICE_VALID_UNTIL_IN_PAST', async () => {
             // Sprint 4 review fix — write-side enforcement у InvoicesService.create.
             const user = await createUser();
-            const slug = await createBusinessFor(user);
+            const { slug, accountSlug } = await createBusinessFor(user);
             const past = new Date(Date.now() - 86_400_000).toISOString(); // вчора
 
             const res = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: 100000,
@@ -383,10 +428,12 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
         it('reject explicit з invalid humanPart (uppercase) — 400', async () => {
             const user = await createUser();
-            const slug = await createBusinessFor(user);
+            const { slug, accountSlug } = await createBusinessFor(user);
 
             await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: 150000,
@@ -400,10 +447,12 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
         it('Sprint 4 §4.4 contract — response shape має `id: string` (а не `_id`), без `__v`', async () => {
             const user = await createUser();
-            const slug = await createBusinessFor(user);
+            const { slug, accountSlug } = await createBusinessFor(user);
 
             const res = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: 100,
@@ -422,11 +471,13 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
         it('5 послідовних simple-інвойсів — counter monotonic 001..005', async () => {
             const user = await createUser();
-            const slug = await createBusinessFor(user);
+            const { slug, accountSlug } = await createBusinessFor(user);
 
             for (let i = 1; i <= 5; i++) {
                 const res = await supertest(app.getHttpServer())
-                    .post(`/api/businesses/me/${slug}/invoices`)
+                    .post(
+                        `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                    )
                     .set('Authorization', bearerFor(user))
                     .send({
                         amount: 100000,
@@ -446,11 +497,13 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             // owner/manager → 403 (Sprint 3 §3.10 patterна — у cabinet enumeration
             // не є ризиком, чесний 403 кращий UX).
             const owner = await createUser();
-            const slug = await createBusinessFor(owner);
+            const { slug, accountSlug } = await createBusinessFor(owner);
             const intruder = await createUser();
 
             const res = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(intruder))
                 .send({
                     amount: 100,
@@ -471,11 +524,13 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
     describe('GET /businesses/me/:slug/invoices', () => {
         it('paginated list з total, page, limit', async () => {
             const user = await createUser();
-            const slug = await createBusinessFor(user);
+            const { slug, accountSlug } = await createBusinessFor(user);
             // створимо 3 інвойси
             for (let i = 0; i < 3; i++) {
                 await supertest(app.getHttpServer())
-                    .post(`/api/businesses/me/${slug}/invoices`)
+                    .post(
+                        `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                    )
                     .set('Authorization', bearerFor(user))
                     .send({
                         amount: 100,
@@ -487,7 +542,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             }
 
             const res = await supertest(app.getHttpServer())
-                .get(`/api/businesses/me/${slug}/invoices?page=1&limit=2`)
+                .get(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices?page=1&limit=2`
+                )
                 .set('Authorization', bearerFor(user))
                 .expect(200);
 
@@ -507,10 +564,12 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
         it('default page=1 limit=10', async () => {
             const user = await createUser();
-            const slug = await createBusinessFor(user);
+            const { slug, accountSlug } = await createBusinessFor(user);
 
             const res = await supertest(app.getHttpServer())
-                .get(`/api/businesses/me/${slug}/invoices`)
+                .get(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .expect(200);
             const body = res.body as {
@@ -529,19 +588,21 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
          */
         it('deterministic pagination на ідентичних timestamp (review fix)', async () => {
             const user = await createUser();
-            const slug = await createBusinessFor(user);
+            const { slug, accountSlug } = await createBusinessFor(user);
             const businessDoc = await businessModel.findOne({
                 slugLower: slug.toLowerCase(),
             });
             const businessId = businessDoc!._id;
+            const accountDoc = await accountModel.findOne({
+                businessId,
+                slug: accountSlug,
+            });
+            const accountId = accountDoc!._id;
 
-            // 6 invoices з тим самим timestamp. Йдемо через `Model.collection.
-            // insertMany` (raw MongoDB driver), що не застосовує Mongoose
-            // `timestamps: true` — це дозволяє явно зафіксувати ідентичні
-            // `createdAt` для імітації tie-group.
             const fixed = new Date('2026-05-07T12:00:00.000Z');
             const docs = Array.from({ length: 6 }, (_, i) => ({
                 businessId,
+                accountId,
                 slug: `tie-${i}-aaaaaaaa`,
                 amount: 100 + i,
                 amountLocked: false,
@@ -560,7 +621,7 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             for (const page of [1, 2, 3]) {
                 const res = await supertest(app.getHttpServer())
                     .get(
-                        `/api/businesses/me/${slug}/invoices?page=${page}&limit=2`
+                        `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices?page=${page}&limit=2`
                     )
                     .set('Authorization', bearerFor(user))
                     .expect(200);
@@ -586,9 +647,11 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
     describe('GET /businesses/me/:slug/invoices/:invoiceSlug', () => {
         it('повертає invoice по slug — 200', async () => {
             const user = await createUser();
-            const slug = await createBusinessFor(user);
+            const { slug, accountSlug } = await createBusinessFor(user);
             const create = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: 100,
@@ -601,7 +664,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                 .slug;
 
             const res = await supertest(app.getHttpServer())
-                .get(`/api/businesses/me/${slug}/invoices/${invoiceSlug}`)
+                .get(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`
+                )
                 .set('Authorization', bearerFor(user))
                 .expect(200);
             expect((res.body as { data: { slug: string } }).data.slug).toBe(
@@ -611,9 +676,11 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
         it('404 INVOICE_NOT_FOUND для неіснуючого slug', async () => {
             const user = await createUser();
-            const slug = await createBusinessFor(user);
+            const { slug, accountSlug } = await createBusinessFor(user);
             const res = await supertest(app.getHttpServer())
-                .get(`/api/businesses/me/${slug}/invoices/missing-aaaaaaaa`)
+                .get(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/missing-aaaaaaaa`
+                )
                 .set('Authorization', bearerFor(user))
                 .expect(404);
             expect((res.body as { error: { code: string } }).error.code).toBe(
@@ -623,9 +690,11 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
         it('case-sensitive slug lookup (SP-8)', async () => {
             const user = await createUser();
-            const slug = await createBusinessFor(user);
+            const { slug, accountSlug } = await createBusinessFor(user);
             const create = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: 100,
@@ -643,7 +712,7 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             // Uppercase варіант → 404, бо case-sensitive
             await supertest(app.getHttpServer())
                 .get(
-                    `/api/businesses/me/${slug}/invoices/${invoiceSlug.toUpperCase()}`
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug.toUpperCase()}`
                 )
                 .set('Authorization', bearerFor(user))
                 .expect(404);
@@ -655,9 +724,11 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
     describe('PATCH /businesses/me/:slug/invoices/:invoiceSlug', () => {
         it('inline-edit paymentPurpose — 200', async () => {
             const user = await createUser();
-            const slug = await createBusinessFor(user);
+            const { slug, accountSlug } = await createBusinessFor(user);
             const create = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: 100,
@@ -670,7 +741,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                 .slug;
 
             const res = await supertest(app.getHttpServer())
-                .patch(`/api/businesses/me/${slug}/invoices/${invoiceSlug}`)
+                .patch(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({ paymentPurpose: 'New purpose' })
                 .expect(200);
@@ -686,9 +759,11 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             // би старий purpose назавжди — прямо суперечить контракту
             // "invoice mutable payment data" (public-invoices controller doc).
             const user = await createUser();
-            const slug = await createBusinessFor(user);
+            const { slug, accountSlug } = await createBusinessFor(user);
             const create = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: 100,
@@ -702,7 +777,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
             // Sanity: public-view спочатку показує "Original".
             const before = await supertest(app.getHttpServer())
-                .get(`/api/businesses/public/${slug}/invoices/${invoiceSlug}`)
+                .get(
+                    `/api/businesses/public/${slug}/account/${accountSlug}/invoices/${invoiceSlug}`
+                )
                 .expect(200);
             expect(
                 (before.body as { data: { paymentPurpose: string } }).data
@@ -711,14 +788,18 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
             // Cabinet PATCH purpose → "Updated".
             await supertest(app.getHttpServer())
-                .patch(`/api/businesses/me/${slug}/invoices/${invoiceSlug}`)
+                .patch(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({ paymentPurpose: 'Updated' })
                 .expect(200);
 
             // Public-view відразу віддає "Updated" — snapshot mirror спрацював.
             const after = await supertest(app.getHttpServer())
-                .get(`/api/businesses/public/${slug}/invoices/${invoiceSlug}`)
+                .get(
+                    `/api/businesses/public/${slug}/account/${accountSlug}/invoices/${invoiceSlug}`
+                )
                 .expect(200);
             expect(
                 (after.body as { data: { paymentPurpose: string } }).data
@@ -731,9 +812,11 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             // business.paymentPurposeTemplate і mirror-ить у snapshot. Public
             // payload завжди має конкретний рядок (не null).
             const user = await createUser();
-            const slug = await createBusinessFor(user);
+            const { slug, accountSlug } = await createBusinessFor(user);
             const create = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: 100,
@@ -747,13 +830,17 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
             // PATCH paymentPurpose=null → resolve до template.
             await supertest(app.getHttpServer())
-                .patch(`/api/businesses/me/${slug}/invoices/${invoiceSlug}`)
+                .patch(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({ paymentPurpose: null })
                 .expect(200);
 
             const view = await supertest(app.getHttpServer())
-                .get(`/api/businesses/public/${slug}/invoices/${invoiceSlug}`)
+                .get(
+                    `/api/businesses/public/${slug}/account/${accountSlug}/invoices/${invoiceSlug}`
+                )
                 .expect(200);
             // Public-purpose === business.paymentPurposeTemplate seeded у helper.
             expect(
@@ -764,9 +851,11 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
         it('reject спробу змінити slug через PATCH — 400 (slug-immutability via .strict())', async () => {
             const user = await createUser();
-            const slug = await createBusinessFor(user);
+            const { slug, accountSlug } = await createBusinessFor(user);
             const create = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: 100,
@@ -779,7 +868,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                 .slug;
 
             await supertest(app.getHttpServer())
-                .patch(`/api/businesses/me/${slug}/invoices/${invoiceSlug}`)
+                .patch(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({ slug: 'evil-vanity' })
                 .expect(400);
@@ -789,9 +880,11 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             'reject спробу змінити %s через PATCH (.strict())',
             async (key) => {
                 const user = await createUser();
-                const slug = await createBusinessFor(user);
+                const { slug, accountSlug } = await createBusinessFor(user);
                 const create = await supertest(app.getHttpServer())
-                    .post(`/api/businesses/me/${slug}/invoices`)
+                    .post(
+                        `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                    )
                     .set('Authorization', bearerFor(user))
                     .send({
                         amount: 100,
@@ -804,7 +897,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                     .data.slug;
 
                 await supertest(app.getHttpServer())
-                    .patch(`/api/businesses/me/${slug}/invoices/${invoiceSlug}`)
+                    .patch(
+                        `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`
+                    )
                     .set('Authorization', bearerFor(user))
                     .send({ [key]: 'evil' })
                     .expect(400);
@@ -813,9 +908,11 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
         it('coupled cross-field amount=null + amountLocked=true (PATCH тільки amountLocked) — 400 INVOICE_AMOUNT_LOCKED_REQUIRES_AMOUNT', async () => {
             const user = await createUser();
-            const slug = await createBusinessFor(user);
+            const { slug, accountSlug } = await createBusinessFor(user);
             const create = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: null,
@@ -828,7 +925,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                 .slug;
 
             const res = await supertest(app.getHttpServer())
-                .patch(`/api/businesses/me/${slug}/invoices/${invoiceSlug}`)
+                .patch(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({ amountLocked: true })
                 .expect(400);
@@ -843,9 +942,11 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             // generic). Тепер `ZOD_ISSUE_CODE_TO_RESPONSE_CODE` мапить
             // `AMOUNT_LOCKED_REQUIRES_AMOUNT` → доменний код.
             const user = await createUser();
-            const slug = await createBusinessFor(user);
+            const { slug, accountSlug } = await createBusinessFor(user);
             const create = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: 100,
@@ -858,7 +959,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                 .slug;
 
             const res = await supertest(app.getHttpServer())
-                .patch(`/api/businesses/me/${slug}/invoices/${invoiceSlug}`)
+                .patch(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({ amount: null, amountLocked: true })
                 .expect(400);
@@ -869,9 +972,11 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
         it('reject validUntil у минулому через PATCH — 400 INVOICE_VALID_UNTIL_IN_PAST', async () => {
             const user = await createUser();
-            const slug = await createBusinessFor(user);
+            const { slug, accountSlug } = await createBusinessFor(user);
             const create = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: 100,
@@ -885,7 +990,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             const past = new Date(Date.now() - 86_400_000).toISOString();
 
             const res = await supertest(app.getHttpServer())
-                .patch(`/api/businesses/me/${slug}/invoices/${invoiceSlug}`)
+                .patch(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({ validUntil: past })
                 .expect(400);
@@ -900,9 +1007,11 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
     describe('DELETE /businesses/me/:slug/invoices/:invoiceSlug', () => {
         it('hard-delete — 200, наступний GET → 404', async () => {
             const user = await createUser();
-            const slug = await createBusinessFor(user);
+            const { slug, accountSlug } = await createBusinessFor(user);
             const create = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slug}/invoices`)
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: 100,
@@ -915,12 +1024,16 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                 .slug;
 
             await supertest(app.getHttpServer())
-                .delete(`/api/businesses/me/${slug}/invoices/${invoiceSlug}`)
+                .delete(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`
+                )
                 .set('Authorization', bearerFor(user))
                 .expect(200);
 
             await supertest(app.getHttpServer())
-                .get(`/api/businesses/me/${slug}/invoices/${invoiceSlug}`)
+                .get(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`
+                )
                 .set('Authorization', bearerFor(user))
                 .expect(404);
         });
@@ -931,12 +1044,14 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
     describe('Cascade-delete (Sprint 4 §SP-5)', () => {
         it('GET /businesses/me/:slug повертає invoicesCount', async () => {
             const user = await createUser();
-            const slug = await createBusinessFor(user);
+            const { slug, accountSlug } = await createBusinessFor(user);
 
             // Створюємо 2 інвойси
             for (let i = 0; i < 2; i++) {
                 await supertest(app.getHttpServer())
-                    .post(`/api/businesses/me/${slug}/invoices`)
+                    .post(
+                        `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                    )
                     .set('Authorization', bearerFor(user))
                     .send({
                         amount: 100,
@@ -959,12 +1074,14 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
         it('DELETE business → cascade видалення усіх invoices + response.affectedInvoices', async () => {
             const user = await createUser();
-            const slug = await createBusinessFor(user);
+            const { slug, accountSlug } = await createBusinessFor(user);
 
             // 3 інвойси
             for (let i = 0; i < 3; i++) {
                 await supertest(app.getHttpServer())
-                    .post(`/api/businesses/me/${slug}/invoices`)
+                    .post(
+                        `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                    )
                     .set('Authorization', bearerFor(user))
                     .send({
                         amount: 100,
@@ -997,7 +1114,7 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
         it('DELETE business без інвойсів → affectedInvoices=0', async () => {
             const user = await createUser();
-            const slug = await createBusinessFor(user);
+            const { slug, accountSlug } = await createBusinessFor(user);
 
             const res = await supertest(app.getHttpServer())
                 .delete(`/api/businesses/me/${slug}`)
@@ -1011,14 +1128,16 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
         it('cross-business cascade isolation: інвойси іншого бізнесу не зачеплені', async () => {
             const user = await createUser();
-            const slugA = await createBusinessFor(user);
-            // Створюємо другий бізнес — потребує іншого URL-shape, тому через
-            // DB-rename. Простіше: створюємо ще одного user і його бізнес.
+            const { slug: slugA, accountSlug: accSlugA } =
+                await createBusinessFor(user);
             const userB = await createUser();
-            const slugB = await createBusinessFor(userB);
+            const { slug: slugB, accountSlug: accSlugB } =
+                await createBusinessFor(userB);
 
             await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slugA}/invoices`)
+                .post(
+                    `/api/businesses/me/${slugA}/accounts/${accSlugA}/invoices`
+                )
                 .set('Authorization', bearerFor(user))
                 .send({
                     amount: 100,
@@ -1028,7 +1147,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                     slugInput: { kind: 'random' },
                 });
             await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${slugB}/invoices`)
+                .post(
+                    `/api/businesses/me/${slugB}/accounts/${accSlugB}/invoices`
+                )
                 .set('Authorization', bearerFor(userB))
                 .send({
                     amount: 100,
@@ -1057,58 +1178,66 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
         // блокує `BusinessAccessGuard`-ом ще раніше). Повний race-test
         // вимагає paralleled timing, що нестабільно у jest; sequential-test
         // покриває the same orphan-failure-mode на rate-fix-side.
-        it('sequential delete → create same businessId → 404 BUSINESS_NOT_FOUND, no orphan', async () => {
+        it('Sprint 9 §SP-3 — sequential delete → create same accountId → 404 ACCOUNT_NOT_FOUND, no orphan', async () => {
             const user = await createUser();
-            const slug = await createBusinessFor(user);
+            const { slug, accountSlug } = await createBusinessFor(user);
             const business = await businessModel.findOne({
                 slugLower: slug.toLowerCase(),
             });
+            const account = await accountModel.findOne({
+                businessId: business?._id,
+                slug: accountSlug,
+            });
             expect(business).not.toBeNull();
-            const businessId = business!._id;
+            expect(account).not.toBeNull();
+            const accountId = account!._id;
 
-            // Delete cascade (success path).
+            // Cascade-delete business (success path).
             await supertest(app.getHttpServer())
                 .delete(`/api/businesses/me/${slug}`)
                 .set('Authorization', bearerFor(user))
                 .expect(200);
 
-            // Прямий service-call — обходимо BusinessAccessGuard, аби
-            // перевірити саме service-layer orphan-block. Симулює state,
-            // у якому concurrent guard-read побачив business, а до моменту
-            // create-touch його вже не було.
+            // Прямий service-call — обходимо AccountAccessGuard, перевіряємо
+            // саме service-layer orphan-block (touch-account у транзакції).
             const invoicesService = app.get(InvoicesService);
             await expect(
-                invoicesService.create(business as BusinessDocument, {
-                    amount: 1000,
-                    amountLocked: true,
-                    paymentPurpose: 'Late insert',
-                    validUntil: null,
-                    slugInput: { kind: 'random' },
-                })
+                invoicesService.create(
+                    business as BusinessDocument,
+                    account as AccountDocument,
+                    {
+                        amount: 1000,
+                        amountLocked: true,
+                        paymentPurpose: 'Late insert',
+                        validUntil: null,
+                        slugInput: { kind: 'random' },
+                    }
+                )
             ).rejects.toMatchObject({
-                response: { code: 'BUSINESS_NOT_FOUND' },
+                response: { code: 'ACCOUNT_NOT_FOUND' },
             });
 
-            // Інваріант atomic-or-nothing: жодного invoice проти видаленого
-            // businessId.
-            const orphans = await invoiceModel.countDocuments({ businessId });
+            const orphans = await invoiceModel.countDocuments({ accountId });
             expect(orphans).toBe(0);
         });
     });
 
     // ─── §4.3 Public flow ───────────────────────────────────────────────
 
-    describe('Public Invoices Controller (Sprint 4 §4.3)', () => {
+    describe('Public Invoices Controller (Sprint 9 §9.1)', () => {
         async function seedInvoice(opts: {
             user: UserDocument;
             businessSlug: string;
+            accountSlug: string;
             amount?: number | null;
             amountLocked?: boolean;
             paymentPurpose?: string | null;
             validUntil?: string | null;
         }): Promise<string> {
             const res = await supertest(app.getHttpServer())
-                .post(`/api/businesses/me/${opts.businessSlug}/invoices`)
+                .post(
+                    `/api/businesses/me/${opts.businessSlug}/accounts/${opts.accountSlug}/invoices`
+                )
                 .set('Authorization', bearerFor(opts.user))
                 .send({
                     amount: opts.amount ?? 150000,
@@ -1123,22 +1252,25 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
         describe('GET /businesses/public/:slug/invoices/:invoiceSlug', () => {
             it('повертає 7 whitelist-полів; без auth', async () => {
                 const user = await createUser();
-                const businessSlug = await createBusinessFor(user);
+                const { slug: businessSlug, accountSlug } =
+                    await createBusinessFor(user);
                 const invoiceSlug = await seedInvoice({
                     user,
                     businessSlug,
+                    accountSlug,
                     amount: 250000,
                     amountLocked: true,
                 });
 
                 const res = await supertest(app.getHttpServer())
                     .get(
-                        `/api/businesses/public/${businessSlug}/invoices/${invoiceSlug}`
+                        `/api/businesses/public/${businessSlug}/account/${accountSlug}/invoices/${invoiceSlug}`
                     )
                     .expect(200);
 
                 const body = res.body as { data: Record<string, unknown> };
                 expect(Object.keys(body.data).sort()).toEqual([
+                    'account',
                     'amount',
                     'amountLocked',
                     'business',
@@ -1153,15 +1285,17 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
             it('whitelist invariant: leak-кандидати з invoice відсутні', async () => {
                 const user = await createUser();
-                const businessSlug = await createBusinessFor(user);
+                const { slug: businessSlug, accountSlug } =
+                    await createBusinessFor(user);
                 const invoiceSlug = await seedInvoice({
                     user,
                     businessSlug,
+                    accountSlug,
                 });
 
                 const res = await supertest(app.getHttpServer())
                     .get(
-                        `/api/businesses/public/${businessSlug}/invoices/${invoiceSlug}`
+                        `/api/businesses/public/${businessSlug}/account/${accountSlug}/invoices/${invoiceSlug}`
                     )
                     .expect(200);
 
@@ -1178,15 +1312,17 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
             it('nested business — теж whitelist', async () => {
                 const user = await createUser();
-                const businessSlug = await createBusinessFor(user);
+                const { slug: businessSlug, accountSlug } =
+                    await createBusinessFor(user);
                 const invoiceSlug = await seedInvoice({
                     user,
                     businessSlug,
+                    accountSlug,
                 });
 
                 const res = await supertest(app.getHttpServer())
                     .get(
-                        `/api/businesses/public/${businessSlug}/invoices/${invoiceSlug}`
+                        `/api/businesses/public/${businessSlug}/account/${accountSlug}/invoices/${invoiceSlug}`
                     )
                     .expect(200);
 
@@ -1212,15 +1348,17 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
             it('nbuLinks: primary → qr.bank.gov.ua, legacy → bank.gov.ua/qr', async () => {
                 const user = await createUser();
-                const businessSlug = await createBusinessFor(user);
+                const { slug: businessSlug, accountSlug } =
+                    await createBusinessFor(user);
                 const invoiceSlug = await seedInvoice({
                     user,
                     businessSlug,
+                    accountSlug,
                 });
 
                 const res = await supertest(app.getHttpServer())
                     .get(
-                        `/api/businesses/public/${businessSlug}/invoices/${invoiceSlug}`
+                        `/api/businesses/public/${businessSlug}/account/${accountSlug}/invoices/${invoiceSlug}`
                     )
                     .expect(200);
 
@@ -1237,15 +1375,17 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
             it('Cache-Control: no-store — invoice mutable payment data (review fix)', async () => {
                 const user = await createUser();
-                const businessSlug = await createBusinessFor(user);
+                const { slug: businessSlug, accountSlug } =
+                    await createBusinessFor(user);
                 const invoiceSlug = await seedInvoice({
                     user,
                     businessSlug,
+                    accountSlug,
                 });
 
                 const res = await supertest(app.getHttpServer())
                     .get(
-                        `/api/businesses/public/${businessSlug}/invoices/${invoiceSlug}`
+                        `/api/businesses/public/${businessSlug}/account/${accountSlug}/invoices/${invoiceSlug}`
                     )
                     .expect(200);
                 expect(res.headers['cache-control']).toBe('no-store');
@@ -1253,28 +1393,48 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
             it('case-insensitive lookup business / case-sensitive lookup invoice', async () => {
                 const user = await createUser();
-                const businessSlug = await createBusinessFor(user);
-                const invoiceSlug = await seedInvoice({
-                    user,
-                    businessSlug,
-                });
+                const { slug: businessSlug, accountSlug } =
+                    await createBusinessFor(user);
+                // Explicit human-part гарантує наявність lowercase-літер у
+                // invoice-slug-у — uppercase-варіант відрізнятиметься від
+                // canonical case-sensitive lookup.
+                const res = await supertest(app.getHttpServer())
+                    .post(
+                        `/api/businesses/me/${businessSlug}/accounts/${accountSlug}/invoices`
+                    )
+                    .set('Authorization', bearerFor(user))
+                    .send({
+                        amount: 150000,
+                        amountLocked: true,
+                        paymentPurpose: 'Оплата',
+                        validUntil: null,
+                        slugInput: {
+                            kind: 'explicit',
+                            humanPart: 'order-test',
+                        },
+                    })
+                    .expect(201);
+                const invoiceSlug = (res.body as { data: { slug: string } })
+                    .data.slug;
 
                 await supertest(app.getHttpServer())
                     .get(
-                        `/api/businesses/public/${businessSlug.toLowerCase()}/invoices/${invoiceSlug}`
+                        `/api/businesses/public/${businessSlug.toLowerCase()}/account/${accountSlug}/invoices/${invoiceSlug}`
                     )
                     .expect(200);
 
                 await supertest(app.getHttpServer())
                     .get(
-                        `/api/businesses/public/${businessSlug}/invoices/${invoiceSlug.toUpperCase()}`
+                        `/api/businesses/public/${businessSlug}/account/${accountSlug}/invoices/${invoiceSlug.toUpperCase()}`
                     )
                     .expect(404);
             });
 
             it('404 BUSINESS_NOT_FOUND для неіснуючого business', async () => {
                 const res = await supertest(app.getHttpServer())
-                    .get(`/api/businesses/public/missing/invoices/whatever`)
+                    .get(
+                        `/api/businesses/public/missing/account/somesssss/invoices/whatever`
+                    )
                     .expect(404);
                 expect(
                     (res.body as { error: { code: string } }).error.code
@@ -1283,10 +1443,11 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
             it('404 INVOICE_NOT_FOUND для неіснуючого invoice', async () => {
                 const user = await createUser();
-                const businessSlug = await createBusinessFor(user);
+                const { slug: businessSlug, accountSlug } =
+                    await createBusinessFor(user);
                 const res = await supertest(app.getHttpServer())
                     .get(
-                        `/api/businesses/public/${businessSlug}/invoices/missing-aaaaaaaa`
+                        `/api/businesses/public/${businessSlug}/account/${accountSlug}/invoices/missing-aaaaaaaa`
                     )
                     .expect(404);
                 expect(
@@ -1312,10 +1473,12 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             async function seedExpiredInvoice(opts: {
                 user: UserDocument;
                 businessSlug: string;
+                accountSlug: string;
             }): Promise<string> {
                 const slug = await seedInvoice({
                     user: opts.user,
                     businessSlug: opts.businessSlug,
+                    accountSlug: opts.accountSlug,
                 });
                 await invoiceModel.updateOne(
                     { slug },
@@ -1326,15 +1489,17 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
             it('JSON view → nbuLinks=null', async () => {
                 const user = await createUser();
-                const businessSlug = await createBusinessFor(user);
+                const { slug: businessSlug, accountSlug } =
+                    await createBusinessFor(user);
                 const invoiceSlug = await seedExpiredInvoice({
                     user,
                     businessSlug,
+                    accountSlug,
                 });
 
                 const res = await supertest(app.getHttpServer())
                     .get(
-                        `/api/businesses/public/${businessSlug}/invoices/${invoiceSlug}`
+                        `/api/businesses/public/${businessSlug}/account/${accountSlug}/invoices/${invoiceSlug}`
                     )
                     .expect(200);
 
@@ -1356,15 +1521,17 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
             it('GET /qr/nbu.png?host=primary → 410 Gone, code=INVOICE_EXPIRED', async () => {
                 const user = await createUser();
-                const businessSlug = await createBusinessFor(user);
+                const { slug: businessSlug, accountSlug } =
+                    await createBusinessFor(user);
                 const invoiceSlug = await seedExpiredInvoice({
                     user,
                     businessSlug,
+                    accountSlug,
                 });
 
                 const res = await supertest(app.getHttpServer())
                     .get(
-                        `/api/businesses/public/${businessSlug}/invoices/${invoiceSlug}/qr/nbu.png?host=primary`
+                        `/api/businesses/public/${businessSlug}/account/${accountSlug}/invoices/${invoiceSlug}/qr/nbu.png?host=primary`
                     )
                     .expect(410);
                 expect(
@@ -1374,15 +1541,17 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
             it('GET /qr/business.png → 410 Gone, code=INVOICE_EXPIRED', async () => {
                 const user = await createUser();
-                const businessSlug = await createBusinessFor(user);
+                const { slug: businessSlug, accountSlug } =
+                    await createBusinessFor(user);
                 const invoiceSlug = await seedExpiredInvoice({
                     user,
                     businessSlug,
+                    accountSlug,
                 });
 
                 const res = await supertest(app.getHttpServer())
                     .get(
-                        `/api/businesses/public/${businessSlug}/invoices/${invoiceSlug}/qr/business.png`
+                        `/api/businesses/public/${businessSlug}/account/${accountSlug}/invoices/${invoiceSlug}/qr/business.png`
                     )
                     .expect(410);
                 expect(
@@ -1394,16 +1563,18 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                 // Sanity-counterpart: інвойс без терміну дії продовжує
                 // працювати безкінечно.
                 const user = await createUser();
-                const businessSlug = await createBusinessFor(user);
+                const { slug: businessSlug, accountSlug } =
+                    await createBusinessFor(user);
                 const invoiceSlug = await seedInvoice({
                     user,
                     businessSlug,
+                    accountSlug,
                     validUntil: null,
                 });
 
                 const jsonRes = await supertest(app.getHttpServer())
                     .get(
-                        `/api/businesses/public/${businessSlug}/invoices/${invoiceSlug}`
+                        `/api/businesses/public/${businessSlug}/account/${accountSlug}/invoices/${invoiceSlug}`
                     )
                     .expect(200);
                 expect(
@@ -1413,7 +1584,7 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
                 await supertest(app.getHttpServer())
                     .get(
-                        `/api/businesses/public/${businessSlug}/invoices/${invoiceSlug}/qr/nbu.png?host=primary`
+                        `/api/businesses/public/${businessSlug}/account/${accountSlug}/invoices/${invoiceSlug}/qr/nbu.png?host=primary`
                     )
                     .expect(200);
             });
@@ -1422,15 +1593,17 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
         describe('GET /qr/business.png — public-URL QR', () => {
             it('повертає valid PNG; Content-Type image/png', async () => {
                 const user = await createUser();
-                const businessSlug = await createBusinessFor(user);
+                const { slug: businessSlug, accountSlug } =
+                    await createBusinessFor(user);
                 const invoiceSlug = await seedInvoice({
                     user,
                     businessSlug,
+                    accountSlug,
                 });
 
                 const res = await supertest(app.getHttpServer())
                     .get(
-                        `/api/businesses/public/${businessSlug}/invoices/${invoiceSlug}/qr/business.png`
+                        `/api/businesses/public/${businessSlug}/account/${accountSlug}/invoices/${invoiceSlug}/qr/business.png`
                     )
                     .buffer(true)
                     .parse((response, callback) => {
@@ -1457,15 +1630,17 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
         describe('GET /qr/nbu.png?host=primary|legacy', () => {
             it('host=primary → valid PNG', async () => {
                 const user = await createUser();
-                const businessSlug = await createBusinessFor(user);
+                const { slug: businessSlug, accountSlug } =
+                    await createBusinessFor(user);
                 const invoiceSlug = await seedInvoice({
                     user,
                     businessSlug,
+                    accountSlug,
                 });
 
                 const res = await supertest(app.getHttpServer())
                     .get(
-                        `/api/businesses/public/${businessSlug}/invoices/${invoiceSlug}/qr/nbu.png?host=primary`
+                        `/api/businesses/public/${businessSlug}/account/${accountSlug}/invoices/${invoiceSlug}/qr/nbu.png?host=primary`
                     )
                     .expect(200);
                 expect(res.headers['content-type']).toBe('image/png');
@@ -1473,45 +1648,51 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
             it('host=legacy → valid PNG', async () => {
                 const user = await createUser();
-                const businessSlug = await createBusinessFor(user);
+                const { slug: businessSlug, accountSlug } =
+                    await createBusinessFor(user);
                 const invoiceSlug = await seedInvoice({
                     user,
                     businessSlug,
+                    accountSlug,
                 });
 
                 await supertest(app.getHttpServer())
                     .get(
-                        `/api/businesses/public/${businessSlug}/invoices/${invoiceSlug}/qr/nbu.png?host=legacy`
+                        `/api/businesses/public/${businessSlug}/account/${accountSlug}/invoices/${invoiceSlug}/qr/nbu.png?host=legacy`
                     )
                     .expect(200);
             });
 
             it('відсутній host param → 400 VALIDATION_ERROR', async () => {
                 const user = await createUser();
-                const businessSlug = await createBusinessFor(user);
+                const { slug: businessSlug, accountSlug } =
+                    await createBusinessFor(user);
                 const invoiceSlug = await seedInvoice({
                     user,
                     businessSlug,
+                    accountSlug,
                 });
 
                 await supertest(app.getHttpServer())
                     .get(
-                        `/api/businesses/public/${businessSlug}/invoices/${invoiceSlug}/qr/nbu.png`
+                        `/api/businesses/public/${businessSlug}/account/${accountSlug}/invoices/${invoiceSlug}/qr/nbu.png`
                     )
                     .expect(400);
             });
 
             it('host=invalid value → 400', async () => {
                 const user = await createUser();
-                const businessSlug = await createBusinessFor(user);
+                const { slug: businessSlug, accountSlug } =
+                    await createBusinessFor(user);
                 const invoiceSlug = await seedInvoice({
                     user,
                     businessSlug,
+                    accountSlug,
                 });
 
                 await supertest(app.getHttpServer())
                     .get(
-                        `/api/businesses/public/${businessSlug}/invoices/${invoiceSlug}/qr/nbu.png?host=qr.bank.gov.ua`
+                        `/api/businesses/public/${businessSlug}/account/${accountSlug}/invoices/${invoiceSlug}/qr/nbu.png?host=qr.bank.gov.ua`
                     )
                     .expect(400);
             });
@@ -1527,10 +1708,12 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                 // поля. Без `jsqr` — швидше і робастно (PNG → QR-decode →
                 // payload — той самий результат, але через image-decode pipeline).
                 const user = await createUser();
-                const businessSlug = await createBusinessFor(user);
+                const { slug: businessSlug, accountSlug } =
+                    await createBusinessFor(user);
                 const invoiceSlug = await seedInvoice({
                     user,
                     businessSlug,
+                    accountSlug,
                     amount: 100000, // 1000 грн
                     amountLocked: true,
                     validUntil: '2026-12-31T21:59:59.000Z', // зима → Kyiv 23:59:59
@@ -1538,7 +1721,7 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
                 const res = await supertest(app.getHttpServer())
                     .get(
-                        `/api/businesses/public/${businessSlug}/invoices/${invoiceSlug}`
+                        `/api/businesses/public/${businessSlug}/account/${accountSlug}/invoices/${invoiceSlug}`
                     )
                     .expect(200);
 
