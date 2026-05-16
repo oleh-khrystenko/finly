@@ -86,7 +86,7 @@ export function QrLandingForm({ form }: QrLandingFormProps) {
 
             <UiInput
                 label="Отримувач"
-                placeholder="Іваненко Олена Петрівна"
+                placeholder="Коваленко Іван Миколайович"
                 autoComplete="name"
                 {...register('receiverName')}
                 error={getZodFieldError(errors.receiverName)}

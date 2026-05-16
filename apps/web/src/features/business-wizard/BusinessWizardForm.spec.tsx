@@ -66,7 +66,7 @@ describe('BusinessWizardForm', () => {
         it('блокує "Далі" поки type не обраний (хоча name валідний)', async () => {
             render(<BusinessWizardForm />);
 
-            const nameInput = screen.getByPlaceholderText('Іваненко');
+            const nameInput = screen.getByPlaceholderText('Коваленко Іван Миколайович');
             fireEvent.change(nameInput, { target: { value: 'Іваненко' } });
 
             const button = screen.getByRole('button', { name: /далі/i });
@@ -86,7 +86,7 @@ describe('BusinessWizardForm', () => {
             render(<BusinessWizardForm />);
 
             fireEvent.click(screen.getByRole('radio', { name: /^ФОП/ }));
-            const nameInput = screen.getByPlaceholderText('Іваненко');
+            const nameInput = screen.getByPlaceholderText('Коваленко Іван Миколайович');
             fireEvent.change(nameInput, { target: { value: 'Іваненко' } });
 
             const button = screen.getByRole('button', { name: /далі/i });
