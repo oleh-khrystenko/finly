@@ -51,7 +51,8 @@ const variantStyles: Record<UiButtonVariant, string> = {
     'destructive-outline':
         'border border-destructive bg-transparent text-destructive hover:bg-destructive/10 active:bg-destructive/20',
     text: 'bg-transparent text-muted-foreground hover:text-foreground',
-    'destructive-text': 'bg-transparent text-destructive hover:text-destructive/80',
+    'destructive-text':
+        'bg-transparent text-destructive hover:text-destructive/80',
     icon: 'bg-transparent text-muted-foreground hover:text-foreground',
     'icon-compact':
         'bg-transparent text-muted-foreground hover:text-foreground',
@@ -137,6 +138,12 @@ const UiButton = forwardRef<
             : variant === 'icon-compact'
               ? iconCompactSizeStyles[size]
               : sizeStyles[size],
+        // Mobile touch-target baseline (44×44 px) для standalone icon-кнопок.
+        // Required by docs/conventions/responsive.md §2; інкапсулюємо у примітиві,
+        // щоб правило не залежало від ручного className чи size="lg" у callers.
+        // icon-compact свідомо не покривається — він призначений для dense
+        // desktop UI (toolbars, table-rows).
+        variant === 'icon' && 'min-h-11 min-w-11',
         variantStyles[variant],
         className
     );

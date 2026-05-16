@@ -11,7 +11,7 @@ import { App } from 'supertest/types';
 import { ZodValidationPipe } from 'nestjs-zod';
 
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
-import { REDIS_CLIENT } from '../src/common/providers/redis.provider';
+import { REDIS_CLIENT } from '../src/common/modules/redis.module';
 import { AppController } from '../src/app.controller';
 import { AppService } from '../src/app.service';
 import { AuthModule } from '../src/modules/auth/auth.module';
@@ -34,7 +34,7 @@ jest.mock('../src/config/env', () => ({
         GOOGLE_CLIENT_SECRET: 'GOCSPX-test-secret',
         GOOGLE_CALLBACK_URL: 'http://localhost:4000/api/auth/google/callback',
         RESEND_API_KEY: 're_test_key',
-        RESEND_FROM_EMAIL: 'CyanShip <test@test.com>',
+        RESEND_FROM_EMAIL: 'Finly <test@test.com>',
         STRIPE_SECRET_KEY: 'sk_test_xxx',
         STRIPE_WEBHOOK_SECRET: 'whsec_test',
     },

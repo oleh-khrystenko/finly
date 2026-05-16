@@ -2,11 +2,12 @@ import {
     CURRENT_TERMS_VERSION,
     type AuthResponse,
     type CheckEmailResponse,
+    type LandingDraft,
     type MagicLinkPurpose,
     type UpdateProfileDto,
     type UserProfile,
     type VerifyMagicLinkResponse,
-} from '@cyanship/types';
+} from '@finly/types';
 
 import { getTimezone } from '@/shared/lib';
 
@@ -33,13 +34,37 @@ export async function loginWithPassword(
     return data.data;
 }
 
+/**
+ * Sprint 10 §SP-7/§SP-11/§SP-12 — `options` 4-й optional argument для
+ * anon-claim cross-device flow.
+ *
+ *  - `landingDraft` + `claimIdempotencyKey` мусять coexist (backend reject-ає
+ *    mismatched pair через `LANDING_DRAFT_AND_KEY_MUST_COEXIST` refine на
+ *    `SendMagicLinkSchema`).
+ *  - `termsVersion` — окремий, прокидається коли user прийняв terms на
+ *    signin-step; backend stamps `user.acceptedTermsVersion` ДО claim (закриває
+ *    acceptTerms ordering window).
+ */
+interface SendMagicLinkOptions {
+    landingDraft?: LandingDraft;
+    claimIdempotencyKey?: string;
+    termsVersion?: string;
+}
+
 export async function sendMagicLink(
     email: string,
-    lang?: string,
     purpose?: MagicLinkPurpose,
-    redirectTo?: string
+    redirectTo?: string,
+    options?: SendMagicLinkOptions
 ): Promise<void> {
-    await apiClient.post('/auth/magic-link/send', { email, lang, purpose, redirectTo });
+    await apiClient.post('/auth/magic-link/send', {
+        email,
+        purpose,
+        redirectTo,
+        landingDraft: options?.landingDraft,
+        claimIdempotencyKey: options?.claimIdempotencyKey,
+        termsVersion: options?.termsVersion,
+    });
 }
 
 export async function setPassword(password: string): Promise<void> {
@@ -92,7 +117,7 @@ export async function updateProfile(
     return data.data;
 }
 
-export async function deleteAccount(): Promise<{
+export async function deleteUserAccount(): Promise<{
     requiresPassword?: boolean;
     requiresMagicLink?: boolean;
 }> {
@@ -105,9 +130,7 @@ export async function deleteAccount(): Promise<{
     return data.data;
 }
 
-export async function confirmDeleteAccount(
-    password: string
-): Promise<void> {
+export async function confirmDeleteAccount(password: string): Promise<void> {
     await apiClient.post('/users/account/delete/confirm', { password });
 }
 
@@ -146,10 +169,6 @@ export async function logout(): Promise<void> {
 export async function getMe(): Promise<UserProfile> {
     const { data } = await apiClient.get<{ data: UserProfile }>('/users/me');
     return data.data;
-}
-
-export async function updatePreferredLang(lang: string): Promise<void> {
-    await apiClient.patch('/users/me/lang', { lang });
 }
 
 export async function acceptTerms(): Promise<void> {

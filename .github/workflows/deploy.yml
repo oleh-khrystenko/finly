@@ -38,6 +38,18 @@ jobs:
 
                       # Build and restart containers
                       docker compose build --parallel
+
+                      # Run pending DB migrations (Sprint 3 §3.1 + future).
+                      # One-shot service via dedicated `migrations` profile +
+                      # Dockerfile target з ts-node + dev deps; exits with code.
+                      # `set -euo pipefail` (вгорі) блокує deploy при failure —
+                      # `up -d` не запускається, попередня версія API
+                      # лишається активною (Docker compose не тригерить
+                      # restart-and-redeploy без `up`). Re-run наступного deploy
+                      # підбере той самий script як ідемпотентний no-op
+                      # (див. apps/api/scripts/migrations/README.md).
+                      docker compose --profile migrations run --rm api-migrations
+
                       docker compose up -d --remove-orphans
 
                       # Health check with retries (wait up to 30s for services to start)

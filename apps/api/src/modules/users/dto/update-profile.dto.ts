@@ -1,4 +1,4 @@
 import { createZodDto } from 'nestjs-zod';
-import { UpdateProfileSchema } from '@cyanship/types';
+import { UpdateProfileSchema } from '@finly/types';
 
 export class UpdateProfileDto extends createZodDto(UpdateProfileSchema) {}

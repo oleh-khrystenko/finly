@@ -1,6 +1,6 @@
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { RESPONSE_CODE, MAGIC_LINK_PURPOSE } from '@cyanship/types';
+import { RESPONSE_CODE, MAGIC_LINK_PURPOSE } from '@finly/types';
 
 import { AuthService } from '../auth/auth.service';
 import { UsersController } from './users.controller';
@@ -10,17 +10,17 @@ const mockUser = {
     id: '507f1f77bcf86cd799439011',
     _id: { toString: () => '507f1f77bcf86cd799439011' },
     email: 'test@gmail.com',
+    role: 'user',
+    worksAsBookkeeper: false,
     profile: { firstName: 'John', lastName: 'Doe', avatar: null },
     executions: { balance: 5, freeReportUsed: false },
     passwordHash: '$2b$10$hash',
     deletedAt: null as Date | null,
     accountDeletionRequestedAt: null as Date | null,
-    preferredLang: 'en',
 };
 
 const mockUsersService = {
     updateProfile: jest.fn(),
-    updateLang: jest.fn(),
     softDelete: jest.fn(),
     restore: jest.fn(),
     setDeletionRequested: jest.fn(),
@@ -57,6 +57,8 @@ describe('UsersController', () => {
                 data: {
                     id: '507f1f77bcf86cd799439011',
                     email: 'test@gmail.com',
+                    role: 'user',
+                    worksAsBookkeeper: false,
                     profile: {
                         firstName: 'John',
                         lastName: 'Doe',
@@ -66,12 +68,36 @@ describe('UsersController', () => {
                     hasPassword: true,
                     deletedAt: null,
                     accountDeletionRequestedAt: null,
-                    preferredLang: 'en',
                     termsVersion: null,
                     billing: null,
-                    ai: null,
                 },
             });
+        });
+
+        it('falls back to defaults for legacy users without role / worksAsBookkeeper', () => {
+            const legacy = {
+                ...mockUser,
+                role: undefined,
+                worksAsBookkeeper: undefined,
+            };
+            const result = controller.getMe(legacy as any);
+
+            expect(result.data.role).toBe('user');
+            expect(result.data.worksAsBookkeeper).toBe(false);
+        });
+
+        it('passes through admin role for admin users', () => {
+            const admin = { ...mockUser, role: 'admin' };
+            const result = controller.getMe(admin as any);
+
+            expect(result.data.role).toBe('admin');
+        });
+
+        it('passes through worksAsBookkeeper=true', () => {
+            const bookkeeper = { ...mockUser, worksAsBookkeeper: true };
+            const result = controller.getMe(bookkeeper as any);
+
+            expect(result.data.worksAsBookkeeper).toBe(true);
         });
 
         it('should return hasPassword: false when no passwordHash', () => {
@@ -127,30 +153,6 @@ describe('UsersController', () => {
                 firstName: 'New',
                 lastName: 'Name',
                 avatar: 'https://new.url',
-            });
-        });
-    });
-
-    describe('PATCH /users/me/lang', () => {
-        it('should call updateLang and return LANG_UPDATED', async () => {
-            mockUsersService.updateLang.mockResolvedValue(undefined);
-
-            const result = await controller.updateLang(
-                mockUser as any,
-                {
-                    lang: 'en',
-                } as any
-            );
-
-            expect(mockUsersService.updateLang).toHaveBeenCalledWith(
-                '507f1f77bcf86cd799439011',
-                'en'
-            );
-            expect(result).toEqual({
-                data: {
-                    code: RESPONSE_CODE.LANG_UPDATED,
-                    message: 'Language updated',
-                },
             });
         });
     });
@@ -216,7 +218,7 @@ describe('UsersController', () => {
             );
             expect(
                 mockAuthService.sendDeletionConfirmationEmail
-            ).toHaveBeenCalledWith('test@gmail.com', 'en');
+            ).toHaveBeenCalledWith('test@gmail.com');
             expect(res.clearCookie).toHaveBeenCalledWith('bid_refresh', {
                 path: '/',
             });

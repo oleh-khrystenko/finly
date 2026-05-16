@@ -28,6 +28,7 @@ services:
             - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
             - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
             - WEB_URL=http://localhost:${WEB_PORT}
+            - PAY_PUBLIC_URL=http://pay.finly.local:${WEB_PORT}
             - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
             - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
             - GOOGLE_CALLBACK_URL=${GOOGLE_CALLBACK_URL}
@@ -45,10 +46,29 @@ services:
             - AUTH_MAGIC_LINK_RATE_WINDOW_MIN=${AUTH_MAGIC_LINK_RATE_WINDOW_MIN}
             - AUTH_MAGIC_LINK_DEDUP_SEC=${AUTH_MAGIC_LINK_DEDUP_SEC}
             - ACCOUNT_DELETION_GRACE_DAYS=${ACCOUNT_DELETION_GRACE_DAYS}
+            - ORPHAN_REMINDER_FIRST_DAYS=${ORPHAN_REMINDER_FIRST_DAYS}
+            - ORPHAN_REMINDER_FINAL_DAYS=${ORPHAN_REMINDER_FINAL_DAYS}
+            - ORPHAN_CLEANUP_DELETION_DAYS=${ORPHAN_CLEANUP_DELETION_DAYS}
+            - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+            - AI_CHAT_MAX_TOKENS=${AI_CHAT_MAX_TOKENS}
+            - AI_CHAT_IP_LIMIT=${AI_CHAT_IP_LIMIT}
+            - R2_ACCOUNT_ID=${R2_ACCOUNT_ID}
+            - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
+            - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
+            - R2_BUCKET_NAME=${R2_BUCKET_NAME}
+            - R2_PUBLIC_URL=${R2_PUBLIC_URL}
             - TSC_WATCHFILE=UsePolling
             - TSC_WATCHDIRECTORY=UsePolling
         ports:
             - '${API_PORT}:${API_PORT}'
+        # Sprint 4 §4.0 — `host.docker.internal` alias для Linux у Режимі C
+        # (API у dev compose, Mongo на host-machine з replica-set). На macOS/
+        # Windows alias built-in у Docker Desktop і `host-gateway` — безпечний
+        # noop. Без цього alias `MONGODB_URI=mongodb://host.docker.internal:...`
+        # не резолвиться з api-контейнера на Linux і cascade-delete-флоу падає
+        # з MongoServerSelectionError. Production-deploy ігнорує цей блок.
+        extra_hosts:
+            - 'host.docker.internal:host-gateway'
         volumes:
             - ./:/app
             - pnpm-store:/pnpm-store
@@ -78,6 +98,8 @@ services:
             - NEXT_PUBLIC_API_URL=http://localhost:${API_PORT}/api
             - NEXT_PUBLIC_PAYMENTS_SUBSCRIPTION_ENABLED=${NEXT_PUBLIC_PAYMENTS_SUBSCRIPTION_ENABLED}
             - NEXT_PUBLIC_PAYMENTS_ONE_OFF_ENABLED=${NEXT_PUBLIC_PAYMENTS_ONE_OFF_ENABLED}
+            - NEXT_PUBLIC_PAY_PUBLIC_URL=http://pay.finly.local:${WEB_PORT}
+            - NEXT_PUBLIC_STORAGE_HOSTNAME=${NEXT_PUBLIC_STORAGE_HOSTNAME}
             - WATCHPACK_POLLING=true
             - CHOKIDAR_USEPOLLING=true
         ports:

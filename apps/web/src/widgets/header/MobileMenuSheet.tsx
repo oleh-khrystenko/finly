@@ -1,15 +1,17 @@
 'use client';
 
-import { useLocale, useTranslations } from 'next-intl';
 import { usePathname } from 'next/navigation';
 import { useTheme } from 'next-themes';
-import { LogOut, User, CreditCard, LogIn, Globe, LayoutDashboard, Bot } from 'lucide-react';
-import ChangeLang from '@/features/change-lang';
-import ChangeTheme, { THEME_ICONS } from '@/features/change-theme';
+import { LogOut, User, CreditCard, LogIn, Briefcase, Bot } from 'lucide-react';
+import ChangeTheme, {
+    THEME_ICONS,
+    THEME_LABELS,
+} from '@/features/change-theme';
 import type { Theme } from '@/shared/types/settings';
 import { THEME } from '@/shared/types/settings';
 import { Logo } from '@/entities/brand';
 import UiButton from '@/shared/ui/UiButton';
+import UiSwitch from '@/shared/ui/UiSwitch';
 import { UiAvatar } from '@/shared/ui/UiAvatar';
 import {
     UiSheet,
@@ -18,7 +20,7 @@ import {
     UiSheetTitle,
 } from '@/shared/ui/UiSheet';
 import { useAuthStore } from '@/entities/user';
-import { getFullName } from '@cyanship/types';
+import { getFullName } from '@finly/types';
 import { useHeaderNavStore } from '@/entities/navigation';
 import { useMobileMenuSheetStore } from './mobileMenuSheetStore';
 import { useUserMenu } from './useUserMenu';
@@ -28,9 +30,6 @@ const menuItemBase =
 const menuItemStyles = `${menuItemBase} text-muted-foreground hover:bg-muted/50 hover:text-foreground`;
 
 export default function MobileMenuSheet() {
-    const t = useTranslations('components.header');
-    const tTheme = useTranslations('components.change_theme');
-    const locale = useLocale();
     const pathname = usePathname();
     const { theme } = useTheme();
 
@@ -46,16 +45,20 @@ export default function MobileMenuSheet() {
     const hasNav = navItems.length > 0;
     const activeSection = useHeaderNavStore((s) => s.activeSection);
 
-    const { visibleItems, handleSelect, initials } = useUserMenu({
-        dashboard: <LayoutDashboard />,
-        aiChat: <Bot />,
-        profile: <User />,
-        billing: <CreditCard />,
-        logout: <LogOut />,
-    });
+    const { visibleItems, handleSelect, bookkeeperToggle, initials } =
+        useUserMenu({
+            // Sprint 3 §3.5 — Dashboard → Бізнеси (E2). Briefcase replaces
+            // LayoutDashboard як іконка бізнес-сегмента.
+            businesses: <Briefcase />,
+            aiChat: <Bot />,
+            profile: <User />,
+            billing: <CreditCard />,
+            logout: <LogOut />,
+        });
 
-    const ThemeIcon = THEME_ICONS[(theme as Theme) ?? THEME.SYSTEM];
-    const themeLabel = tTheme((theme as Theme) ?? 'system');
+    const activeTheme: Theme = (theme as Theme) ?? THEME.SYSTEM;
+    const ThemeIcon = THEME_ICONS[activeTheme];
+    const themeLabel = THEME_LABELS[activeTheme];
 
     return (
         <UiSheet open={isOpen} onOpenChange={(open) => !open && close()}>
@@ -72,8 +75,7 @@ export default function MobileMenuSheet() {
                         <nav className="flex flex-col gap-1">
                             {navItems.map(({ href, label }) => {
                                 const isActive =
-                                    activeSection ===
-                                    href.replace('#', '');
+                                    activeSection === href.replace('#', '');
                                 return (
                                     <a
                                         key={href}
@@ -109,12 +111,20 @@ export default function MobileMenuSheet() {
                                 <UiAvatar
                                     size="md"
                                     src={user.profile.avatar}
-                                    alt={getFullName(user.profile.firstName, user.profile.lastName) ?? ''}
+                                    alt={
+                                        getFullName(
+                                            user.profile.firstName,
+                                            user.profile.lastName
+                                        ) ?? ''
+                                    }
                                     fallback={initials}
                                 />
                                 <div className="flex min-w-0 flex-col">
                                     <span className="truncate text-sm font-medium">
-                                        {getFullName(user.profile.firstName, user.profile.lastName)}
+                                        {getFullName(
+                                            user.profile.firstName,
+                                            user.profile.lastName
+                                        )}
                                     </span>
                                     <span className="text-muted-foreground truncate text-xs">
                                         {user.email}
@@ -145,25 +155,40 @@ export default function MobileMenuSheet() {
                                     </button>
                                 ))}
 
+                            {/* Sprint 3 §3.5 §E5 — bookkeeper toggle.
+                                Inline-опис без hover-tooltip (responsive.md §6).
+                                `<label htmlFor>` обгортає UiSwitch — Headless
+                                UI Switch handle-ить click нативно; вкладений
+                                <button> ламав DOM (nested interactive). */}
+                            {bookkeeperToggle && (
+                                <>
+                                    <div className="bg-border mx-1 my-2 h-px" />
+                                    <label
+                                        htmlFor="mobile-bookkeeper-toggle"
+                                        className="hover:bg-muted/50 -mx-2 flex w-full cursor-pointer items-start justify-between gap-3 rounded-lg px-3 py-2.5 transition-colors"
+                                    >
+                                        <div className="flex min-w-0 flex-col">
+                                            <span className="text-foreground text-sm font-medium">
+                                                {bookkeeperToggle.label}
+                                            </span>
+                                            <span className="text-muted-foreground text-xs">
+                                                {bookkeeperToggle.description}
+                                            </span>
+                                        </div>
+                                        <UiSwitch
+                                            id="mobile-bookkeeper-toggle"
+                                            size="sm"
+                                            checked={bookkeeperToggle.checked}
+                                            onChange={() =>
+                                                void bookkeeperToggle.onToggle()
+                                            }
+                                        />
+                                    </label>
+                                </>
+                            )}
+
                             <div className="bg-border mx-1 my-2 h-px" />
 
-                            <ChangeLang
-                                align="start"
-                                trigger={
-                                    <button
-                                        type="button"
-                                        className={menuItemStyles}
-                                    >
-                                        <span className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4">
-                                            <Globe />
-                                        </span>
-                                        <span>{t('language')}</span>
-                                        <span className="text-muted-foreground ml-auto text-xs">
-                                            {locale.toUpperCase()}
-                                        </span>
-                                    </button>
-                                }
-                            />
                             <ChangeTheme
                                 align="start"
                                 trigger={
@@ -174,7 +199,7 @@ export default function MobileMenuSheet() {
                                         <span className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4">
                                             <ThemeIcon />
                                         </span>
-                                        <span>{t('theme')}</span>
+                                        <span>Тема</span>
                                         <span className="text-muted-foreground ml-auto text-xs">
                                             {themeLabel}
                                         </span>
@@ -192,31 +217,11 @@ export default function MobileMenuSheet() {
                                 <span className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4">
                                     <LogOut />
                                 </span>
-                                <span>{t('logout')}</span>
+                                <span>Вийти</span>
                             </button>
                         </div>
                     ) : (
                         <div className="flex flex-col gap-1">
-                            <span className="text-muted-foreground px-1 text-xs font-medium tracking-wider uppercase">
-                                {t('settings')}
-                            </span>
-                            <ChangeLang
-                                align="start"
-                                trigger={
-                                    <button
-                                        type="button"
-                                        className={menuItemStyles}
-                                    >
-                                        <span className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4">
-                                            <Globe />
-                                        </span>
-                                        <span>{t('language')}</span>
-                                        <span className="text-muted-foreground ml-auto text-xs">
-                                            {locale.toUpperCase()}
-                                        </span>
-                                    </button>
-                                }
-                            />
                             <ChangeTheme
                                 align="start"
                                 trigger={
@@ -227,7 +232,7 @@ export default function MobileMenuSheet() {
                                         <span className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4">
                                             <ThemeIcon />
                                         </span>
-                                        <span>{t('theme')}</span>
+                                        <span>Тема</span>
                                         <span className="text-muted-foreground ml-auto text-xs">
                                             {themeLabel}
                                         </span>
@@ -240,14 +245,14 @@ export default function MobileMenuSheet() {
                                     <div className="bg-border mx-1 my-2 h-px" />
                                     <UiButton
                                         as="link"
-                                        href={`/${locale}/auth/signin`}
+                                        href="/auth/signin"
                                         variant="text"
                                         size="md"
                                         IconLeft={<LogIn />}
                                         className="justify-start"
                                         onClick={close}
                                     >
-                                        {t('signin')}
+                                        Увійти
                                     </UiButton>
                                 </>
                             )}

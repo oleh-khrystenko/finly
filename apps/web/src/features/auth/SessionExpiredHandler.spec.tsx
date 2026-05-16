@@ -4,10 +4,9 @@ import { render } from '@testing-library/react';
 const mockClearUser = jest.fn();
 const mockToastInfo = jest.fn();
 const mockReplace = jest.fn();
-const mockTranslate = jest.fn((key: string) => `t:${key}`);
 
 let mockSearchParams = new URLSearchParams();
-const mockPathname = '/uk/auth/signin';
+const mockPathname = '/auth/signin';
 
 jest.mock('@/entities/user', () => ({
     useAuthStore: {
@@ -19,10 +18,6 @@ jest.mock('sonner', () => ({
     toast: {
         info: (msg: string) => mockToastInfo(msg),
     },
-}));
-
-jest.mock('next-intl', () => ({
-    useTranslations: () => mockTranslate,
 }));
 
 jest.mock('next/navigation', () => ({
@@ -38,7 +33,6 @@ describe('SessionExpiredHandler', () => {
         mockClearUser.mockClear();
         mockToastInfo.mockClear();
         mockReplace.mockClear();
-        mockTranslate.mockClear();
         mockSearchParams = new URLSearchParams();
     });
 
@@ -48,9 +42,11 @@ describe('SessionExpiredHandler', () => {
         render(<SessionExpiredHandler />);
 
         expect(mockClearUser).toHaveBeenCalledTimes(1);
-        expect(mockToastInfo).toHaveBeenCalledWith('t:session_expired');
+        expect(mockToastInfo).toHaveBeenCalledWith(
+            'Термін дії сесії закінчився. Будь ласка, увійдіть знову.'
+        );
         // No other params → URL becomes the bare pathname.
-        expect(mockReplace).toHaveBeenCalledWith('/uk/auth/signin', {
+        expect(mockReplace).toHaveBeenCalledWith('/auth/signin', {
             scroll: false,
         });
     });
@@ -59,15 +55,15 @@ describe('SessionExpiredHandler', () => {
         // A logged-in user redirected from /billing should preserve the
         // original `redirect` param so signin can return them after login.
         mockSearchParams = new URLSearchParams(
-            'reason=session-expired&redirect=%2Fuk%2Fbilling&email=foo%40bar.com'
+            'reason=session-expired&redirect=%2Fbilling&email=foo%40bar.com'
         );
 
         render(<SessionExpiredHandler />);
 
         expect(mockReplace).toHaveBeenCalledTimes(1);
         const replacedUrl: string = mockReplace.mock.calls[0][0];
-        expect(replacedUrl).toContain('/uk/auth/signin?');
-        expect(replacedUrl).toContain('redirect=%2Fuk%2Fbilling');
+        expect(replacedUrl).toContain('/auth/signin?');
+        expect(replacedUrl).toContain('redirect=%2Fbilling');
         expect(replacedUrl).toContain('email=foo%40bar.com');
         expect(replacedUrl).not.toContain('reason=');
     });

@@ -3,7 +3,7 @@ jest.mock('./client', () => ({
 }));
 
 import { apiClient } from './client';
-import { PAYMENT_TYPE } from '@cyanship/types';
+import { PAYMENT_TYPE } from '@finly/types';
 import {
     getCatalog,
     createSubscriptionCheckout,
@@ -56,7 +56,11 @@ describe('payments api', () => {
             'should POST to /api/payments/checkout-session with paymentType and planCode for %s',
             async (code) => {
                 mockPost.mockResolvedValue({
-                    data: { data: { checkoutUrl: 'https://checkout.stripe.com/test' } },
+                    data: {
+                        data: {
+                            checkoutUrl: 'https://checkout.stripe.com/test',
+                        },
+                    },
                 });
 
                 await createSubscriptionCheckout(code);
@@ -66,22 +70,28 @@ describe('payments api', () => {
                     {
                         paymentType: PAYMENT_TYPE.SUBSCRIPTION,
                         planCode: code,
-                    },
+                    }
                 );
-            },
+            }
         );
 
         it.each(PLAN_CODES)(
             'should return { checkoutUrl } extracted from response.data.data for %s',
             async (code) => {
                 mockPost.mockResolvedValue({
-                    data: { data: { checkoutUrl: 'https://checkout.stripe.com/test' } },
+                    data: {
+                        data: {
+                            checkoutUrl: 'https://checkout.stripe.com/test',
+                        },
+                    },
                 });
 
                 const result = await createSubscriptionCheckout(code);
 
-                expect(result).toEqual({ checkoutUrl: 'https://checkout.stripe.com/test' });
-            },
+                expect(result).toEqual({
+                    checkoutUrl: 'https://checkout.stripe.com/test',
+                });
+            }
         );
 
         it.each(PLAN_CODES)(
@@ -90,9 +100,9 @@ describe('payments api', () => {
                 mockPost.mockRejectedValue(new Error('Network error'));
 
                 await expect(createSubscriptionCheckout(code)).rejects.toThrow(
-                    'Network error',
+                    'Network error'
                 );
-            },
+            }
         );
     });
 
@@ -103,7 +113,11 @@ describe('payments api', () => {
             'should POST to /api/payments/checkout-session with paymentType and packCode for %s',
             async (code) => {
                 mockPost.mockResolvedValue({
-                    data: { data: { checkoutUrl: 'https://checkout.stripe.com/oneoff' } },
+                    data: {
+                        data: {
+                            checkoutUrl: 'https://checkout.stripe.com/oneoff',
+                        },
+                    },
                 });
 
                 await createOneOffCheckout(code);
@@ -113,22 +127,28 @@ describe('payments api', () => {
                     {
                         paymentType: PAYMENT_TYPE.ONE_OFF,
                         packCode: code,
-                    },
+                    }
                 );
-            },
+            }
         );
 
         it.each(PACK_CODES)(
             'should return { checkoutUrl } extracted from response.data.data for %s',
             async (code) => {
                 mockPost.mockResolvedValue({
-                    data: { data: { checkoutUrl: 'https://checkout.stripe.com/oneoff' } },
+                    data: {
+                        data: {
+                            checkoutUrl: 'https://checkout.stripe.com/oneoff',
+                        },
+                    },
                 });
 
                 const result = await createOneOffCheckout(code);
 
-                expect(result).toEqual({ checkoutUrl: 'https://checkout.stripe.com/oneoff' });
-            },
+                expect(result).toEqual({
+                    checkoutUrl: 'https://checkout.stripe.com/oneoff',
+                });
+            }
         );
 
         it.each(PACK_CODES)(
@@ -137,9 +157,9 @@ describe('payments api', () => {
                 mockPost.mockRejectedValue(new Error('Payment failed'));
 
                 await expect(createOneOffCheckout(code)).rejects.toThrow(
-                    'Payment failed',
+                    'Payment failed'
                 );
-            },
+            }
         );
     });
 
@@ -148,7 +168,9 @@ describe('payments api', () => {
     describe('createPortalSession', () => {
         it('should POST to /api/payments/portal-session without body', async () => {
             mockPost.mockResolvedValue({
-                data: { data: { portalUrl: 'https://billing.stripe.com/test' } },
+                data: {
+                    data: { portalUrl: 'https://billing.stripe.com/test' },
+                },
             });
 
             await createPortalSession();
@@ -158,12 +180,16 @@ describe('payments api', () => {
 
         it('should return { portalUrl } extracted from response.data.data', async () => {
             mockPost.mockResolvedValue({
-                data: { data: { portalUrl: 'https://billing.stripe.com/test' } },
+                data: {
+                    data: { portalUrl: 'https://billing.stripe.com/test' },
+                },
             });
 
             const result = await createPortalSession();
 
-            expect(result).toEqual({ portalUrl: 'https://billing.stripe.com/test' });
+            expect(result).toEqual({
+                portalUrl: 'https://billing.stripe.com/test',
+            });
         });
 
         it('should propagate errors from apiClient.post', async () => {

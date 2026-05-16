@@ -8,22 +8,21 @@ import {
     Section,
     Text,
 } from '@react-email/components';
-import { EMAIL_COLORS } from '@cyanship/types';
+import { EMAIL_COLORS } from '@finly/types';
 
 interface BaseLayoutProps {
-    lang: string;
     children: React.ReactNode;
 }
 
-export function BaseLayout({ lang, children }: BaseLayoutProps) {
+export function BaseLayout({ children }: BaseLayoutProps) {
     return (
-        <Html lang={lang}>
+        <Html lang="uk">
             <Head />
             <Body style={body}>
                 <Container style={container}>
                     <Section style={header}>
-                        <Link href="https://cyanship.com" style={brandLink}>
-                            <Text style={brand}>CyanShip</Text>
+                        <Link href="https://finly.com.ua" style={brandLink}>
+                            <Text style={brand}>Finly</Text>
                         </Link>
                     </Section>
                     {children}
@@ -45,10 +44,10 @@ export function BaseLayout({ lang, children }: BaseLayoutProps) {
                     </Section>
                     <Text style={siteLink}>
                         <Link
-                            href="https://cyanship.com"
+                            href="https://finly.com.ua"
                             style={siteLinkAnchor}
                         >
-                            cyanship.com
+                            finly.com.ua
                         </Link>
                     </Text>
                 </Container>

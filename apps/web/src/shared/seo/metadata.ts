@@ -1,89 +1,48 @@
 import { Metadata } from 'next';
 import { MetaProps } from '@/shared/types/settings';
-import { LANG } from '@cyanship/types';
 import { ENV } from '@/shared/config';
 
 const BASE_URL = ENV.NEXT_PUBLIC_BASE_URL;
 
-export async function fetchMetadata({
-    params,
+const FALLBACK_TITLE = 'Finly';
+const FALLBACK_DESCRIPTION =
+    'Finly — сервіс для українських ФОП та їх бухгалтерів.';
+
+export function fetchMetadata({
     page,
     href,
     meta,
-}: MetaProps): Promise<Metadata> {
-    let locale: string;
+    noindex,
+}: MetaProps): Metadata {
+    let title = FALLBACK_TITLE;
+    let description = FALLBACK_DESCRIPTION;
 
-    try {
-        const resolved = await params;
-        locale = resolved?.locale;
-        if (!locale) throw new Error('Locale is missing in params');
-    } catch (error) {
-        console.error('❌ Failed to resolve locale from params:', error);
-        locale = LANG.UK;
-    }
-
-    let title = 'CyanShip – Запустіть SaaS MVP за 4 тижні';
-    let description =
-        'Розробка production-ready B2B платформ на Next.js та NestJS. Швидкий вихід на ринок без агенційних витрат.';
-
-    if (page === null) {
-        if (meta) {
-            title = meta.title;
-            description = meta.description;
-        }
-    } else {
-        const raw = String(locale ?? '').toLowerCase();
-        const normalized = /^[a-z]{2}(-[a-z]{2})?$/i.test(raw) ? raw : LANG.UK;
-
-        interface PageMessages {
-            head?: { title?: string; description?: string };
-        }
-
-        type Messages = Record<string, PageMessages>;
-
-        async function importMessages(loc: string): Promise<Messages> {
-            try {
-                const mod = await import(`../../../messages/${loc}.json`);
-                return mod.default ?? mod;
-            } catch {
-                if (loc !== LANG.UK) {
-                    const modUk = await import(
-                        `../../../messages/${LANG.UK}.json`
-                    );
-                    return modUk.default ?? modUk;
-                }
-                return {};
-            }
-        }
-
-        const messages = await importMessages(normalized);
-        const pageData = messages[`${page}_page`];
-
-        title = pageData?.head?.title ?? title;
-        description = pageData?.head?.description ?? description;
+    if (page === null && meta) {
+        title = meta.title;
+        description = meta.description;
+    } else if (meta) {
+        title = meta.title;
+        description = meta.description;
     }
 
     const path = href === 'landing' ? '' : `/${href}`;
-
-    const canonicalUrl = `${BASE_URL}/${locale}${path}`;
+    const canonicalUrl = `${BASE_URL}${path}`;
 
     return {
         title,
         description,
         alternates: {
             canonical: canonicalUrl,
-            languages: {
-                'x-default': `${BASE_URL}/uk${path}`,
-                'uk-ua': `${BASE_URL}/uk${path}`,
-                'en-ua': `${BASE_URL}/en${path}`,
-            },
         },
+        ...(noindex && {
+            robots: { index: false, follow: false },
+        }),
         openGraph: {
             title,
             description,
             url: canonicalUrl,
-            siteName: 'CyanShip',
-            locale: locale === 'uk' ? 'uk_UA' : 'en_US',
+            siteName: 'Finly',
+            locale: 'uk_UA',
             type: 'website',
             images: [
                 {

@@ -2,11 +2,10 @@ import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 
 import type { UiAvatarSize } from '../UiAvatar';
 
-export interface UiAvatarButtonProps
-    extends Omit<
-        ComponentPropsWithoutRef<'button'>,
-        'children' | 'aria-label'
-    > {
+export interface UiAvatarButtonProps extends Omit<
+    ComponentPropsWithoutRef<'button'>,
+    'children' | 'aria-label'
+> {
     /**
      * Image source. When falsy or after a load error, the underlying avatar
      * renders `fallback` instead.

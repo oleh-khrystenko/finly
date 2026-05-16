@@ -11,17 +11,19 @@ const UiSectionCard = ({
     headerRight,
     variant = 'default',
     className,
+    id,
     children,
 }: UiSectionCardProps) => (
     <section
+        id={id}
         className={composeClasses(
-            'rounded-xl border bg-card p-6 md:p-8',
+            'bg-card rounded-xl border p-6 md:p-8',
             borderStyles[variant],
-            className,
+            className
         )}
     >
         <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-foreground">{title}</h2>
+            <h2 className="text-foreground text-lg font-semibold">{title}</h2>
             {headerRight}
         </div>
         {children}

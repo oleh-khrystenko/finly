@@ -10,15 +10,8 @@ export const RESPONSE_CODE = {
     ACCOUNT_RESTORED: 'ACCOUNT_RESTORED',
 
     // --- users success ---
-    LANG_UPDATED: 'LANG_UPDATED',
     TERMS_ACCEPTED: 'TERMS_ACCEPTED',
     EXECUTIONS_SPENT: 'EXECUTIONS_SPENT',
-
-    // --- agency success ---
-    BRIEF_SUBMITTED: 'BRIEF_SUBMITTED',
-
-    // --- agency error ---
-    CAPTCHA_FAILED: 'CAPTCHA_FAILED',
 
     // --- payments error ---
     ALREADY_SUBSCRIBED: 'ALREADY_SUBSCRIBED',
@@ -30,7 +23,6 @@ export const RESPONSE_CODE = {
     ONBOARDING_INCOMPLETE: 'ONBOARDING_INCOMPLETE',
 
     // --- ai error ---
-    AI_LIMIT_EXHAUSTED: 'AI_LIMIT_EXHAUSTED',
     AI_RATE_LIMIT_EXCEEDED: 'AI_RATE_LIMIT_EXCEEDED',
     AI_MESSAGE_TOO_LONG: 'AI_MESSAGE_TOO_LONG',
 
@@ -47,6 +39,190 @@ export const RESPONSE_CODE = {
     AVATAR_UPLOAD_NOT_FOUND: 'AVATAR_UPLOAD_NOT_FOUND',
     AVATAR_UPLOAD_INVALID: 'AVATAR_UPLOAD_INVALID',
 
+    // --- businesses error (Sprint 3 §3.10) ---
+    BUSINESS_NOT_FOUND: 'BUSINESS_NOT_FOUND',
+    BUSINESS_ACCESS_DENIED: 'BUSINESS_ACCESS_DENIED',
+    SLUG_GENERATION_FAILED: 'SLUG_GENERATION_FAILED',
+    /**
+     * Sprint 3 §3.2 cross-field VAT × taxationSystem check (рішення C1).
+     * Service-layer кидає цей код, коли клієнт PATCH-ить тільки одне з пари
+     * `(taxationSystem, isVatPayer)` так, що результуюча комбінація стає
+     * невалідною (наприклад, isVatPayer=true з existing simplified-1).
+     *
+     * Sprint 3 рішення E6 (inline-edit per field у кабінеті) — frontend
+     * передає лише змінене поле; cross-field validation у Zod write-DTO
+     * skip-иться, коли пара не повна. Service читає БД, валідує комбо,
+     * кидає цей машинний код. Frontend через mapApiCode → inline-помилка
+     * під полем "Платник ПДВ".
+     *
+     * Recoverable client-side: ФОП обирає валідну пару і повторно save-ить.
+     */
+    INVALID_VAT_FOR_TAXATION_SYSTEM: 'INVALID_VAT_FOR_TAXATION_SYSTEM',
+    /**
+     * Sprint 7 §7.1 — структурна перевірка ЄДРПОУ (`^\d{8}$`) для типів
+     * `tov` / `organization`. Окремий код від `INVALID_TAX_ID` (РНОКПП), щоб
+     * `mapApiCode` міг видати специфічне повідомлення "ЄДРПОУ має містити
+     * 8 цифр" замість загального "Неправильний податковий код".
+     *
+     * Розгалуження валідатора живе у Zod write-DTO (`CreateBusinessSchema`
+     * discriminated union per `type`) і у `BusinessesService.update`
+     * (читає document-resident `type` для PATCH без `type`-context).
+     *
+     * **MVP не валідує ДКСУ-checksum** (Sprint 7 §SP-2): naive-impl false-
+     * negative-ить ~5-10% валідних реальних ЄДРПОУ; checksum — окремий
+     * tech-backlog ticket.
+     */
+    INVALID_LEGAL_TAX_ID: 'INVALID_LEGAL_TAX_ID',
+    /**
+     * Sprint 7 §7.5 — service-layer cross-check на UPDATE: PATCH містить
+     * `taxationSystem` чи `isVatPayer`, але document-resident `type` —
+     * `individual` чи `organization`, де taxation-поля семантично не
+     * застосовуються (не існує "ОСББ на спрощеній-3").
+     *
+     * **Виключно forward-direction garbage** ("поля недоступні для цього
+     * типу"). Зворотний випадок (null-clear на fop/tov, де поля обов'язкові)
+     * — окремий код `TAXATION_REQUIRED_FOR_TYPE`, бо UX-recovery різний:
+     *  - тут: видалити поле з PATCH-payload-у;
+     *  - там: передати non-null значення.
+     *
+     * Чому окремий код від `TAXATION_FIELDS_MISMATCH_TYPE` (read-side
+     * entity-refine): user-action — PATCH; recoverable client-side. Generic
+     * refine-error описує symmetric data-state-violation, інтерпретується для
+     * UI як "бекенд-bug"; цей же код — UX-actionable.
+     */
+    TAXATION_NOT_APPLICABLE_FOR_TYPE: 'TAXATION_NOT_APPLICABLE_FOR_TYPE',
+    /**
+     * Sprint 7 §7.5 — backward-сторона того ж cross-check-у: PATCH намагається
+     * очистити (`null`) `taxationSystem` чи `isVatPayer` на бізнесі типу
+     * `fop` / `tov`, де таксейшн-поля обов'язкові. Семантично це "ви не
+     * можете видалити обов'язкове поле", не "поле недоступне".
+     *
+     * Recovery-path для UI: передати non-null значення (підказка "оберіть
+     * систему оподаткування"). Реальний flow зміни на null — створення нового
+     * бізнесу типу `individual` / `organization`, бо `type` immutable
+     * post-creation (§SP-8).
+     */
+    TAXATION_REQUIRED_FOR_TYPE: 'TAXATION_REQUIRED_FOR_TYPE',
+    /**
+     * Sprint 7 §7.5 — service-layer cross-check на UPDATE: PATCH містить
+     * `taxId` неправильного формату для document-resident `type` (наприклад,
+     * 8-digit ЄДРПОУ при type=fop, або 10-digit РНОКПП при type=tov). Sprint 9
+     * §SP-1 path-update: `taxId` тепер top-level поле Business (раніше
+     * `requisites.taxId`); semantics коду незмінні.
+     *
+     * Окремий код від `INVALID_TAX_ID` / `INVALID_LEGAL_TAX_ID` — ці два
+     * описують **структурну** помилку (regex/checksum), цей — **type-binding**
+     * (формат сам валідний, але не для цього `type`). UI підказує "ваш бізнес
+     * — ФОП, потрібен 10-цифровий РНОКПП", не "введіть валідний код".
+     */
+    TAX_ID_FORMAT_MISMATCH_TYPE: 'TAX_ID_FORMAT_MISMATCH_TYPE',
+
+    // --- invoices error (Sprint 4 §4.2 §4.8) ---
+    /** Invoice не знайдено в межах business-у. `InvoiceAccessGuard` / `InvoicesService.getBySlug`. UA: "Рахунок не знайдено". */
+    INVOICE_NOT_FOUND: 'INVOICE_NOT_FOUND',
+    /** `InvoiceSlugGeneratorService` після MAX_ATTEMPTS retries (статистично недосяжно). UA: "Не вдалося згенерувати посилання. Спробуйте ще раз". */
+    INVOICE_SLUG_GENERATION_FAILED: 'INVOICE_SLUG_GENERATION_FAILED',
+    /** Coupled-rule на write-side: `amount=null + amountLocked=true`. Sprint 1 entity Zod дублює; service окремий код для UX-friendly inline error. UA: "Заблокувати редагування суми можна лише при заданій сумі". */
+    INVOICE_AMOUNT_LOCKED_REQUIRES_AMOUNT:
+        'INVOICE_AMOUNT_LOCKED_REQUIRES_AMOUNT',
+    /**
+     * Sprint 4 review fix — invoice expired (`validUntil < now`). Public QR
+     * endpoints повертають 410 Gone з цим кодом. JSON-view продовжує працювати
+     * (heading + "Прострочено"-banner), але `nbuLinks: null` — payment-vector
+     * не віддається. UA: "Термін рахунку минув".
+     */
+    INVOICE_EXPIRED: 'INVOICE_EXPIRED',
+    /**
+     * Sprint 4 review fix — write-side service блокує `validUntil < now` на
+     * create/update. Раніше комментарі схеми проголошували, що app-layer
+     * service блокує цей інваріант, але enforcement не існував. Тепер code
+     * приходить з 400 BadRequest на cabinet write. UA: "Термін дії не може
+     * бути у минулому".
+     */
+    INVOICE_VALID_UNTIL_IN_PAST: 'INVOICE_VALID_UNTIL_IN_PAST',
+    /**
+     * Sprint 4 §4.0 + SP-5 / Sprint 9 §SP-1 + §SP-3 — generic infra-misconfig:
+     * Mongo транзакція вимагає replica-set (`session.withTransaction`).
+     * Standalone mongod кидає `MongoServerError: Transaction numbers are only
+     * allowed on a replica set...`. Service ловить → 500 з цим кодом.
+     *
+     * **Уніфікований код для 4 service-call-сайтів** (Sprint 9 review fix —
+     * раніше `CASCADE_DELETE_REQUIRES_REPLICA_SET` reuse-ався у не-cascade
+     * flow-ах, що давало user-у "Не вдалося видалити бізнес" на create-account):
+     *  - `BusinessesService.delete` (cascade-delete business+accounts+invoices)
+     *  - `AccountsService.create` (touch-business orphan-prevention)
+     *  - `AccountsService.delete` (cascade Invoice.count+Account.delete)
+     *  - `InvoicesService.create` (touch-account orphan-prevention)
+     *
+     * UA: нейтральне "Сервер тимчасово недоступний. Зверніться в підтримку" —
+     * справжню причину (infra-misconfig) видно лише у server-логах.
+     */
+    TRANSACTION_REQUIRES_REPLICA_SET: 'TRANSACTION_REQUIRES_REPLICA_SET',
+
+    // --- accounts error (Sprint 9 §SP-1..§SP-3) ---
+    /** Account не знайдено в межах business-у. `AccountAccessGuard` / `AccountsService.getBySlug`. UA: "Рахунок не знайдено". */
+    ACCOUNT_NOT_FOUND: 'ACCOUNT_NOT_FOUND',
+    /**
+     * Sprint 9 §SP-3 — Account-delete pre-check: `Invoice.countDocuments({accountId}) > 0`.
+     * 409 з UA-template, що містить `{invoicesPhrase}`-плейсхолдер; caller
+     * (backend exception + frontend toast.error) pre-resolves через
+     * `pluralizeUa(count, 'виставлений інвойс', 'виставлені інвойси', 'виставлених інвойсів')`.
+     * UA-шаблон: "Цей рахунок має {invoicesPhrase}. Спочатку видаліть їх або весь бізнес".
+     */
+    ACCOUNT_HAS_INVOICES: 'ACCOUNT_HAS_INVOICES',
+    /** `AccountAccessGuard` ownership-check fail (account.businessId ≠ request.business._id). UA: "Доступ до рахунку заборонено". */
+    ACCOUNT_ACCESS_DENIED: 'ACCOUNT_ACCESS_DENIED',
+    /**
+     * `AccountSlugGeneratorService` після MAX_ATTEMPTS retries (астрономічно
+     * недосяжно при random 8-char A-Za-z0-9). Окремий код від Sprint 3
+     * `SLUG_GENERATION_FAILED` (business-domain): error-mapping може дати
+     * домен-специфічну рекомендацію. UA: "Не вдалося згенерувати рахунок. Спробуйте ще раз".
+     */
+    ACCOUNT_SLUG_GENERATION_FAILED: 'ACCOUNT_SLUG_GENERATION_FAILED',
+    /**
+     * Sprint 9 §SP-2 — anti-duplicate IBAN під одним бізнесом. compound-unique
+     * `(businessId, iban)` на Mongo; AccountsService.create ловить 11000 і
+     * мапить на цей код. Cross-business-duplicate (один IBAN на двох бізнесах
+     * одного юзера) — дозволено, цей код не спрацьовує. UA: "Цей IBAN вже доданий до бізнесу".
+     */
+    ACCOUNT_IBAN_DUPLICATE: 'ACCOUNT_IBAN_DUPLICATE',
+    /**
+     * Sprint 9 §SP-2 safety-net — unknown 11000-патерн у AccountsService.create
+     * (не slug-collision, не iban-duplicate). UA: "Не вдалося створити рахунок. Спробуйте ще раз".
+     */
+    ACCOUNT_CREATE_FAILED: 'ACCOUNT_CREATE_FAILED',
+
+    // --- qr error (Sprint 2 §2.1 + Sprint 8 fix) ---
+    /**
+     * Sprint 8 fix — overall payload-size overflow після build NBU-payload.
+     * Per-field валідація проходить, але сума полів перевищує норматив 507 B
+     * (Додатки 3 §IV.11, 4 §IV.8) АБО Base64URL-форма перевищує 475 B
+     * (таблиця 1 у Додатках 3 і 4).
+     *
+     * Це **emergent property** комбінації полів, не окреме поле — Zod на
+     * write-DTO технічно не може валідувати без виклику builder-а. Тому
+     * `AllExceptionsFilter` ловить `PayloadValidationError` з кодами
+     * `PAYLOAD_OVERALL_SIZE_EXCEEDED` / `PAYLOAD_BASE64URL_SIZE_EXCEEDED` і
+     * мапить на цей код як 400 BAD_REQUEST. До Sprint 8 цей шлях віддавав
+     * 500 INTERNAL_ERROR на legitimate user-input (наприклад
+     * `purpose='А'.repeat(420)` cyrillic — валідні 420 chars, але payload 840 B).
+     *
+     * UA: "Ваші дані не вміщуються в платіжний QR-код. Скоротіть назву або
+     * призначення платежу" — actionable рекомендація.
+     */
+    PAYLOAD_TOO_LARGE: 'PAYLOAD_TOO_LARGE',
+
+    // --- users error ---
+    /**
+     * Sprint 11 — open-redirect protection. `UsersService.setPendingPostLoginTarget`
+     * відхиляє target, що не пройшов `validateSameOriginPath`. Шлях також
+     * блокує DTO-validation на `PATCH /users/me`, якщо frontend помилково
+     * передав non-null value (anti-injection rule). User-actionable повідомлення
+     * не потрібне: стемп робиться backend-only, цей код ніколи не доходить до
+     * happy-path UI.
+     */
+    INVALID_REDIRECT_TARGET: 'INVALID_REDIRECT_TARGET',
+
     // --- errors ---
     UNAUTHORIZED: 'UNAUTHORIZED',
     VALIDATION_ERROR: 'VALIDATION_ERROR',
@@ -57,8 +233,7 @@ export const RESPONSE_CODE = {
     INTERNAL_ERROR: 'INTERNAL_ERROR',
 } as const;
 
-export type ResponseCode =
-    (typeof RESPONSE_CODE)[keyof typeof RESPONSE_CODE];
+export type ResponseCode = (typeof RESPONSE_CODE)[keyof typeof RESPONSE_CODE];
 
 /** Маппінг код → тип для фронту (колір нотифікації тощо) */
 export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
@@ -66,18 +241,14 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.LOGGED_OUT]: RESPONSE_TYPE.SUCCESS,
     [RESPONSE_CODE.PASSWORD_SET]: RESPONSE_TYPE.SUCCESS,
     [RESPONSE_CODE.PASSWORD_RESET]: RESPONSE_TYPE.SUCCESS,
-    [RESPONSE_CODE.LANG_UPDATED]: RESPONSE_TYPE.SUCCESS,
     [RESPONSE_CODE.TERMS_ACCEPTED]: RESPONSE_TYPE.SUCCESS,
     [RESPONSE_CODE.ACCOUNT_DELETED]: RESPONSE_TYPE.SUCCESS,
     [RESPONSE_CODE.ACCOUNT_RESTORED]: RESPONSE_TYPE.SUCCESS,
     [RESPONSE_CODE.EXECUTIONS_SPENT]: RESPONSE_TYPE.SUCCESS,
-    [RESPONSE_CODE.BRIEF_SUBMITTED]: RESPONSE_TYPE.SUCCESS,
-    [RESPONSE_CODE.CAPTCHA_FAILED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.ALREADY_SUBSCRIBED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.SUBSCRIPTION_REQUIRED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.NO_BILLING_ACCOUNT]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.PAYMENT_TYPE_DISABLED]: RESPONSE_TYPE.ERROR,
-    [RESPONSE_CODE.AI_LIMIT_EXHAUSTED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.AI_RATE_LIMIT_EXCEEDED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.AI_MESSAGE_TOO_LONG]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.EXECUTIONS_RESERVATION_ACTIVE]: RESPONSE_TYPE.ERROR,
@@ -87,7 +258,29 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.AVATAR_FILE_KEY_INVALID]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.AVATAR_UPLOAD_NOT_FOUND]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.AVATAR_UPLOAD_INVALID]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BUSINESS_NOT_FOUND]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BUSINESS_ACCESS_DENIED]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.SLUG_GENERATION_FAILED]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.INVALID_VAT_FOR_TAXATION_SYSTEM]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.INVALID_LEGAL_TAX_ID]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.TAXATION_NOT_APPLICABLE_FOR_TYPE]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.TAXATION_REQUIRED_FOR_TYPE]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.TAX_ID_FORMAT_MISMATCH_TYPE]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.INVOICE_NOT_FOUND]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.INVOICE_SLUG_GENERATION_FAILED]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.INVOICE_AMOUNT_LOCKED_REQUIRES_AMOUNT]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.INVOICE_EXPIRED]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.INVOICE_VALID_UNTIL_IN_PAST]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.TRANSACTION_REQUIRES_REPLICA_SET]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.ACCOUNT_NOT_FOUND]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.ACCOUNT_HAS_INVOICES]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.ACCOUNT_ACCESS_DENIED]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.ACCOUNT_SLUG_GENERATION_FAILED]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.ACCOUNT_IBAN_DUPLICATE]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.ACCOUNT_CREATE_FAILED]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.PAYLOAD_TOO_LARGE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.ONBOARDING_INCOMPLETE]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.INVALID_REDIRECT_TARGET]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.UNAUTHORIZED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.VALIDATION_ERROR]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.NOT_FOUND]: RESPONSE_TYPE.ERROR,

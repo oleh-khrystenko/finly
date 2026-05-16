@@ -2,42 +2,50 @@
 
 import dynamic from 'next/dynamic';
 
-const BriefDialog = dynamic(
-    () => import('@/features/agency/brief/BriefDialog'),
-);
 const DeleteAccountDialog = dynamic(
-    () => import('@/features/profile/DeleteAccountDialog'),
+    () => import('@/features/profile/DeleteAccountDialog')
 );
 const AvatarUploadDialog = dynamic(
-    () => import('@/features/profile/AvatarUploadDialog'),
+    () => import('@/features/profile/AvatarUploadDialog')
 );
 const AvatarDeleteConfirmDialog = dynamic(
-    () => import('@/features/profile/AvatarDeleteConfirmDialog'),
+    () => import('@/features/profile/AvatarDeleteConfirmDialog')
 );
 const TermsReacceptDialog = dynamic(
-    () => import('@/features/auth/TermsReacceptDialog'),
+    () => import('@/features/auth/TermsReacceptDialog')
 );
 const BillingResetDialog = dynamic(
-    () => import('@/features/billing/BillingResetDialog'),
+    () => import('@/features/billing/BillingResetDialog')
+);
+const DeleteBusinessConfirmDialog = dynamic(
+    () => import('@/features/business-edit/DeleteBusinessConfirmDialog')
+);
+const DeleteInvoiceConfirmDialog = dynamic(
+    () => import('@/features/invoice-edit/DeleteInvoiceConfirmDialog')
+);
+const DeleteAccountConfirmDialog = dynamic(
+    () => import('@/features/account-edit/DeleteAccountConfirmDialog')
+);
+const SlugPresetWarningDialog = dynamic(
+    () => import('@/entities/invoice/SlugPresetWarningDialog')
 );
 const MobileMenuSheet = dynamic(
-    () => import('@/widgets/header/MobileMenuSheet'),
-);
-const DogfoodingSheet = dynamic(
-    () => import('@/widgets/agency/landing/DogfoodingSection/DogfoodingSheet'),
+    () => import('@/widgets/header/MobileMenuSheet')
 );
 
 export function Overlays() {
     return (
         <>
-            <BriefDialog />
             <DeleteAccountDialog />
             <AvatarUploadDialog />
             <AvatarDeleteConfirmDialog />
             <TermsReacceptDialog />
             <BillingResetDialog />
+            <DeleteBusinessConfirmDialog />
+            <DeleteInvoiceConfirmDialog />
+            <DeleteAccountConfirmDialog />
+            <SlugPresetWarningDialog />
             <MobileMenuSheet />
-            <DogfoodingSheet />
         </>
     );
 }

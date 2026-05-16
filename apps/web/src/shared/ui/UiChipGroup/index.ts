@@ -1,2 +1,6 @@
 export { default } from './UiChipGroup';
-export type { UiChipGroupProps, UiChipGroupOption, UiChipGroupSize } from './types';
+export type {
+    UiChipGroupProps,
+    UiChipGroupOption,
+    UiChipGroupSize,
+} from './types';

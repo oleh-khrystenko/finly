@@ -16,6 +16,7 @@ Feature / Page / Widget code
 ```
 
 Ui-компоненти інкапсулюють:
+
 - **Візуальні варіанти** (variant, size) -- єдине джерело дизайн-токенів
 - **Accessibility** (aria-атрибути, keyboard navigation, focus management)
 - **Поліморфізм** (button / link / anchor в одному API -- UiButton)
@@ -25,21 +26,23 @@ Ui-компоненти інкапсулюють:
 
 ## Поточний реєстр примітивів
 
-| Ui-компонент | Замінює нативний елемент | Варіанти |
-|---|---|---|
-| `UiButton` | `<button>`, `<a>`, Next.js `<Link>` | `filled`, `outline`, `soft`, `text`, `icon`, `icon-compact`; polymorphic: `as="button"` / `as="link"` / `as="a"` |
-| `UiInput` | `<input>` (text, email, number, etc.) | `outlined`, `filled` |
-| `UiPasswordInput` | `<input type="password">` + show/hide toggle | композиція UiInput + UiButton; внутрішній стан visibility |
-| `UiSelect` | `<select>` | `outlined`, `filled` |
-| `UiSwitch` | `<input type="checkbox">` (toggle) | -- (sizes: sm/md/lg) |
-| `UiSpinner` | Кастомні loading-індикатори | -- (sizes: sm/md/lg) |
-| `UiDropdownMenu` | Context menus, action menus, option pickers | align: `start`/`end`; sizes: sm/md/lg |
-| `UiFullPageLoader` | Full-screen centered spinner з optional message | композиція UiSpinner; для Suspense fallback та loading states |
-| `UiConfirmDialog` | `window.confirm()`, кастомні confirmation modals | `default`, `destructive`; controlled (open/onOpenChange); Radix AlertDialog |
-| `UiTextarea` | `<textarea>` | `outlined`, `filled` |
-| `UiChipGroup` | Radio-style inline chip selector | -- (sizes: sm/md/lg); Headless UI RadioGroup |
-| `UiModal` | Centered modal / bottom sheet dialogs | controlled (open/onOpenChange); mobile bottom sheet, desktop centered; hideOverlay, hideCloseButton; Radix Dialog |
-| `UiHeaderShell` | Структурна обгортка header-зони (`<header>` + container h-16) | -- ; className override |
+| Ui-компонент       | Замінює нативний елемент                                                 | Варіанти                                                                                                                                                       |
+| ------------------ | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `UiButton`         | `<button>`, `<a>`, Next.js `<Link>`                                      | `filled`, `outline`, `soft`, `text`, `icon`, `icon-compact`; polymorphic: `as="button"` / `as="link"` / `as="a"`                                               |
+| `UiInput`          | `<input>` (text, email, number, etc.)                                    | `outlined`, `filled`                                                                                                                                           |
+| `UiPasswordInput`  | `<input type="password">` + show/hide toggle                             | композиція UiInput + UiButton; внутрішній стан visibility                                                                                                      |
+| `UiSelect`         | `<select>`                                                               | `outlined`, `filled`                                                                                                                                           |
+| `UiSwitch`         | `<input type="checkbox">` (toggle)                                       | -- (sizes: sm/md/lg)                                                                                                                                           |
+| `UiSpinner`        | Кастомні loading-індикатори                                              | -- (sizes: sm/md/lg)                                                                                                                                           |
+| `UiDropdownMenu`   | Context menus, action menus, option pickers                              | align: `start`/`end`; sizes: sm/md/lg                                                                                                                          |
+| `UiFullPageLoader` | Full-screen centered spinner з optional message                          | композиція UiSpinner; для Suspense fallback та loading states                                                                                                  |
+| `UiConfirmDialog`  | `window.confirm()`, кастомні confirmation modals                         | `default`, `destructive`; controlled (open/onOpenChange); Radix AlertDialog                                                                                    |
+| `UiTextarea`       | `<textarea>`                                                             | `outlined`, `filled`                                                                                                                                           |
+| `UiChipGroup`      | Radio-style inline chip selector                                         | -- (sizes: sm/md/lg); Headless UI RadioGroup                                                                                                                   |
+| `UiRadioCardGroup` | Radio-style grid cards з title + description (+ optional icon)           | -- ; responsive `columns: { mobile: 1\|2, desktop: 2\|3\|4 }`; Headless UI RadioGroup; built-in arrow-key + roving tabindex; generic `<TValue extends string>` |
+| `UiModal`          | Centered modal / bottom sheet dialogs                                    | controlled (open/onOpenChange); mobile bottom sheet, desktop centered; hideOverlay, hideCloseButton; Radix Dialog                                              |
+| `UiHeaderShell`    | Структурна обгортка header-зони (`<header>` + container h-16)            | -- ; className override                                                                                                                                        |
+| `UiEditableField`  | Inline-edit per field (read mode → "олівець" → edit mode з ✓/✗ кнопками) | Generic над `TValue`; renderer-props (`renderRead`/`renderEdit`); async `onSave`; optional `validate`; `disabled`                                              |
 
 ## Rules
 
@@ -47,19 +50,20 @@ Ui-компоненти інкапсулюють:
 
 Наступні HTML-елементи **заборонено** використовувати напряму в коді features, widgets, entities та pages:
 
-| Заборонено | Використовувати |
-|---|---|
-| `<button>` | `UiButton` (default, `as="button"`) |
-| `<a>` | `UiButton as="a"` (зовнішні посилання) |
-| `<Link>` (next/link) | `UiButton as="link"` (внутрішня навігація) |
-| `<input>` (text/email/number) | `UiInput` |
-| `<input type="password">` | `UiPasswordInput` |
-| `<select>` | `UiSelect` |
-| `<input type="checkbox">` (toggle) | `UiSwitch` |
-| `<textarea>` | `UiTextarea` |
-| `window.confirm()` | `UiConfirmDialog` |
+| Заборонено                         | Використовувати                            |
+| ---------------------------------- | ------------------------------------------ |
+| `<button>`                         | `UiButton` (default, `as="button"`)        |
+| `<a>`                              | `UiButton as="a"` (зовнішні посилання)     |
+| `<Link>` (next/link)               | `UiButton as="link"` (внутрішня навігація) |
+| `<input>` (text/email/number)      | `UiInput`                                  |
+| `<input type="password">`          | `UiPasswordInput`                          |
+| `<select>`                         | `UiSelect`                                 |
+| `<input type="checkbox">` (toggle) | `UiSwitch`                                 |
+| `<textarea>`                       | `UiTextarea`                               |
+| `window.confirm()`                 | `UiConfirmDialog`                          |
 
 **Винятки:**
+
 - `<input type="hidden">`, `<input type="file">` та інші спеціалізовані input-типи, для яких ще не створено Ui-обгортку, дозволені до появи відповідного примітиву.
 - `<a href="#section">` — anchor links для навігації по секціях тієї самої сторінки. Не потребують UiButton обгортки, бо це не інтерактивний елемент з варіантами/розмірами, а простий scroll anchor.
 - `<a>` всередині prose-контенту (юридичні сторінки, статті, markdown-контент) — inline-посилання в суцільному тексті, де UiButton порушив би flow тексту. Стилізуються через батьківський CSS-клас (наприклад `.prose-legal a`).
@@ -67,6 +71,7 @@ Ui-компоненти інкапсулюють:
 ### 2. Єдина точка стилізації
 
 Візуальна кастомізація примітивів відбувається через:
+
 1. **variant / size props** -- для стандартних варіацій
 2. **className prop** -- для контекстно-специфічних override-ів (позиціонування, кольори)
 

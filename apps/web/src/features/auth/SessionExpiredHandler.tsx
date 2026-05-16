@@ -2,12 +2,13 @@
 
 import { useEffect, useRef } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 
 import { useAuthStore } from '@/entities/user';
 
 const SESSION_EXPIRED_REASON = 'session-expired';
+const SESSION_EXPIRED_MESSAGE =
+    'Термін дії сесії закінчився. Будь ласка, увійдіть знову.';
 
 /**
  * Reacts to a server-driven "session expired" redirect.
@@ -35,7 +36,6 @@ const SESSION_EXPIRED_REASON = 'session-expired';
  * Other query params (`redirect`, `email`, `step`) are preserved.
  */
 export default function SessionExpiredHandler() {
-    const t = useTranslations('auth_page.signin');
     const router = useRouter();
     const pathname = usePathname();
     const searchParams = useSearchParams();
@@ -50,7 +50,7 @@ export default function SessionExpiredHandler() {
         handledRef.current = true;
 
         useAuthStore.getState().clearUser();
-        toast.info(t('session_expired'));
+        toast.info(SESSION_EXPIRED_MESSAGE);
 
         // Strip ?reason from the URL so refresh/back navigation does
         // not re-fire the toast. Preserve every other query param.
@@ -60,7 +60,7 @@ export default function SessionExpiredHandler() {
         router.replace(queryString ? `${pathname}?${queryString}` : pathname, {
             scroll: false,
         });
-    }, [pathname, searchParams, router, t]);
+    }, [pathname, searchParams, router]);
 
     return null;
 }

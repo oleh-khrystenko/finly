@@ -16,7 +16,11 @@ const baseStyles =
 const UiLink = forwardRef<HTMLAnchorElement, UiLinkProps>((props, ref) => {
     const { children, className, variant = 'primary' } = props;
 
-    const classes = composeClasses(baseStyles, variantStyles[variant], className);
+    const classes = composeClasses(
+        baseStyles,
+        variantStyles[variant],
+        className
+    );
 
     if (props.as === 'link') {
         const {
@@ -29,12 +33,7 @@ const UiLink = forwardRef<HTMLAnchorElement, UiLinkProps>((props, ref) => {
         } = props;
 
         return (
-            <Link
-                {...linkProps}
-                href={href}
-                className={classes}
-                ref={ref}
-            >
+            <Link {...linkProps} href={href} className={classes} ref={ref}>
                 {children}
             </Link>
         );
@@ -50,12 +49,7 @@ const UiLink = forwardRef<HTMLAnchorElement, UiLinkProps>((props, ref) => {
     } = props;
 
     return (
-        <a
-            {...anchorProps}
-            href={href}
-            className={classes}
-            ref={ref}
-        >
+        <a {...anchorProps} href={href} className={classes} ref={ref}>
             {children}
         </a>
     );

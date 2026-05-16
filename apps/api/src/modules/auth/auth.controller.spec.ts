@@ -1,6 +1,6 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { RESPONSE_CODE, MAGIC_LINK_PURPOSE } from '@cyanship/types';
+import { RESPONSE_CODE, MAGIC_LINK_PURPOSE } from '@finly/types';
 
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
@@ -20,7 +20,6 @@ const mockUser = {
     executions: { balance: 0, freeReportUsed: false },
     passwordHash: '$2b$10$hash',
     deletedAt: null as Date | null,
-    preferredLang: 'en',
 };
 
 const mockAuthService = {
@@ -28,7 +27,6 @@ const mockAuthService = {
     checkEmail: jest.fn(),
     loginWithPassword: jest.fn(),
     sendMagicLink: jest.fn(),
-    verifyMagicLink: jest.fn(),
     setPassword: jest.fn(),
     changePassword: jest.fn(),
     verifyPassword: jest.fn(),
@@ -203,11 +201,17 @@ describe('AuthController', () => {
                 purpose: undefined,
             } as any);
 
+            // Sprint 10 — 4-й argument options-object з 3 optional sibling-
+            // fields. Без передачі — усі три undefined.
             expect(mockAuthService.sendMagicLink).toHaveBeenCalledWith(
                 'test@gmail.com',
                 MAGIC_LINK_PURPOSE.LOGIN,
                 undefined,
-                undefined
+                {
+                    landingDraft: undefined,
+                    claimIdempotencyKey: undefined,
+                    termsVersion: undefined,
+                }
             );
         });
 
@@ -223,78 +227,12 @@ describe('AuthController', () => {
                 'test@gmail.com',
                 MAGIC_LINK_PURPOSE.REGISTER,
                 undefined,
-                undefined
+                {
+                    landingDraft: undefined,
+                    claimIdempotencyKey: undefined,
+                    termsVersion: undefined,
+                }
             );
-        });
-    });
-
-    describe('POST /auth/magic-link/verify', () => {
-        it('should set cookie and return user for login purpose', async () => {
-            mockAuthService.verifyMagicLink.mockResolvedValue({
-                user: mockUser,
-                tokens: {
-                    accessToken: 'access-token',
-                    refreshToken: 'refresh-token',
-                },
-                purpose: 'login',
-                deleted: false,
-            });
-            const res = createMockResponse();
-
-            const result = await controller.verifyMagicLink(
-                { token: 'abc123' } as any,
-                res as any
-            );
-
-            expect(res.cookie).toHaveBeenCalledWith(
-                'bid_refresh',
-                'refresh-token',
-                expect.objectContaining({ httpOnly: true })
-            );
-            expect(result.data).toHaveProperty('accessToken', 'access-token');
-        });
-
-        it('should clear cookie and return deleted response for delete-account', async () => {
-            mockAuthService.verifyMagicLink.mockResolvedValue({
-                deleted: true,
-                message: 'Account scheduled for deletion',
-                purpose: MAGIC_LINK_PURPOSE.DELETE_ACCOUNT,
-            });
-            const res = createMockResponse();
-
-            const result = await controller.verifyMagicLink(
-                { token: 'abc123' } as any,
-                res as any
-            );
-
-            expect(res.clearCookie).toHaveBeenCalledWith('bid_refresh', {
-                path: '/',
-            });
-            expect(res.cookie).not.toHaveBeenCalled();
-            expect(result.data).toEqual({
-                deleted: true,
-                purpose: MAGIC_LINK_PURPOSE.DELETE_ACCOUNT,
-                message: 'Account scheduled for deletion',
-            });
-        });
-
-        it('should include purpose in response', async () => {
-            mockAuthService.verifyMagicLink.mockResolvedValue({
-                user: mockUser,
-                tokens: {
-                    accessToken: 'at',
-                    refreshToken: 'rt',
-                },
-                purpose: 'reset-password',
-            });
-            const res = createMockResponse();
-
-            const result = await controller.verifyMagicLink(
-                { token: 'abc123' } as any,
-                res as any
-            );
-
-            expect((result.data as any).purpose).toBe('reset-password');
         });
     });
 

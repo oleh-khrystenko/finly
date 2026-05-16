@@ -13,7 +13,7 @@ import * as bcrypt from 'bcrypt';
 import { Model } from 'mongoose';
 
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
-import { REDIS_CLIENT } from '../src/common/providers/redis.provider';
+import { REDIS_CLIENT } from '../src/common/modules/redis.module';
 import { AppController } from '../src/app.controller';
 import { AppService } from '../src/app.service';
 import { AuthModule } from '../src/modules/auth/auth.module';
@@ -24,7 +24,7 @@ import { StorageModule } from '../src/modules/storage/storage.module';
 import { PaymentsModule } from '../src/modules/payments/payments.module';
 import { User, UserDocument } from '../src/modules/users/schemas/user.schema';
 import { EmailService } from '../src/modules/email/email.service';
-import { CURRENT_TERMS_VERSION } from '@cyanship/types';
+import { CURRENT_TERMS_VERSION } from '@finly/types';
 
 // Mock ENV
 jest.mock('../src/config/env', () => ({
@@ -40,7 +40,7 @@ jest.mock('../src/config/env', () => ({
         GOOGLE_CLIENT_SECRET: 'GOCSPX-test-secret',
         GOOGLE_CALLBACK_URL: 'http://localhost:4000/api/auth/google/callback',
         RESEND_API_KEY: 're_test_key',
-        RESEND_FROM_EMAIL: 'CyanShip <test@test.com>',
+        RESEND_FROM_EMAIL: 'Finly <test@test.com>',
         STRIPE_SECRET_KEY: 'sk_test_xxx',
         STRIPE_WEBHOOK_SECRET: 'whsec_test',
         AUTH_LOCKOUT_THRESHOLDS: '5:1,10:5,20:15',
@@ -271,7 +271,7 @@ describe('Auth E2E', () => {
             email: email.toLowerCase(),
             passwordHash: hash,
             profile: { firstName: 'Test', lastName: 'User' },
-            credits: { balance: 0, freeReportUsed: false },
+            executions: { balance: 0, freeReportUsed: false },
         });
     }
 
@@ -281,7 +281,7 @@ describe('Auth E2E', () => {
         return userModel.create({
             email: email.toLowerCase(),
             profile: { firstName: 'Test', lastName: 'User' },
-            credits: { balance: 0, freeReportUsed: false },
+            executions: { balance: 0, freeReportUsed: false },
         });
     }
 
@@ -848,18 +848,23 @@ describe('Auth E2E', () => {
                     id: string;
                     email: string;
                     profile: object;
-                    credits: object;
+                    executions: { balance: number; freeReportUsed: boolean };
                     hasPassword: boolean;
-                    preferredLang: string;
                     deletedAt: null;
+                    accountDeletionRequestedAt: null;
+                    termsVersion: string | null;
+                    billing: object | null;
                 };
             };
             expect(body.data.email).toBe('user@example.com');
             expect(body.data.hasPassword).toBe(true);
-            expect(body.data.preferredLang).toBeDefined();
             expect(body.data.id).toBeDefined();
             expect(body.data.profile).toBeDefined();
-            expect(body.data.credits).toBeDefined();
+            expect(body.data.executions).toEqual({
+                balance: expect.any(Number),
+                freeReportUsed: expect.any(Boolean),
+            });
+            expect(body.data.billing).toBeNull();
         });
 
         it('GET /api/users/me should return 401 without auth', async () => {
@@ -892,32 +897,6 @@ describe('Auth E2E', () => {
             await supertest(app.getHttpServer())
                 .patch('/api/users/me')
                 .send({ firstName: 'Test' })
-                .expect(401);
-        });
-
-        it('PATCH /api/users/me/lang should update language', async () => {
-            await createUserWithPassword('user@example.com', 'password123');
-            const { accessToken } = await loginWithPassword(
-                'user@example.com',
-                'password123'
-            );
-
-            await supertest(app.getHttpServer())
-                .patch('/api/users/me/lang')
-                .set('Authorization', `Bearer ${accessToken}`)
-                .send({ lang: 'en' })
-                .expect(200);
-
-            const user = await userModel.findOne({
-                email: 'user@example.com',
-            });
-            expect(user?.preferredLang).toBe('en');
-        });
-
-        it('PATCH /api/users/me/lang should return 401 without auth', async () => {
-            await supertest(app.getHttpServer())
-                .patch('/api/users/me/lang')
-                .send({ lang: 'en' })
                 .expect(401);
         });
     });

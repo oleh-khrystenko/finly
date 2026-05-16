@@ -2,7 +2,7 @@ import {
     AVATAR,
     type AvatarUploadUrlResponse,
     type CommitAvatarUploadResponse,
-} from '@cyanship/types';
+} from '@finly/types';
 
 import { apiClient } from './client';
 
@@ -37,10 +37,7 @@ export async function deleteAvatar(): Promise<void> {
  * `Content-Length` is set by the browser automatically from the blob body and
  * cannot be controlled programmatically (forbidden request header in Fetch).
  */
-export async function uploadToR2(
-    uploadUrl: string,
-    blob: Blob
-): Promise<void> {
+export async function uploadToR2(uploadUrl: string, blob: Blob): Promise<void> {
     const response = await fetch(uploadUrl, {
         method: 'PUT',
         headers: { 'Content-Type': AVATAR.OUTPUT_FORMAT },

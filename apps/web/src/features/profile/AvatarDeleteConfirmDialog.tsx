@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 
 import { UiConfirmDialog } from '@/shared/ui/UiConfirmDialog';
@@ -22,10 +21,6 @@ import { useAvatarDeleteConfirmDialogStore } from './avatarDeleteConfirmDialogSt
  * per-request UX state (spinner / disable cancel).
  */
 export default function AvatarDeleteConfirmDialog() {
-    const t = useTranslations('profile_page.avatar');
-    const tErrors = useTranslations('errors.storage');
-    const tNotifications = useTranslations('notifications.storage');
-
     const isOpen = useAvatarDeleteConfirmDialogStore((s) => s.isOpen);
     const close = useAvatarDeleteConfirmDialogStore((s) => s.close);
 
@@ -49,10 +44,10 @@ export default function AvatarDeleteConfirmDialog() {
                 ...user,
                 profile: { ...user.profile, avatar: undefined },
             });
-            toast.success(tNotifications('avatar_deleted'));
+            toast.success('Фото видалено');
             close();
         } catch {
-            toast.error(tErrors('avatar_upload_failed'));
+            toast.error('Не вдалося завантажити фото. Спробуйте пізніше');
         } finally {
             setSubmitting(false);
         }
@@ -63,10 +58,10 @@ export default function AvatarDeleteConfirmDialog() {
             open={isOpen}
             onOpenChange={handleOpenChange}
             onConfirm={handleConfirm}
-            title={t('delete_confirm_title')}
-            description={t('delete_confirm_description')}
-            confirmLabel={t('delete_confirm_button')}
-            cancelLabel={t('delete_cancel_button')}
+            title="Видалити фото профілю?"
+            description="Замість фото відображатимуться ініціали"
+            confirmLabel="Видалити"
+            cancelLabel="Скасувати"
             variant="destructive"
             loading={submitting}
         />

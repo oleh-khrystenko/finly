@@ -8,6 +8,7 @@ CLAUDE.md — це **навігаційна карта + правила**, НЕ 
 Якщо ні — не включай.
 
 Агент може за секунди відкрити будь-який файл. Тому:
+
 - НЕ копіюй зміст файлів (таблиці полів схем, enum values, списки UI компонентів)
 - НЕ вставляй code blocks — вказуй шлях до файлу-прикладу
 - НЕ дублюй те, що є в `docs/` — посилайся
@@ -70,17 +71,18 @@ apps/
 │   ├── main.ts, app.module.ts
 │   ├── config/
 │   ├── common/          # decorators, filters, guards, providers
-│   └── modules/         # auth, users, payments, agency, reports, storage
+│   └── modules/         # auth, users, payments, ai, storage, reports, email
 ├── web/src/
-│   ├── app/[locale]/    # pages: auth, (protected), (agency)
-│   ├── features/        # auth, change-lang, change-theme, profile, agency
-│   ├── widgets/         # header, agency/landing
-│   └── shared/          # api, ui, config, stores, i18n, styles
+│   ├── app/[locale]/    # pages: root, auth, (protected), privacy, terms
+│   ├── features/        # auth, billing, profile, change-lang, change-theme
+│   ├── widgets/         # header
+│   └── shared/          # api, ui, config, lib, i18n, styles
 packages/
 └── types/src/           # constants, enums, entities, contracts, validation
 ```
 
 **Правила:**
+
 - Анотації папок — максимум 3–5 слів після `#`
 - НЕ розкривай окремі файли всередині модулів
 - НЕ дублюй те, що буде в інших секціях (endpoints, guards, dto)
@@ -90,6 +92,7 @@ packages/
 Для кожної моделі: назва + шлях до schema файлу + 2–3 ключові особливості.
 
 Формат:
+
 ```
 ### ModelName
 Файл: path/to/schema.ts | Zod: path/to/entity.ts
@@ -98,6 +101,7 @@ packages/
 ```
 
 **Правила:**
+
 - НЕ таблиці полів — агент прочитає schema файл
 - НЕ enum values — агент прочитає enum файл
 - Тільки те, що неочевидно: нестандартні індекси, embedded documents, зв'язки між моделями
@@ -119,11 +123,13 @@ PaymentsModule → UsersModule
 Для кожного патерну: **правило + шлях до файлу-прикладу**. Один рядок або короткий абзац.
 
 **Правила:**
+
 - БЕЗ code blocks — тільки шлях до reference файлу
 - Кожен патерн описаний ОДИН раз (не дублювати між секціями)
-- Якщо є окрема документація (`docs/architecture/*`) — вказуй посилання замість опису
+- Якщо є окрема документація під `docs/` — вказуй посилання замість опису
 
 Приклад правильного формату:
+
 ```
 ### Створення endpoint
 Guard + @CurrentUser() + DTO + Service. Приклад: payments.controller.ts
@@ -170,6 +176,7 @@ Compact список.
 - Runtime поведінка, яка відрізняється від очевидної (test vs prod TTL)
 
 **Правила:**
+
 - Якщо gotcha вже описана в Key Patterns — НЕ дублюй тут
 - Кожна complexity — максимум 2–3 рядки
 - НЕ описуй нормальну поведінку системи — тільки пастки
@@ -187,9 +194,9 @@ Compact список.
 
 - ❌ Таблиці з переліком полів моделей — агент відкриє schema файл
 - ❌ Таблиці UI компонентів з описом кожного — агент відкриє shared/ui/
-- ❌ Таблиці секцій landing page — агент відкриє widgets/agency/landing/
+- ❌ Таблиці секцій сторінок — агент відкриє відповідний widget/feature
 - ❌ Code blocks з прикладами патернів — достатньо шляху до файлу
-- ❌ Повний опис auth/payments flow кроками — посилайся на docs/architecture/
+- ❌ Повний опис auth/payments flow кроками — описуй коротко й посилайся на код
 - ❌ Перелік enum values — агент прочитає enum файл
 - ❌ Дублювання інформації між секціями (особливо Key Patterns ↔ Known Complexities)
 - ❌ Redis keys таблиця — агент знайде це в auth.service.ts

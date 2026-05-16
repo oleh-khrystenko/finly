@@ -1,8 +1,8 @@
 'use client';
 
 import { Camera } from 'lucide-react';
-import type { UserProfile } from '@cyanship/types';
-import { getFullName, getInitials } from '@cyanship/types';
+import type { UserProfile } from '@finly/types';
+import { getFullName, getInitials } from '@finly/types';
 
 import { UiAvatarButton } from '@/shared/ui/UiAvatarButton';
 
@@ -25,10 +25,7 @@ export default function AvatarEditButton({
     ariaLabel,
     onPress,
 }: AvatarEditButtonProps) {
-    const fullName = getFullName(
-        user.profile.firstName,
-        user.profile.lastName
-    );
+    const fullName = getFullName(user.profile.firstName, user.profile.lastName);
     const initials = getInitials(fullName, user.email);
 
     return (

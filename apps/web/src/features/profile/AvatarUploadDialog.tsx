@@ -7,11 +7,10 @@ import {
     useRef,
     useState,
 } from 'react';
-import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import Cropper, { type Area } from 'react-easy-crop';
 import { AxiosError } from 'axios';
-import { AVATAR, RESPONSE_CODE } from '@cyanship/types';
+import { AVATAR, RESPONSE_CODE } from '@finly/types';
 
 import {
     UiModal,
@@ -37,22 +36,25 @@ type Phase = 'idle' | 'crop';
 
 const ACCEPT_MIME = AVATAR.ALLOWED_MIME_TYPES.join(',');
 
-type UploadErrorKey =
-    | 'avatar_upload_failed'
-    | 'avatar_file_key_invalid'
-    | 'avatar_upload_not_found'
-    | 'avatar_upload_invalid';
+const UPLOAD_ERROR_MESSAGES: Record<string, string> = {
+    avatar_upload_failed: 'Не вдалося завантажити фото. Спробуйте пізніше',
+    avatar_file_key_invalid: 'Сесія завантаження закінчилась. Спробуйте ще раз',
+    avatar_upload_not_found:
+        'Не вдалося знайти завантажене фото. Спробуйте ще раз',
+    avatar_upload_invalid:
+        'Цей файл не може бути використаний як фото. Спробуйте інше зображення',
+};
 
-function mapUploadErrorCode(code?: string): UploadErrorKey {
+function mapUploadErrorMessage(code?: string): string {
     switch (code) {
         case RESPONSE_CODE.AVATAR_FILE_KEY_INVALID:
-            return 'avatar_file_key_invalid';
+            return UPLOAD_ERROR_MESSAGES.avatar_file_key_invalid;
         case RESPONSE_CODE.AVATAR_UPLOAD_NOT_FOUND:
-            return 'avatar_upload_not_found';
+            return UPLOAD_ERROR_MESSAGES.avatar_upload_not_found;
         case RESPONSE_CODE.AVATAR_UPLOAD_INVALID:
-            return 'avatar_upload_invalid';
+            return UPLOAD_ERROR_MESSAGES.avatar_upload_invalid;
         default:
-            return 'avatar_upload_failed';
+            return UPLOAD_ERROR_MESSAGES.avatar_upload_failed;
     }
 }
 
@@ -65,10 +67,6 @@ function extractApiErrorCode(err: unknown): string | undefined {
 }
 
 export default function AvatarUploadDialog() {
-    const t = useTranslations('profile_page.avatar');
-    const tErrors = useTranslations('errors.storage');
-    const tNotifications = useTranslations('notifications.storage');
-
     const isOpen = useAvatarUploadDialogStore((s) => s.isOpen);
     const close = useAvatarUploadDialogStore((s) => s.close);
     const openDeleteConfirm = useAvatarDeleteConfirmDialogStore((s) => s.open);
@@ -115,7 +113,7 @@ export default function AvatarUploadDialog() {
 
     const processFile = async (file: File): Promise<void> => {
         if (file.size > AVATAR.MAX_FILE_SIZE) {
-            toast.error(t('file_too_large'));
+            toast.error('Файл занадто великий. Максимальний розмір — 5 МБ');
             return;
         }
 
@@ -124,7 +122,9 @@ export default function AvatarUploadDialog() {
         ).includes(file.type);
 
         if (!mimeOk) {
-            toast.error(t('unsupported_format'));
+            toast.error(
+                'Непідтримуваний формат. Використовуйте JPEG, PNG або WebP'
+            );
             return;
         }
 
@@ -182,12 +182,12 @@ export default function AvatarUploadDialog() {
                 ...user,
                 profile: { ...user.profile, avatar },
             });
-            toast.success(tNotifications('avatar_updated'));
+            toast.success('Фото оновлено');
             resetAll();
             close();
         } catch (err) {
             const code = extractApiErrorCode(err);
-            toast.error(tErrors(mapUploadErrorCode(code)));
+            toast.error(mapUploadErrorMessage(code));
             setSubmitting(false);
         }
     };
@@ -212,7 +212,7 @@ export default function AvatarUploadDialog() {
         <UiModal open={isOpen} onOpenChange={handleOpenChange}>
             <UiModalContent>
                 <UiModalHeader>
-                    <UiModalTitle>{t('dialog_title')}</UiModalTitle>
+                    <UiModalTitle>Фото профілю</UiModalTitle>
                 </UiModalHeader>
                 <div className="px-4 pb-6">
                     {phase === 'idle' && (
@@ -229,7 +229,7 @@ export default function AvatarUploadDialog() {
                                 )}
                             >
                                 <p className="text-muted-foreground text-sm">
-                                    {t('drop_text')}
+                                    Перетягніть фото сюди або
                                 </p>
                                 <UiButton
                                     type="button"
@@ -239,10 +239,10 @@ export default function AvatarUploadDialog() {
                                         fileInputRef.current?.click()
                                     }
                                 >
-                                    {t('browse_button')}
+                                    Оберіть файл
                                 </UiButton>
                                 <p className="text-muted-foreground text-xs">
-                                    {t('supported_formats')}
+                                    JPEG, PNG або WebP. Максимум 5 МБ
                                 </p>
                                 <input
                                     ref={fileInputRef}
@@ -262,7 +262,7 @@ export default function AvatarUploadDialog() {
                                         onClick={handleRequestDelete}
                                         disabled={submitting}
                                     >
-                                        {t('delete_button')}
+                                        Видалити фото
                                     </UiButton>
                                 </div>
                             )}
@@ -289,7 +289,7 @@ export default function AvatarUploadDialog() {
 
                             <div>
                                 <label className="text-muted-foreground mb-1.5 block text-sm">
-                                    {t('zoom_label')}
+                                    Масштаб
                                 </label>
                                 <input
                                     type="range"
@@ -313,7 +313,7 @@ export default function AvatarUploadDialog() {
                                     onClick={cancelCrop}
                                     disabled={submitting}
                                 >
-                                    {t('cancel_button')}
+                                    Скасувати
                                 </UiButton>
                                 <UiButton
                                     type="button"
@@ -325,7 +325,7 @@ export default function AvatarUploadDialog() {
                                     {submitting ? (
                                         <UiSpinner size="sm" />
                                     ) : (
-                                        t('save_button')
+                                        'Зберегти'
                                     )}
                                 </UiButton>
                             </div>

@@ -1,12 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useTranslations } from 'next-intl';
 import { AxiosError } from 'axios';
 import { toast } from 'sonner';
 import UiButton from '@/shared/ui/UiButton';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
-import { deleteAccount } from '@/shared/api';
+import { deleteUserAccount } from '@/shared/api';
 import { useAuthStore } from '@/entities/user';
 import { useDeleteAccountDialogStore } from './deleteAccountDialogStore';
 
@@ -14,9 +13,6 @@ const MAGIC_LINK_TTL_MS = 15 * 60 * 1000;
 const RESEND_COOLDOWN_SEC = 60;
 
 const DangerZone = () => {
-    const t = useTranslations('profile_page.danger_zone');
-    const tModal = useTranslations('delete_account_modal');
-
     const user = useAuthStore((s) => s.user);
     const setUser = useAuthStore((s) => s.setUser);
     const openDeleteDialog = useDeleteAccountDialogStore((s) => s.open);
@@ -42,7 +38,7 @@ const DangerZone = () => {
     const handleDelete = async () => {
         setLoading(true);
         try {
-            const result = await deleteAccount();
+            const result = await deleteUserAccount();
 
             if (result.requiresPassword) {
                 openDeleteDialog();
@@ -54,7 +50,7 @@ const DangerZone = () => {
                     });
                 }
                 setCooldownSec(RESEND_COOLDOWN_SEC);
-                toast.success(tModal('magic_link_sent'));
+                toast.success('Посилання для підтвердження надіслано на пошту');
             }
         } catch (error) {
             const code =
@@ -63,11 +59,11 @@ const DangerZone = () => {
                     : undefined;
 
             if (code === 'RATE_LIMIT_EXCEEDED') {
-                toast.error(tModal('rate_limit'));
+                toast.error('Забагато запитів. Спробуйте через 15 хвилин');
             } else if (code === 'EMAIL_SEND_FAILED') {
-                toast.error(tModal('error_generic'));
+                toast.error('Не вдалося виконати операцію. Спробуйте пізніше');
             } else {
-                toast.error(tModal('invalid_password'));
+                toast.error('Невірний пароль');
             }
         } finally {
             setLoading(false);
@@ -77,23 +73,24 @@ const DangerZone = () => {
     const resendDisabled = loading || cooldownSec > 0;
 
     return (
-        <UiSectionCard title={t('heading')} variant="destructive">
-
+        <UiSectionCard title="Небезпечна зона" variant="destructive">
             <div className="mt-5">
                 <h3 className="text-foreground text-sm font-medium">
-                    {t('delete_title')}
+                    Видалення акаунту
                 </h3>
                 <p className="text-muted-foreground mt-1 text-sm">
-                    {t('delete_description')}
+                    Після видалення у вас є 30 днів для відновлення акаунту.
                 </p>
 
                 {isPendingDeletion && (
-                    <div className="mt-4 rounded-lg border border-primary/30 bg-primary/10 p-4">
+                    <div className="border-primary/30 bg-primary/10 mt-4 rounded-lg border p-4">
                         <p className="text-primary text-sm font-medium">
-                            {tModal('magic_link_sent_title')}
+                            Перевірте пошту
                         </p>
                         <p className="text-primary mt-1 text-sm">
-                            {tModal('magic_link_sent_description')}
+                            Посилання для підтвердження видалення акаунту
+                            надіслано на вашу адресу. Посилання дійсне 15
+                            хвилин.
                         </p>
                     </div>
                 )}
@@ -107,11 +104,9 @@ const DangerZone = () => {
                 >
                     {isPendingDeletion
                         ? cooldownSec > 0
-                            ? t('resend_button_cooldown', {
-                                  seconds: cooldownSec,
-                              })
-                            : t('resend_button')
-                        : t('delete_button')}
+                            ? `Надіслати повторно (${cooldownSec}с)`
+                            : 'Надіслати повторно'
+                        : 'Видалити акаунт'}
                 </UiButton>
             </div>
         </UiSectionCard>

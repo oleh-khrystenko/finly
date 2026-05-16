@@ -1,5 +1,5 @@
 {
-    "name": "@cyanship/types",
+    "name": "@finly/types",
     "version": "1.0.0",
     "main": "./dist/index.js",
     "types": "./src/index.ts",
@@ -11,11 +11,19 @@
     },
     "scripts": {
         "build": "tsc -p tsconfig.build.json",
-        "dev": "tsc -p tsconfig.build.json --watch"
+        "dev": "tsc -p tsconfig.build.json --watch",
+        "test": "jest",
+        "test:watch": "jest --watch"
     },
     "license": "MIT",
     "packageManager": "pnpm@10.12.1",
     "dependencies": {
         "zod": "^4.3.6"
+    },
+    "devDependencies": {
+        "@types/jest": "^30.0.0",
+        "jest": "^30.2.0",
+        "ts-jest": "^29.4.5",
+        "ts-node": "^10.9.2"
     }
 }

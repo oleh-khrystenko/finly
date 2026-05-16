@@ -22,7 +22,8 @@ const variantStyles: Record<UiInputVariant, string> = {
     filled: 'bg-secondary text-foreground border border-transparent hover:bg-card focus-within:bg-card',
 };
 
-const errorStyles = 'border-destructive hover:border-destructive focus-within:border-destructive';
+const errorStyles =
+    'border-destructive hover:border-destructive focus-within:border-destructive';
 
 const UiInput = forwardRef<HTMLInputElement, UiInputProps>((props, ref) => {
     const {
@@ -62,11 +63,11 @@ const UiInput = forwardRef<HTMLInputElement, UiInputProps>((props, ref) => {
             {label && (
                 <label
                     htmlFor={inputId}
-                    className="mb-1 block text-sm font-medium text-foreground"
+                    className="text-foreground mb-1 block text-sm font-medium"
                 >
                     {label}
                     {required && (
-                        <span className="ml-1 text-destructive">*</span>
+                        <span className="text-destructive ml-1">*</span>
                     )}
                 </label>
             )}
@@ -86,7 +87,7 @@ const UiInput = forwardRef<HTMLInputElement, UiInputProps>((props, ref) => {
                     ref={ref}
                     disabled={disabled}
                     required={required}
-                    className="w-full bg-transparent outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
+                    className="placeholder:text-muted-foreground w-full bg-transparent outline-none disabled:cursor-not-allowed"
                 />
                 {IconRight && (
                     <span className={iconClass} aria-hidden>
@@ -94,11 +95,7 @@ const UiInput = forwardRef<HTMLInputElement, UiInputProps>((props, ref) => {
                     </span>
                 )}
             </div>
-            {error && (
-                <p className="mt-1 text-sm text-destructive">
-                    {error}
-                </p>
-            )}
+            {error && <p className="text-destructive mt-1 text-sm">{error}</p>}
         </div>
     );
 });

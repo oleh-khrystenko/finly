@@ -5,7 +5,7 @@ const UiHeaderShell = ({ children, className }: UiHeaderShellProps) => (
     <header
         className={composeClasses(
             'container flex h-16 items-center justify-between px-6',
-            className,
+            className
         )}
     >
         {children}

@@ -2,11 +2,10 @@ import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 
 export type UiAvatarSize = 'sm' | 'md' | 'lg' | 'xl' | '2xl';
 
-export interface UiAvatarProps
-    extends Omit<
-        ComponentPropsWithoutRef<'span'>,
-        'children' | 'role' | 'aria-label'
-    > {
+export interface UiAvatarProps extends Omit<
+    ComponentPropsWithoutRef<'span'>,
+    'children' | 'role' | 'aria-label'
+> {
     /**
      * Image source. When falsy or after a load error, the avatar
      * displays `fallback` instead. Accepts `null`/`undefined` so callers

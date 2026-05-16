@@ -1,6 +1,5 @@
 'use client';
 
-import { useLocale, useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -26,8 +25,6 @@ const DeleteAccountFormSchema = z.object({
 type DeleteAccountFormValues = z.input<typeof DeleteAccountFormSchema>;
 
 export default function DeleteAccountDialog() {
-    const t = useTranslations('delete_account_modal');
-    const locale = useLocale();
     const router = useRouter();
     const isOpen = useDeleteAccountDialogStore((s) => s.isOpen);
     const close = useDeleteAccountDialogStore((s) => s.close);
@@ -52,8 +49,8 @@ export default function DeleteAccountDialog() {
             await confirmDeleteAccount(data.password);
             close();
             form.reset();
-            toast.success(t('deleted'));
-            router.push(`/${locale}/auth/signin`);
+            toast.success('Акаунт деактивовано');
+            router.push('/auth/signin');
         } catch (err) {
             const code =
                 err instanceof AxiosError
@@ -63,17 +60,17 @@ export default function DeleteAccountDialog() {
             if (code === 'UNAUTHORIZED') {
                 form.setError('password', {
                     type: 'server',
-                    message: t('invalid_password'),
+                    message: 'Невірний пароль',
                 });
             } else if (code === 'RATE_LIMIT_EXCEEDED') {
                 form.setError('password', {
                     type: 'server',
-                    message: t('rate_limit'),
+                    message: 'Забагато запитів. Спробуйте через 15 хвилин',
                 });
             } else {
                 form.setError('password', {
                     type: 'server',
-                    message: t('error_generic'),
+                    message: 'Не вдалося виконати операцію. Спробуйте пізніше',
                 });
             }
         }
@@ -83,14 +80,18 @@ export default function DeleteAccountDialog() {
         <UiModal open={isOpen} onOpenChange={handleOpenChange}>
             <UiModalContent>
                 <UiModalHeader>
-                    <UiModalTitle>{t('title')}</UiModalTitle>
+                    <UiModalTitle>Видалення акаунту</UiModalTitle>
                 </UiModalHeader>
                 <div className="px-4 pb-6">
                     <p className="text-muted-foreground text-sm">
-                        {t('description')}
+                        Ви впевнені? Ваш акаунт буде деактивовано. У вас буде 30
+                        днів для відновлення.
                     </p>
 
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="mt-4 space-y-4">
+                    <form
+                        onSubmit={form.handleSubmit(onSubmit)}
+                        className="mt-4 space-y-4"
+                    >
                         <UiPasswordInput
                             {...form.register('password', {
                                 onChange: () => {
@@ -99,7 +100,7 @@ export default function DeleteAccountDialog() {
                                     }
                                 },
                             })}
-                            label={t('password_label')}
+                            label="Введіть пароль для підтвердження"
                             error={
                                 errors.password?.type === 'server'
                                     ? errors.password.message
@@ -118,7 +119,7 @@ export default function DeleteAccountDialog() {
                                 onClick={() => handleOpenChange(false)}
                                 disabled={isSubmitting}
                             >
-                                {t('cancel_button')}
+                                Скасувати
                             </UiButton>
                             <UiButton
                                 type="submit"
@@ -129,7 +130,7 @@ export default function DeleteAccountDialog() {
                                 {isSubmitting ? (
                                     <UiSpinner size="sm" />
                                 ) : (
-                                    t('confirm_button')
+                                    'Видалити акаунт'
                                 )}
                             </UiButton>
                         </div>

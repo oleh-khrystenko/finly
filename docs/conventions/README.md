@@ -7,15 +7,15 @@
 
 ## Index
 
-| Конвенція | Файл | Опис |
-|-----------|------|------|
-| Tone & Style | [tone.md](tone.md) | Тон та стиль user-facing повідомлень |
-| Fail Fast & Env Sync | [fail-fast.md](fail-fast.md) | Політика обов'язкових env vars + синхронізація між env.ts, .env та .env.example |
-| i18n | [i18n.md](i18n.md) | Синхронізація мови між фронтом та бекендом |
-| Modular Boundaries | [modular-boundaries.md](modular-boundaries.md) | Core/Agency розділення, однонаправлені залежності, fork checklist |
-| UI Primitives | [ui-primitives.md](ui-primitives.md) | Заборона нативних HTML-елементів, єдиний набір Ui-компонентів |
-| Design Tokens | [design-tokens.md](design-tokens.md) | Заборона хардкоджених кольорів/шрифтів, використання дизайн-токенів |
-| Overlays | [overlays.md](overlays.md) | Модалки, sheets, confirm dialogs — примітиви, Zustand store, layout mount |
+| Конвенція                 | Файл                                           | Опис                                                                                      |
+| ------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Tone & Style              | [tone.md](tone.md)                             | Тон та стиль user-facing повідомлень                                                      |
+| Fail Fast & Env Sync      | [fail-fast.md](fail-fast.md)                   | Політика обов'язкових env vars + синхронізація між env.ts, .env та .env.example           |
+| Modular Boundaries        | [modular-boundaries.md](modular-boundaries.md) | FSD layering для web, ESLint guardrails                                                   |
+| UI Primitives             | [ui-primitives.md](ui-primitives.md)           | Заборона нативних HTML-елементів, єдиний набір Ui-компонентів                             |
+| Design Tokens             | [design-tokens.md](design-tokens.md)           | Заборона хардкоджених кольорів/шрифтів, використання дизайн-токенів                       |
+| Overlays                  | [overlays.md](overlays.md)                     | Модалки, sheets, confirm dialogs — примітиви, Zustand store, layout mount                 |
+| Responsive & Mobile-First | [responsive.md](responsive.md)                 | Усі сторінки адаптивні (mobile + tablet + desktop), mobile-first як залізобетонне правило |
 
 ## Як додати нове правило
 

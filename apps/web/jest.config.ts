@@ -12,7 +12,7 @@ const config: Config = {
     },
     moduleNameMapper: {
         '^@/(.*)$': '<rootDir>/src/$1',
-        '^@cyanship/types$': '<rootDir>/../../packages/types/src/index.ts',
+        '^@finly/types$': '<rootDir>/../../packages/types/src/index.ts',
     },
     testMatch: ['<rootDir>/src/**/*.spec.{ts,tsx}'],
     setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],

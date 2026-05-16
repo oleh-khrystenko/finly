@@ -21,6 +21,7 @@ services:
             - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
             - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
             - WEB_URL=${WEB_URL}
+            - PAY_PUBLIC_URL=${PAY_PUBLIC_URL}
             - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
             - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
             - GOOGLE_CALLBACK_URL=${GOOGLE_CALLBACK_URL}
@@ -38,13 +39,12 @@ services:
             - AUTH_MAGIC_LINK_RATE_WINDOW_MIN=${AUTH_MAGIC_LINK_RATE_WINDOW_MIN}
             - AUTH_MAGIC_LINK_DEDUP_SEC=${AUTH_MAGIC_LINK_DEDUP_SEC}
             - ACCOUNT_DELETION_GRACE_DAYS=${ACCOUNT_DELETION_GRACE_DAYS}
-            - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY}
-            - BRIEF_NOTIFICATION_EMAIL=${BRIEF_NOTIFICATION_EMAIL}
+            - ORPHAN_REMINDER_FIRST_DAYS=${ORPHAN_REMINDER_FIRST_DAYS}
+            - ORPHAN_REMINDER_FINAL_DAYS=${ORPHAN_REMINDER_FINAL_DAYS}
+            - ORPHAN_CLEANUP_DELETION_DAYS=${ORPHAN_CLEANUP_DELETION_DAYS}
             - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
             - AI_CHAT_MAX_TOKENS=${AI_CHAT_MAX_TOKENS}
             - AI_CHAT_IP_LIMIT=${AI_CHAT_IP_LIMIT}
-            - AI_CHAT_FREE_LIMIT=${AI_CHAT_FREE_LIMIT}
-            - AI_CHAT_BONUS_AMOUNT=${AI_CHAT_BONUS_AMOUNT}
             - R2_ACCOUNT_ID=${R2_ACCOUNT_ID}
             - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
             - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
@@ -52,6 +52,25 @@ services:
             - R2_PUBLIC_URL=${R2_PUBLIC_URL}
         depends_on:
             - redis
+        networks:
+            - internal
+
+    # One-shot service для DB-міграцій. Активується через
+    # `docker compose --profile migrations run --rm api-migrations` у CI
+    # (deploy.yml) перед `docker compose up -d`. Поза profile `migrations`
+    # service не стартує разом з API/Web — тому регулярний `up` не тригерить
+    # re-run. Env набір — той самий, що в `api`, але вирізаний до того, що
+    # реально треба міграціям (Mongo only). Ділить network з `api`/`redis`,
+    # бо MongoDB Atlas-URI йде назовні; redis dependency не потрібен.
+    api-migrations:
+        profiles: [migrations]
+        build:
+            context: .
+            dockerfile: ./apps/api/Dockerfile
+            target: migrations
+        environment:
+            - NODE_ENV=${NODE_ENV}
+            - MONGODB_URI=${MONGODB_URI}
         networks:
             - internal
 
@@ -65,10 +84,8 @@ services:
                 NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
                 NEXT_PUBLIC_PAYMENTS_SUBSCRIPTION_ENABLED: ${NEXT_PUBLIC_PAYMENTS_SUBSCRIPTION_ENABLED}
                 NEXT_PUBLIC_PAYMENTS_ONE_OFF_ENABLED: ${NEXT_PUBLIC_PAYMENTS_ONE_OFF_ENABLED}
-                NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${NEXT_PUBLIC_TURNSTILE_SITE_KEY}
                 NEXT_PUBLIC_STORAGE_HOSTNAME: ${NEXT_PUBLIC_STORAGE_HOSTNAME}
-                NEXT_PUBLIC_DEMO_VIDEO_URL: ${NEXT_PUBLIC_DEMO_VIDEO_URL}
-                NEXT_PUBLIC_DEMO_VIDEO_POSTER_URL: ${NEXT_PUBLIC_DEMO_VIDEO_POSTER_URL}
+                NEXT_PUBLIC_PAY_PUBLIC_URL: ${NEXT_PUBLIC_PAY_PUBLIC_URL}
         restart: unless-stopped
         environment:
             - NODE_ENV=${NODE_ENV}
@@ -77,6 +94,7 @@ services:
             - NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL}
             - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
             - NEXT_PUBLIC_STORAGE_HOSTNAME=${NEXT_PUBLIC_STORAGE_HOSTNAME}
+            - NEXT_PUBLIC_PAY_PUBLIC_URL=${NEXT_PUBLIC_PAY_PUBLIC_URL}
         ports:
             - '127.0.0.1:${WEB_PORT}:${WEB_PORT}'
         depends_on:

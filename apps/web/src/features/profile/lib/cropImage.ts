@@ -1,5 +1,5 @@
 import type { Area } from 'react-easy-crop';
-import { AVATAR } from '@cyanship/types';
+import { AVATAR } from '@finly/types';
 
 /**
  * Load an image into an `HTMLImageElement` and resolve once it's fully decoded.

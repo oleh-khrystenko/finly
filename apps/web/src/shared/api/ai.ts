@@ -1,4 +1,4 @@
-import type { ChatMessageItem, AiChatSSEEvent } from '@cyanship/types';
+import type { ChatMessageItem, AiChatSSEEvent } from '@finly/types';
 
 import { apiClient, getAccessToken, setAccessToken } from './client';
 import { ENV } from '@/shared/config';
@@ -7,7 +7,7 @@ import { getTimezone } from '@/shared/lib';
 export class AiChatError extends Error {
     constructor(
         public readonly code: string,
-        public readonly status: number,
+        public readonly status: number
     ) {
         super(`AI Chat error: ${code} (${status})`);
         this.name = 'AiChatError';
@@ -16,7 +16,7 @@ export class AiChatError extends Error {
 
 async function doStreamRequest(
     message: string,
-    signal?: AbortSignal,
+    signal?: AbortSignal
 ): Promise<Response> {
     const token = getAccessToken();
 
@@ -41,7 +41,7 @@ async function tryRefreshToken(): Promise<boolean> {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ timezone: getTimezone() }),
                 credentials: 'include',
-            },
+            }
         );
 
         if (!response.ok) return false;
@@ -68,7 +68,7 @@ async function parseErrorCode(response: Response): Promise<string> {
 
 async function readSSEStream(
     response: Response,
-    onEvent: (event: AiChatSSEEvent) => void,
+    onEvent: (event: AiChatSSEEvent) => void
 ): Promise<void> {
     const reader = response.body?.getReader();
     if (!reader) return;
@@ -109,7 +109,7 @@ async function readSSEStream(
 export async function streamAiChat(
     message: string,
     onEvent: (event: AiChatSSEEvent) => void,
-    signal?: AbortSignal,
+    signal?: AbortSignal
 ): Promise<void> {
     let response = await doStreamRequest(message, signal);
 

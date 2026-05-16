@@ -1,20 +1,20 @@
 'use client';
 
 import { useState } from 'react';
-import { useTranslations } from 'next-intl';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AxiosError } from 'axios';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { Pencil, ShieldCheck, ShieldOff } from 'lucide-react';
-import type { UserProfile } from '@cyanship/types';
-import { passwordSchema } from '@cyanship/types';
+import type { UserProfile } from '@finly/types';
+import { passwordSchema } from '@finly/types';
 import UiButton from '@/shared/ui/UiButton';
 import UiPasswordInput from '@/shared/ui/UiPasswordInput';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
 import { setPassword, getMe } from '@/shared/api';
+import { mapValidationCode } from '@/shared/lib';
 import { useAuthStore } from '@/entities/user';
 import ChangePasswordForm from './ChangePasswordForm';
 
@@ -32,7 +32,6 @@ interface SecuritySectionProps {
 }
 
 const SecuritySection = ({ user, mode }: SecuritySectionProps) => {
-    const t = useTranslations('profile_page.security');
     const setUser = useAuthStore((s) => s.setUser);
 
     const [editing, setEditing] = useState(false);
@@ -49,9 +48,7 @@ const SecuritySection = ({ user, mode }: SecuritySectionProps) => {
 
     const isSetMode =
         !hasPassword &&
-        (mode === 'new' ||
-            mode === 'set-password' ||
-            mode === null);
+        (mode === 'new' || mode === 'set-password' || mode === null);
 
     const isChangeMode = hasPassword && (mode === null || mode === undefined);
 
@@ -68,7 +65,9 @@ const SecuritySection = ({ user, mode }: SecuritySectionProps) => {
         if (!result.success) {
             form.setError('password', {
                 type: 'validate',
-                message: t('password_too_short'),
+                message:
+                    result.error.issues[0]?.message ??
+                    'INVALID_PASSWORD_TOO_SHORT',
             });
             return;
         }
@@ -77,7 +76,7 @@ const SecuritySection = ({ user, mode }: SecuritySectionProps) => {
             await setPassword(data.password);
             const me = await getMe();
             setUser(me);
-            toast.success(t('password_set'));
+            toast.success('Пароль встановлено');
             form.reset();
         } catch (err) {
             const code =
@@ -86,16 +85,16 @@ const SecuritySection = ({ user, mode }: SecuritySectionProps) => {
                     : undefined;
 
             if (code === 'RATE_LIMIT_EXCEEDED') {
-                toast.error(t('error_rate_limit'));
+                toast.error('Забагато запитів. Спробуйте через 15 хвилин');
             } else {
-                toast.error(t('error_generic'));
+                toast.error('Не вдалося виконати операцію. Спробуйте пізніше');
             }
         }
     };
 
     return (
         <UiSectionCard
-            title={t('heading')}
+            title="Безпека"
             headerRight={
                 isViewMode ? (
                     <UiButton
@@ -104,7 +103,7 @@ const SecuritySection = ({ user, mode }: SecuritySectionProps) => {
                         IconLeft={<Pencil />}
                         onClick={() => setEditing(true)}
                     >
-                        {t('edit_button')}
+                        Змінити
                     </UiButton>
                 ) : undefined
             }
@@ -112,8 +111,8 @@ const SecuritySection = ({ user, mode }: SecuritySectionProps) => {
             {isSetMode && (
                 <p className="text-muted-foreground mt-1 text-sm">
                     {isPasswordOptional
-                        ? t('set_password_optional')
-                        : t('set_password')}
+                        ? 'Встановити пароль (опціонально)'
+                        : 'Встановити пароль'}
                 </p>
             )}
 
@@ -122,12 +121,12 @@ const SecuritySection = ({ user, mode }: SecuritySectionProps) => {
                 <dl className="mt-5">
                     <div className="flex items-center gap-2">
                         <dt className="text-muted-foreground text-sm">
-                            {t('password_label')}
+                            Пароль
                         </dt>
                         <dd className="flex items-center gap-1.5">
-                            <ShieldCheck className="size-4 text-success" />
+                            <ShieldCheck className="text-success size-4" />
                             <span className="text-success text-sm font-medium">
-                                {t('password_active')}
+                                Встановлено
                             </span>
                         </dd>
                     </div>
@@ -136,11 +135,14 @@ const SecuritySection = ({ user, mode }: SecuritySectionProps) => {
 
             {/* Set password mode */}
             {isSetMode && (
-                <form onSubmit={form.handleSubmit(onSetPassword)} className="mt-5 space-y-4">
+                <form
+                    onSubmit={form.handleSubmit(onSetPassword)}
+                    className="mt-5 space-y-4"
+                >
                     <div className="flex items-center gap-2">
-                        <ShieldOff className="size-4 text-muted-foreground" />
+                        <ShieldOff className="text-muted-foreground size-4" />
                         <span className="text-muted-foreground text-sm">
-                            {t('password_not_set')}
+                            Пароль не встановлено
                         </span>
                     </div>
                     <UiPasswordInput
@@ -151,26 +153,25 @@ const SecuritySection = ({ user, mode }: SecuritySectionProps) => {
                                 }
                             },
                         })}
-                        placeholder={t('password_placeholder')}
-                        error={errors.password?.message}
+                        placeholder="Мінімум 8 символів"
+                        error={mapValidationCode(errors.password?.message)}
                         required={!isPasswordOptional}
                         size="lg"
-                        showLabel={t('show_password')}
-                        hideLabel={t('hide_password')}
+                        showLabel="Показати пароль"
+                        hideLabel="Сховати пароль"
                     />
                     <UiButton
                         type="submit"
                         variant="filled"
                         size="md"
                         disabled={
-                            isSubmitting ||
-                            (!isPasswordOptional && !password)
+                            isSubmitting || (!isPasswordOptional && !password)
                         }
                     >
                         {isSubmitting ? (
                             <UiSpinner size="sm" />
                         ) : (
-                            t('set_password')
+                            'Встановити пароль'
                         )}
                     </UiButton>
                 </form>

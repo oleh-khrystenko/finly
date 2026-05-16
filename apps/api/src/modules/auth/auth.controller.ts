@@ -13,18 +13,18 @@ import { AuthGuard } from '@nestjs/passport';
 import {
     AuthResponse,
     CheckEmailResponse,
-    Lang,
     MAGIC_LINK_PURPOSE,
     RESPONSE_CODE,
     type ApiMessageResponse,
-} from '@cyanship/types';
-import { CookieOptions, Request, Response } from 'express';
+} from '@finly/types';
+import { Request, Response } from 'express';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { SkipOnboarding } from '../../common/decorators/skip-onboarding.decorator';
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
 import { ENV } from '../../config/env';
 import { UserDocument } from '../users/schemas/user.schema';
+import { mapUserToProfileResponse } from '../users/user-profile.mapper';
 import { AuthService } from './auth.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
@@ -32,18 +32,10 @@ import { CheckEmailDto } from './dto/check-email.dto';
 import { LoginPasswordDto } from './dto/login-password.dto';
 import { SendMagicLinkDto } from './dto/send-magic-link.dto';
 import { SetPasswordDto } from './dto/set-password.dto';
-import { VerifyMagicLinkDto } from './dto/verify-magic-link.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { VerifyPasswordDto } from './dto/verify-password.dto';
+import { REFRESH_COOKIE_OPTIONS } from './refresh-cookie.config';
 import { GoogleValidatedUser } from './strategies/google.strategy';
-
-const REFRESH_COOKIE_OPTIONS: CookieOptions = {
-    httpOnly: true,
-    secure: ENV.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-};
 
 @Controller('auth')
 export class AuthController {
@@ -104,18 +96,7 @@ export class AuthController {
 
         return {
             data: {
-                user: {
-                    id: user.id as string,
-                    email: user.email,
-                    profile: user.profile,
-                    executions: {
-                        balance: user.executions.balance,
-                        freeReportUsed: user.executions.freeReportUsed,
-                    },
-                    hasPassword: !!user.passwordHash,
-                    deletedAt: user.deletedAt ?? null,
-                    preferredLang: user.preferredLang as Lang,
-                },
+                user: mapUserToProfileResponse(user),
                 accessToken,
                 ...(accountDeleted && { accountDeleted }),
             },
@@ -133,56 +114,17 @@ export class AuthController {
         await this.authService.sendMagicLink(
             dto.email,
             dto.purpose ?? MAGIC_LINK_PURPOSE.LOGIN,
-            dto.lang,
-            dto.redirectTo
+            dto.redirectTo,
+            {
+                landingDraft: dto.landingDraft,
+                claimIdempotencyKey: dto.claimIdempotencyKey,
+                termsVersion: dto.termsVersion,
+            }
         );
         return {
             data: {
                 code: RESPONSE_CODE.MAGIC_LINK_SENT,
                 message: 'Magic link sent',
-            },
-        };
-    }
-
-    @Post('magic-link/verify')
-    async verifyMagicLink(
-        @Body() dto: VerifyMagicLinkDto,
-        @Res({ passthrough: true }) res: Response
-    ): Promise<{ data: AuthResponse | { deleted: true; message: string } }> {
-        const result = await this.authService.verifyMagicLink(dto.token);
-
-        if (result.deleted) {
-            res.clearCookie('bid_refresh', { path: '/' });
-            return {
-                data: {
-                    deleted: true,
-                    purpose: MAGIC_LINK_PURPOSE.DELETE_ACCOUNT,
-                    message: result.message,
-                },
-            };
-        }
-
-        const { user, tokens, purpose, accountDeleted } = result;
-
-        res.cookie('bid_refresh', tokens.refreshToken, REFRESH_COOKIE_OPTIONS);
-
-        return {
-            data: {
-                user: {
-                    id: user.id as string,
-                    email: user.email,
-                    profile: user.profile,
-                    executions: {
-                        balance: user.executions.balance,
-                        freeReportUsed: user.executions.freeReportUsed,
-                    },
-                    hasPassword: !!user.passwordHash,
-                    deletedAt: user.deletedAt ?? null,
-                    preferredLang: user.preferredLang as Lang,
-                },
-                accessToken: tokens.accessToken,
-                purpose,
-                ...(accountDeleted && { accountDeleted }),
             },
         };
     }

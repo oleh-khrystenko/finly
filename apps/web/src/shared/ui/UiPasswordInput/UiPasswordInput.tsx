@@ -41,13 +41,13 @@ const UiPasswordInput = forwardRef<HTMLInputElement, UiPasswordInputProps>(
                         variant="icon-compact"
                         size={size}
                         onClick={() => setVisible((v) => !v)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2"
+                        className="absolute top-1/2 right-3 -translate-y-1/2"
                         aria-label={visible ? hideLabel : showLabel}
                         IconLeft={visible ? <EyeOff /> : <Eye />}
                     />
                 </div>
                 {error && (
-                    <p className="mt-1 text-sm text-destructive">{error}</p>
+                    <p className="text-destructive mt-1 text-sm">{error}</p>
                 )}
             </div>
         );

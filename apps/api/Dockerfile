@@ -31,6 +31,26 @@ RUN pnpm --filter ./apps/api build
 # Формуємо мінімальний деплой-пакет з прод-залежностями
 RUN pnpm deploy --filter ./apps/api --prod --legacy /out
 
+# ---------- migrations ----------
+# One-shot контейнер для DB-міграцій. Extends `build` stage, де ts-node, dev
+# deps і scripts/ ще присутні (на відміну від обрізаного через
+# `pnpm deploy --prod` runtime). Запускається перед `docker compose up -d api`
+# через окремий compose-profile (`migrations`); failure блокує deploy.
+#
+# **CMD = `migration:all`-orchestrator** (Sprint 4 review fix). Раніше CMD
+# хардкоджено на одну міграцію (slug-lower); кожна нова міграція потребувала
+# update Dockerfile + deploy.yml + risk забути одне з двох. Тепер
+# `migration:all` chain-ить усі міграції chronologically (ідемпотентні —
+# re-run cheap no-op). Додавання нової міграції зводиться до:
+#   1) новий `*.ts` script + `*.spec.ts`
+#   2) npm-script `migration:<slug>` + додаток у `migration:all` chain
+#   3) запис у `scripts/migrations/README.md` registry
+# Дeploy.yml не міняється.
+FROM build AS migrations
+WORKDIR /app/apps/api
+ENV NODE_ENV=production
+CMD ["pnpm", "run", "migration:all"]
+
 # ---------- runtime ----------
 FROM node:20-alpine AS runtime
 WORKDIR /app

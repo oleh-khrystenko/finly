@@ -15,7 +15,6 @@ const mockUserDoc = (overrides = {}) => ({
         avatar: 'https://photo.url',
     },
     executions: { balance: 0, freeReportUsed: false, activeReservation: null },
-    preferredLang: 'uk',
     lastLoginAt: null as Date | null,
     save: jest.fn().mockReturnThis(),
     ...overrides,
@@ -432,54 +431,6 @@ describe('UsersService', () => {
         });
     });
 
-    describe('grantAiBonus', () => {
-        const userId = '507f1f77bcf86cd799439011';
-
-        it('grants bonus atomically with $ne guard and returns true on first call', async () => {
-            mockModel.findOneAndUpdate.mockResolvedValue({ _id: userId });
-
-            const granted = await service.grantAiBonus(userId);
-
-            expect(granted).toBe(true);
-            expect(mockModel.findOneAndUpdate).toHaveBeenCalledWith(
-                { _id: userId, 'ai.bonusGranted': { $ne: true } },
-                { $set: { 'ai.bonusGranted': true } },
-                expect.anything()
-            );
-        });
-
-        it('returns false when bonus already granted (guard miss)', async () => {
-            mockModel.findOneAndUpdate.mockResolvedValue(null);
-
-            const granted = await service.grantAiBonus(userId);
-
-            expect(granted).toBe(false);
-        });
-
-        it('returns false when user does not exist', async () => {
-            mockModel.findOneAndUpdate.mockResolvedValue(null);
-
-            const granted = await service.grantAiBonus('nonexistent');
-
-            expect(granted).toBe(false);
-        });
-    });
-
-    describe('updateLang', () => {
-        it('should update preferredLang for user', async () => {
-            mockModel.findByIdAndUpdate.mockReturnValue({
-                exec: jest.fn().mockResolvedValue(undefined),
-            });
-
-            await service.updateLang('507f1f77bcf86cd799439011', 'en');
-
-            expect(mockModel.findByIdAndUpdate).toHaveBeenCalledWith(
-                '507f1f77bcf86cd799439011',
-                { preferredLang: 'en' }
-            );
-        });
-    });
-
     describe('setPasswordHash', () => {
         it('should store password hash via findByIdAndUpdate', async () => {
             mockModel.findByIdAndUpdate.mockResolvedValue(undefined);
@@ -561,21 +512,6 @@ describe('UsersService', () => {
             expect(result).toBe(updated);
         });
 
-        it('should update only preferredLang when only lang provided', async () => {
-            const updated = mockUserDoc({ preferredLang: 'en' });
-            mockModel.findByIdAndUpdate.mockResolvedValue(updated);
-
-            await service.updateProfile('507f1f77bcf86cd799439011', {
-                preferredLang: 'en',
-            });
-
-            expect(mockModel.findByIdAndUpdate).toHaveBeenCalledWith(
-                '507f1f77bcf86cd799439011',
-                { preferredLang: 'en' },
-                { new: true }
-            );
-        });
-
         it('should not include undefined fields in update', async () => {
             mockModel.findByIdAndUpdate.mockResolvedValue(mockUserDoc());
 
@@ -587,7 +523,284 @@ describe('UsersService', () => {
             expect(updateArg).toEqual({ 'profile.firstName': 'Only' });
             expect(updateArg).not.toHaveProperty('profile.lastName');
             expect(updateArg).not.toHaveProperty('profile.avatar');
-            expect(updateArg).not.toHaveProperty('preferredLang');
+        });
+
+        // Sprint 3 §3.4 — bookkeeper toggle (рішення E5).
+
+        it('мутує worksAsBookkeeper на корені user-документа (не у profile)', async () => {
+            mockModel.findByIdAndUpdate.mockResolvedValue(
+                mockUserDoc({ worksAsBookkeeper: true })
+            );
+
+            await service.updateProfile('507f1f77bcf86cd799439011', {
+                worksAsBookkeeper: true,
+            });
+
+            const updateArg = mockModel.findByIdAndUpdate.mock.calls[0][1];
+            expect(updateArg).toEqual({ worksAsBookkeeper: true });
+            expect(updateArg).not.toHaveProperty('profile.worksAsBookkeeper');
+        });
+
+        it('приймає worksAsBookkeeper=false (вимкнення режиму)', async () => {
+            mockModel.findByIdAndUpdate.mockResolvedValue(
+                mockUserDoc({ worksAsBookkeeper: false })
+            );
+
+            await service.updateProfile('507f1f77bcf86cd799439011', {
+                worksAsBookkeeper: false,
+            });
+
+            const updateArg = mockModel.findByIdAndUpdate.mock.calls[0][1];
+            expect(updateArg).toEqual({ worksAsBookkeeper: false });
+        });
+
+        it('combined update: profile-поле + worksAsBookkeeper в одному виклику', async () => {
+            mockModel.findByIdAndUpdate.mockResolvedValue(mockUserDoc());
+
+            await service.updateProfile('507f1f77bcf86cd799439011', {
+                firstName: 'Олег',
+                worksAsBookkeeper: true,
+            });
+
+            const updateArg = mockModel.findByIdAndUpdate.mock.calls[0][1];
+            expect(updateArg).toEqual({
+                'profile.firstName': 'Олег',
+                worksAsBookkeeper: true,
+            });
+        });
+    });
+
+    describe('setPendingPostLoginTarget (Sprint 11)', () => {
+        const userId = '507f1f77bcf86cd799439011';
+
+        it('writes valid same-origin path via $set', async () => {
+            mockModel.updateOne.mockResolvedValue({ matchedCount: 1 });
+
+            await service.setPendingPostLoginTarget(
+                userId,
+                '/business/biz/account/acc?completed-from=landing'
+            );
+
+            expect(mockModel.updateOne).toHaveBeenCalledWith(
+                { _id: userId },
+                {
+                    $set: {
+                        pendingPostLoginTarget:
+                            '/business/biz/account/acc?completed-from=landing',
+                    },
+                }
+            );
+        });
+
+        it('throws INVALID_REDIRECT_TARGET on missing leading slash', async () => {
+            await expect(
+                service.setPendingPostLoginTarget(userId, 'evil.com')
+            ).rejects.toMatchObject({
+                response: { code: 'INVALID_REDIRECT_TARGET' },
+            });
+            expect(mockModel.updateOne).not.toHaveBeenCalled();
+        });
+
+        it('throws INVALID_REDIRECT_TARGET on absolute URL with protocol', async () => {
+            await expect(
+                service.setPendingPostLoginTarget(userId, 'http://attacker.com')
+            ).rejects.toMatchObject({
+                response: { code: 'INVALID_REDIRECT_TARGET' },
+            });
+            expect(mockModel.updateOne).not.toHaveBeenCalled();
+        });
+
+        it('throws INVALID_REDIRECT_TARGET on protocol-relative URL', async () => {
+            await expect(
+                service.setPendingPostLoginTarget(userId, '//attacker.com')
+            ).rejects.toMatchObject({
+                response: { code: 'INVALID_REDIRECT_TARGET' },
+            });
+            expect(mockModel.updateOne).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('clearPendingPostLoginTarget (Sprint 11)', () => {
+        it('issues $unset on the field', async () => {
+            mockModel.updateOne.mockResolvedValue({ matchedCount: 1 });
+
+            await service.clearPendingPostLoginTarget(
+                '507f1f77bcf86cd799439011'
+            );
+
+            expect(mockModel.updateOne).toHaveBeenCalledWith(
+                { _id: '507f1f77bcf86cd799439011' },
+                { $unset: { pendingPostLoginTarget: 1 } }
+            );
+        });
+    });
+
+    describe('stampProfileCompletionReminder (Sprint 12 §12.1a)', () => {
+        const userId = '507f1f77bcf86cd799439011';
+
+        it('Stage 1 claim — atomic updateOne з filter null + $set Date; returns true on match', async () => {
+            mockModel.updateOne.mockResolvedValue({ matchedCount: 1 });
+
+            const claimed = await service.stampProfileCompletionReminder(
+                userId,
+                'first'
+            );
+
+            expect(claimed).toBe(true);
+            expect(mockModel.updateOne).toHaveBeenCalledWith(
+                {
+                    _id: userId,
+                    'profileCompletionReminders.firstReminderSentAt': null,
+                },
+                {
+                    $set: {
+                        'profileCompletionReminders.firstReminderSentAt':
+                            expect.any(Date),
+                    },
+                }
+            );
+        });
+
+        it('Stage 1 idempotent skip — matchedCount=0 returns false (already-stamped race-loser)', async () => {
+            mockModel.updateOne.mockResolvedValue({ matchedCount: 0 });
+
+            const claimed = await service.stampProfileCompletionReminder(
+                userId,
+                'first'
+            );
+
+            expect(claimed).toBe(false);
+        });
+
+        it('Stage 2 claim — filter включає prereq-guard firstReminderSentAt: $ne null', async () => {
+            mockModel.updateOne.mockResolvedValue({ matchedCount: 1 });
+
+            const claimed = await service.stampProfileCompletionReminder(
+                userId,
+                'final'
+            );
+
+            expect(claimed).toBe(true);
+            expect(mockModel.updateOne).toHaveBeenCalledWith(
+                {
+                    _id: userId,
+                    'profileCompletionReminders.finalWarningSentAt': null,
+                    'profileCompletionReminders.firstReminderSentAt': {
+                        $ne: null,
+                    },
+                },
+                {
+                    $set: {
+                        'profileCompletionReminders.finalWarningSentAt':
+                            expect.any(Date),
+                    },
+                }
+            );
+        });
+
+        it('Stage 2 skip без prereq stamp — matchedCount=0 (filter не зматчив)', async () => {
+            // БД-state: firstReminderSentAt=null → prereq-guard не пропустив.
+            mockModel.updateOne.mockResolvedValue({ matchedCount: 0 });
+
+            const claimed = await service.stampProfileCompletionReminder(
+                userId,
+                'final'
+            );
+
+            expect(claimed).toBe(false);
+        });
+    });
+
+    describe('resetSingleStamp (Sprint 12 §12.1a)', () => {
+        const userId = '507f1f77bcf86cd799439011';
+
+        it('first → $set null на firstReminderSentAt без conditional filter', async () => {
+            mockModel.updateOne.mockResolvedValue({ matchedCount: 1 });
+
+            await service.resetSingleStamp(userId, 'first');
+
+            expect(mockModel.updateOne).toHaveBeenCalledWith(
+                { _id: userId },
+                {
+                    $set: {
+                        'profileCompletionReminders.firstReminderSentAt': null,
+                    },
+                }
+            );
+        });
+
+        it('final → $set null на finalWarningSentAt без conditional filter', async () => {
+            mockModel.updateOne.mockResolvedValue({ matchedCount: 1 });
+
+            await service.resetSingleStamp(userId, 'final');
+
+            expect(mockModel.updateOne).toHaveBeenCalledWith(
+                { _id: userId },
+                {
+                    $set: {
+                        'profileCompletionReminders.finalWarningSentAt': null,
+                    },
+                }
+            );
+        });
+    });
+
+    describe('finalizeOrphanCleanup (Sprint 12 §12.1a)', () => {
+        it('atomic single updateOne — clears stamps AND $unset pendingPostLoginTarget', async () => {
+            mockModel.updateOne.mockResolvedValue({ matchedCount: 1 });
+
+            await service.finalizeOrphanCleanup('507f1f77bcf86cd799439011');
+
+            expect(mockModel.updateOne).toHaveBeenCalledTimes(1);
+            expect(mockModel.updateOne).toHaveBeenCalledWith(
+                { _id: '507f1f77bcf86cd799439011' },
+                {
+                    $set: {
+                        'profileCompletionReminders.firstReminderSentAt': null,
+                        'profileCompletionReminders.finalWarningSentAt': null,
+                    },
+                    $unset: { pendingPostLoginTarget: 1 },
+                }
+            );
+        });
+    });
+
+    describe('stampAcceptedTerms (Sprint 10 §SP-12)', () => {
+        it('idempotent filter — викликає updateOne з $ne на termsVersion', async () => {
+            mockModel.updateOne.mockResolvedValue({ matchedCount: 0 });
+            await service.stampAcceptedTerms('507f1f77bcf86cd799439011', 'v2');
+
+            expect(mockModel.updateOne).toHaveBeenCalledWith(
+                {
+                    _id: '507f1f77bcf86cd799439011',
+                    termsVersion: { $ne: 'v2' },
+                },
+                {
+                    $set: {
+                        termsAcceptedAt: expect.any(Date),
+                        termsVersion: 'v2',
+                    },
+                }
+            );
+        });
+
+        it('overwrite на новий version — той самий update-shape, новий version у $set', async () => {
+            mockModel.updateOne.mockResolvedValue({ matchedCount: 1 });
+            await service.stampAcceptedTerms('507f1f77bcf86cd799439011', 'v3');
+
+            const updateArg = mockModel.updateOne.mock.calls[0][1];
+            expect(updateArg.$set.termsVersion).toBe('v3');
+            expect(updateArg.$set.termsAcceptedAt).toBeInstanceOf(Date);
+        });
+
+        it('no-op коли version === current — filter $ne блокує match (matchedCount=0)', async () => {
+            // Імітуємо БД-state: termsVersion='v2'. Filter $ne: v2 не матчить
+            // документ — updateOne повертає matchedCount=0. Метод повертає
+            // void без помилки (idempotent semantics).
+            mockModel.updateOne.mockResolvedValue({ matchedCount: 0 });
+            await expect(
+                service.stampAcceptedTerms('507f1f77bcf86cd799439011', 'v2')
+            ).resolves.toBeUndefined();
         });
     });
 
