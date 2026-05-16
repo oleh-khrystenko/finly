@@ -23,6 +23,13 @@ interface ProtectedLayoutProps {
  * AuthGuard теж. Layout стає composite, але SSR-friendly (server-render
  * лише `<Header />` + delegate-render до children).
  */
+// Protected pages вимагають runtime auth-check через `AuthGuard` (client-side
+// authStore). Static prerender видавав би HTML без auth-state → flicker або
+// build-time bailout для client-only hooks (`useSearchParams` у billing/cancel,
+// billing/success, business/new, profile, account/new). `force-dynamic`
+// узгоджує семантику з тим, що group і так не кешуватиметься.
+export const dynamic = 'force-dynamic';
+
 export default function ProtectedLayout({ children }: ProtectedLayoutProps) {
     return (
         <>
