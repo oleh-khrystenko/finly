@@ -33,7 +33,8 @@ Replace these placeholders everywhere:
 | # | File | What it does |
 |---|---|---|
 | 0 | `README.md` | This file. Index + preflight. |
-| 00 | `00-prod-checklist.md` | **Run BEFORE `01`**: збирає всі prod-значення (DNS, certs, secrets, .env, GitHub Actions). Без нього `05` зламається на `getEnvVar(...) throw`. |
+| 00 | `00-prod-checklist.md` | **Run BEFORE `01`**: збирає всі prod-значення (OVH VPS purchase, Claude Code CLI bootstrap, DNS, certs, secrets, .env, GitHub Actions). Без нього `05` зламається на `getEnvVar(...) throw`. |
+| AI | `AI-RUNBOOK.md` | **Опціонально, замість ручного `01..08`**: self-contained prompt для Claude Code CLI, запущеного на VPS після §0.5 чек-листа. AI виконує phases A..Z з handoff-points на `.env`, Origin Cert, R2 backup creds. Усі safety-constraints inline (нема `CLAUDE.md` на VPS). |
 | 1 | `01-server-bootstrap.md` | Provision VPS, first SSH, hostname, timezone, NTP, base updates. |
 | 2 | `02-security-hardening.md` | Non-root sudo, key-only SSH, sshd hardening, UFW, fail2ban, secrets perms. |
 | 3 | `03-swap-and-tuning.md` | Swap file, `vm.swappiness`, sysctl tweaks, journal limits. |

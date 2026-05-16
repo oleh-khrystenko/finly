@@ -10,6 +10,144 @@
 | `<PROJECT>` | `finly` |
 | `<USER>` | `ubuntu` (рекомендований non-root sudo user — налаштовується у §02) |
 
+## 0. OVH VPS purchase walkthrough
+
+Робиться **до** початку playbook-у `01..08`. Очікувано: ~10 хвилин у OVH UI + ~5 хвилин на provisioning.
+
+1. Створи акаунт на **[ovhcloud.com](https://www.ovhcloud.com)** (якщо ще немає). Білінг — карта або bank transfer.
+2. У навігації: **Hosting → VPS → Order VPS** (або прямо [ovhcloud.com/uk/vps/](https://www.ovhcloud.com/uk/vps/)).
+3. **Plan:** для Finly — **VPS-2** (раніше називався `vps-2024-le-2`):
+   - 2 vCPU, **8 GB RAM**, 80 GB NVMe SSD, 500 Mbps unmetered
+   - Це мінімум: Next.js + NestJS build процеси разом їдять >4 GB RAM peak. VPS-1 (4 GB) ризикує OOM під час `compose up --build`.
+4. **Datacenter:** для UA users — **Warsaw (Poland)** або **Frankfurt (Germany)**. Strasbourg/Gravelines теж працюють, але латентність +20-30ms.
+5. **OS:** Ubuntu **24.04 LTS Server** (no GUI). Не Debian, не Ubuntu 22.04 — playbook валідовано конкретно на 24.04.
+6. **SSH key:** на цьому кроці OVH дає upload-нути public key. Згенеруй локально на ноутбуці нову пару спеціально для VPS:
+   ```bash
+   ssh-keygen -t ed25519 -f ~/.ssh/finly_vps -N "" -C "finly-prod-root@$(hostname)"
+   cat ~/.ssh/finly_vps.pub   # це upload-уй в OVH UI
+   ```
+   Private key (`~/.ssh/finly_vps`) залишається на ноутбуці; **не комітити** в репо.
+7. **Backups:** включи **Automated Backups** (~+20% до місячної ціни). Це провайдер-side daily snapshots — окремо від `08-backups.md` restic-схеми, дублювання навмисне. Якщо бюджет тісний — пропусти, але §08 restic-flow стає єдиним рятувальним кругом.
+8. **Period:** monthly billing для початку (≈€10-12/міс для VPS-2 Comfort у Warsaw). Annual дає ~10% знижки, але міняти план потім складніше.
+9. **Anti-DDoS:** **OVH Game DDoS protection НЕ потрібен** (це для game-servers, дорого, додаткова латентність). Базовий OVH anti-DDoS уже включений безкоштовно.
+10. **Pay** → wait for confirmation email (~2-5 хв) → email міститиме: **IPv4**, **IPv6**, **root SSH credentials**.
+
+> Збережи IPv4 у password manager — це `<IPV4>` для всього playbook.
+>
+> **Snapshot:** після того як playbook §01..§08 пройдено і smoke-tests зелені — зайди в OVH UI → VPS → Snapshots → Take Snapshot ("baseline-prod-ready"). Це безкоштовний rollback-checkpoint на випадок якщо щось зламаєш через тиждень.
+
+## 0.5. Claude Code CLI installation on VPS (manual bootstrap)
+
+Якщо ти плануєш делегувати steps §01..§08 (Phase 2) AI-агенту через `AI-RUNBOOK.md` — спочатку треба **вручну** довести VPS до стану, де Claude Code CLI зможе на ньому запуститися. Це ~10 хвилин ручної роботи; після цього AI бере все на себе.
+
+> Якщо ти проходиш playbook вручну, без AI — пропусти цей розділ і йди прямо до `01-server-bootstrap.md`.
+
+### 0.5.1. Первинний root SSH
+
+```bash
+ssh -i ~/.ssh/finly_vps ubuntu@<IPV4>
+# Або, якщо OVH створив root-only access:
+ssh -i ~/.ssh/finly_vps root@<IPV4>
+```
+
+Якщо OVH запропонував зміну root password при першому login — встанови сильний (32+ chars), збережи у password manager. Він знадобиться рівно один раз.
+
+### 0.5.2. Bare-minimum apt baseline
+
+Це підмножина того, що `01-server-bootstrap.md` зробить повноцінно потім. Зараз — мінімум, щоб поставити Node:
+
+```bash
+apt update
+apt -y install curl ca-certificates gnupg
+```
+
+### 0.5.3. Non-root sudo user
+
+Claude Code (і весь подальший deploy) має жити під **non-root** user-ом. Якщо ти зайшов як root:
+
+```bash
+adduser --disabled-password --gecos "" ubuntu
+usermod -aG sudo ubuntu
+
+# Скопіювати root's authorized_keys → ubuntu, щоб ssh-key login працював
+install -d -m 700 -o ubuntu -g ubuntu /home/ubuntu/.ssh
+cp /root/.ssh/authorized_keys /home/ubuntu/.ssh/authorized_keys
+chown ubuntu:ubuntu /home/ubuntu/.ssh/authorized_keys
+chmod 600 /home/ubuntu/.ssh/authorized_keys
+
+# Passwordless sudo для нього (тимчасово — playbook §02 потім ужорсточить)
+echo "ubuntu ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/90-ubuntu
+chmod 440 /etc/sudoers.d/90-ubuntu
+```
+
+Якщо OVH одразу створив `ubuntu` user-а з sudo (деякі OVH templates так роблять) — пропусти цей крок, перевір лише `groups ubuntu` має `sudo`.
+
+### 0.5.4. Logout + SSH як non-root
+
+```bash
+exit
+ssh -i ~/.ssh/finly_vps ubuntu@<IPV4>
+sudo whoami   # має повернути `root` без запиту пароля
+```
+
+### 0.5.5. Node 20 + Claude Code CLI
+
+```bash
+# Node 20 від NodeSource (Ubuntu archive має Node 18 LTS — застаре)
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt -y install nodejs
+
+node --version    # повинно бути v20.x
+npm --version
+
+# Claude Code CLI глобально
+sudo npm install -g @anthropic-ai/claude-code
+claude --version
+```
+
+### 0.5.6. Authentication
+
+Claude Code потребує Anthropic API key або subscription auth. Найпростіший варіант — API key:
+
+```bash
+claude login
+# Інтерактивний prompt — paste API key з https://console.anthropic.com → API Keys
+```
+
+Або через env var:
+
+```bash
+echo 'export ANTHROPIC_API_KEY="sk-ant-..."' >> ~/.bashrc
+source ~/.bashrc
+```
+
+> **Безпека:** цей API key буде використовуватись AI-агентом на VPS. Обмеж його rate-limit у Anthropic console (`$50/day soft cap`) на випадок якщо AI зациклиться у tool-call loop. Окремий API key від dev — щоб ротувати незалежно.
+
+### 0.5.7. Дай AI runbook
+
+Дві опції:
+
+**(a) Paste через TUI** (найпростіше):
+```bash
+claude   # запускає interactive TUI
+# Потім paste-уй ВЕСЬ зміст AI-RUNBOOK.md як першу message.
+```
+
+**(b) Через file** (якщо repo публічний):
+```bash
+curl -fsSL https://raw.githubusercontent.com/<owner>/finly/main/docs/server-playbook/AI-RUNBOOK.md > /tmp/runbook.md
+claude
+# Потім: "Read /tmp/runbook.md and execute it phase by phase."
+```
+
+> **Перед стартом AI** переконайся, що у тебе під рукою (для handoff-points):
+> - `.env` файл готовий (повністю заповнений по §1..§11 нижче)
+> - `origin.pem` + `origin-key.pem` (Cloudflare Origin Cert, §2)
+> - R2 backup token + restic password (§8 нижче, готується пізніше)
+> - GitHub deploy key (читай-only) на repo або repo вже публічний
+
+AI зупинятиметься на handoff-points і питатиме ці значення у тебе через чат.
+
 ## 1. Cloudflare DNS
 
 В дашборді Cloudflare для `finly.com.ua`:
