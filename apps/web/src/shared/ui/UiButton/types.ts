@@ -9,7 +9,8 @@ export type UiButtonVariant =
     | 'text'
     | 'destructive-text'
     | 'icon'
-    | 'icon-compact';
+    | 'icon-compact'
+    | 'link';
 export type UiButtonSize = 'sm' | 'md' | 'lg';
 
 /**

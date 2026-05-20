@@ -4,6 +4,14 @@
     margin-right: auto;
 }
 
+/* Sticky header (UiHeaderShell h-16 = 4rem) перекриває anchor-targets
+   після scroll-to-fragment. Offset гарантує, що заголовок секції лягає
+   нижче header-bar-а. +1rem breathing space. Глобально, бо header
+   sticky присутній на всіх hosts (cabinet, public, landing). */
+html {
+    scroll-padding-top: 5rem;
+}
+
 .prose-legal {
     & h2 {
         @apply mt-10 text-xl font-bold tracking-tight text-foreground md:mt-16;

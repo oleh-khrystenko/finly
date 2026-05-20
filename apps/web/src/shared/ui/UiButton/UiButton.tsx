@@ -40,6 +40,17 @@ const iconCompactSizeStyles: Record<UiButtonSize, string> = {
 };
 
 /**
+ * Inline-link sizes — без button-shaped padding (тільки font-size + height
+ * via `min-h-11` для touch-target). Призначений для prose-style links у
+ * footer, breadcrumbs, в'юверах юридичних сторінок тощо.
+ */
+const linkSizeStyles: Record<UiButtonSize, string> = {
+    sm: 'text-sm',
+    md: 'text-base',
+    lg: 'text-lg',
+};
+
+/**
  * Theme-agnostic variant styles using neutral colors
  * Override via className prop for custom design systems
  */
@@ -56,6 +67,7 @@ const variantStyles: Record<UiButtonVariant, string> = {
     icon: 'bg-transparent text-muted-foreground hover:text-foreground',
     'icon-compact':
         'bg-transparent text-muted-foreground hover:text-foreground',
+    link: 'bg-transparent text-muted-foreground hover:text-foreground',
 };
 
 interface RenderContentProps {
@@ -137,13 +149,16 @@ const UiButton = forwardRef<
             ? iconSizeStyles[size]
             : variant === 'icon-compact'
               ? iconCompactSizeStyles[size]
-              : sizeStyles[size],
-        // Mobile touch-target baseline (44×44 px) для standalone icon-кнопок.
-        // Required by docs/conventions/responsive.md §2; інкапсулюємо у примітиві,
-        // щоб правило не залежало від ручного className чи size="lg" у callers.
-        // icon-compact свідомо не покривається — він призначений для dense
-        // desktop UI (toolbars, table-rows).
-        variant === 'icon' && 'min-h-11 min-w-11',
+              : variant === 'link'
+                ? linkSizeStyles[size]
+                : sizeStyles[size],
+        // Mobile touch-target baseline (44×44 px) для standalone icon-кнопок
+        // та inline-link-ів. Required by docs/conventions/responsive.md §2;
+        // інкапсулюємо у примітиві, щоб правило не залежало від ручного
+        // className чи size="lg" у callers. icon-compact свідомо не покрито
+        // — це dense desktop UI (toolbars, table-rows).
+        (variant === 'icon' || variant === 'link') && 'min-h-11',
+        variant === 'icon' && 'min-w-11',
         variantStyles[variant],
         className
     );

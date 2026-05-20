@@ -1,85 +1,74 @@
+import { ArrowRight } from 'lucide-react';
+
 import UiButton from '@/shared/ui/UiButton';
 
+import { PhoneMockup } from './PhoneMockup';
+
 /**
- * Sprint 8 §8.6 — content-complete hero для `finly.com.ua/`.
+ * Hero для `finly.com.ua/`. Direct-response копія за `docs/marketing/landing.md`.
  *
- * **Чому 3 benefit-tiles, а не "усе що захочемо"**: кожен tile описує
- * **конкретний** факт продукту (а не маркетинг-копію). Якщо tile неможливо
- * зв'язати з реальним product-constraint, він не належить до Sprint 8 hero.
+ * Структура: 2-column на desktop (text + phone-mockup), stack на mobile.
+ * Primary CTA — "Створити свою сторінку" → /auth/signin. Secondary —
+ * "Спробувати без реєстрації" → якір на існуючий QrLandingBlock (#try-now).
  *
- *  1. **Стандарт НБУ** — посилання на постанову № 97. Єдина існуюча
- *     нормативна база; реальна юридична прив'язка, не перебільшення.
- *  2. **Один тап** — реальний UX flow universal-link → app-link → банк-
- *     додаток. Sprint 2 §2.1 builder + Sprint 3 §3.7 host-aware routing
- *     забезпечують це поведінково.
- *  3. **Без комісій від Finly** — фактичне обмеження бізнес-моделі MVP.
- *     Sprint 6 додасть Paid-плани, але % з платежу не входить у roadmap
- *     (qr-decisions.md §1.12 — модель А "тупий генератор").
- *
- * **Server Component** (без `'use client'`) — статика без state. Інтерактивність
- * (анкори `<a href="#try-now">`) — нативна browser-функція, без React
- * client-runtime overhead.
+ * Server Component — статика + anchor links. Без client-runtime.
  */
 export function LandingHero() {
     return (
-        <section className="container mx-auto px-6 py-20">
-            <div className="text-center">
-                <h1 className="text-4xl font-semibold tracking-tight sm:text-6xl">
-                    Платіжні QR-коди
-                    <br />
-                    <span className="text-primary">
-                        для українського бізнесу
-                    </span>
-                </h1>
-                <p className="text-muted-foreground mx-auto mt-6 max-w-2xl text-lg">
-                    Згенеруйте QR-код за стандартом НБУ і прийміть оплату в один
-                    тап з будь-якого банк-додатку.
-                </p>
-                <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-                    <UiButton
-                        as="a"
-                        href="#try-now"
-                        variant="filled"
-                        size="lg"
-                    >
-                        Спробувати без реєстрації
-                    </UiButton>
-                    <UiButton
-                        as="link"
-                        href="/auth/signin"
-                        variant="outline"
-                        size="lg"
-                    >
-                        Зареєструватися
-                    </UiButton>
+        <section className="relative overflow-hidden">
+            <div
+                aria-hidden
+                className="from-primary/15 via-background to-background pointer-events-none absolute inset-0 -z-10 bg-gradient-to-br"
+            />
+            <div className="container mx-auto px-6 pt-16 pb-20 md:pt-24 md:pb-28">
+                <div className="grid items-center gap-12 md:grid-cols-2 md:gap-16">
+                    <div className="max-w-xl">
+                        <div className="border-border bg-card/60 text-muted-foreground mb-6 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs backdrop-blur">
+                            <span className="bg-primary inline-block size-1.5 rounded-full" />
+                            Стандарт НБУ, постанова №97
+                        </div>
+
+                        <h1 className="text-foreground text-4xl leading-[1.05] font-semibold tracking-tight sm:text-5xl lg:text-6xl">
+                            Ваш клієнт хоче заплатити.
+                            <br />
+                            <span className="text-muted-foreground">
+                                А ви диктуєте йому 29 цифр.
+                            </span>
+                        </h1>
+
+                        <p className="text-muted-foreground mt-6 text-base leading-relaxed sm:text-lg">
+                            Він копіює IBAN у вайбер, шукає у банк-додатку, де
+                            його вставити, плутає Privat з Mono. Пише завтра:
+                            «нагадайте реквізити ще раз». А когось ви взагалі
+                            більше не побачите.
+                        </p>
+
+                        <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                            <UiButton
+                                as="link"
+                                href="/auth/signin"
+                                variant="filled"
+                                size="lg"
+                                IconRight={<ArrowRight />}
+                            >
+                                Створити свою сторінку
+                            </UiButton>
+                            <UiButton
+                                as="a"
+                                href="#try-now"
+                                variant="outline"
+                                size="lg"
+                            >
+                                Спробувати без реєстрації
+                            </UiButton>
+                        </div>
+                    </div>
+
+                    <div className="md:order-last">
+                        <PhoneMockup />
+                    </div>
                 </div>
             </div>
-
-            <ul className="mx-auto mt-16 grid max-w-4xl gap-6 sm:grid-cols-3">
-                <li className="bg-card border-border rounded-xl border p-6">
-                    <h3 className="text-base font-medium">Стандарт НБУ</h3>
-                    <p className="text-muted-foreground mt-2 text-sm">
-                        Формат 003 згідно постанови № 97 — сумісний з усіма
-                        банк-додатками України.
-                    </p>
-                </li>
-                <li className="bg-card border-border rounded-xl border p-6">
-                    <h3 className="text-base font-medium">Один тап</h3>
-                    <p className="text-muted-foreground mt-2 text-sm">
-                        Клієнт сканує QR або відкриває посилання — банк-додаток
-                        запускається з заповненими реквізитами.
-                    </p>
-                </li>
-                <li className="bg-card border-border rounded-xl border p-6">
-                    <h3 className="text-base font-medium">
-                        Без комісій від Finly
-                    </h3>
-                    <p className="text-muted-foreground mt-2 text-sm">
-                        Сервіс не утримує процент із платежу. Гроші йдуть
-                        напряму на ваш IBAN.
-                    </p>
-                </li>
-            </ul>
         </section>
     );
 }

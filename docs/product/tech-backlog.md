@@ -10,6 +10,10 @@
 
 - При реєстрації зробити **прізвище** обов'язковим полем (зараз обов'язкове лише ім'я).
 
+## Маркетинг / лендінг
+
+- **landing-banks-svg-logos** — _пріоритет: medium перед широким launch-ом._ `widgets/landing-banks/LandingBanks.tsx` показує trust-блок «Працює з банк-додатками», але поки лежать monogram-плейсхолдери (`П`, `m`, `ПУ`, `iZ`, `КД` тощо) у `getMonogram(code)`. Це візуально проседає soc-proof-claim. **Implementation note:** один callsite — функція `getMonogram` має почати повертати `<svg>` / `<Image src="/logo/banks/{code}.svg" />` замість `string`. Layout (size-12 circle, gap, labels знизу) не міняється. Потрібно зібрати 10 SVG-логотипів MVP_BANKS у мономорфному стилі (grayscale + повний колор на hover) і покласти у `apps/web/public/logo/banks/{code}.svg`. **Коли робити:** перед launch-ом маркетингової кампанії; до того moment плейсхолдери OK для preview-аудиторії.
+
 ## Юридичні сторінки
 
 - Оновити Privacy Policy та Terms of Service під новий продукт Finly:

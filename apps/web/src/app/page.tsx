@@ -2,17 +2,24 @@ import { Metadata } from 'next';
 
 import { QrLandingBlock } from '@/features/qr-landing-preview';
 import { fetchMetadata } from '@/shared/seo/metadata';
-import { Header } from '@/widgets/header';
+import { LandingBanks } from '@/widgets/landing-banks';
+import { LandingClosingCta } from '@/widgets/landing-closing-cta';
+import { LandingContrast } from '@/widgets/landing-contrast';
+import { LandingFooter } from '@/widgets/landing-footer';
 import { LandingHero } from '@/widgets/landing-hero';
+import { LandingHowItWorks } from '@/widgets/landing-how-it-works';
+import { LandingNavSetup } from '@/widgets/landing-nav-setup';
+import { LandingWhy } from '@/widgets/landing-why';
+import { Header } from '@/widgets/header';
 
 export function generateMetadata(): Metadata {
     return fetchMetadata({
         page: 'home',
         href: 'landing',
         meta: {
-            title: 'Finly — Платіжні QR-коди',
+            title: 'Finly — платіжні QR-коди за стандартом НБУ для українського бізнесу',
             description:
-                'Згенеруйте QR-код за стандартом НБУ і прийміть оплату в один тап з будь-якого банк-додатку.',
+                'Одна сторінка зі своїми реквізитами. Клієнт сканує QR — банк-додаток відкривається із заповненою формою. Без комісій, без диктування IBAN у вайбер.',
         },
     });
 }
@@ -21,10 +28,17 @@ export default function HomePage() {
     return (
         <>
             <Header />
+            <LandingNavSetup />
             <main>
                 <LandingHero />
+                <LandingContrast />
+                <LandingHowItWorks />
                 <QrLandingBlock />
+                <LandingWhy />
+                <LandingBanks />
+                <LandingClosingCta />
             </main>
+            <LandingFooter />
         </>
     );
 }
