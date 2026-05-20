@@ -1,79 +1,81 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-    /* Базові фони залишаємо холодними сірими (hue 260) */
-    --background: oklch(0.98 0.002 260); /* #f8f8fa */
-    --foreground: oklch(0.2 0.01 260); /* #13161b */
-    --card: oklch(0.99 0.001 260); /* #fbfcfc */
-    --card-foreground: oklch(0.2 0.01 260);
+    /* Paper-нейтрали: hue 85 (pure-yellow tint, без orange-кастом), chroma 0.005 — Apple Notes-style */
+    --background: oklch(0.975 0.005 85);
+    --foreground: oklch(0.2 0.018 65);
+    --card: oklch(0.995 0.003 85);
+    --card-foreground: oklch(0.2 0.018 65);
 
-    /* Твій бренд Finly: Ціановий колір для головних кнопок та акцентів */
-    --primary: oklch(0.65 0.16 195); /* #00a7a8 */
-    /* Темний текст на ціановій кнопці для кращої читабельності */
-    --primary-foreground: oklch(1 0 0); /* #05070b */
+    /* Бренд Finly: deep emerald (hue 158 — pure-emerald, не teal/fern) */
+    --primary: oklch(0.48 0.135 158);
+    --primary-foreground: oklch(0.985 0.004 85);
 
-    --secondary: oklch(0.95 0.005 260);
-    --secondary-foreground: oklch(0.2 0.01 260);
-    --muted: oklch(0.95 0.005 260);
-    --muted-foreground: oklch(0.55 0.01 260); /* #6e7278 */
+    --secondary: oklch(0.94 0.008 85);
+    --secondary-foreground: oklch(0.22 0.018 65);
+    --muted: oklch(0.94 0.008 85);
+    --muted-foreground: oklch(0.48 0.015 65);
 
-    /* Accent залишаємо приглушеним для hover-ефектів (не роби його яскравим) */
-    --accent: oklch(0.95 0.005 260);
-    --accent-foreground: oklch(0.2 0.01 260);
+    /* Accent — теплий sand для hover/підсвічування */
+    --accent: oklch(0.92 0.018 85);
+    --accent-foreground: oklch(0.22 0.018 65);
 
-    --destructive: oklch(0.6 0.15 20);
-    --destructive-foreground: oklch(0.98 0 0);
-    --border: oklch(0.9 0.01 260);
-    --input: oklch(0.9 0.01 260);
+    /* Destructive — стриманий теракот (гармоніює з warm-палітрою) */
+    --destructive: oklch(0.55 0.17 25);
+    --destructive-foreground: oklch(0.985 0.004 85);
 
-    /* Обводка при фокусі (focus ring) тепер теж фірмового кольору */
-    --ring: oklch(0.65 0.16 195);
+    --border: oklch(0.88 0.01 85);
+    --input: oklch(0.88 0.01 85);
 
-    --success: oklch(0.65 0.15 150);
-    --warning: oklch(0.8 0.15 80);
+    /* Focus-ring фірмовим emerald */
+    --ring: oklch(0.48 0.135 158);
+
+    /* Success — pure-green (hue 145), розведений з primary-emerald для парних UI-станів */
+    --success: oklch(0.55 0.13 145);
+    /* Warning — теплий amber (hue 75), низький L для тексту на paper-фоні */
+    --warning: oklch(0.65 0.15 75);
     --radius: 0.625rem;
 
-    /* Liquid Glass */
-    --liquid-glass-bg: oklch(0.98 0.002 260 / 0.55);
+    /* Liquid Glass — paper tone synced з основою */
+    --liquid-glass-bg: oklch(0.975 0.005 85 / 0.55);
     --liquid-glass-border: oklch(1 0 0 / 0.5);
     --liquid-glass-highlight: oklch(1 0 0 / 0.12);
-    --liquid-glass-shadow: oklch(0.3 0.01 260 / 0.06);
+    --liquid-glass-shadow: oklch(0.3 0.015 65 / 0.06);
     --liquid-glass-blur: 8px;
 }
 
 .dark {
-    /* Темна тема: Глибокий Slate фон */
-    --background: oklch(0.13 0.01 260); /* #05070b */
-    --foreground: oklch(0.9 0.01 260); /* #dadee5 */
-    --card: oklch(0.16 0.01 260);
-    --card-foreground: oklch(0.9 0.01 260);
+    /* Темна тема: warm-brown deep (hue 65) — тепла альтернатива slate */
+    --background: oklch(0.18 0.012 65);
+    --foreground: oklch(0.95 0.008 85);
+    --card: oklch(0.22 0.012 65);
+    --card-foreground: oklch(0.95 0.008 85);
 
-    /* Cyan у темній темі робимо трохи яскравішим (неоновим) для контрасту */
-    --primary: oklch(0.7 0.18 195); /* #00b8b9 */
-    /* На неоновому ціані текст має бути темним */
-    --primary-foreground: oklch(0.13 0.01 260);
+    /* Emerald яскравіший у темній — visible signal на warm-dark */
+    --primary: oklch(0.68 0.14 158);
+    --primary-foreground: oklch(0.18 0.012 65);
 
-    --secondary: oklch(0.2 0.01 260);
-    --secondary-foreground: oklch(0.9 0.01 260);
-    --muted: oklch(0.2 0.01 260);
-    --muted-foreground: oklch(0.65 0.01 260);
+    --secondary: oklch(0.25 0.012 65);
+    --secondary-foreground: oklch(0.95 0.008 85);
+    --muted: oklch(0.25 0.012 65);
+    --muted-foreground: oklch(0.7 0.012 85);
 
-    --accent: oklch(0.2 0.01 260);
-    --accent-foreground: oklch(0.9 0.01 260);
+    --accent: oklch(0.28 0.015 65);
+    --accent-foreground: oklch(0.95 0.008 85);
 
-    --destructive: oklch(0.45 0.15 20);
-    --destructive-foreground: oklch(0.98 0 0);
-    --border: oklch(0.22 0.01 260);
-    --input: oklch(0.22 0.01 260);
+    --destructive: oklch(0.62 0.18 25);
+    --destructive-foreground: oklch(0.98 0.006 85);
 
-    /* Обводка фокусу (Cyan) */
-    --ring: oklch(0.7 0.18 195);
+    --border: oklch(0.3 0.015 65);
+    --input: oklch(0.3 0.015 65);
 
-    --success: oklch(0.55 0.15 150);
-    --warning: oklch(0.7 0.15 80);
+    --ring: oklch(0.68 0.14 158);
 
-    /* Liquid Glass */
-    --liquid-glass-bg: oklch(0.16 0.01 260 / 0.6);
+    --success: oklch(0.65 0.13 145);
+    --warning: oklch(0.75 0.14 75);
+
+    /* Liquid Glass — warm-dark */
+    --liquid-glass-bg: oklch(0.22 0.012 65 / 0.6);
     --liquid-glass-border: oklch(1 0 0 / 0.1);
     --liquid-glass-highlight: oklch(1 0 0 / 0.05);
     --liquid-glass-shadow: oklch(0 0 0 / 0.25);

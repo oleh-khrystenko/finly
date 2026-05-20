@@ -26,7 +26,22 @@ Feature / Page / Widget / shared/ui/
 
 Файл: `apps/web/src/shared/styles/themes.css`
 
-Формат: `{color}` + `{color}-foreground` пари. Всі кольори монохромні (oklch з нульовою хромою), крім `destructive`, `success`, `warning`.
+Формат: `{color}` + `{color}-foreground` пари.
+
+**Нейтрали — inverted-paper схема на одній tone-axis (hue 65 ↔ 85), дзеркальна за темою.** Розподіл за **роллю токена**, не за L:
+
+| Роль                                                                                  | Light hue              | Dark hue             | L-поведінка                  |
+| ------------------------------------------------------------------------------------- | ---------------------- | -------------------- | ---------------------------- |
+| **Surfaces** (background, card, muted, secondary, accent, border, input)              | **85** (paper-cream)   | **65** (warm-brown)  | Світлі у light, темні у dark |
+| **Text** (foreground, muted-foreground, card/secondary/accent/muted-foreground)       | **65** (warm-brown)    | **85** (paper-cream) | Темні у light, світлі у dark |
+| **`primary-foreground`** (CTA-button label)                                           | **85** (paper, L≈0.99) | **65** (brown, L≈0.18) | Інверсія за темою          |
+| **`destructive-foreground`** (alarm-button label)                                     | **85** (paper, L≈0.99) | **85** (paper, L≈0.98) | **Завжди світлий**           |
+
+Chroma нейтралів ≤ 0.018 — ледь-помітний tint без cafe-yellow агресії.
+
+**Чому `primary-foreground` і `destructive-foreground` різні**: `primary` — CTA (нейтральний бренд-acent), його label інвертується за темою як звичайний foreground. `destructive` — **alarm-signal**, де червоно-теракотовий fill повинен зберігати максимальну впізнаваність у обох темах. Темний brown-текст на теракоті у dark гасив би «гучність» сигналу — Linear, Stripe, GitHub, Tailwind UI тримають destructive label завжди-світлим саме з цієї причини. Це навмисний виняток з inverse-логіки, а не помилка.
+
+**Акцентні кольори насичені:** `primary` (emerald hue 158), `destructive` (теракот hue 25), `success` (pure-green hue 145), `warning` (amber hue 75).
 
 | Група           | Tailwind-клас                                                       | CSS-змінна                                            | Призначення                                 |
 | --------------- | ------------------------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------- |
