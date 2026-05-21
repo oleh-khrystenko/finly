@@ -21,29 +21,32 @@ import { useBusinessWizardStore } from './businessWizardStore';
 const NameSchema = z.object({ name: businessNameSchema });
 type NameValues = z.input<typeof NameSchema>;
 
-/**
- * Sprint 7 §SP-1 / §SP-6 — under-label one-liner для кожного типу.
- *
- * Кожен опис максимально стислий і **дискримінує тип з сусідніх кейсів**, які
- * легко переплутати: ТОВ vs Організація обидва — юр.особи з ЄДРПОУ, але
- * перший — комерційний, другий — неприбутковий. ОСББ-кейс маркером "ОСББ /
- * фонд / громадська" знімає UX-плутанину PUB-6 (Sprint 7 README §Risks #3).
- *
- * Single-source-of-truth для wizard-у; cabinet `BasicSection` Sprint 7 §7.8
- * читає лише top-label `BUSINESS_TYPE_LABEL[type]`, без описів.
- */
 const TYPE_DESCRIPTIONS: Record<BusinessType, string> = {
-    individual: 'Фізособа: збори, подарунки, особисті оплати',
-    fop: 'ФОП: підприємницька діяльність, РНОКПП',
-    tov: 'ТОВ, ПрАТ: комерційна юр.особа з ЄДРПОУ',
-    organization: 'ОСББ, фонд, громадська спілка — без оподаткування',
+    individual: 'Збори, донати, особисті повернення',
+    fop: 'Послуги, гонорари, рахунки клієнтам',
+    tov: 'Товари, послуги, контракти з компаніями',
+    organization: 'Внески, пожертви, цільові збори',
+};
+
+const NAME_LABELS: Record<BusinessType, string> = {
+    individual: "Повне ім'я",
+    fop: "Повне ім'я",
+    tov: 'Назва компанії',
+    organization: 'Назва організації',
+};
+
+const NAME_HELPERS: Record<BusinessType, string> = {
+    individual: '«Фізособа» додасться автоматично',
+    fop: '«ФОП» додасться автоматично',
+    tov: '«ТОВ» додасться автоматично',
+    organization: '«Неприбуткова організація» додасться автоматично',
 };
 
 const NAME_PLACEHOLDERS: Record<BusinessType, string> = {
     individual: 'Коваленко Іван Миколайович',
-    fop: 'Коваленко Іван Миколайович',
-    tov: 'ТОВ «Ромашка»',
-    organization: 'ОСББ «Будинок 12»',
+    fop: 'Шевченко Марія Іванівна',
+    tov: '«Ваша компанія»',
+    organization: '«Ваша організація»',
 };
 
 const TYPE_OPTIONS: ReadonlyArray<UiRadioCardGroupOption<BusinessType>> =
@@ -100,8 +103,7 @@ export default function Step1TypeAndName() {
             noValidate
         >
             <UiRadioCardGroup<BusinessType>
-                label="Тип платника"
-                description="Оберіть юр-форму, від якої виставляєте платіжне посилання. Цей вибір впливає на формат коду одержувача та інші поля."
+                label="Тип одержувача"
                 options={TYPE_OPTIONS}
                 value={selectedType}
                 onChange={handleSelectType}
@@ -109,8 +111,9 @@ export default function Step1TypeAndName() {
             />
 
             <UiInput
-                label="Назва бізнесу"
+                label={NAME_LABELS[selectedType ?? 'individual']}
                 placeholder={NAME_PLACEHOLDERS[selectedType ?? 'individual']}
+                description={NAME_HELPERS[selectedType ?? 'individual']}
                 {...form.register('name')}
                 error={getZodFieldError(errors.name)}
             />

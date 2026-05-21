@@ -47,7 +47,7 @@ describe('BusinessWizardForm', () => {
 
             // 4 radio-cards
             expect(
-                screen.getByRole('radio', { name: /Я особисто/ })
+                screen.getByRole('radio', { name: /^Фізособа/ })
             ).toBeInTheDocument();
             expect(
                 screen.getByRole('radio', { name: /^ФОП/ })
@@ -56,7 +56,7 @@ describe('BusinessWizardForm', () => {
                 screen.getByRole('radio', { name: /^ТОВ/ })
             ).toBeInTheDocument();
             expect(
-                screen.getByRole('radio', { name: /ОСББ/ })
+                screen.getByRole('radio', { name: /^Неприбуткова організація/ })
             ).toBeInTheDocument();
 
             const nextButton = screen.getByRole('button', { name: /далі/i });
@@ -86,7 +86,7 @@ describe('BusinessWizardForm', () => {
             render(<BusinessWizardForm />);
 
             fireEvent.click(screen.getByRole('radio', { name: /^ФОП/ }));
-            const nameInput = screen.getByPlaceholderText('Коваленко Іван Миколайович');
+            const nameInput = screen.getByPlaceholderText('Шевченко Марія Іванівна');
             fireEvent.change(nameInput, { target: { value: 'Іваненко' } });
 
             const button = screen.getByRole('button', { name: /далі/i });

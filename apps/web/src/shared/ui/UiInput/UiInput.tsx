@@ -30,6 +30,7 @@ const UiInput = forwardRef<HTMLInputElement, UiInputProps>((props, ref) => {
         variant = 'outlined',
         size = 'md',
         label,
+        description,
         error,
         IconLeft,
         IconRight,
@@ -42,6 +43,9 @@ const UiInput = forwardRef<HTMLInputElement, UiInputProps>((props, ref) => {
 
     const generatedId = useId();
     const inputId = externalId ?? generatedId;
+    const errorId = `${inputId}-error`;
+    const descriptionId = `${inputId}-description`;
+    const describedBy = error ? errorId : description ? descriptionId : undefined;
 
     const iconClass = composeClasses(
         'shrink-0 text-muted-foreground',
@@ -87,6 +91,8 @@ const UiInput = forwardRef<HTMLInputElement, UiInputProps>((props, ref) => {
                     ref={ref}
                     disabled={disabled}
                     required={required}
+                    aria-invalid={error ? true : undefined}
+                    aria-describedby={describedBy}
                     className="placeholder:text-muted-foreground w-full bg-transparent outline-none disabled:cursor-not-allowed"
                 />
                 {IconRight && (
@@ -95,7 +101,20 @@ const UiInput = forwardRef<HTMLInputElement, UiInputProps>((props, ref) => {
                     </span>
                 )}
             </div>
-            {error && <p className="text-destructive mt-1 text-sm">{error}</p>}
+            {error ? (
+                <p id={errorId} className="text-destructive mt-1 text-sm">
+                    {error}
+                </p>
+            ) : (
+                description && (
+                    <p
+                        id={descriptionId}
+                        className="text-muted-foreground mt-1 text-xs"
+                    >
+                        {description}
+                    </p>
+                )
+            )}
         </div>
     );
 });
