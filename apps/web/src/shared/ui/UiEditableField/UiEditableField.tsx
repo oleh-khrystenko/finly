@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { Check, Pencil, X } from 'lucide-react';
 import UiButton from '@/shared/ui/UiButton';
-import UiSpinner from '@/shared/ui/UiSpinner';
 import { EditableFieldCancelledError } from './cancelled';
 import type { UiEditableFieldProps } from './types';
 
@@ -115,10 +114,10 @@ export default function UiEditableField<TValue>({
                             variant="filled"
                             size="sm"
                             onClick={() => void save()}
-                            disabled={saving}
-                            IconLeft={!saving ? <Check /> : undefined}
+                            loading={saving}
+                            IconLeft={<Check />}
                         >
-                            {saving ? <UiSpinner size="sm" /> : 'Зберегти'}
+                            Зберегти
                         </UiButton>
                     </div>
                 </div>

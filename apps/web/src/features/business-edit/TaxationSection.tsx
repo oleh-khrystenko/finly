@@ -13,7 +13,6 @@ import {
 import UiButton from '@/shared/ui/UiButton';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSelect from '@/shared/ui/UiSelect';
-import UiSpinner from '@/shared/ui/UiSpinner';
 import UiSwitch from '@/shared/ui/UiSwitch';
 
 const SELECT_OPTIONS = TAXATION_SYSTEMS.map((value) => ({
@@ -221,10 +220,10 @@ export default function TaxationSection({ business, onSave }: Props) {
                             variant="filled"
                             size="sm"
                             onClick={() => void save()}
-                            disabled={saving}
-                            IconLeft={!saving ? <Check /> : undefined}
+                            loading={saving}
+                            IconLeft={<Check />}
                         >
-                            {saving ? <UiSpinner size="sm" /> : 'Зберегти'}
+                            Зберегти
                         </UiButton>
                     </div>
                 </div>

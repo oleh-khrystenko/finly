@@ -17,7 +17,6 @@ import { mapValidationCode } from '@/shared/lib';
 import UiTextarea from '@/shared/ui/UiTextarea';
 import UiCheckbox from '@/shared/ui/UiCheckbox';
 import UiButton from '@/shared/ui/UiButton';
-import UiSpinner from '@/shared/ui/UiSpinner';
 import {
     buildCreateRequestFromDraft,
     useBusinessWizardStore,
@@ -198,19 +197,11 @@ export default function Step4PurposeBanks() {
                     type="button"
                     variant="filled"
                     size="md"
-                    disabled={!canSubmit || submitting}
+                    disabled={!canSubmit}
+                    loading={submitting}
                     onClick={onSubmit}
-                    className="relative"
                 >
-                    <span className={submitting ? 'invisible' : ''}>
-                        Створити
-                    </span>
-                    {submitting && (
-                        <UiSpinner
-                            size="sm"
-                            className="absolute inset-0 m-auto"
-                        />
-                    )}
+                    Створити
                 </UiButton>
             </div>
         </div>

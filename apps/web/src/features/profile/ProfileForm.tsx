@@ -9,7 +9,6 @@ import type { UserProfile } from '@finly/types';
 import UiButton from '@/shared/ui/UiButton';
 import UiInput from '@/shared/ui/UiInput';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
-import UiSpinner from '@/shared/ui/UiSpinner';
 import { getZodFieldError } from '@/shared/lib';
 import { updateProfile, getMe } from '@/shared/api';
 import { useAuthStore } from '@/entities/user';
@@ -139,13 +138,9 @@ const ProfileForm = ({
                             type="submit"
                             variant="filled"
                             size="md"
-                            disabled={isSubmitting}
+                            loading={isSubmitting}
                         >
-                            {isSubmitting ? (
-                                <UiSpinner size="sm" />
-                            ) : (
-                                'Зберегти'
-                            )}
+                            Зберегти
                         </UiButton>
                         <UiButton
                             type="button"

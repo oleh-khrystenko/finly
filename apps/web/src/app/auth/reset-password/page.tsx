@@ -11,7 +11,6 @@ import { passwordSchema } from '@finly/types';
 
 import UiButton from '@/shared/ui/UiButton';
 import UiPasswordInput from '@/shared/ui/UiPasswordInput';
-import UiSpinner from '@/shared/ui/UiSpinner';
 import UiFullPageLoader from '@/shared/ui/UiFullPageLoader';
 import { getZodFieldError } from '@/shared/lib';
 import { resetPassword } from '@/shared/api';
@@ -144,10 +143,10 @@ function ResetPasswordContent() {
                     type="submit"
                     variant="filled"
                     size="lg"
-                    disabled={isSubmitting}
+                    loading={isSubmitting}
                     className="w-full"
                 >
-                    {isSubmitting ? <UiSpinner size="sm" /> : 'Скинути пароль'}
+                    Скинути пароль
                 </UiButton>
             </form>
 

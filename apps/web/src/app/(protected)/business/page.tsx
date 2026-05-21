@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { ArrowRight, Briefcase, CreditCard, FileText, Plus } from 'lucide-react';
 import { AxiosError } from 'axios';
 import {
@@ -18,8 +18,17 @@ import UiPageHeading from '@/shared/ui/UiPageHeading';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
 
-function stripScheme(url: string): string {
-    return url.replace(/^https?:\/\//, '').replace(/\/$/, '');
+// Display host без схеми (`pay.finly.com.ua`) для рядка `host/slug` на картці.
+// ENV-конст — frozen на module-load, тож обчислюємо один раз для всього файлу.
+const PAY_HOST = ENV.NEXT_PUBLIC_PAY_PUBLIC_URL.replace(
+    /^https?:\/\//,
+    ''
+).replace(/\/$/, '');
+
+function extractApiErrorCode(err: unknown): string {
+    if (!(err instanceof AxiosError)) return 'unknown';
+    const data = err.response?.data as { error?: { code?: string } } | undefined;
+    return data?.error?.code ?? 'unknown';
 }
 
 /**
@@ -34,29 +43,15 @@ function stripScheme(url: string): string {
  * плутався, чому "його" бізнес не видно.
  */
 export default function BusinessListPage() {
-    const user = useAuthStore((s) => s.user);
-    const isBookkeeper = user?.worksAsBookkeeper ?? false;
-
-    const [items, setItems] = useState<BusinessWithCounts[] | null>(
-        null
+    const isBookkeeper = useAuthStore(
+        (s) => s.user?.worksAsBookkeeper ?? false
     );
+    const [items, setItems] = useState<BusinessWithCounts[] | null>(null);
     const [error, setError] = useState<string | null>(null);
     // Optimistic delete-removal (Sprint 3 §3.8 §C2). pendingDeletes-store
     // ловить slugs, що в межах 5s-undo-вікна; UI ховає їх до того, як
-    // фактичний DELETE спрацює. Subscribe-селектор повертає Set, useState
-    // re-render при change.
+    // фактичний DELETE спрацює.
     const pendingDeleteSlugs = usePendingDeletesStore((s) => s.slugs);
-
-    const payHost = useMemo(
-        () => stripScheme(ENV.NEXT_PUBLIC_PAY_PUBLIC_URL),
-        []
-    );
-
-    const visibleItems = useMemo(
-        () =>
-            items ? items.filter((i) => !pendingDeleteSlugs.has(i.slug)) : null,
-        [items, pendingDeleteSlugs]
-    );
 
     // Re-fetch при перемиканні toggle — backend filter залежить від
     // `worksAsBookkeeper` стану user-а. State-mutation тільки в async-callback-ах
@@ -75,15 +70,7 @@ export default function BusinessListPage() {
             })
             .catch((err: unknown) => {
                 if (cancelled) return;
-                const code =
-                    err instanceof AxiosError
-                        ? ((
-                              err.response?.data as
-                                  | { error?: { code?: string } }
-                                  | undefined
-                          )?.error?.code ?? 'unknown')
-                        : 'unknown';
-                setError(getApiMessage(code, 'businesses'));
+                setError(getApiMessage(extractApiErrorCode(err), 'businesses'));
             });
         return () => {
             cancelled = true;
@@ -100,20 +87,17 @@ export default function BusinessListPage() {
         );
     }
 
+    const visibleItems = (items ?? []).filter(
+        (i) => !pendingDeleteSlugs.has(i.slug)
+    );
+    const isEmpty = visibleItems.length === 0;
+
     return (
         <UiPageContainer className="space-y-8 py-12 md:py-16">
             <div className="flex flex-wrap items-start justify-between gap-4">
                 <UiPageHeading>Бізнеси</UiPageHeading>
-                {visibleItems && visibleItems.length > 0 && (
-                    <UiButton
-                        as="link"
-                        href="/business/new"
-                        variant="filled"
-                        size="md"
-                        IconLeft={<Plus />}
-                    >
-                        Створити бізнес
-                    </UiButton>
+                {!isEmpty && (
+                    <CreateBusinessButton>Створити бізнес</CreateBusinessButton>
                 )}
             </div>
 
@@ -125,21 +109,10 @@ export default function BusinessListPage() {
                 </UiSectionCard>
             )}
 
-            {visibleItems && visibleItems.length === 0 && !error && (
-                <EmptyState isBookkeeper={isBookkeeper} />
-            )}
+            {isEmpty && !error && <EmptyState isBookkeeper={isBookkeeper} />}
 
-            {visibleItems && visibleItems.length > 0 && (
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                    {visibleItems.map((b) => (
-                        <BusinessCard
-                            key={b.id}
-                            business={b}
-                            isBookkeeper={isBookkeeper}
-                            payHost={payHost}
-                        />
-                    ))}
-                </div>
+            {!isEmpty && (
+                <BusinessGrid items={visibleItems} isBookkeeper={isBookkeeper} />
             )}
         </UiPageContainer>
     );
@@ -169,15 +142,47 @@ function EmptyState({ isBookkeeper }: { isBookkeeper: boolean }) {
                     {description}
                 </p>
             </div>
-            <UiButton
-                as="link"
-                href="/business/new"
-                variant="filled"
-                size="md"
-                IconLeft={<Plus />}
-            >
-                {ctaLabel}
-            </UiButton>
+            <CreateBusinessButton>{ctaLabel}</CreateBusinessButton>
+        </div>
+    );
+}
+
+/**
+ * Кнопка-перехід на `/business/new`. Використовуємо `as="link"` (anchor-семантика
+ * для middle/Ctrl-click → нова вкладка, контекстного меню, hover-URL); pending-
+ * спінер під час client-side навігації приходить безкоштовно з `useLinkStatus`
+ * усередині `UiButton`.
+ */
+function CreateBusinessButton({ children }: { children: ReactNode }) {
+    return (
+        <UiButton
+            as="link"
+            href="/business/new"
+            variant="filled"
+            size="md"
+            IconLeft={<Plus />}
+        >
+            {children}
+        </UiButton>
+    );
+}
+
+function BusinessGrid({
+    items,
+    isBookkeeper,
+}: {
+    items: BusinessWithCounts[];
+    isBookkeeper: boolean;
+}) {
+    return (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {items.map((business) => (
+                <BusinessCard
+                    key={business.id}
+                    business={business}
+                    isBookkeeper={isBookkeeper}
+                />
+            ))}
         </div>
     );
 }
@@ -185,11 +190,9 @@ function EmptyState({ isBookkeeper }: { isBookkeeper: boolean }) {
 function BusinessCard({
     business,
     isBookkeeper,
-    payHost,
 }: {
     business: BusinessWithCounts;
     isBookkeeper: boolean;
-    payHost: string;
 }) {
     const typeLabel = BUSINESS_TYPE_LABEL[business.type];
     const { accountsCount, invoicesCount } = business;
@@ -213,7 +216,7 @@ function BusinessCard({
             <div className="space-y-1">
                 <p className="text-muted-foreground text-xs">{typeLabel}</p>
                 <p className="text-muted-foreground truncate text-xs">
-                    {payHost}/
+                    {PAY_HOST}/
                     <span className="text-foreground font-mono">
                         {business.slug}
                     </span>

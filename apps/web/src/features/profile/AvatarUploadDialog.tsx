@@ -19,7 +19,6 @@ import {
     UiModalTitle,
 } from '@/shared/ui/UiModal';
 import UiButton from '@/shared/ui/UiButton';
-import UiSpinner from '@/shared/ui/UiSpinner';
 import { composeClasses } from '@/shared/lib';
 import {
     commitAvatarUpload,
@@ -320,13 +319,10 @@ export default function AvatarUploadDialog() {
                                     variant="filled"
                                     size="md"
                                     onClick={handleSave}
-                                    disabled={submitting || !cropAreaPixels}
+                                    disabled={!cropAreaPixels}
+                                    loading={submitting}
                                 >
-                                    {submitting ? (
-                                        <UiSpinner size="sm" />
-                                    ) : (
-                                        'Зберегти'
-                                    )}
+                                    Зберегти
                                 </UiButton>
                             </div>
                         </div>

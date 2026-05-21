@@ -6,7 +6,6 @@ import { type Invoice } from '@finly/types';
 import UiButton from '@/shared/ui/UiButton';
 import UiInput from '@/shared/ui/UiInput';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
-import UiSpinner from '@/shared/ui/UiSpinner';
 import UiSwitch from '@/shared/ui/UiSwitch';
 import {
     formatKopecksForInput,
@@ -246,10 +245,11 @@ function MoneyEditableField({
                             // duplicate того save-guard-у (button disabled +
                             // save() no-op): button-disabled чітко комунікує
                             // стан користувачу, save-guard ловить race.
-                            disabled={saving || parseErr !== null}
-                            IconLeft={!saving ? <Check /> : undefined}
+                            disabled={parseErr !== null}
+                            loading={saving}
+                            IconLeft={<Check />}
                         >
-                            {saving ? <UiSpinner size="sm" /> : 'Зберегти'}
+                            Зберегти
                         </UiButton>
                     </div>
                 </div>

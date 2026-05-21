@@ -1,8 +1,10 @@
 'use client';
 
-import Link from 'next/link';
+import Link, { useLinkStatus } from 'next/link';
 import { ReactNode, Ref, forwardRef } from 'react';
 import { composeClasses } from '@/shared/lib';
+import UiSpinner from '@/shared/ui/UiSpinner';
+import type { UiSpinnerSize } from '@/shared/ui/UiSpinner';
 import type { UiButtonProps, UiButtonSize, UiButtonVariant } from './types';
 
 /**
@@ -70,6 +72,17 @@ const variantStyles: Record<UiButtonVariant, string> = {
     link: 'bg-transparent text-muted-foreground hover:text-foreground',
 };
 
+/**
+ * Спінер-розмір для кожного button-size. md→sm не випадкове: 16px спінер у
+ * 40px-кнопці виглядає пропорційно label-у; md-spinner (24px) переповнював би
+ * вертикаль і змушував би layout-jump через стиснутий padding.
+ */
+const spinnerSizeForButton: Record<UiButtonSize, UiSpinnerSize> = {
+    sm: 'sm',
+    md: 'sm',
+    lg: 'md',
+};
+
 interface RenderContentProps {
     IconLeft?: ReactNode;
     IconRight?: ReactNode;
@@ -101,6 +114,71 @@ const renderContent = ({
     );
 };
 
+interface WrapContentProps {
+    content: ReactNode;
+    loading: boolean;
+    size: UiButtonSize;
+    hasGap: boolean;
+}
+
+/**
+ * При `loading` ховаємо реальний контент через `invisible` (зберігає bbox)
+ * і кладемо спінер абсолютно по центру. Це той самий патерн, який раніше
+ * робився руками у `auth/signin/page.tsx`, тепер інкапсульований у примітиві
+ * — щоб усі кнопки з submit-state мали ідентичну поведінку без width-jump.
+ */
+const wrapContent = ({ content, loading, size, hasGap }: WrapContentProps) => {
+    if (!loading) return content;
+    return (
+        <>
+            <span
+                className={composeClasses(
+                    'inline-flex items-center',
+                    hasGap && 'gap-2',
+                    'invisible'
+                )}
+            >
+                {content}
+            </span>
+            <span
+                className="absolute inset-0 flex items-center justify-center"
+                aria-hidden
+            >
+                <UiSpinner size={spinnerSizeForButton[size]} />
+            </span>
+        </>
+    );
+};
+
+/**
+ * Для `as="link"` додаємо безкоштовний pending-індикатор: під час client-side
+ * навігації (`router.push`-еквівалент, що його робить `<Link>`) `useLinkStatus`
+ * повертає `pending=true` поки наступна сторінка не зрендериться. Це знімає
+ * потребу замінювати `<Link>` на `useTransition + router.push` лише заради
+ * spinner-а — anchor-семантика (middle-click, контекстне меню, hover URL,
+ * `role="link"`) зберігається. Викликається тільки усередині `<Link>`-нащадка,
+ * де hook дійсно живе у відповідному контексті.
+ */
+const LinkLoadingWrapper = ({
+    content,
+    explicitLoading,
+    size,
+    hasGap,
+}: {
+    content: ReactNode;
+    explicitLoading: boolean;
+    size: UiButtonSize;
+    hasGap: boolean;
+}) => {
+    const { pending } = useLinkStatus();
+    return wrapContent({
+        content,
+        loading: explicitLoading || pending,
+        size,
+        hasGap,
+    });
+};
+
 /**
  * Shared UI attributes for all button/link variants
  */
@@ -108,20 +186,22 @@ interface CommonProps {
     className: string;
     variant: UiButtonVariant;
     size: UiButtonSize;
+    loading: boolean;
 }
 
-const getCommonProps = ({ className, variant, size }: CommonProps) => ({
+const getCommonProps = ({ className, variant, size, loading }: CommonProps) => ({
     className,
     'data-variant': variant,
     'data-size': size,
+    'aria-busy': loading || undefined,
 });
 
 /**
  * Additional props for link elements (internal and external)
  */
-const getLinkAccessibilityProps = (disabled?: boolean) => ({
-    'aria-disabled': disabled,
-    tabIndex: disabled ? -1 : undefined,
+const getLinkAccessibilityProps = (blocked: boolean) => ({
+    'aria-disabled': blocked,
+    tabIndex: blocked ? -1 : undefined,
 });
 
 const UiButton = forwardRef<
@@ -136,15 +216,23 @@ const UiButton = forwardRef<
         IconLeft,
         IconRight,
         disabled,
+        loading = false,
     } = props;
 
+    const blocked = disabled || loading;
+    const hasGap = variant !== 'icon' && variant !== 'icon-compact';
+
     const classes = composeClasses(
-        'inline-flex items-center justify-center rounded-lg',
-        variant !== 'icon' && variant !== 'icon-compact' && 'gap-2',
+        'inline-flex items-center justify-center rounded-lg relative',
+        hasGap && 'gap-2',
         'cursor-pointer disabled:cursor-not-allowed',
         'focus:outline-none',
         'transition-colors',
-        disabled && 'opacity-50 cursor-not-allowed pointer-events-none',
+        // `disabled` без `loading` — справжній disabled-state: greyed-out +
+        // not-allowed cursor. `loading` навмисно НЕ грейкає кнопку, щоб
+        // користувач бачив "запит у роботі", а не "кнопка вимкнена".
+        disabled && !loading && 'opacity-50 cursor-not-allowed pointer-events-none',
+        loading && 'cursor-wait pointer-events-none',
         variant === 'icon'
             ? iconSizeStyles[size]
             : variant === 'icon-compact'
@@ -163,9 +251,10 @@ const UiButton = forwardRef<
         className
     );
 
-    const content = renderContent({ IconLeft, IconRight, children, size });
-    const commonProps = getCommonProps({ className: classes, variant, size });
-    const accessibilityProps = getLinkAccessibilityProps(disabled);
+    const innerContent = renderContent({ IconLeft, IconRight, children, size });
+    const content = wrapContent({ content: innerContent, loading, size, hasGap });
+    const commonProps = getCommonProps({ className: classes, variant, size, loading });
+    const accessibilityProps = getLinkAccessibilityProps(blocked);
 
     // Type guard: Native anchor element
     if (props.as === 'a') {
@@ -178,6 +267,7 @@ const UiButton = forwardRef<
             IconLeft: _iconLeft,
             IconRight: _iconRight,
             disabled: _disabled,
+            loading: _loading,
             children: _children,
             ...anchorProps
         } = props;
@@ -189,7 +279,7 @@ const UiButton = forwardRef<
                 {...accessibilityProps}
                 href={href}
                 onClick={(e) => {
-                    if (disabled) {
+                    if (blocked) {
                         e.preventDefault();
                         e.stopPropagation();
                         return;
@@ -214,6 +304,7 @@ const UiButton = forwardRef<
             IconLeft: _iconLeft,
             IconRight: _iconRight,
             disabled: _disabled,
+            loading: _loading,
             children: _children,
             ...linkProps
         } = props;
@@ -225,7 +316,7 @@ const UiButton = forwardRef<
                 {...accessibilityProps}
                 href={href}
                 onClick={(e) => {
-                    if (disabled) {
+                    if (blocked) {
                         e.preventDefault();
                         e.stopPropagation();
                         return;
@@ -234,7 +325,12 @@ const UiButton = forwardRef<
                 }}
                 ref={ref as Ref<HTMLAnchorElement>}
             >
-                {content}
+                <LinkLoadingWrapper
+                    content={innerContent}
+                    explicitLoading={loading}
+                    size={size}
+                    hasGap={hasGap}
+                />
             </Link>
         );
     }
@@ -248,6 +344,7 @@ const UiButton = forwardRef<
         IconLeft: _iconLeft,
         IconRight: _iconRight,
         disabled: _disabled,
+        loading: _loading,
         children: _children,
         ...buttonProps
     } = props;
@@ -257,9 +354,9 @@ const UiButton = forwardRef<
             {...buttonProps}
             {...commonProps}
             type={buttonProps.type ?? 'button'}
-            disabled={disabled}
+            disabled={blocked}
             onClick={(e) => {
-                if (disabled) {
+                if (blocked) {
                     e.preventDefault();
                     e.stopPropagation();
                     return;

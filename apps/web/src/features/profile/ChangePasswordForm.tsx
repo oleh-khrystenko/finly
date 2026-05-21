@@ -8,7 +8,6 @@ import { z } from 'zod';
 import { passwordSchema } from '@finly/types';
 import UiButton from '@/shared/ui/UiButton';
 import UiPasswordInput from '@/shared/ui/UiPasswordInput';
-import UiSpinner from '@/shared/ui/UiSpinner';
 import { getZodFieldError } from '@/shared/lib';
 import { changePassword, getMe } from '@/shared/api';
 import { useAuthStore } from '@/entities/user';
@@ -136,9 +135,10 @@ const ChangePasswordForm = ({ onDone, onCancel }: ChangePasswordFormProps) => {
                     type="submit"
                     variant="filled"
                     size="md"
-                    disabled={isSubmitting || !canSubmit}
+                    disabled={!canSubmit}
+                    loading={isSubmitting}
                 >
-                    {isSubmitting ? <UiSpinner size="sm" /> : 'Змінити пароль'}
+                    Змінити пароль
                 </UiButton>
 
                 <UiButton

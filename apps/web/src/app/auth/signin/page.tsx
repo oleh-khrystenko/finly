@@ -549,21 +549,11 @@ function SigninContent() {
                 type="submit"
                 variant="filled"
                 size="lg"
-                className="relative w-full justify-center"
+                className="w-full justify-center"
                 disabled={isPasswordBusy}
+                loading={passwordForm.formState.isSubmitting}
             >
-                <span
-                    className={
-                        passwordForm.formState.isSubmitting ? 'invisible' : ''
-                    }
-                >
-                    Увійти
-                </span>
-                {passwordForm.formState.isSubmitting && (
-                    <span className="absolute inset-0 flex items-center justify-center">
-                        <UiSpinner size="sm" />
-                    </span>
-                )}
+                Увійти
             </UiButton>
 
             {showMagicLinkSuggestion && (
@@ -605,16 +595,13 @@ function SigninContent() {
                     variant="text"
                     size="sm"
                     onClick={handleResend}
-                    disabled={resendCountdown > 0 || resending}
+                    disabled={resendCountdown > 0}
+                    loading={resending}
                     className="text-primary text-sm font-medium hover:underline"
                 >
-                    {resending ? (
-                        <UiSpinner size="sm" />
-                    ) : resendCountdown > 0 ? (
-                        `Повторно через ${resendCountdown}с`
-                    ) : (
-                        'Надіслати повторно'
-                    )}
+                    {resendCountdown > 0
+                        ? `Повторно через ${resendCountdown}с`
+                        : 'Надіслати повторно'}
                 </UiButton>
 
                 <UiButton
@@ -641,10 +628,10 @@ function SigninContent() {
                 variant="filled"
                 size="lg"
                 className="w-full justify-center"
-                disabled={submitting}
+                loading={submitting}
                 onClick={handleRestore}
             >
-                {submitting ? <UiSpinner size="sm" /> : 'Відновити акаунт'}
+                Відновити акаунт
             </UiButton>
 
             <UiButton

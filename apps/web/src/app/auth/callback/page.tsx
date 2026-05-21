@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import UiButton from '@/shared/ui/UiButton';
 import UiFullPageLoader from '@/shared/ui/UiFullPageLoader';
-import UiSpinner from '@/shared/ui/UiSpinner';
 import { refreshToken, getMe, restoreAccount, acceptTerms } from '@/shared/api';
 import { consumeRedirect } from '@/shared/lib';
 import { useAuthStore } from '@/entities/user';
@@ -82,10 +81,10 @@ export default function CallbackPage() {
                     variant="filled"
                     size="lg"
                     className="w-full justify-center"
-                    disabled={submitting}
+                    loading={submitting}
                     onClick={() => void handleRestore()}
                 >
-                    {submitting ? <UiSpinner size="sm" /> : 'Відновити акаунт'}
+                    Відновити акаунт
                 </UiButton>
             </div>
         );
