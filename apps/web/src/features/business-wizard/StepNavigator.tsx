@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import UiButton from '@/shared/ui/UiButton';
 import { composeClasses } from '@/shared/lib';
 import { STEP_TITLES, type BusinessWizardStep } from './businessWizardStore';
@@ -96,8 +96,16 @@ export default function StepNavigator({ current, steps, onJumpBack }: Props) {
                 </p>
             </div>
 
-            {/* Desktop horizontal */}
-            <ol className="hidden items-center justify-between gap-2 sm:flex">
+            {/*
+             * Desktop horizontal: step-items + connectors як alternating
+             * sibling-`<li>` (а не nested), щоб довгі labels ("Призначення і
+             * банки") не wrap-ились. Title-li — `shrink-0` (натуральна
+             * ширина + `whitespace-nowrap`), connector-li — `flex-1`
+             * (заповнює простір між titles). Раніше було `flex-1` на title-
+             * li → всі 4 кроки отримували рівну ширину, і довший label не
+             * вміщався → wrap.
+             */}
+            <ol className="hidden items-center gap-2 sm:flex">
                 {steps.map((step, idx) => {
                     const stepState: StepState =
                         idx < safeIndex
@@ -107,50 +115,53 @@ export default function StepNavigator({ current, steps, onJumpBack }: Props) {
                               : 'future';
 
                     return (
-                        <li
-                            key={step}
-                            className="flex flex-1 items-center gap-2"
-                        >
-                            {stepState === 'passed' ? (
-                                <UiButton
-                                    variant="text"
-                                    size="sm"
-                                    onClick={() => onJumpBack(step)}
-                                    IconLeft={
+                        <Fragment key={step}>
+                            <li className="flex shrink-0 items-center">
+                                {stepState === 'passed' ? (
+                                    <UiButton
+                                        variant="text"
+                                        size="sm"
+                                        className="whitespace-nowrap"
+                                        onClick={() => onJumpBack(step)}
+                                        IconLeft={
+                                            <StepIndicator
+                                                index={idx}
+                                                state="passed"
+                                            />
+                                        }
+                                    >
+                                        {STEP_TITLES[step]}
+                                    </UiButton>
+                                ) : (
+                                    <span
+                                        aria-current={
+                                            stepState === 'current'
+                                                ? 'step'
+                                                : undefined
+                                        }
+                                        className={composeClasses(
+                                            'inline-flex items-center gap-2 px-3 py-1.5 text-sm whitespace-nowrap',
+                                            stepState === 'current' &&
+                                                'text-foreground font-semibold',
+                                            stepState === 'future' &&
+                                                'text-muted-foreground opacity-50'
+                                        )}
+                                    >
                                         <StepIndicator
                                             index={idx}
-                                            state="passed"
+                                            state={stepState}
                                         />
-                                    }
-                                >
-                                    {STEP_TITLES[step]}
-                                </UiButton>
-                            ) : (
-                                <span
-                                    aria-current={
-                                        stepState === 'current'
-                                            ? 'step'
-                                            : undefined
-                                    }
-                                    className={composeClasses(
-                                        'inline-flex items-center gap-2 px-3 py-1.5 text-sm',
-                                        stepState === 'current' &&
-                                            'text-foreground font-semibold',
-                                        stepState === 'future' &&
-                                            'text-muted-foreground opacity-50'
-                                    )}
-                                >
-                                    <StepIndicator
-                                        index={idx}
-                                        state={stepState}
-                                    />
-                                    <span>{STEP_TITLES[step]}</span>
-                                </span>
-                            )}
+                                        <span>{STEP_TITLES[step]}</span>
+                                    </span>
+                                )}
+                            </li>
                             {idx < steps.length - 1 && (
-                                <div className="bg-border h-px flex-1" />
+                                <li
+                                    aria-hidden
+                                    className="bg-border h-px flex-1"
+                                />
                             )}
-                        </li>
+                        </Fragment>
                     );
                 })}
             </ol>

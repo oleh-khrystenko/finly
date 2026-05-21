@@ -284,6 +284,21 @@ const migratePersistedState = (
     };
 };
 
+/**
+ * "Порожній draft" — користувач ще не ввів жодного поля. `acceptedBanks`
+ * навмисно НЕ враховується, бо завжди pre-filled `MVP_BANKS` за дефолтом
+ * (Sprint 3 §B6). Перевірка точкова — кожне поле, яке user реально вводить
+ * або обирає. Слугує для skip-confirm-on-empty у cancel-flow: якщо нічого
+ * не введено — викидати модалку зайве.
+ */
+export const isWizardDraftEmpty = (draft: BusinessWizardDraft): boolean =>
+    draft.type === undefined &&
+    !draft.name &&
+    !draft.taxId &&
+    draft.taxationSystem === undefined &&
+    draft.isVatPayer === undefined &&
+    !draft.paymentPurposeTemplate;
+
 export const useBusinessWizardStore = create<BusinessWizardState>()(
     persist(
         (set) => ({

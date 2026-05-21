@@ -26,6 +26,9 @@ const DeleteInvoiceConfirmDialog = dynamic(
 const DeleteAccountConfirmDialog = dynamic(
     () => import('@/features/account-edit/DeleteAccountConfirmDialog')
 );
+const CancelBusinessWizardDialog = dynamic(
+    () => import('@/features/business-wizard/CancelBusinessWizardDialog')
+);
 const SlugPresetWarningDialog = dynamic(
     () => import('@/entities/invoice/SlugPresetWarningDialog')
 );
@@ -44,6 +47,7 @@ export function Overlays() {
             <DeleteBusinessConfirmDialog />
             <DeleteInvoiceConfirmDialog />
             <DeleteAccountConfirmDialog />
+            <CancelBusinessWizardDialog />
             <SlugPresetWarningDialog />
             <MobileMenuSheet />
         </>

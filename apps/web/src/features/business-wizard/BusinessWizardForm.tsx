@@ -1,12 +1,16 @@
 'use client';
 
 import { useEffect, useMemo } from 'react';
+import UiButton from '@/shared/ui/UiButton';
 import {
     computeStepsForType,
     isBusinessWizardStep,
+    isWizardDraftEmpty,
     useBusinessWizardStore,
     type BusinessWizardStep,
 } from './businessWizardStore';
+import { useCancelBusinessWizardConfirmStore } from './cancelBusinessWizardConfirmStore';
+import { useCancelWizardAction } from './useCancelWizardAction';
 import StepNavigator from './StepNavigator';
 import Step1TypeAndName from './Step1TypeAndName';
 import Step2Requisites from './Step2Requisites';
@@ -65,8 +69,34 @@ export default function BusinessWizardForm() {
         [formData.type]
     );
 
+    const openCancel = useCancelBusinessWizardConfirmStore((s) => s.open);
+    const cancelWizard = useCancelWizardAction();
+
+    /**
+     * Skip-confirm-on-empty: якщо користувач ще нічого не ввів — модалка
+     * "ви впевнені?" зайва, бо нема чого втрачати. Одразу cancel-flow. На
+     * non-empty draft — стандартний confirm-flow через діалог.
+     */
+    const handleCancelClick = () => {
+        if (isWizardDraftEmpty(formData)) {
+            cancelWizard();
+        } else {
+            openCancel();
+        }
+    };
+
     return (
         <div className="space-y-6">
+            <div className="flex justify-end">
+                <UiButton
+                    type="button"
+                    variant="text"
+                    size="sm"
+                    onClick={handleCancelClick}
+                >
+                    Скасувати
+                </UiButton>
+            </div>
             <StepNavigator
                 current={currentStep}
                 steps={steps}
