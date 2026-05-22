@@ -41,6 +41,7 @@ export default function RequisitesSection({ business, onSave }: Props) {
                         inputMode="numeric"
                         maxLength={taxIdConfig.maxLength}
                         placeholder={taxIdConfig.placeholder}
+                        description={taxIdConfig.description}
                     />
                 )}
                 validate={(v) => {

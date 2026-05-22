@@ -4,20 +4,47 @@ describe('taxIdFieldConfig — Sprint 7 §SP-4 type-aware UI config', () => {
     it.each([
         [
             'individual',
-            { label: 'РНОКПП', placeholder: '1234567890', maxLength: 10 },
+            {
+                label: 'РНОКПП',
+                placeholder: '1234567890',
+                description: '10 цифр — як у довідці ДПС',
+                maxLength: 10,
+            },
         ],
-        ['fop', { label: 'РНОКПП', placeholder: '1234567890', maxLength: 10 }],
-        ['tov', { label: 'ЄДРПОУ', placeholder: '12345678', maxLength: 8 }],
+        [
+            'fop',
+            {
+                label: 'РНОКПП',
+                placeholder: '1234567890',
+                description: '10 цифр — особистий код з довідки ДПС',
+                maxLength: 10,
+            },
+        ],
+        [
+            'tov',
+            {
+                label: 'ЄДРПОУ',
+                placeholder: '12345678',
+                description: '8 цифр — як у виписці ЄДР',
+                maxLength: 8,
+            },
+        ],
         [
             'organization',
-            { label: 'ЄДРПОУ', placeholder: '12345678', maxLength: 8 },
+            {
+                label: 'ЄДРПОУ',
+                placeholder: '12345678',
+                description: '8 цифр — як у виписці ЄДР',
+                maxLength: 8,
+            },
         ],
     ] as const)(
-        '%s → label/placeholder/maxLength відповідає нормативу',
+        '%s → label/placeholder/description/maxLength відповідає нормативу',
         (type, expected) => {
             const config = taxIdFieldConfig(type);
             expect(config.label).toBe(expected.label);
             expect(config.placeholder).toBe(expected.placeholder);
+            expect(config.description).toBe(expected.description);
             expect(config.maxLength).toBe(expected.maxLength);
         }
     );

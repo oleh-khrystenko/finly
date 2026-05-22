@@ -81,6 +81,7 @@ export default function Step2Requisites() {
             <UiInput
                 label={config.label}
                 placeholder={config.placeholder}
+                description={config.description}
                 inputMode="numeric"
                 maxLength={config.maxLength}
                 {...form.register('taxId')}
