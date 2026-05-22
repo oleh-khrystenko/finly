@@ -32,6 +32,7 @@
 
     /* Success — pure-green (hue 145), розведений з primary-emerald для парних UI-станів */
     --success: oklch(0.55 0.13 145);
+    --success-foreground: oklch(0.985 0.004 85);
     /* Warning — теплий amber (hue 75), низький L для тексту на paper-фоні */
     --warning: oklch(0.65 0.15 75);
     --radius: 0.625rem;
@@ -72,6 +73,7 @@
     --ring: oklch(0.68 0.14 158);
 
     --success: oklch(0.65 0.13 145);
+    --success-foreground: oklch(0.18 0.012 65);
     --warning: oklch(0.75 0.14 75);
 
     /* Liquid Glass — warm-dark */
@@ -101,6 +103,7 @@
     --color-input: var(--input);
     --color-ring: var(--ring);
     --color-success: var(--success);
+    --color-success-foreground: var(--success-foreground);
     --color-warning: var(--warning);
     --color-liquid-glass-border: var(--liquid-glass-border);
     --radius-sm: calc(var(--radius) - 4px);

@@ -35,6 +35,7 @@ Feature / Page / Widget / shared/ui/
 | **Surfaces** (background, card, muted, secondary, accent, border, input)              | **85** (paper-cream)   | **65** (warm-brown)  | Світлі у light, темні у dark |
 | **Text** (foreground, muted-foreground, card/secondary/accent/muted-foreground)       | **65** (warm-brown)    | **85** (paper-cream) | Темні у light, світлі у dark |
 | **`primary-foreground`** (CTA-button label)                                           | **85** (paper, L≈0.99) | **65** (brown, L≈0.18) | Інверсія за темою          |
+| **`success-foreground`** (success-state label)                                        | **85** (paper, L≈0.99) | **65** (brown, L≈0.18) | Інверсія за темою          |
 | **`destructive-foreground`** (alarm-button label)                                     | **85** (paper, L≈0.99) | **85** (paper, L≈0.98) | **Завжди світлий**           |
 
 Chroma нейтралів ≤ 0.018 — ледь-помітний tint без cafe-yellow агресії.
@@ -56,7 +57,7 @@ Chroma нейтралів ≤ 0.018 — ледь-помітний tint без ca
 | **Border**      | `border-border`                                                     | `var(--border)`                                       | Межі, роздільники                           |
 | **Input**       | `bg-input`, `border-input`                                          | `var(--input)`                                        | Input borders/bg                            |
 | **Ring**        | `ring-ring`                                                         | `var(--ring)`                                         | Focus rings                                 |
-| **Success**     | `text-success`, `bg-success`                                        | `var(--success)`                                      | Успішні стани, toast notifications          |
+| **Success**     | `text-success`, `bg-success`, `text-success-foreground`             | `var(--success)`, `var(--success-foreground)`         | Успішні стани, toast notifications, label на success-fill |
 | **Warning**     | `text-warning`, `bg-warning`                                        | `var(--warning)`                                      | Попередження, toast notifications           |
 
 **Utility tokens:**
