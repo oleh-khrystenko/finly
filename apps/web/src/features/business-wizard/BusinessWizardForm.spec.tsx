@@ -204,8 +204,8 @@ describe('BusinessWizardForm', () => {
         });
     });
 
-    describe("Step 'taxation' — coupled VAT × taxationSystem rule (C1)", () => {
-        it('VAT switch disabled при taxationSystem=simplified-1 (UI guard)', () => {
+    describe("Step 'taxation' — coupled VAT × taxationSystem rule (C1 + Sprint 13 radio-cards)", () => {
+        it('VAT radio-cards приховані при taxationSystem=simplified-1 (ПКУ — ПДВ заборонений)', () => {
             act(() => {
                 useBusinessWizardStore.setState({
                     currentStep: 'taxation',
@@ -222,13 +222,15 @@ describe('BusinessWizardForm', () => {
 
             render(<BusinessWizardForm />);
 
-            const vatSwitch = screen.getByRole('switch', {
-                name: /платник пдв/i,
-            });
-            expect(vatSwitch).toBeDisabled();
+            expect(
+                screen.queryByRole('radio', { name: /ставка/i })
+            ).not.toBeInTheDocument();
+            expect(
+                screen.queryByRole('radio', { name: /зареєстрований/i })
+            ).not.toBeInTheDocument();
         });
 
-        it('VAT switch enabled при taxationSystem=simplified-3', () => {
+        it('VAT radio-cards видимі при taxationSystem=simplified-3 (вибір ставки 5% vs 3%+ПДВ)', () => {
             act(() => {
                 useBusinessWizardStore.setState({
                     currentStep: 'taxation',
@@ -245,10 +247,37 @@ describe('BusinessWizardForm', () => {
 
             render(<BusinessWizardForm />);
 
-            const vatSwitch = screen.getByRole('switch', {
-                name: /платник пдв/i,
+            expect(
+                screen.getByRole('radio', { name: /ставка 5% без ПДВ/i })
+            ).toBeInTheDocument();
+            expect(
+                screen.getByRole('radio', { name: /ставка 3% \+ ПДВ/i })
+            ).toBeInTheDocument();
+        });
+
+        it('VAT radio-cards для Загальної системи — формулювання про реєстрацію (ст. 181 ПКУ)', () => {
+            act(() => {
+                useBusinessWizardStore.setState({
+                    currentStep: 'taxation',
+                    formData: {
+                        type: 'fop',
+                        name: 'Іваненко',
+                        taxId: VALID_RNOKPP,
+                        taxationSystem: 'general',
+                        isVatPayer: false,
+                        acceptedBanks: [...MVP_BANKS],
+                    },
+                });
             });
-            expect(vatSwitch).not.toBeDisabled();
+
+            render(<BusinessWizardForm />);
+
+            expect(
+                screen.getByRole('radio', { name: /^Не зареєстрований/i })
+            ).toBeInTheDocument();
+            expect(
+                screen.getByRole('radio', { name: /^Зареєстрований платник ПДВ/i })
+            ).toBeInTheDocument();
         });
 
         it("Sprint 7 §SP-7 — defensive redirect: type=individual на step 'taxation' → setStep('purpose-banks')", () => {

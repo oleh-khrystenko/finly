@@ -6,15 +6,22 @@ import {
     TAXATION_SYSTEMS,
     TAXATION_SYSTEM_LABEL,
     isTaxationAllowedForType,
-    isVatAllowedTaxationSystem,
     requiresTaxation,
     type Business,
     type TaxationSystem,
 } from '@finly/types';
+import {
+    VAT_CHOICE_SECTION_LABEL,
+    getVatChoiceOptions,
+    isVatChoiceApplicable,
+    vatBoolToChoice,
+    vatChoiceToBool,
+    type VatChoice,
+} from '@/entities/business';
 import UiButton from '@/shared/ui/UiButton';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSelect from '@/shared/ui/UiSelect';
-import UiSwitch from '@/shared/ui/UiSwitch';
+import UiRadioCardGroup from '@/shared/ui/UiRadioCardGroup';
 
 /**
  * Sprint 7 §7.8 / §SP-3 — `Business.taxationSystem` і `isVatPayer` тепер
@@ -75,14 +82,16 @@ interface Props {
 }
 
 /**
- * Sprint 3 §3.8 §C1 — coupled card. Sprint plan §E6 пояснює: пара
- * `taxationSystem + isVatPayer` редагується разом (один "олівець" на всю
- * картку, два контроли всередині, один Save). Тому окрема implementation
- * замість двох `EditableField`-ів.
+ * Sprint 3 §3.8 §C1 — coupled card. Pair `taxationSystem + isVatPayer`
+ * редагується разом (один "олівець" на всю картку, два контроли всередині,
+ * один Save). Sprint 13 — VAT-tumbler замінено на `UiRadioCardGroup` з
+ * контекстними title/description per system (ст. 293.3 ПКУ — на Спрощеній-3
+ * це вибір ставки; ст. 181/182 ПКУ — на Загальній це факт реєстрації).
  *
- * Coupled-rule: при перемиканні taxationSystem на simplified-1/2, якщо
- * isVatPayer=true — automatically false. Save надсилає обидва поля за один
- * PATCH (bypass-ить service-side cross-field check).
+ * Coupled-rule: при перемиканні taxationSystem на не-VAT-allowed систему
+ * (`simplified-1/2`) — radio-cards секція ховається, а `draftVat` обнуляється
+ * на `false`, щоб submit ніс legitimate pair. Save надсилає обидва поля за
+ * один PATCH (bypass-ить service-side cross-field check).
  */
 export default function TaxationSection({ business, onSave }: Props) {
     const [editing, setEditing] = useState(false);
@@ -93,7 +102,7 @@ export default function TaxationSection({ business, onSave }: Props) {
     const [error, setError] = useState<string | undefined>();
     const [saving, setSaving] = useState(false);
 
-    // ПКУ розд. XIV гл. 1: ТОВ обмежений спрощеною-3 і загальною; ФОП — усі 4.
+    // ПКУ розд. XIV гл. 1: ТОВ обмежений Спрощеною-3 і Загальною; ФОП — усі 4.
     // `business.type` immutable post-creation, тож allowed-set обчислюємо один
     // раз на mount.
     const selectOptions = useMemo(
@@ -107,7 +116,11 @@ export default function TaxationSection({ business, onSave }: Props) {
         [business.type]
     );
 
-    const vatAllowedForDraft = isVatAllowedTaxationSystem(draftTaxation);
+    const vatApplicable = isVatChoiceApplicable(draftTaxation);
+    const vatOptions = useMemo(
+        () => (vatApplicable ? getVatChoiceOptions(draftTaxation) : null),
+        [vatApplicable, draftTaxation]
+    );
 
     const startEdit = () => {
         setDraftTaxation(business.taxationSystem);
@@ -126,7 +139,7 @@ export default function TaxationSection({ business, onSave }: Props) {
         try {
             await onSave({
                 taxationSystem: draftTaxation,
-                isVatPayer: draftVat && vatAllowedForDraft,
+                isVatPayer: vatApplicable ? draftVat : false,
             });
             setEditing(false);
             setError(undefined);
@@ -142,9 +155,16 @@ export default function TaxationSection({ business, onSave }: Props) {
     const handleTaxationChange = (next: string) => {
         const ts = next as TaxationSystem;
         setDraftTaxation(ts);
-        if (!isVatAllowedTaxationSystem(ts) && draftVat) {
+        // Coupled-flip: системи, де ПДВ юридично заборонений (Спрощена-1/2),
+        // не показують radio-card-секцію. Обнуляємо drafт-VAT, щоб submit
+        // не ніс stale-true з попередньої системи.
+        if (!isVatChoiceApplicable(ts)) {
             setDraftVat(false);
         }
+    };
+
+    const handleVatChange = (next: VatChoice) => {
+        setDraftVat(vatChoiceToBool(next));
     };
 
     return (
@@ -190,27 +210,15 @@ export default function TaxationSection({ business, onSave }: Props) {
                         value={draftTaxation}
                         onChange={handleTaxationChange}
                     />
-                    <div className="border-border flex items-start justify-between gap-3 rounded-md border p-3">
-                        <label
-                            htmlFor="taxation-vat-toggle"
-                            className="flex flex-1 cursor-pointer flex-col gap-1"
-                        >
-                            <span className="text-foreground text-sm font-medium">
-                                Платник ПДВ
-                            </span>
-                            {!vatAllowedForDraft && (
-                                <span className="text-muted-foreground text-xs">
-                                    ПДВ доступний для спрощеної-3 і загальної
-                                </span>
-                            )}
-                        </label>
-                        <UiSwitch
-                            id="taxation-vat-toggle"
-                            checked={draftVat && vatAllowedForDraft}
-                            disabled={!vatAllowedForDraft}
-                            onChange={setDraftVat}
+                    {vatApplicable && vatOptions && (
+                        <UiRadioCardGroup<VatChoice>
+                            label={VAT_CHOICE_SECTION_LABEL[draftTaxation]}
+                            options={vatOptions}
+                            value={vatBoolToChoice(draftVat)}
+                            onChange={handleVatChange}
+                            columns={{ mobile: 1, desktop: 2 }}
                         />
-                    </div>
+                    )}
                     {error && (
                         <p className="text-destructive text-xs">{error}</p>
                     )}

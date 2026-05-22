@@ -5,13 +5,20 @@ import {
     TAXATION_SYSTEMS,
     TAXATION_SYSTEM_LABEL,
     isTaxationAllowedForType,
-    isVatAllowedTaxationSystem,
     requiresTaxation,
     type TaxationSystem,
 } from '@finly/types';
+import {
+    VAT_CHOICE_SECTION_LABEL,
+    getVatChoiceOptions,
+    isVatChoiceApplicable,
+    vatBoolToChoice,
+    vatChoiceToBool,
+    type VatChoice,
+} from '@/entities/business';
 import UiSelect from '@/shared/ui/UiSelect';
-import UiSwitch from '@/shared/ui/UiSwitch';
 import UiButton from '@/shared/ui/UiButton';
+import UiRadioCardGroup from '@/shared/ui/UiRadioCardGroup';
 import { useBusinessWizardStore } from './businessWizardStore';
 
 export default function Step3Taxation() {
@@ -38,13 +45,19 @@ export default function Step3Taxation() {
     const [taxationSystem, setTaxationSystem] = useState<
         TaxationSystem | undefined
     >(formData.taxationSystem);
-    const [isVatPayer, setIsVatPayer] = useState<boolean>(
-        formData.isVatPayer ?? false
+    /**
+     * VAT-вибір — `undefined` поки користувач явно не клацнув одну з radio-cards.
+     * Default `false` ховав би відсутність рішення під pre-selected карткою
+     * "без ПДВ" — frictionless UI, але дезінформація: бекенд би отримав
+     * `isVatPayer: false` як ніби-юзер обрав, а реально просто не торкнувся.
+     * `canProceed` примусово вимагає explicit-choice для VAT-required систем.
+     */
+    const [vatChoice, setVatChoice] = useState<VatChoice | undefined>(
+        formData.isVatPayer === undefined
+            ? undefined
+            : vatBoolToChoice(formData.isVatPayer)
     );
 
-    // ПКУ розд. XIV гл. 1: ТОВ обмежений спрощеною-3 і загальною; ФОП — усі 4.
-    // Фільтр заразом покриває майбутні розширення `BusinessType` без правок UI:
-    // допустимий перелік живе у `ALLOWED_TAXATION_SYSTEMS_BY_TYPE`.
     const selectOptions = useMemo(
         () =>
             TAXATION_SYSTEMS.filter((system) =>
@@ -58,24 +71,32 @@ export default function Step3Taxation() {
         [formData.type]
     );
 
-    const vatAllowed =
-        taxationSystem !== undefined &&
-        isVatAllowedTaxationSystem(taxationSystem);
+    const vatApplicable = isVatChoiceApplicable(taxationSystem);
+    const vatOptions = useMemo(
+        () => (vatApplicable ? getVatChoiceOptions(taxationSystem) : null),
+        [vatApplicable, taxationSystem]
+    );
 
     const handleTaxationChange = (next: string) => {
         const ts = next as TaxationSystem;
         setTaxationSystem(ts);
-        // Coupled-rule (C1): при перемиканні на simplified-1/2 — automatic
-        // false для VAT, щоб submitв уmовно невалідну пару.
-        if (!isVatAllowedTaxationSystem(ts) && isVatPayer) {
-            setIsVatPayer(false);
+        // На Спрощеній-1/2 ПДВ юридично заборонений (ст. 293.3 ПКУ) — radio-
+        // card-секція не рендериться, а stale-вибір з попередньої системи
+        // (наприклад, user був на Спрощеній-3 з 'yes' → перейшов на -1)
+        // треба обнулити, інакше submit понесе invalid pair.
+        if (!isVatChoiceApplicable(ts)) {
+            setVatChoice(undefined);
         }
     };
 
-    const canProceed = taxationSystem !== undefined;
+    const canProceed =
+        taxationSystem !== undefined && (!vatApplicable || vatChoice !== undefined);
 
     const handleNext = () => {
         if (!taxationSystem) return;
+        const isVatPayer = vatApplicable
+            ? vatChoiceToBool(vatChoice as VatChoice)
+            : false;
         patch({ taxationSystem, isVatPayer });
         nextStep();
     };
@@ -90,27 +111,15 @@ export default function Step3Taxation() {
                 onChange={handleTaxationChange}
             />
 
-            <div className="border-border flex items-start justify-between gap-3 rounded-md border p-3">
-                <label
-                    htmlFor="wizard-vat"
-                    className="flex flex-1 cursor-pointer flex-col gap-1"
-                >
-                    <span className="text-foreground text-sm font-medium">
-                        Платник ПДВ
-                    </span>
-                    {!vatAllowed && (
-                        <span className="text-muted-foreground text-xs">
-                            ПДВ доступний для спрощеної-3 і загальної системи
-                        </span>
-                    )}
-                </label>
-                <UiSwitch
-                    id="wizard-vat"
-                    checked={isVatPayer && vatAllowed}
-                    disabled={!vatAllowed}
-                    onChange={(next) => setIsVatPayer(next)}
+            {vatApplicable && vatOptions && (
+                <UiRadioCardGroup<VatChoice>
+                    label={VAT_CHOICE_SECTION_LABEL[taxationSystem]}
+                    options={vatOptions}
+                    value={vatChoice}
+                    onChange={setVatChoice}
+                    columns={{ mobile: 1, desktop: 2 }}
                 />
-            </div>
+            )}
 
             <div className="flex justify-between">
                 <UiButton
