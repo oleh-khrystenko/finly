@@ -11,6 +11,7 @@ import {
     isTaxationAllowedForType,
     requiresTaxation,
 } from '@finly/types';
+import { taxIdFieldConfig } from '@/entities/business';
 
 /**
  * Sprint 7 §SP-6 — wizard step як **семантичний літерал**, не numeric
@@ -157,6 +158,15 @@ export interface BusinessWizardState {
      *
      * При зворотному переході (individual/organization → fop/tov) поля
      * лишаються `undefined` — користувач заповнить на Step 'taxation'.
+     *
+     * **`taxId`-reset на несумісний формат** — симетричний інваріант з
+     * taxation-clear. Якщо у draft уже введено taxId, який не пройде
+     * validator нового типу (наприклад, 10-цифровий РНОКПП після переходу
+     * fop → tov, де очікується 8-цифровий ЄДРПОУ) — `taxId` скидається у
+     * `undefined`. Без цього Step2 на re-mount хапав би старе значення як
+     * `defaultValues`, RHF reject-ив би його новим валідатором, і кнопка
+     * "Далі" лишалася б заблокованою поки користувач не видалить надлишок
+     * цифр вручну.
      */
     setType: (type: BusinessType) => void;
     patchFormData: (patch: BusinessWizardDraft) => void;
@@ -332,19 +342,25 @@ export const useBusinessWizardStore = create<BusinessWizardState>()(
                             willBeTaxationType &&
                             currentSystem !== undefined &&
                             !isTaxationAllowedForType(type, currentSystem));
-                    if (shouldClearTaxation) {
-                        return {
-                            formData: {
-                                ...s.formData,
-                                type,
-                                taxationSystem: undefined,
-                                isVatPayer: undefined,
-                            },
-                        };
-                    }
-                    return {
-                        formData: { ...s.formData, type },
+                    const currentTaxId = s.formData.taxId;
+                    const shouldClearTaxId =
+                        typeof currentTaxId === 'string' &&
+                        currentTaxId.length > 0 &&
+                        !taxIdFieldConfig(type).validator.safeParse(
+                            currentTaxId
+                        ).success;
+                    const nextFormData: BusinessWizardDraft = {
+                        ...s.formData,
+                        type,
                     };
+                    if (shouldClearTaxation) {
+                        nextFormData.taxationSystem = undefined;
+                        nextFormData.isVatPayer = undefined;
+                    }
+                    if (shouldClearTaxId) {
+                        nextFormData.taxId = undefined;
+                    }
+                    return { formData: nextFormData };
                 }),
             patchFormData: (patch) =>
                 set((s) => ({ formData: { ...s.formData, ...patch } })),

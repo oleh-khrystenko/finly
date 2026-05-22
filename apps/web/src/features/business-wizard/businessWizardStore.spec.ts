@@ -382,6 +382,95 @@ describe('useBusinessWizardStore', () => {
             expect(data.taxationSystem).toBeUndefined();
             expect(data.isVatPayer).toBeUndefined();
         });
+
+        // ─── taxId reset на несумісний формат ───
+        //
+        // Якщо користувач уже ввів taxId на Step 'requisites' і повертається
+        // на Step 'type-name' змінити тип — store мусить скинути значення,
+        // якщо validator нового типу його reject-ить. Інакше Step2 на
+        // re-mount хапає старе значення як defaultValues, RHF reject-ить,
+        // кнопка "Далі" disabled поки користувач не зітре зайве вручну.
+
+        it.each([
+            ['fop', 'tov'],
+            ['fop', 'organization'],
+            ['individual', 'tov'],
+            ['individual', 'organization'],
+        ] as const)(
+            'переключення %s (10-digit РНОКПП) → %s СКИДАЄ taxId (формат 8-digit ЄДРПОУ)',
+            (fromType, toType) => {
+                const { setType, patchFormData } =
+                    useBusinessWizardStore.getState();
+                setType(fromType);
+                patchFormData({ taxId: '1234567899' });
+                setType(toType);
+                const data = useBusinessWizardStore.getState().formData;
+                expect(data.type).toBe(toType);
+                expect(data.taxId).toBeUndefined();
+            }
+        );
+
+        it.each([
+            ['tov', 'fop'],
+            ['tov', 'individual'],
+            ['organization', 'fop'],
+            ['organization', 'individual'],
+        ] as const)(
+            'переключення %s (8-digit ЄДРПОУ) → %s СКИДАЄ taxId (формат 10-digit РНОКПП)',
+            (fromType, toType) => {
+                const { setType, patchFormData } =
+                    useBusinessWizardStore.getState();
+                setType(fromType);
+                patchFormData({ taxId: '12345678' });
+                setType(toType);
+                const data = useBusinessWizardStore.getState().formData;
+                expect(data.type).toBe(toType);
+                expect(data.taxId).toBeUndefined();
+            }
+        );
+
+        it.each([
+            ['fop', 'individual'],
+            ['individual', 'fop'],
+        ] as const)(
+            'переключення %s ↔ %s ЗБЕРІГАЄ taxId (обидва формат 10-digit РНОКПП)',
+            (fromType, toType) => {
+                const { setType, patchFormData } =
+                    useBusinessWizardStore.getState();
+                setType(fromType);
+                patchFormData({ taxId: '1234567899' });
+                setType(toType);
+                expect(useBusinessWizardStore.getState().formData.taxId).toBe(
+                    '1234567899'
+                );
+            }
+        );
+
+        it.each([
+            ['tov', 'organization'],
+            ['organization', 'tov'],
+        ] as const)(
+            'переключення %s ↔ %s ЗБЕРІГАЄ taxId (обидва формат 8-digit ЄДРПОУ)',
+            (fromType, toType) => {
+                const { setType, patchFormData } =
+                    useBusinessWizardStore.getState();
+                setType(fromType);
+                patchFormData({ taxId: '12345678' });
+                setType(toType);
+                expect(useBusinessWizardStore.getState().formData.taxId).toBe(
+                    '12345678'
+                );
+            }
+        );
+
+        it('переключення типу без введеного taxId — passthrough (нема що скидати)', () => {
+            const { setType } = useBusinessWizardStore.getState();
+            setType('fop');
+            setType('tov');
+            expect(
+                useBusinessWizardStore.getState().formData.taxId
+            ).toBeUndefined();
+        });
     });
 
     // ─── Sprint 7 §SP-6 — nextStep / prevStep через computed steps ───
