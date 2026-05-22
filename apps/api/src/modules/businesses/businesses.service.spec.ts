@@ -615,6 +615,42 @@ describe('BusinessesService', () => {
                 });
             });
 
+            it.each(['simplified-1', 'simplified-2'] as const)(
+                'tov + PATCH %s → 400 TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE (ПКУ — заборонено для ТОВ)',
+                async (taxationSystem) => {
+                    mockExistingType('tov');
+                    await expect(
+                        service.update('IvanEnko', { taxationSystem })
+                    ).rejects.toMatchObject({
+                        response: {
+                            code: 'TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE',
+                        },
+                    });
+                    expect(businessModel.findOneAndUpdate).not.toHaveBeenCalled();
+                }
+            );
+
+            it.each(['simplified-3', 'general'] as const)(
+                'tov + PATCH %s → проходить cross-check (allowed-set)',
+                async (taxationSystem) => {
+                    mockExistingType('tov');
+                    mockUpdateReturn({ taxationSystem });
+                    await expect(
+                        service.update('IvanEnko', { taxationSystem })
+                    ).resolves.toBeDefined();
+                }
+            );
+
+            it('fop + PATCH simplified-1 → проходить cross-check (для ФОП усі 4 системи валідні)', async () => {
+                mockExistingType('fop');
+                mockUpdateReturn({ taxationSystem: 'simplified-1' });
+                await expect(
+                    service.update('IvanEnko', {
+                        taxationSystem: 'simplified-1',
+                    })
+                ).resolves.toBeDefined();
+            });
+
             it('individual + PATCH valid 10-digit RNOKPP → проходить cross-check', async () => {
                 mockExistingType('individual');
                 mockUpdateReturn({ name: 'X' });

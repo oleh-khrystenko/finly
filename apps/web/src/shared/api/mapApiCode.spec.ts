@@ -81,10 +81,19 @@ describe('getApiMessage', () => {
             );
         });
 
+        it('TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE — ПКУ розд. XIV гл. 1 (групи 1/2 заборонені для ТОВ)', () => {
+            expect(
+                getApiMessage('TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE', 'businesses')
+            ).toBe(
+                'Ця система оподаткування недоступна для обраного типу бізнесу'
+            );
+        });
+
         it.each([
             'TAXATION_NOT_APPLICABLE_FOR_TYPE',
             'TAXATION_REQUIRED_FOR_TYPE',
             'TAX_ID_FORMAT_MISMATCH_TYPE',
+            'TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE',
             'INVALID_LEGAL_TAX_ID',
         ])(
             'код %s НЕ повертає UNKNOWN_FALLBACK (raw-code-leak guard)',

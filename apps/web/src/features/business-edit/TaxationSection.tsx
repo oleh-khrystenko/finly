@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pencil, Check, X } from 'lucide-react';
 import {
     TAXATION_SYSTEMS,
     TAXATION_SYSTEM_LABEL,
+    isTaxationAllowedForType,
     isVatAllowedTaxationSystem,
     requiresTaxation,
     type Business,
@@ -14,11 +15,6 @@ import UiButton from '@/shared/ui/UiButton';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSelect from '@/shared/ui/UiSelect';
 import UiSwitch from '@/shared/ui/UiSwitch';
-
-const SELECT_OPTIONS = TAXATION_SYSTEMS.map((value) => ({
-    value,
-    label: TAXATION_SYSTEM_LABEL[value],
-}));
 
 /**
  * Sprint 7 §7.8 / §SP-3 — `Business.taxationSystem` і `isVatPayer` тепер
@@ -96,6 +92,20 @@ export default function TaxationSection({ business, onSave }: Props) {
     const [draftVat, setDraftVat] = useState<boolean>(business.isVatPayer);
     const [error, setError] = useState<string | undefined>();
     const [saving, setSaving] = useState(false);
+
+    // ПКУ розд. XIV гл. 1: ТОВ обмежений спрощеною-3 і загальною; ФОП — усі 4.
+    // `business.type` immutable post-creation, тож allowed-set обчислюємо один
+    // раз на mount.
+    const selectOptions = useMemo(
+        () =>
+            TAXATION_SYSTEMS.filter((system) =>
+                isTaxationAllowedForType(business.type, system)
+            ).map((value) => ({
+                value,
+                label: TAXATION_SYSTEM_LABEL[value],
+            })),
+        [business.type]
+    );
 
     const vatAllowedForDraft = isVatAllowedTaxationSystem(draftTaxation);
 
@@ -176,7 +186,7 @@ export default function TaxationSection({ business, onSave }: Props) {
                 <div className="mt-2 space-y-4">
                     <UiSelect
                         label="Система оподаткування"
-                        options={SELECT_OPTIONS}
+                        options={selectOptions}
                         value={draftTaxation}
                         onChange={handleTaxationChange}
                     />

@@ -11,6 +11,7 @@ import {
     RESPONSE_CODE,
     VAT_ALLOWED_TAXATION_SYSTEMS,
     isTaxIdValidForType,
+    isTaxationAllowedForType,
     requiresTaxation,
     type BusinessWithCounts,
     type CreateBusinessRequest,
@@ -360,6 +361,22 @@ export class BusinessesService {
                     code: RESPONSE_CODE.TAXATION_REQUIRED_FOR_TYPE,
                     message:
                         'Taxation fields are required for this business type',
+                });
+            }
+
+            if (
+                dto.taxationSystem != null &&
+                requiresTaxation(existingType) &&
+                !isTaxationAllowedForType(existingType, dto.taxationSystem)
+            ) {
+                // ПКУ розд. XIV гл. 1 — групи 1/2 єдиного податку доступні лише
+                // ФОП. PATCH-DTO Zod не несе `type` (immutable post-creation), тож
+                // type-binding `(existingType, dto.taxationSystem)` живе тут.
+                // Defense-in-depth для curl-bypass-у frontend-filter-у dropdown-а.
+                throw new BadRequestException({
+                    code: RESPONSE_CODE.TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE,
+                    message:
+                        'Taxation system not allowed for this business type',
                 });
             }
 

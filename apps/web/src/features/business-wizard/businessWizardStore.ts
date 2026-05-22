@@ -6,7 +6,11 @@ import type {
     CreateBusinessRequest,
     TaxationSystem,
 } from '@finly/types';
-import { MVP_BANKS, requiresTaxation } from '@finly/types';
+import {
+    MVP_BANKS,
+    isTaxationAllowedForType,
+    requiresTaxation,
+} from '@finly/types';
 
 /**
  * Sprint 7 §SP-6 — wizard step як **семантичний літерал**, не numeric
@@ -141,6 +145,15 @@ export interface BusinessWizardState {
      * taxation-значення лишилися б у draft-і і `buildCreateRequestFromDraft`
      * пропустив би їх у submit, який далі reject-нувся б backend-ом
      * (`.strict()` на individual/organization-variant).
+     *
+     * Cross-taxation-type перехід (`fop → tov`): зберігаємо taxation-fields,
+     * якщо існуюча `taxationSystem` дозволена для нового типу
+     * (`isTaxationAllowedForType`). Інакше скидаємо у `undefined` — на ТОВ
+     * групи 1/2 єдиного податку заборонені ПКУ, тож стара `simplified-1` /
+     * `simplified-2` з ФОП-draft-у несумісна; без reset користувач застряг
+     * би на Step3 з невалідним store-стейтом, який dropdown відфільтрував би
+     * з options, але `formData.taxationSystem` лишився б defined → `canProceed`
+     * пройшов би, а submit упав на backend Zod-refine.
      *
      * При зворотному переході (individual/organization → fop/tov) поля
      * лишаються `undefined` — користувач заповнить на Step 'taxation'.
@@ -312,7 +325,14 @@ export const useBusinessWizardStore = create<BusinessWizardState>()(
                         previousType !== undefined &&
                         requiresTaxation(previousType);
                     const willBeTaxationType = requiresTaxation(type);
-                    if (wasTaxationType && !willBeTaxationType) {
+                    const currentSystem = s.formData.taxationSystem;
+                    const shouldClearTaxation =
+                        (wasTaxationType && !willBeTaxationType) ||
+                        (wasTaxationType &&
+                            willBeTaxationType &&
+                            currentSystem !== undefined &&
+                            !isTaxationAllowedForType(type, currentSystem));
+                    if (shouldClearTaxation) {
                         return {
                             formData: {
                                 ...s.formData,

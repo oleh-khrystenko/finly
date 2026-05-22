@@ -575,6 +575,46 @@ describe('Businesses E2E', () => {
                     })
                     .expect(400);
             });
+
+            // ПКУ розд. XIV гл. 1 — групи 1/2 єдиного податку доступні
+            // виключно ФОП. ТОВ дозволяється `simplified-3` або `general`.
+            it.each(['simplified-1', 'simplified-2'] as const)(
+                'reject tov + %s — 400 VALIDATION_ERROR',
+                async (taxationSystem) => {
+                    const user = await createUser();
+                    const res = await supertest(app.getHttpServer())
+                        .post('/api/businesses/me')
+                        .set('Authorization', bearerFor(user))
+                        .send({
+                            ...baseFields,
+                            type: 'tov',
+                            taxId: VALID_EDRPOU,
+                            taxationSystem,
+                            isVatPayer: false,
+                        })
+                        .expect(400);
+                    const body = res.body as { error: { code: string } };
+                    expect(body.error.code).toBe('VALIDATION_ERROR');
+                }
+            );
+
+            it.each(['simplified-1', 'simplified-2'] as const)(
+                'accept fop + %s (для ФОП дозволено усі 4 системи) — 201',
+                async (taxationSystem) => {
+                    const user = await createUser();
+                    await supertest(app.getHttpServer())
+                        .post('/api/businesses/me')
+                        .set('Authorization', bearerFor(user))
+                        .send({
+                            ...baseFields,
+                            type: 'fop',
+                            taxId: VALID_RNOKPP,
+                            taxationSystem,
+                            isVatPayer: false,
+                        })
+                        .expect(201);
+                }
+            );
         });
     });
 
@@ -892,6 +932,40 @@ describe('Businesses E2E', () => {
             // бо UX-recovery різний — "оберіть систему" vs "приберіть поле".
             expect(body.error.code).toBe('TAXATION_REQUIRED_FOR_TYPE');
         });
+
+        it.each(['simplified-1', 'simplified-2'] as const)(
+            'PATCH ТОВ на %s — 400 TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE',
+            async (taxationSystem) => {
+                const user = await createUser();
+                // Створюємо ТОВ на дозволеній системі.
+                const created = await supertest(app.getHttpServer())
+                    .post('/api/businesses/me')
+                    .set('Authorization', bearerFor(user))
+                    .send({
+                        type: 'tov',
+                        name: 'ТОВ',
+                        taxId: '12345678',
+                        taxationSystem: 'general',
+                        isVatPayer: true,
+                        paymentPurposeTemplate: 'Оплата',
+                        acceptedBanks: ['privatbank'],
+                    });
+                const { slug } = (created.body as { data: { slug: string } })
+                    .data;
+
+                // Defense-in-depth: curl-bypass frontend-filter dropdown-а.
+                const res = await supertest(app.getHttpServer())
+                    .patch(`/api/businesses/me/${slug}`)
+                    .set('Authorization', bearerFor(user))
+                    .send({ taxationSystem })
+                    .expect(400);
+
+                const body = res.body as { error: { code: string } };
+                expect(body.error.code).toBe(
+                    'TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE'
+                );
+            }
+        );
 
         it('coupled cross-field VAT (PATCH тільки isVatPayer=true з existing simplified-1) — 400', async () => {
             const user = await createUser();

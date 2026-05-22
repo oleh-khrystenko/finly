@@ -321,7 +321,7 @@ describe('useBusinessWizardStore', () => {
             expect(data.isVatPayer).toBeUndefined();
         });
 
-        it('переключення fop → tov ЗБЕРІГАЄ taxation-fields (обидва вимагають)', () => {
+        it('переключення fop → tov ЗБЕРІГАЄ taxation-fields, якщо система дозволена для tov (simplified-3 ∈ allowed)', () => {
             const { setType, patchFormData } =
                 useBusinessWizardStore.getState();
             setType('fop');
@@ -333,6 +333,43 @@ describe('useBusinessWizardStore', () => {
             const data = useBusinessWizardStore.getState().formData;
             expect(data.type).toBe('tov');
             expect(data.taxationSystem).toBe('simplified-3');
+            expect(data.isVatPayer).toBe(true);
+        });
+
+        it.each(['simplified-1', 'simplified-2'] as const)(
+            'переключення fop+%s → tov СКИДАЄ taxation-fields (ПКУ — групи 1/2 заборонені для ТОВ)',
+            (taxationSystem) => {
+                const { setType, patchFormData } =
+                    useBusinessWizardStore.getState();
+                setType('fop');
+                patchFormData({
+                    taxationSystem,
+                    isVatPayer: false,
+                });
+                setType('tov');
+                const data = useBusinessWizardStore.getState().formData;
+                expect(data.type).toBe('tov');
+                // Без reset користувач застряг би у Step3 з невалідним store-
+                // стейтом — dropdown відфільтрував би option, але `formData.
+                // taxationSystem` лишився б defined, canProceed пройшов би,
+                // а submit упав на backend Zod-refine.
+                expect(data.taxationSystem).toBeUndefined();
+                expect(data.isVatPayer).toBeUndefined();
+            }
+        );
+
+        it('переключення tov → fop ЗБЕРІГАЄ taxation-fields (всі ТОВ-системи валідні і для ФОП)', () => {
+            const { setType, patchFormData } =
+                useBusinessWizardStore.getState();
+            setType('tov');
+            patchFormData({
+                taxationSystem: 'general',
+                isVatPayer: true,
+            });
+            setType('fop');
+            const data = useBusinessWizardStore.getState().formData;
+            expect(data.type).toBe('fop');
+            expect(data.taxationSystem).toBe('general');
             expect(data.isVatPayer).toBe(true);
         });
 

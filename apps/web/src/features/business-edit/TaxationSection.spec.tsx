@@ -77,6 +77,49 @@ describe('TaxationSection — coupled rule (Sprint 3 §C1)', () => {
         });
     });
 
+    it('ТОВ: dropdown містить лише simplified-3 і general (ПКУ розд. XIV — групи 1/2 заборонені для юр.осіб)', async () => {
+        const tovBusiness: TaxationCapableBusiness = {
+            ...baseBusiness,
+            type: 'tov',
+            taxId: '12345678',
+            taxationSystem: 'simplified-3',
+            isVatPayer: true,
+        };
+        render(<TaxationSection business={tovBusiness} onSave={jest.fn()} />);
+        fireEvent.click(screen.getByLabelText('Редагувати: оподаткування'));
+
+        // Headless UI Listbox: відкриваємо select клацанням на trigger.
+        fireEvent.click(screen.getByRole('button', { name: /спрощена-3/i }));
+
+        const options = await screen.findAllByRole('option');
+        const optionLabels = options.map((o) => o.textContent ?? '');
+        expect(optionLabels).toEqual(
+            expect.arrayContaining(['Спрощена-3', 'Загальна'])
+        );
+        expect(optionLabels).not.toEqual(
+            expect.arrayContaining(['Спрощена-1'])
+        );
+        expect(optionLabels).not.toEqual(
+            expect.arrayContaining(['Спрощена-2'])
+        );
+    });
+
+    it('ФОП: dropdown містить усі 4 системи', async () => {
+        render(<TaxationSection business={baseBusiness} onSave={jest.fn()} />);
+        fireEvent.click(screen.getByLabelText('Редагувати: оподаткування'));
+        fireEvent.click(screen.getByRole('button', { name: /спрощена-3/i }));
+        const options = await screen.findAllByRole('option');
+        const optionLabels = options.map((o) => o.textContent ?? '');
+        expect(optionLabels).toEqual(
+            expect.arrayContaining([
+                'Спрощена-1',
+                'Спрощена-2',
+                'Спрощена-3',
+                'Загальна',
+            ])
+        );
+    });
+
     it('coupled flip: simplified-3 → simplified-1 миттєво ставить isVatPayer=false (Sprint 3 §3.8 DoD)', async () => {
         // Sprint plan §3.8 DoD дослівно: "зміна `simplified-3 → simplified-1`
         // миттєво ставить `isVatPayer=false`". Це UI-guard, що не дозволяє

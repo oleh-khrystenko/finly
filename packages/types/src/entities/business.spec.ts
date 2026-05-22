@@ -547,6 +547,25 @@ describe('BusinessSchema', () => {
                     ).toBe(true);
                 }
             });
+
+            it.each([
+                'simplified-1',
+                'simplified-2',
+                'simplified-3',
+                'general',
+            ] as const)(
+                'accepts fop with %s (ПКУ розд. XIV гл. 1 — усі 4 системи)',
+                (taxationSystem) => {
+                    const result = BusinessSchema.safeParse(
+                        buildBusiness({
+                            ...base,
+                            taxationSystem,
+                            isVatPayer: false,
+                        })
+                    );
+                    expect(result.success).toBe(true);
+                }
+            );
         });
 
         describe('tov (taxation required, ЄДРПОУ)', () => {
@@ -600,6 +619,12 @@ describe('BusinessSchema', () => {
                 );
                 expect(result.success).toBe(false);
                 if (!result.success) {
+                    // Z Zod не short-circuit-ить між незалежними refine-ами:
+                    // tov + simplified-1 + isVatPayer=true одночасно ламає
+                    // VAT-coupling (C1) і type-binding (ПКУ розд. XIV гл. 1).
+                    // Перевіряємо, що VAT-issue присутнє в списку — UI читає
+                    // refine-issues через `.some()` для inline-помилки під
+                    // конкретним полем.
                     expect(
                         result.error.issues.some(
                             (i) =>
@@ -608,6 +633,43 @@ describe('BusinessSchema', () => {
                     ).toBe(true);
                 }
             });
+
+            it.each(['simplified-1', 'simplified-2'] as const)(
+                'rejects tov with %s → TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE (ПКУ розд. XIV гл. 1)',
+                (taxationSystem) => {
+                    const result = BusinessSchema.safeParse(
+                        buildBusiness({
+                            ...base,
+                            taxationSystem,
+                            isVatPayer: false,
+                        })
+                    );
+                    expect(result.success).toBe(false);
+                    if (!result.success) {
+                        const issue = result.error.issues.find(
+                            (i) =>
+                                i.message ===
+                                'TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE'
+                        );
+                        expect(issue).toBeDefined();
+                        expect(issue?.path).toEqual(['taxationSystem']);
+                    }
+                }
+            );
+
+            it.each(['simplified-3', 'general'] as const)(
+                'accepts tov with %s (allowed-set)',
+                (taxationSystem) => {
+                    const result = BusinessSchema.safeParse(
+                        buildBusiness({
+                            ...base,
+                            taxationSystem,
+                            isVatPayer: false,
+                        })
+                    );
+                    expect(result.success).toBe(true);
+                }
+            );
         });
 
         describe('organization (no taxation, ЄДРПОУ)', () => {

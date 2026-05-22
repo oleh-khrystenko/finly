@@ -9,7 +9,10 @@ import {
     taxationSystemSchema,
     type Business,
 } from '../entities/business';
-import { isVatAllowedTaxationSystem } from '../enums/taxation-system';
+import {
+    isTaxationAllowedForType,
+    isVatAllowedTaxationSystem,
+} from '../enums/taxation-system';
 import {
     individualTaxIdZod,
     legalEntityTaxIdZod,
@@ -91,6 +94,18 @@ const taxationVatRefineOptions = {
 };
 
 /**
+ * Type-binding refine: `taxationSystem ∈ ALLOWED_TAXATION_SYSTEMS_BY_TYPE[type]`.
+ * Активний у `createTovVariant` (групи 1/2 єдиного податку для ТОВ заборонені
+ * ПКУ розд. XIV гл. 1). У `createFopVariant` не потрібен — ФОП дозволяє всі
+ * 4 системи. Update-DTO `UpdateBusinessSchema` не несе `type`; та сама перевірка
+ * живе у `BusinessesService.update` (читає document-resident `type`).
+ */
+const taxationSystemAllowedRefineOptions = {
+    message: 'TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE',
+    path: ['taxationSystem'] as PropertyKey[],
+};
+
+/**
  * Sprint 7 §SP-3 + §SP-4 + Sprint 9 §SP-1 — `CreateBusinessSchema` як
  * `z.discriminatedUnion` по `type`. Кожен variant явно описує **тільки ті поля,
  * що мають юридичний сенс для цього типу**:
@@ -153,7 +168,11 @@ const createTovVariant = z
         claimIdempotencyKey: claimIdempotencyKeyField,
     })
     .strict()
-    .refine(taxationVatCheck, taxationVatRefineOptions);
+    .refine(taxationVatCheck, taxationVatRefineOptions)
+    .refine(
+        (data) => isTaxationAllowedForType('tov', data.taxationSystem),
+        taxationSystemAllowedRefineOptions
+    );
 
 const createOrganizationVariant = z
     .object({

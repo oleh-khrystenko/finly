@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     TAXATION_SYSTEMS,
     TAXATION_SYSTEM_LABEL,
+    isTaxationAllowedForType,
     isVatAllowedTaxationSystem,
     requiresTaxation,
     type TaxationSystem,
@@ -12,11 +13,6 @@ import UiSelect from '@/shared/ui/UiSelect';
 import UiSwitch from '@/shared/ui/UiSwitch';
 import UiButton from '@/shared/ui/UiButton';
 import { useBusinessWizardStore } from './businessWizardStore';
-
-const SELECT_OPTIONS = TAXATION_SYSTEMS.map((value) => ({
-    value,
-    label: TAXATION_SYSTEM_LABEL[value],
-}));
 
 export default function Step3Taxation() {
     const formData = useBusinessWizardStore((s) => s.formData);
@@ -46,6 +42,22 @@ export default function Step3Taxation() {
         formData.isVatPayer ?? false
     );
 
+    // ПКУ розд. XIV гл. 1: ТОВ обмежений спрощеною-3 і загальною; ФОП — усі 4.
+    // Фільтр заразом покриває майбутні розширення `BusinessType` без правок UI:
+    // допустимий перелік живе у `ALLOWED_TAXATION_SYSTEMS_BY_TYPE`.
+    const selectOptions = useMemo(
+        () =>
+            TAXATION_SYSTEMS.filter((system) =>
+                formData.type
+                    ? isTaxationAllowedForType(formData.type, system)
+                    : true
+            ).map((value) => ({
+                value,
+                label: TAXATION_SYSTEM_LABEL[value],
+            })),
+        [formData.type]
+    );
+
     const vatAllowed =
         taxationSystem !== undefined &&
         isVatAllowedTaxationSystem(taxationSystem);
@@ -73,7 +85,7 @@ export default function Step3Taxation() {
             <UiSelect
                 label="Система оподаткування"
                 placeholder="Оберіть систему"
-                options={SELECT_OPTIONS}
+                options={selectOptions}
                 value={taxationSystem ?? ''}
                 onChange={handleTaxationChange}
             />

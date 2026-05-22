@@ -41,10 +41,19 @@ describe('mapValidationCode', () => {
             );
         });
 
+        it('TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE — ПКУ розд. XIV гл. 1', () => {
+            expect(
+                mapValidationCode('TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE')
+            ).toBe(
+                'Ця система оподаткування недоступна для обраного типу бізнесу'
+            );
+        });
+
         it.each([
             'INVALID_LEGAL_TAX_ID',
             'TAXATION_FIELDS_MISMATCH_TYPE',
             'TAX_ID_FORMAT_MISMATCH_TYPE',
+            'TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE',
         ])('%s НЕ повертає raw machine-code (UI leak guard)', (code) => {
             const msg = mapValidationCode(code);
             expect(msg).toBeDefined();

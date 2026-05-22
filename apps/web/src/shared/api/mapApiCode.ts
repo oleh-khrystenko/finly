@@ -102,6 +102,13 @@ const ERRORS: Record<string, MessageDict> = {
         // валідний код, але невідповідного формату для типу бізнесу.
         tax_id_format_mismatch_type:
             'Код одержувача не відповідає формату для цього типу платника',
+        // ПКУ розд. XIV гл. 1 — групи 1 і 2 єдиного податку доступні лише ФОП;
+        // ТОВ може бути на спрощеній-3 або загальній. Backend кидає на write-DTO
+        // refine (`createTovVariant`) і у service-layer для PATCH; frontend
+        // повідомляє користувача коротким inline-text-ом без перерахування
+        // дозволених систем (dropdown уже відфільтрований).
+        taxation_system_not_allowed_for_type:
+            'Ця система оподаткування недоступна для обраного типу бізнесу',
     },
     // Sprint 9 §SP-1..§SP-3 — accounts UA-messages. ACCOUNT_HAS_INVOICES не тут:
     // backend pre-resolves повідомлення через pluralizeUa (accounts.service.ts

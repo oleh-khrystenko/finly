@@ -244,6 +244,64 @@ describe('CreateBusinessSchema', () => {
             });
             expect(result.success).toBe(false);
         });
+
+        // ПКУ розд. XIV гл. 1 — групи 1/2 єдиного податку доступні виключно
+        // ФОП. ТОВ дозволяється лише `simplified-3` і `general`. Refine живе на
+        // `createTovVariant`; `createFopVariant` приймає усі 4 системи.
+        describe('taxation-system × type binding (ПКУ розд. XIV)', () => {
+            it.each(['simplified-1', 'simplified-2'] as const)(
+                'rejects tov + %s → TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE',
+                (taxationSystem) => {
+                    const result = CreateBusinessSchema.safeParse({
+                        ...baseFields,
+                        type: 'tov',
+                        taxId: VALID_EDRPOU,
+                        taxationSystem,
+                        isVatPayer: false,
+                    });
+                    expect(result.success).toBe(false);
+                    if (!result.success) {
+                        const issue = result.error.issues.find(
+                            (i) =>
+                                i.message ===
+                                'TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE'
+                        );
+                        expect(issue).toBeDefined();
+                        expect(issue?.path).toEqual(['taxationSystem']);
+                    }
+                }
+            );
+
+            it.each(['simplified-3', 'general'] as const)(
+                'accepts tov + %s (allowed-set)',
+                (taxationSystem) => {
+                    const result = CreateBusinessSchema.safeParse({
+                        ...baseFields,
+                        type: 'tov',
+                        taxId: VALID_EDRPOU,
+                        taxationSystem,
+                        isVatPayer: false,
+                    });
+                    expect(result.success).toBe(true);
+                }
+            );
+
+            it.each([
+                'simplified-1',
+                'simplified-2',
+                'simplified-3',
+                'general',
+            ] as const)('accepts fop + %s (усі 4 системи)', (taxationSystem) => {
+                const result = CreateBusinessSchema.safeParse({
+                    ...baseFields,
+                    type: 'fop',
+                    taxId: VALID_RNOKPP,
+                    taxationSystem,
+                    isVatPayer: false,
+                });
+                expect(result.success).toBe(true);
+            });
+        });
     });
 });
 
