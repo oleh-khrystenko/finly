@@ -11,6 +11,7 @@ import UiCheckbox from '@/shared/ui/UiCheckbox';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiTextarea from '@/shared/ui/UiTextarea';
 import UiEditableField from '@/shared/ui/UiEditableField';
+import { paymentPurposeTemplateFieldConfig } from '@/entities/business';
 import { mapValidationCode } from '@/shared/lib';
 
 interface Props {
@@ -29,15 +30,19 @@ interface Props {
 }
 
 export default function BanksSection({ business, onSave, id }: Props) {
+    const purposeFieldConfig = paymentPurposeTemplateFieldConfig(business.type);
+
     return (
         <UiSectionCard id={id} title="Призначення і банки">
             <div className="space-y-4">
                 <UiEditableField<string>
-                    label="Призначення платежу"
+                    label={purposeFieldConfig.label}
                     value={business.paymentPurposeTemplate}
                     renderRead={(v) => v}
                     renderEdit={({ value, setValue, error }) => (
                         <UiTextarea
+                            placeholder={purposeFieldConfig.placeholder}
+                            description={purposeFieldConfig.description}
                             value={value}
                             onChange={(e) => setValue(e.target.value)}
                             error={error}

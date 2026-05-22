@@ -31,6 +31,7 @@ const UiTextarea = forwardRef<HTMLTextAreaElement, UiTextareaProps>(
             variant = 'outlined',
             size = 'md',
             label,
+            description,
             error,
             suffix,
             autoGrow = false,
@@ -46,6 +47,13 @@ const UiTextarea = forwardRef<HTMLTextAreaElement, UiTextareaProps>(
 
         const generatedId = useId();
         const textareaId = externalId ?? generatedId;
+        const errorId = `${textareaId}-error`;
+        const descriptionId = `${textareaId}-description`;
+        const describedBy = error
+            ? errorId
+            : description
+              ? descriptionId
+              : undefined;
         const internalRef = useRef<HTMLTextAreaElement | null>(null);
 
         const adjustHeight = useCallback(() => {
@@ -118,12 +126,25 @@ const UiTextarea = forwardRef<HTMLTextAreaElement, UiTextareaProps>(
                         onChange={handleChange}
                         disabled={disabled}
                         required={required}
+                        aria-invalid={error ? true : undefined}
+                        aria-describedby={describedBy}
                         className={`placeholder:text-muted-foreground w-full bg-transparent outline-none disabled:cursor-not-allowed ${noResize ? 'resize-none' : 'resize-y'}`}
                     />
                     {suffix}
                 </div>
-                {error && (
-                    <p className="text-destructive mt-1 text-sm">{error}</p>
+                {error ? (
+                    <p id={errorId} className="text-destructive mt-1 text-sm">
+                        {error}
+                    </p>
+                ) : (
+                    description && (
+                        <p
+                            id={descriptionId}
+                            className="text-muted-foreground mt-1 text-xs"
+                        >
+                            {description}
+                        </p>
+                    )
                 )}
             </div>
         );

@@ -10,6 +10,7 @@ export interface UiTextareaProps extends Omit<
     variant?: UiTextareaVariant;
     size?: UiTextareaSize;
     label?: string;
+    description?: string;
     error?: string;
     /** Element rendered inside the wrapper, after the textarea (e.g. submit button). */
     suffix?: ReactNode;

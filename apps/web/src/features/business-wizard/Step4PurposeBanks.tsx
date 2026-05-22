@@ -13,6 +13,7 @@ import {
 } from '@finly/types';
 import { z } from 'zod';
 import { createBusiness, getApiMessage } from '@/shared/api';
+import { paymentPurposeTemplateFieldConfig } from '@/entities/business';
 import { mapValidationCode } from '@/shared/lib';
 import UiTextarea from '@/shared/ui/UiTextarea';
 import UiCheckbox from '@/shared/ui/UiCheckbox';
@@ -43,6 +44,10 @@ export default function Step4PurposeBanks() {
         formData.acceptedBanks ?? [...MVP_BANKS]
     );
     const [submitting, setSubmitting] = useState(false);
+
+    const purposeFieldConfig = paymentPurposeTemplateFieldConfig(
+        formData.type ?? 'individual'
+    );
 
     const purposeParse = PurposeWrap.safeParse({
         paymentPurposeTemplate: purpose,
@@ -137,8 +142,9 @@ export default function Step4PurposeBanks() {
     return (
         <div className="space-y-6">
             <UiTextarea
-                label="Призначення платежу за замовчуванням"
-                placeholder="Оплата за послуги"
+                label={purposeFieldConfig.label}
+                placeholder={purposeFieldConfig.placeholder}
+                description={purposeFieldConfig.description}
                 value={purpose}
                 onChange={(e) => setPurpose(e.target.value)}
                 onBlur={onPurposeBlur}
