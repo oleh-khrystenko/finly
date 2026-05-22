@@ -16,6 +16,7 @@ import Step1TypeAndName from './Step1TypeAndName';
 import Step2Requisites from './Step2Requisites';
 import Step3Taxation from './Step3Taxation';
 import Step4PurposeBanks from './Step4PurposeBanks';
+import WizardStepSummary from './WizardStepSummary';
 
 /**
  * Sprint 3 §3.7 + Sprint 7 §SP-6 — root wizard.
@@ -103,6 +104,7 @@ export default function BusinessWizardForm() {
                 onJumpBack={(step: BusinessWizardStep) => setStep(step)}
             />
             <div className="border-border bg-card rounded-xl border p-5 md:p-6">
+                <WizardStepSummary step={currentStep} />
                 {currentStep === 'type-name' && <Step1TypeAndName />}
                 {currentStep === 'requisites' && <Step2Requisites />}
                 {currentStep === 'taxation' && <Step3Taxation />}
