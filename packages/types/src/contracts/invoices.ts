@@ -1,7 +1,6 @@
 import { z } from 'zod';
 
 import {
-    bankCodeSchema,
     businessNameSchema,
     businessSlugSchema,
     businessTypeSchema,
@@ -175,9 +174,8 @@ export type UpdateInvoiceRequest = z.infer<typeof UpdateInvoiceSchema>;
  * **Whitelist 8 полів** (Sprint 4 §"Скоуп.Shared" + Sprint 9 §4.7 розширення):
  *  - 4 invoice-fields: `amount`, `amountLocked`, `paymentPurpose`, `validUntil`.
  *  - `slug` — invoice-slug.
- *  - `business` — nested view: `type`, `name`, `slug`, `acceptedBanks` (4 поля
- *    з Sprint 3 `PublicBusinessSchema`, **без `seoIndexEnabled`** — інвойси
- *    завжди `noindex`, hardcoded на frontend).
+ *  - `business` — nested view: `type`, `name`, `slug` (без `seoIndexEnabled` —
+ *    інвойси завжди `noindex`, hardcoded на frontend).
  *  - **`account` — nested view (Sprint 9 §SP-6 розширення):** `slug`, `name`,
  *    `bankCode`, `ibanMask`. Клієнт бачить через який рахунок іде платіж +
  *    4-цифровий IBAN-tail для disambiguation. Reuse
@@ -214,7 +212,6 @@ export const PublicInvoiceSchema = z.object({
         type: businessTypeSchema,
         name: businessNameSchema,
         slug: businessSlugSchema,
-        acceptedBanks: z.array(bankCodeSchema),
     }),
     account: PublicAccountListItemSchema,
     nbuLinks: z

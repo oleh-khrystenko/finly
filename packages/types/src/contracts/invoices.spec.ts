@@ -285,7 +285,6 @@ describe('PublicInvoiceSchema (whitelist invariant)', () => {
             type: 'fop' as const,
             name: 'Іваненко',
             slug: 'IvanEnko',
-            acceptedBanks: ['privatbank', 'monobank'] as const,
         },
         account: {
             slug: 'aB3xQ9k7',

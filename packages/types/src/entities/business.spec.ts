@@ -18,7 +18,6 @@ const VALID_BUSINESS = {
     taxationSystem: 'simplified-3',
     isVatPayer: false,
     paymentPurposeTemplate: 'Оплата за послуги',
-    acceptedBanks: ['privatbank', 'monobank'],
     seoIndexEnabled: false,
     deletedAt: null,
     createdAt: '2026-05-01T10:00:00.000Z',
@@ -58,14 +57,6 @@ describe('BusinessSchema', () => {
         const result = BusinessSchema.safeParse({
             ...VALID_BUSINESS,
             type: 'sole-proprietor',
-        });
-        expect(result.success).toBe(false);
-    });
-
-    it('rejects unknown bank code in acceptedBanks', () => {
-        const result = BusinessSchema.safeParse({
-            ...VALID_BUSINESS,
-            acceptedBanks: ['privatbank', 'unknown_bank'],
         });
         expect(result.success).toBe(false);
     });

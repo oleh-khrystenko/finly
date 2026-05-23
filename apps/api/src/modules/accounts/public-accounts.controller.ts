@@ -73,7 +73,6 @@ export class PublicAccountsController {
                 type: business.type,
                 name: business.name,
                 slug: business.slug,
-                acceptedBanks: business.acceptedBanks,
                 seoIndexEnabled: business.seoIndexEnabled,
             },
             nbuLinks: {

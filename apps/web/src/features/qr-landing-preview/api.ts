@@ -45,8 +45,8 @@ export async function fetchQrPreview(
  * **`mapLandingDraftToCreateBusinessRequest` — shared helper** з
  * `@finly/types/contracts/landing-draft.ts`. Single source of truth для
  * field-mapping (`receiverName → name`, `purpose → paymentPurposeTemplate`,
- * `acceptedBanks: [...MVP_BANKS]`, `type: 'individual'`, `taxId` top-level,
- * `claimIdempotencyKey` top-level). Backend `LandingClaimService` використовує
+ * `type: 'individual'`, `taxId` top-level, `claimIdempotencyKey` top-level).
+ * Backend `LandingClaimService` використовує
  * той самий helper — drift-vector закритий compile-time.
  *
  * **`claimIdempotencyKey` — required**: backend `BusinessesService.create`

@@ -2,6 +2,7 @@
 
 import {
     BANK_LABEL,
+    MVP_BANKS,
     type BankCode,
     type BusinessType,
 } from '@finly/types';
@@ -17,12 +18,11 @@ interface Props {
         bankCode: BankCode | null;
         ibanMask: string;
     };
-    /** Nested business view (whitelist 5 полів). */
+    /** Nested business view (whitelist 4 поля). */
     business: {
         type: BusinessType;
         name: string;
         slug: string;
-        acceptedBanks: BankCode[];
         seoIndexEnabled: boolean;
     };
     /**
@@ -101,7 +101,7 @@ export default function PublicAccountView({
                  * per-bank deep-links без зміни layout.
                  */}
                 <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
-                    {business.acceptedBanks.map((bank) => {
+                    {MVP_BANKS.map((bank) => {
                         const Icon = BANK_DISPLAY[bank];
                         return (
                             <div

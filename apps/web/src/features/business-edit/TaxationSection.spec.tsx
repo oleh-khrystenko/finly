@@ -20,7 +20,6 @@ const baseBusiness: TaxationCapableBusiness = {
     taxationSystem: 'simplified-3',
     isVatPayer: true,
     paymentPurposeTemplate: 'Оплата',
-    acceptedBanks: ['privatbank'],
     seoIndexEnabled: false,
     deletedAt: null,
     createdAt: new Date('2026-05-01'),

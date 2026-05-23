@@ -30,7 +30,7 @@ export default function Step3Taxation() {
     /**
      * Sprint 7 §SP-7 sanity-fail-safe: для individual / organization цей крок
      * не входить у `computeStepsForType`, тож `nextStep` з Step 'requisites'
-     * перестрибує одразу на 'purpose-banks'. Якщо store потрапив сюди обхідним
+     * перестрибує одразу на 'purpose'. Якщо store потрапив сюди обхідним
      * шляхом (stale sessionStorage, прямий URL, devtools setStep) — редіректимо
      * на наступний логічний крок замість render-у форми, що згенерує garbage
      * taxation-data для не-taxation типу. План §7.7 явно фіксує це як
@@ -38,7 +38,7 @@ export default function Step3Taxation() {
      */
     useEffect(() => {
         if (formData.type && !requiresTaxation(formData.type)) {
-            setStep('purpose-banks');
+            setStep('purpose');
         }
     }, [formData.type, setStep]);
 

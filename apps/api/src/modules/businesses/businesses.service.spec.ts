@@ -61,7 +61,6 @@ describe('BusinessesService', () => {
         taxationSystem: 'simplified-3',
         isVatPayer: false,
         paymentPurposeTemplate: 'Оплата',
-        acceptedBanks: ['privatbank'],
     };
 
     beforeEach(async () => {

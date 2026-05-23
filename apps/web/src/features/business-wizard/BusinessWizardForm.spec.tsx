@@ -27,7 +27,6 @@ jest.mock('sonner', () => ({
 
 import BusinessWizardForm from './BusinessWizardForm';
 import { useBusinessWizardStore } from './businessWizardStore';
-import { MVP_BANKS } from '@finly/types';
 
 const VALID_RNOKPP = '1234567899';
 const VALID_EDRPOU = '12345678';
@@ -115,7 +114,6 @@ describe('BusinessWizardForm', () => {
                     formData: {
                         type: 'fop',
                         name: 'Іваненко',
-                        acceptedBanks: [...MVP_BANKS],
                     },
                 });
             });
@@ -137,7 +135,6 @@ describe('BusinessWizardForm', () => {
                     formData: {
                         type: 'tov',
                         name: 'ТОВ Каса',
-                        acceptedBanks: [...MVP_BANKS],
                     },
                 });
             });
@@ -158,7 +155,6 @@ describe('BusinessWizardForm', () => {
                     formData: {
                         type: 'individual',
                         name: 'Іваненко',
-                        acceptedBanks: [...MVP_BANKS],
                     },
                 });
             });
@@ -179,7 +175,6 @@ describe('BusinessWizardForm', () => {
                     formData: {
                         type: 'fop',
                         name: 'Іваненко',
-                        acceptedBanks: [...MVP_BANKS],
                     },
                 });
             });
@@ -215,7 +210,6 @@ describe('BusinessWizardForm', () => {
                         taxId: VALID_RNOKPP,
                         taxationSystem: 'simplified-1',
                         isVatPayer: false,
-                        acceptedBanks: [...MVP_BANKS],
                     },
                 });
             });
@@ -240,7 +234,6 @@ describe('BusinessWizardForm', () => {
                         taxId: VALID_RNOKPP,
                         taxationSystem: 'simplified-3',
                         isVatPayer: false,
-                        acceptedBanks: [...MVP_BANKS],
                     },
                 });
             });
@@ -265,7 +258,6 @@ describe('BusinessWizardForm', () => {
                         taxId: VALID_RNOKPP,
                         taxationSystem: 'general',
                         isVatPayer: false,
-                        acceptedBanks: [...MVP_BANKS],
                     },
                 });
             });
@@ -280,7 +272,7 @@ describe('BusinessWizardForm', () => {
             ).toBeInTheDocument();
         });
 
-        it("Sprint 7 §SP-7 — defensive redirect: type=individual на step 'taxation' → setStep('purpose-banks')", () => {
+        it("Sprint 7 §SP-7 — defensive redirect: type=individual на step 'taxation' → setStep('purpose')", () => {
             act(() => {
                 useBusinessWizardStore.setState({
                     currentStep: 'taxation',
@@ -288,7 +280,6 @@ describe('BusinessWizardForm', () => {
                         type: 'individual',
                         name: 'Іваненко',
                         taxId: VALID_RNOKPP,
-                        acceptedBanks: [...MVP_BANKS],
                     },
                 });
             });
@@ -297,17 +288,17 @@ describe('BusinessWizardForm', () => {
 
             return waitFor(() => {
                 expect(useBusinessWizardStore.getState().currentStep).toBe(
-                    'purpose-banks'
+                    'purpose'
                 );
             });
         });
     });
 
-    describe("Step 'purpose-banks' — submit з 4-type-aware payload-ом (Sprint 9 §9.2 без requisites)", () => {
+    describe("Step 'purpose' — submit з 4-type-aware payload-ом (Sprint 9 §9.2 без requisites)", () => {
         it('fop submit з повним CreateBusinessRequest (taxation присутній, taxId top-level)', async () => {
             act(() => {
                 useBusinessWizardStore.setState({
-                    currentStep: 'purpose-banks',
+                    currentStep: 'purpose',
                     formData: {
                         type: 'fop',
                         name: 'Іваненко',
@@ -315,7 +306,6 @@ describe('BusinessWizardForm', () => {
                         taxationSystem: 'simplified-3',
                         isVatPayer: true,
                         paymentPurposeTemplate: 'Оплата за послуги',
-                        acceptedBanks: [...MVP_BANKS],
                     },
                 });
             });
@@ -341,7 +331,6 @@ describe('BusinessWizardForm', () => {
                 taxationSystem: 'simplified-3',
                 isVatPayer: true,
                 paymentPurposeTemplate: 'Оплата за послуги',
-                acceptedBanks: [...MVP_BANKS],
             });
             await waitFor(() =>
                 expect(mockRouterReplace).toHaveBeenCalledWith(
@@ -353,7 +342,7 @@ describe('BusinessWizardForm', () => {
         it('individual submit БЕЗ taxation-полів (Sprint 7 §SP-3 discriminated union)', async () => {
             act(() => {
                 useBusinessWizardStore.setState({
-                    currentStep: 'purpose-banks',
+                    currentStep: 'purpose',
                     formData: {
                         type: 'individual',
                         name: 'Іваненко',
@@ -361,7 +350,6 @@ describe('BusinessWizardForm', () => {
                         taxationSystem: undefined,
                         isVatPayer: undefined,
                         paymentPurposeTemplate: 'На пицу',
-                        acceptedBanks: [...MVP_BANKS],
                     },
                 });
             });
@@ -387,13 +375,12 @@ describe('BusinessWizardForm', () => {
         it('organization submit з ЄДРПОУ (8-digit), без taxation-полів', async () => {
             act(() => {
                 useBusinessWizardStore.setState({
-                    currentStep: 'purpose-banks',
+                    currentStep: 'purpose',
                     formData: {
                         type: 'organization',
                         name: 'ОСББ Покрова',
                         taxId: VALID_EDRPOU,
                         paymentPurposeTemplate: 'Внесок на ОСББ',
-                        acceptedBanks: [...MVP_BANKS],
                     },
                 });
             });
@@ -417,7 +404,7 @@ describe('BusinessWizardForm', () => {
         it('reset wizard store після successful submit', async () => {
             act(() => {
                 useBusinessWizardStore.setState({
-                    currentStep: 'purpose-banks',
+                    currentStep: 'purpose',
                     formData: {
                         type: 'fop',
                         name: 'Іваненко',
@@ -425,7 +412,6 @@ describe('BusinessWizardForm', () => {
                         taxationSystem: 'simplified-3',
                         isVatPayer: false,
                         paymentPurposeTemplate: 'Оплата',
-                        acceptedBanks: [...MVP_BANKS],
                     },
                 });
             });
@@ -446,14 +432,13 @@ describe('BusinessWizardForm', () => {
         it("reset wizard на 'type-name' + toast.error при stale formData", async () => {
             act(() => {
                 useBusinessWizardStore.setState({
-                    currentStep: 'purpose-banks',
+                    currentStep: 'purpose',
                     formData: {
                         type: 'fop',
                         name: 'Іваненко',
                         // taxId відсутній → CreateBusinessSchema fail на required-полі
                         taxationSystem: 'simplified-3',
                         isVatPayer: false,
-                        acceptedBanks: [...MVP_BANKS],
                     },
                 });
             });
@@ -483,7 +468,6 @@ describe('BusinessWizardForm', () => {
                     currentStep: 'type-name',
                     formData: {
                         type: 'individual',
-                        acceptedBanks: [...MVP_BANKS],
                     },
                 });
             });
@@ -498,7 +482,6 @@ describe('BusinessWizardForm', () => {
                     currentStep: 'type-name',
                     formData: {
                         type: 'fop',
-                        acceptedBanks: [...MVP_BANKS],
                     },
                 });
             });

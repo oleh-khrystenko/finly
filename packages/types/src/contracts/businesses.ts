@@ -1,7 +1,6 @@
 import { z } from 'zod';
 
 import {
-    bankCodeSchema,
     businessNameSchema,
     businessPaymentPurposeTemplateSchema,
     businessSlugSchema,
@@ -55,10 +54,6 @@ import { PublicAccountListItemSchema } from './accounts';
  * або прямого curl-у; помилка прокидається `ZodValidationPipe` як 400
  * `VALIDATION_ERROR`. Frontend бачить inline-помилку через ту саму схему.
  */
-
-const acceptedBanksField = z.array(bankCodeSchema).min(1, {
-    message: 'ACCEPTED_BANKS_REQUIRED',
-});
 
 /**
  * Sprint 10 §SP-11 — UUID v4 anti-duplicate token для anon-claim-flow. Optional
@@ -127,9 +122,6 @@ const taxationSystemAllowedRefineOptions = {
  * compile-error на `z.discriminatedUnion(...)` literal-tuple. Conditional
  * refine на single-shape обманює type-checker і дозволяє skip-нути нову
  * branch.
- *
- * **`acceptedBanks` — мінімум 1** (рішення B6: дефолт усі 11 на UI, але
- * в контракті — не-пустий список; нульовий стан неможливий).
  */
 const createIndividualVariant = z
     .object({
@@ -137,7 +129,6 @@ const createIndividualVariant = z
         name: businessNameSchema,
         taxId: individualTaxIdZod,
         paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
-        acceptedBanks: acceptedBanksField,
         claimIdempotencyKey: claimIdempotencyKeyField,
     })
     .strict();
@@ -150,7 +141,6 @@ const createFopVariant = z
         taxationSystem: taxationSystemSchema,
         isVatPayer: z.boolean(),
         paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
-        acceptedBanks: acceptedBanksField,
         claimIdempotencyKey: claimIdempotencyKeyField,
     })
     .strict()
@@ -164,7 +154,6 @@ const createTovVariant = z
         taxationSystem: taxationSystemSchema,
         isVatPayer: z.boolean(),
         paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
-        acceptedBanks: acceptedBanksField,
         claimIdempotencyKey: claimIdempotencyKeyField,
     })
     .strict()
@@ -180,7 +169,6 @@ const createOrganizationVariant = z
         name: businessNameSchema,
         taxId: legalEntityTaxIdZod,
         paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
-        acceptedBanks: acceptedBanksField,
         claimIdempotencyKey: claimIdempotencyKeyField,
     })
     .strict();
@@ -250,7 +238,6 @@ export const UpdateBusinessSchema = z
         taxationSystem: taxationSystemSchema.nullable(),
         isVatPayer: z.boolean().nullable(),
         paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
-        acceptedBanks: acceptedBanksField,
         seoIndexEnabled: z.boolean(),
     })
     .partial()
@@ -315,10 +302,10 @@ export type BusinessWithCounts = Business & {
  *     `accounts.length === 0 → empty-state`; `=== 1 → 307-redirect на
  *     {accounts[0].slug}`; `>= 2 → render list-of-cards`.
  *
- * **Visible-поля:** `type`, `name`, `slug`, `acceptedBanks`, `seoIndexEnabled`,
- * `accounts`. Реквізити (IBAN, ІПН) **не** віддаються JSON-ом напряму — leak-
- * сурфейс лишається через NBU payload-link на per-account-view (той самий
- * vector як QR PNG; payload містить реквізити у Base64URL).
+ * **Visible-поля:** `type`, `name`, `slug`, `seoIndexEnabled`, `accounts`.
+ * Реквізити (IBAN, ІПН) **не** віддаються JSON-ом напряму — leak-сурфейс
+ * лишається через NBU payload-link на per-account-view (той самий vector як
+ * QR PNG; payload містить реквізити у Base64URL).
  *
  * `seoIndexEnabled` для рендеру `<meta name="robots">` у Server Component.
  *
@@ -330,7 +317,6 @@ export const PublicBusinessSchema = z.object({
     type: businessTypeSchema,
     name: businessNameSchema,
     slug: businessSlugSchema,
-    acceptedBanks: z.array(bankCodeSchema),
     seoIndexEnabled: z.boolean(),
     accounts: z.array(PublicAccountListItemSchema),
 });

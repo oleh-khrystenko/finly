@@ -15,7 +15,7 @@ import StepNavigator from './StepNavigator';
 import Step1TypeAndName from './Step1TypeAndName';
 import Step2Requisites from './Step2Requisites';
 import Step3Taxation from './Step3Taxation';
-import Step4PurposeBanks from './Step4PurposeBanks';
+import Step4Purpose from './Step4Purpose';
 import WizardStepSummary from './WizardStepSummary';
 
 /**
@@ -24,7 +24,7 @@ import WizardStepSummary from './WizardStepSummary';
  * **Lifecycle persisted wizard state:**
  *   - State живе у Zustand store з sessionStorage persist — випадковий
  *     reload зберігає прогрес.
- *   - **Reset** робиться **тільки у `Step4PurposeBanks` після успішного
+ *   - **Reset** робиться **тільки у `Step4Purpose` після успішного
  *     `createBusiness()`** (через `useBusinessWizardStore.reset()`).
  *     Жодного unmount-cleanup тут навмисно: користувач, що залишив wizard
  *     і повернувся (router back, refresh), має побачити свій прогрес.
@@ -108,7 +108,7 @@ export default function BusinessWizardForm() {
                 {currentStep === 'type-name' && <Step1TypeAndName />}
                 {currentStep === 'requisites' && <Step2Requisites />}
                 {currentStep === 'taxation' && <Step3Taxation />}
-                {currentStep === 'purpose-banks' && <Step4PurposeBanks />}
+                {currentStep === 'purpose' && <Step4Purpose />}
             </div>
         </div>
     );

@@ -34,7 +34,6 @@ function makeBusiness(
         taxationSystem: isTaxationType ? 'simplified-3' : null,
         isVatPayer: isTaxationType ? false : null,
         paymentPurposeTemplate: 'Оплата',
-        acceptedBanks: ['privatbank'],
         seoIndexEnabled: false,
         deletedAt: null,
         createdAt: new Date('2026-05-01'),

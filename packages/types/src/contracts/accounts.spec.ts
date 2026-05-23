@@ -165,7 +165,6 @@ describe('PublicAccountViewSchema', () => {
             type: 'fop' as const,
             name: 'Іваненко',
             slug: 'IvanEnko',
-            acceptedBanks: ['privatbank', 'monobank'] as const,
             seoIndexEnabled: true,
         },
         nbuLinks: {

@@ -28,12 +28,12 @@ describe('UserSchema', () => {
         const result = UserSchema.safeParse({
             ...VALID_USER,
             pendingPostLoginTarget:
-                '/business/ivanenko-fop/account/abcd1234?completed-from=landing',
+                '/business/ivanenko-fop/account/abcd1234',
         });
         expect(result.success).toBe(true);
         if (result.success) {
             expect(result.data.pendingPostLoginTarget).toBe(
-                '/business/ivanenko-fop/account/abcd1234?completed-from=landing',
+                '/business/ivanenko-fop/account/abcd1234',
             );
         }
     });

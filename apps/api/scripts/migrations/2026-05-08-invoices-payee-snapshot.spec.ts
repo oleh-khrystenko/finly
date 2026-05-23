@@ -56,7 +56,6 @@ describe('migration 2026-05-08-invoices-payee-snapshot', () => {
                 taxId: '1234567899',
             },
             paymentPurposeTemplate: 'Оплата за послуги',
-            acceptedBanks: ['privatbank'],
             slug: 'IvanEnko',
             slugLower: 'ivanenko',
             ownerId: new mongoose.Types.ObjectId(),

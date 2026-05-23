@@ -186,7 +186,7 @@ export class LandingClaimService {
         businessSlug: string,
         accountSlug: string
     ): Promise<void> {
-        const target = `/business/${businessSlug}/account/${accountSlug}?completed-from=landing`;
+        const target = `/business/${businessSlug}/account/${accountSlug}`;
         try {
             await this.usersService.setPendingPostLoginTarget(userId, target);
         } catch (err) {

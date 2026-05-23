@@ -178,7 +178,6 @@ const VALID_BUSINESS_PAYLOAD = {
     taxationSystem: 'simplified-3',
     isVatPayer: false,
     paymentPurposeTemplate: 'Оплата за послуги',
-    acceptedBanks: ['privatbank', 'monobank'],
 };
 
 const VALID_ACCOUNT_PAYLOAD = {
@@ -1332,7 +1331,6 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                     }
                 ).data.business;
                 expect(Object.keys(business).sort()).toEqual([
-                    'acceptedBanks',
                     'name',
                     'slug',
                     'type',

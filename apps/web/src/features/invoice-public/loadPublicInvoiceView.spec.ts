@@ -36,7 +36,6 @@ describe('loadPublicInvoiceView (Sprint 9 — 3-сегментна URL)', () => 
             type: 'fop',
             name: 'Іваненко',
             slug: 'IvanEnko',
-            acceptedBanks: ['privatbank'],
         },
         account: {
             slug: 'aBc12345',

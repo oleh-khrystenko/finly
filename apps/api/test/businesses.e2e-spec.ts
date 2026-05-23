@@ -172,7 +172,6 @@ const VALID_CREATE_PAYLOAD = {
     taxationSystem: 'simplified-3',
     isVatPayer: false,
     paymentPurposeTemplate: 'Оплата за послуги',
-    acceptedBanks: ['privatbank', 'monobank'],
 };
 
 // ─── Test ───
@@ -407,18 +406,6 @@ describe('Businesses E2E', () => {
                 .expect(400);
         });
 
-        it('reject empty acceptedBanks (мінімум 1 — B6) — 400', async () => {
-            const user = await createUser();
-            await supertest(app.getHttpServer())
-                .post('/api/businesses/me')
-                .set('Authorization', bearerFor(user))
-                .send({
-                    ...VALID_CREATE_PAYLOAD,
-                    acceptedBanks: [],
-                })
-                .expect(400);
-        });
-
         it('без auth — 401', async () => {
             await supertest(app.getHttpServer())
                 .post('/api/businesses/me')
@@ -434,7 +421,6 @@ describe('Businesses E2E', () => {
             const baseFields = {
                 name: 'Іваненко',
                 paymentPurposeTemplate: 'Оплата за послуги',
-                acceptedBanks: ['privatbank'],
             };
 
             it('individual — без taxation, RNOKPP 10-digit → 201', async () => {
@@ -880,7 +866,6 @@ describe('Businesses E2E', () => {
                     name: 'Збір',
                     taxId: VALID_TAX_ID,
                     paymentPurposeTemplate: 'Збір',
-                    acceptedBanks: ['privatbank'],
                 })
                 .expect(201);
             const { slug } = (created.body as { data: { slug: string } }).data;
@@ -948,7 +933,6 @@ describe('Businesses E2E', () => {
                         taxationSystem: 'general',
                         isVatPayer: true,
                         paymentPurposeTemplate: 'Оплата',
-                        acceptedBanks: ['privatbank'],
                     });
                 const { slug } = (created.body as { data: { slug: string } })
                     .data;
@@ -1055,7 +1039,6 @@ describe('Businesses E2E', () => {
                 };
             };
             expect(Object.keys(body.data).sort()).toEqual([
-                'acceptedBanks',
                 'accounts',
                 'name',
                 'seoIndexEnabled',

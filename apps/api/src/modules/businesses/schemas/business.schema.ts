@@ -2,9 +2,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
 import {
     BUSINESS_TYPES,
-    MVP_BANKS,
     TAXATION_SYSTEMS,
-    type BankCode,
     type BusinessType,
     type TaxationSystem,
 } from '@finly/types';
@@ -112,12 +110,6 @@ export class Business {
 
     @Prop({ required: true, trim: true })
     paymentPurposeTemplate!: string;
-
-    @Prop({
-        type: [{ type: String, enum: MVP_BANKS }],
-        default: [],
-    })
-    acceptedBanks!: BankCode[];
 
     /**
      * Чи показувати публічну сторінку у Google (Sprint 3 рішення E3). Default

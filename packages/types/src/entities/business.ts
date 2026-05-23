@@ -17,12 +17,11 @@ import { isTaxIdValidForType, payerTaxIdZod } from '../validation/tax-id';
  * Sprint 9 §SP-1 рефакторинг: IBAN переїхав на окрему сутність `Account`
  * (`packages/types/src/entities/account.ts`); Business зберігає тільки
  * юр-property платника (type, name, taxId, taxationSystem, isVatPayer,
- * paymentPurposeTemplate, acceptedBanks, slug, ownership).
+ * paymentPurposeTemplate, slug, ownership).
  *
  * **Що Zod-схема НЕ перевіряє** (свідомо, бо це write-side / runtime-time):
  * - Унікальність `slugLower` глобально — Mongoose unique index.
  * - Резервовані slug-и (`qr`, `api`, `host-pay`, …) — slug-генератор.
- * - Free-tier обмеження на `acceptedBanks` — app-layer у Sprint 6.
  *
  * **Length-обмеження `name` і `paymentPurposeTemplate` derived-from-spec**
  * через `effectiveLimit(...)` = MIN по `PAYLOAD_VERSIONS` (Sprint 2 §2.2).
@@ -172,7 +171,6 @@ export const BusinessSchema = z
          */
         isVatPayer: z.boolean().nullable(),
         paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
-        acceptedBanks: z.array(bankCodeSchema),
         seoIndexEnabled: z.boolean(),
         deletedAt: z.coerce.date().nullable(),
         createdAt: z.coerce.date(),

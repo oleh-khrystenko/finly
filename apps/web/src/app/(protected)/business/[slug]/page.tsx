@@ -22,9 +22,9 @@ import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
 import {
     AccountsSection,
-    BanksSection,
     BasicSection,
     PublicSection,
+    PurposeSection,
     RequisitesSection,
     TaxationSection,
     hasTaxationFields,
@@ -39,7 +39,7 @@ import {
  *   1. BasicSection (тип, назва)
  *   2. RequisitesSection (тільки `taxId`, IBAN переїхав на Account)
  *   3. TaxationSection (conditional для fop / tov)
- *   4. BanksSection (acceptedBanks)
+ *   4. PurposeSection (paymentPurposeTemplate)
  *   5. PublicSection (slug, public URL)
  *   6. AccountsSection (cards-list рахунків + CTA "Додати рахунок")
  *   7. DangerSection (видалення бізнесу з cascade-toast)
@@ -199,11 +199,7 @@ export default function BusinessSlugPage() {
                         onSave={handlePatch}
                     />
                 )}
-                <BanksSection
-                    id="banks"
-                    business={business}
-                    onSave={handlePatch}
-                />
+                <PurposeSection business={business} onSave={handlePatch} />
                 <PublicSection
                     business={business}
                     payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}

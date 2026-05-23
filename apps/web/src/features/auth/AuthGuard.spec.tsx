@@ -116,9 +116,9 @@ describe('AuthGuard — Sprint 10 next-builder', () => {
         jest.clearAllMocks();
     });
 
-    it('auth + incomplete + post-claim path → /profile?mode=new&next=<encoded path+query>', () => {
+    it('auth + incomplete + deep-link з query → /profile?mode=new&next=<encoded path+query>', () => {
         mockPathname = '/business/iva-X3kQ/account/acc-aB12cD34';
-        mockSearchParams = new URLSearchParams('completed-from=landing');
+        mockSearchParams = new URLSearchParams('ref=invite');
         mockAuthState({
             isAuthenticated: true,
             isLoading: false,
@@ -134,7 +134,7 @@ describe('AuthGuard — Sprint 10 next-builder', () => {
         const expected =
             '/profile?mode=new&next=' +
             encodeURIComponent(
-                '/business/iva-X3kQ/account/acc-aB12cD34?completed-from=landing'
+                '/business/iva-X3kQ/account/acc-aB12cD34?ref=invite'
             );
         expect(mockReplace).toHaveBeenCalledWith(expected);
     });

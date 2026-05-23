@@ -32,9 +32,9 @@ interface Props {
     prefillIban?: string;
     /**
      * Sprint 10 §10.2 — landing-recovery branch активний. На success робить
-     * `clearAll()` landing-store + redirect з `?completed-from=landing`-banner-
-     * trigger на per-account page. На стандартний cabinet-flow — звичайний
-     * redirect без banner.
+     * `clearAll()` landing-store + redirect на per-account page із success-
+     * toast "Бізнес і рахунок збережено". На стандартний cabinet-flow —
+     * redirect із "Рахунок створено".
      */
     landingRecovery?: boolean;
 }
@@ -108,7 +108,7 @@ export default function AccountCreateForm({
                 useQrLandingDraftStore.getState().clearAll();
                 toast.success('Бізнес і рахунок збережено');
                 router.replace(
-                    `/business/${businessSlug}/account/${created.slug}?completed-from=landing`
+                    `/business/${businessSlug}/account/${created.slug}`
                 );
             } else {
                 toast.success('Рахунок створено');

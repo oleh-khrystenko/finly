@@ -1,4 +1,3 @@
-import { MVP_BANKS } from '../constants/banks';
 import { CreateBusinessSchema } from './businesses';
 import {
     LandingDraftSchema,
@@ -70,7 +69,7 @@ describe('LandingDraftSchema', () => {
 });
 
 describe('mapLandingDraftToCreateBusinessRequest', () => {
-    it('мапить draft + key → individual-variant з 6 ключами', () => {
+    it('мапить draft + key → individual-variant з 5 ключами', () => {
         const result = mapLandingDraftToCreateBusinessRequest(
             VALID_DRAFT,
             VALID_UUID
@@ -80,18 +79,8 @@ describe('mapLandingDraftToCreateBusinessRequest', () => {
             name: 'Іваненко Олена Петрівна',
             taxId: VALID_RNOKPP,
             paymentPurposeTemplate: 'Поповнення рахунку',
-            acceptedBanks: [...MVP_BANKS],
             claimIdempotencyKey: VALID_UUID,
         });
-    });
-
-    it('result.acceptedBanks містить усі MVP_BANKS', () => {
-        const result = mapLandingDraftToCreateBusinessRequest(
-            VALID_DRAFT,
-            VALID_UUID
-        );
-        expect(result.acceptedBanks.length).toBe(MVP_BANKS.length);
-        expect(new Set(result.acceptedBanks)).toEqual(new Set(MVP_BANKS));
     });
 
     it('result проходить CreateBusinessSchema (round-trip без drift-у)', () => {

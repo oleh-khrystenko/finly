@@ -1,16 +1,11 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type {
-    BankCode,
     BusinessType,
     CreateBusinessRequest,
     TaxationSystem,
 } from '@finly/types';
-import {
-    MVP_BANKS,
-    isTaxationAllowedForType,
-    requiresTaxation,
-} from '@finly/types';
+import { isTaxationAllowedForType, requiresTaxation } from '@finly/types';
 import { taxIdFieldConfig } from '@/entities/business';
 
 /**
@@ -18,7 +13,7 @@ import { taxIdFieldConfig } from '@/entities/business';
  * (`1 | 2 | 3 | 4` до Sprint 7). Причина: dynamic step-list залежить від
  * `formData.type` (`individual` / `organization` пропускають крок
  * `'taxation'`); numeric-нумерація тоді стає крихкою (Step 3 для ФОП =
- * Taxation, для ОСББ = Purpose-Banks). Named steps дають **stable identity**:
+ * Taxation, для ОСББ = Purpose). Named steps дають **stable identity**:
  * рендер-вибір у `BusinessWizardForm` робиться за `currentStep === 'taxation'`
  * незалежно від index-у у `steps[]`.
  */
@@ -26,7 +21,7 @@ export type BusinessWizardStep =
     | 'type-name'
     | 'requisites'
     | 'taxation'
-    | 'purpose-banks';
+    | 'purpose';
 
 /**
  * Повний step-list (4 кроки). `taxation` присутній лише для `requiresTaxation`-
@@ -37,7 +32,7 @@ const FULL_STEPS: readonly BusinessWizardStep[] = [
     'type-name',
     'requisites',
     'taxation',
-    'purpose-banks',
+    'purpose',
 ] as const;
 
 /**
@@ -60,7 +55,7 @@ export const isBusinessWizardStep = (
 const STEPS_WITHOUT_TAXATION: readonly BusinessWizardStep[] = [
     'type-name',
     'requisites',
-    'purpose-banks',
+    'purpose',
 ] as const;
 
 /**
@@ -91,7 +86,7 @@ export const STEP_TITLES: Record<BusinessWizardStep, string> = {
     'type-name': 'Тип і назва',
     requisites: 'Реквізити',
     taxation: 'Оподаткування',
-    'purpose-banks': 'Призначення і банки',
+    purpose: 'Призначення',
 };
 
 /**
@@ -123,7 +118,6 @@ export interface BusinessWizardDraft {
     taxationSystem?: TaxationSystem;
     isVatPayer?: boolean;
     paymentPurposeTemplate?: string;
-    acceptedBanks?: BankCode[];
 }
 
 /**
@@ -182,16 +176,11 @@ export interface BusinessWizardState {
  * вимагає явного вибору з 4 опцій (radio-cards), без default-у на ФОП. Жодне
  * "Далі" не enabled поки type не обрано (UI перевіряє `formData.type`).
  *
- * `acceptedBanks` лишається з повним set-ом банків — це Sprint 3 §B6 default
- * "усі 11 увімкнені", що однаковий для всіх 4 типів.
- *
  * `isVatPayer` — НЕ default. До Sprint 7 був `false`, але з 4 типами це
  * неприпустимо: для individual/organization isVatPayer семантично `null`,
  * для fop/tov — обов'язковий вибір на Step 'taxation'.
  */
-const INITIAL_FORM: BusinessWizardDraft = {
-    acceptedBanks: [...MVP_BANKS],
-};
+const INITIAL_FORM: BusinessWizardDraft = {};
 
 /**
  * Sprint 7 §SP-6 persist — серіалізована частина state. **Без actions** —
@@ -214,7 +203,7 @@ type PersistedWizardState = Pick<
  * tab-сесією.
  *
  * **Mapping:** symmetric до старого order (Step1→type-name, Step2→requisites,
- * Step3→taxation, Step4→purpose-banks). Якщо persisted значення невалідне
+ * Step3→taxation, Step4→purpose). Якщо persisted значення невалідне
  * (manual edit, downgrade-flow), fallback на `'type-name'` — wizard
  * перезапускається з початку, без crash чи blank state.
  */
@@ -222,7 +211,7 @@ const NUMERIC_STEP_TO_NAMED: Record<number, BusinessWizardStep> = {
     1: 'type-name',
     2: 'requisites',
     3: 'taxation',
-    4: 'purpose-banks',
+    4: 'purpose',
 };
 
 /**
@@ -232,6 +221,10 @@ const NUMERIC_STEP_TO_NAMED: Record<number, BusinessWizardStep> = {
  *    переноситься у `formData.taxId`; `formData.requisites` вилучається.
  *  - drop orphan `invoiceSlugPresetDefault` (v2 містив поле, але emitter
  *    `buildCreateRequestFromDraft` його не emit-ив; Sprint 9 переніс owner-а).
+ *
+ * v4 migration: `acceptedBanks` field видалено повністю (UI-блок прибраний;
+ * public-page рендерить усі MVP_BANKS без per-business фільтра). Step rename
+ * `'purpose-banks' → 'purpose'`.
  *
  * Якщо persisted shape неможливо інтерпретувати — fallback на initial state.
  */
@@ -252,11 +245,18 @@ const migratePersistedState = (
         formData?: Record<string, unknown>;
     };
 
+    // v3 → v4: step rename `'purpose-banks' → 'purpose'`. До цієї міграції
+    // persisted currentStep може бути старою назвою — підставляємо нову.
+    let normalizedStep: unknown = state.currentStep;
+    if (version < 4 && normalizedStep === 'purpose-banks') {
+        normalizedStep = 'purpose';
+    }
+
     let migratedStep: BusinessWizardStep;
-    if (version < 2 && typeof state.currentStep === 'number') {
-        migratedStep = NUMERIC_STEP_TO_NAMED[state.currentStep] ?? 'type-name';
-    } else if (isBusinessWizardStep(state.currentStep)) {
-        migratedStep = state.currentStep;
+    if (version < 2 && typeof normalizedStep === 'number') {
+        migratedStep = NUMERIC_STEP_TO_NAMED[normalizedStep] ?? 'type-name';
+    } else if (isBusinessWizardStep(normalizedStep)) {
+        migratedStep = normalizedStep;
     } else {
         migratedStep = 'type-name';
     }
@@ -264,7 +264,7 @@ const migratePersistedState = (
     const rawForm = state.formData ?? {};
     const migratedForm: BusinessWizardDraft = { ...INITIAL_FORM };
 
-    // Pass-through полів, що не змінюють форму між v2 і v3.
+    // Pass-through полів, що не змінюють форму між v3 і v4.
     if (typeof rawForm.type === 'string') {
         migratedForm.type = rawForm.type as BusinessType;
     }
@@ -280,9 +280,8 @@ const migratePersistedState = (
     if (typeof rawForm.paymentPurposeTemplate === 'string') {
         migratedForm.paymentPurposeTemplate = rawForm.paymentPurposeTemplate;
     }
-    if (Array.isArray(rawForm.acceptedBanks)) {
-        migratedForm.acceptedBanks = rawForm.acceptedBanks as BankCode[];
-    }
+
+    // v3 → v4: `acceptedBanks` поле в persisted-shape ігнорується (drop).
 
     // v2 → v3: `requisites.taxId` (якщо був) → top-level `taxId`.
     // `requisites.iban` навмисно drop-ається (Account-domain).
@@ -308,11 +307,10 @@ const migratePersistedState = (
 };
 
 /**
- * "Порожній draft" — користувач ще не ввів жодного поля. `acceptedBanks`
- * навмисно НЕ враховується, бо завжди pre-filled `MVP_BANKS` за дефолтом
- * (Sprint 3 §B6). Перевірка точкова — кожне поле, яке user реально вводить
- * або обирає. Слугує для skip-confirm-on-empty у cancel-flow: якщо нічого
- * не введено — викидати модалку зайве.
+ * "Порожній draft" — користувач ще не ввів жодного поля. Перевірка точкова:
+ * кожне поле, яке user реально вводить або обирає. Слугує для
+ * skip-confirm-on-empty у cancel-flow: якщо нічого не введено — викидати
+ * модалку зайве.
  */
 export const isWizardDraftEmpty = (draft: BusinessWizardDraft): boolean =>
     draft.type === undefined &&
@@ -370,10 +368,10 @@ export const useBusinessWizardStore = create<BusinessWizardState>()(
                     const idx = steps.indexOf(s.currentStep);
                     // Якщо поточний step не входить у обчислений list (зміна
                     // типу зробила його irrelevant — наприклад, `taxation`
-                    // після setType('individual')) — fallback на 'purpose-banks'
+                    // після setType('individual')) — fallback на 'purpose'
                     // як останній логічний крок.
                     if (idx === -1) {
-                        return { currentStep: 'purpose-banks' };
+                        return { currentStep: 'purpose' };
                     }
                     if (idx >= steps.length - 1) {
                         return {};
@@ -398,7 +396,9 @@ export const useBusinessWizardStore = create<BusinessWizardState>()(
             // Sprint 9 §9.2 — bump 2→3: `requisites`-wrapper видалено
             //   (taxId flatten на top-level), `invoiceSlugPresetDefault` drop
             //   (переїхав на Account). `migrate` переносить v2→v3 поля.
-            version: 3,
+            // Bump 3→4: `acceptedBanks` field видалено повністю (UI-блок
+            //   прибраний), step rename `'purpose-banks' → 'purpose'`.
+            version: 4,
             migrate: migratePersistedState,
             // **Persist лише data-частину**, не actions. Без цього default-
             // merge переписав би actions значеннями, що повернула migrate-
@@ -434,21 +434,19 @@ export function buildCreateRequestFromDraft(
         name,
         taxId,
         paymentPurposeTemplate,
-        acceptedBanks,
         taxationSystem,
         isVatPayer,
     } = draft;
     if (!type || !name || !taxId) {
         throw new Error('Wizard draft incomplete: required fields missing');
     }
-    if (!paymentPurposeTemplate || !acceptedBanks?.length) {
-        throw new Error('Wizard draft incomplete: purpose / banks missing');
+    if (!paymentPurposeTemplate) {
+        throw new Error('Wizard draft incomplete: purpose missing');
     }
     const baseFields = {
         name,
         taxId,
         paymentPurposeTemplate,
-        acceptedBanks,
     };
     switch (type) {
         case 'individual':

@@ -34,7 +34,6 @@ const buildLegacyDoc = (overrides: Record<string, unknown> = {}) => ({
     name: 'Іваненко',
     requisites: { iban: VALID_IBAN, taxId: VALID_TAX_ID },
     paymentPurposeTemplate: 'Оплата за послуги',
-    acceptedBanks: ['privatbank'],
     deletedAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),

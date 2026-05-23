@@ -185,7 +185,7 @@ describe('AuthInitializer', () => {
                 email: 'user@finly.com.ua',
                 termsVersion: CURRENT_TERMS_VERSION,
                 pendingPostLoginTarget:
-                    '/business/iva-X3kQ/account/acc-aB12cD34?completed-from=landing',
+                    '/business/iva-X3kQ/account/acc-aB12cD34',
             });
 
             render(<AuthInitializer />);
@@ -193,7 +193,7 @@ describe('AuthInitializer', () => {
 
             expect(mockClearPendingPostLoginTarget).toHaveBeenCalledTimes(1);
             expect(mockRouterReplace).toHaveBeenCalledWith(
-                '/business/iva-X3kQ/account/acc-aB12cD34?completed-from=landing'
+                '/business/iva-X3kQ/account/acc-aB12cD34'
             );
             expect(callOrder).toEqual(['clear', 'replace']);
         });

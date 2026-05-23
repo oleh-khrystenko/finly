@@ -26,7 +26,7 @@
 **Рівень 1 — Бізнес (юр-особа).**
 
 - Має унікальний slug (наприклад, `ivanenko-fop`).
-- Юр-property: `type` (4 типи — §1.13), `taxId` (РНОКПП/ЄДРПОУ), `taxationSystem`, `isVatPayer`, `paymentPurposeTemplate`, `acceptedBanks`.
+- Юр-property: `type` (4 типи — §1.13), `taxId` (РНОКПП/ЄДРПОУ), `taxationSystem`, `isVatPayer`, `paymentPurposeTemplate`.
 - **НЕ має IBAN** — IBAN живе на рівні 2 (Account). Sprint 9 §SP-1.
 
 **Рівень 2 — Account (банківський рахунок під бізнесом).**
@@ -175,7 +175,7 @@ Discriminator живе у Zod write-DTO (`CreateBusinessSchema` discriminated un
 
 **Розщеплено на 3 сутності:**
 
-- **Business** — юр-особа: `type`, `name`, `taxId` (top-level, flatten-нутий з `requisites.taxId`), `taxationSystem`, `isVatPayer`, `paymentPurposeTemplate`, `acceptedBanks`, `slug`, ownership.
+- **Business** — юр-особа: `type`, `name`, `taxId` (top-level, flatten-нутий з `requisites.taxId`), `taxationSystem`, `isVatPayer`, `paymentPurposeTemplate`, `slug`, ownership.
 - **Account** — банківський рахунок: `iban` (immutable), `name` (auto-default з МФО+last4), `slug` (case-sensitive 8-char random), `bankCode` (stored derived з МФО), `invoiceSlugPresetDefault` (переїхав з Business — нумерація інвойсів per-account).
 - **Invoice** — одноразова платіжка: `accountId` (required), `businessId` (denormalized для cascade), amount/lockMask/validUntil/purpose/slug.
 

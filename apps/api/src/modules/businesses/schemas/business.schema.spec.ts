@@ -16,7 +16,6 @@ const buildFixture = (overrides: Partial<Business> = {}) => ({
     taxId: VALID_TAX_ID,
     taxationSystem: 'simplified-3' as const,
     paymentPurposeTemplate: 'Оплата за послуги',
-    acceptedBanks: ['privatbank', 'monobank'] as const,
     ...overrides,
 });
 
@@ -50,7 +49,6 @@ describe('Business schema (Mongoose integration) — Sprint 9 §SP-1', () => {
         expect(doc.taxId).toBe(VALID_TAX_ID);
         expect(doc.deletedAt).toBeNull();
         expect(doc.managers).toEqual([]);
-        expect(doc.acceptedBanks).toEqual(['privatbank', 'monobank']);
         expect(doc.taxationSystem).toBe('simplified-3');
         expect(doc.isVatPayer).toBe(false);
         expect(doc.seoIndexEnabled).toBe(false); // default
@@ -167,19 +165,6 @@ describe('Business schema (Mongoose integration) — Sprint 9 §SP-1', () => {
                 })
             )
         ).rejects.toThrow(/simplified-99.*enum/i);
-    });
-
-    it('rejects unknown bank code in acceptedBanks', async () => {
-        await expect(
-            BusinessModel.create(
-                buildFixture({
-                    acceptedBanks: [
-                        'privatbank',
-                        'unknown_bank',
-                    ] as unknown as ['privatbank', 'monobank'],
-                })
-            )
-        ).rejects.toThrow(/unknown_bank/i);
     });
 
     it('rejects missing required name', async () => {

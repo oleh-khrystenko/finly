@@ -108,7 +108,6 @@ describe('BusinessesService cascade-delete (Sprint 4 §SP-5, MongoMemoryReplSet)
             taxationSystem: 'simplified-3',
             isVatPayer: false,
             paymentPurposeTemplate: 'Оплата',
-            acceptedBanks: ['privatbank'],
             seoIndexEnabled: false,
         });
         const accounts: AccountDocument[] = [];
@@ -232,7 +231,6 @@ describe('BusinessesService cascade-delete (Sprint 4 §SP-5, MongoMemoryReplSet)
             taxationSystem: 'simplified-3',
             isVatPayer: false,
             paymentPurposeTemplate: 'Other',
-            acceptedBanks: ['privatbank'],
             seoIndexEnabled: false,
         });
         const otherAccount = await accountModel.create({

@@ -14,12 +14,11 @@ describe('useBusinessWizardStore', () => {
         expect(useBusinessWizardStore.getState().currentStep).toBe('type-name');
     });
 
-    it('initial formData — type undefined, всі банки з MVP_BANKS (Sprint 9 §9.0 — 10 банків після SportBank-консолідації)', () => {
+    it('initial formData — порожній draft (type / taxation / VAT undefined)', () => {
         const data = useBusinessWizardStore.getState().formData;
         expect(data.type).toBeUndefined();
         expect(data.taxationSystem).toBeUndefined();
         expect(data.isVatPayer).toBeUndefined();
-        expect(data.acceptedBanks).toHaveLength(10);
     });
 
     it('setStep змінює currentStep на named-літерал', () => {
@@ -42,7 +41,7 @@ describe('useBusinessWizardStore', () => {
     it("reset повертає до initial state ('type-name', type undefined)", () => {
         const { setStep, patchFormData, reset } =
             useBusinessWizardStore.getState();
-        setStep('purpose-banks');
+        setStep('purpose');
         patchFormData({ name: 'Test' });
         reset();
         const s = useBusinessWizardStore.getState();
@@ -60,7 +59,7 @@ describe('useBusinessWizardStore', () => {
                     'type-name',
                     'requisites',
                     'taxation',
-                    'purpose-banks',
+                    'purpose',
                 ]);
             }
         });
@@ -70,7 +69,7 @@ describe('useBusinessWizardStore', () => {
                 expect(computeStepsForType(type)).toEqual([
                     'type-name',
                     'requisites',
-                    'purpose-banks',
+                    'purpose',
                 ]);
             }
         });
@@ -102,7 +101,7 @@ describe('useBusinessWizardStore', () => {
                 'type-name',
                 'requisites',
                 'taxation',
-                'purpose-banks',
+                'purpose',
             ]) {
                 expect(isBusinessWizardStep(step)).toBe(true);
             }
@@ -145,7 +144,7 @@ describe('useBusinessWizardStore', () => {
             [1, 'type-name'],
             [2, 'requisites'],
             [3, 'taxation'],
-            [4, 'purpose-banks'],
+            [4, 'purpose'],
         ] as const)(
             'numeric currentStep=%s (v1) мігрує на %s',
             async (numericStep, expectedNamed) => {
@@ -159,7 +158,6 @@ describe('useBusinessWizardStore', () => {
                             formData: {
                                 type: 'fop',
                                 name: 'Іваненко',
-                                acceptedBanks: [],
                             },
                         },
                         version: 0,
@@ -476,7 +474,7 @@ describe('useBusinessWizardStore', () => {
     // ─── Sprint 7 §SP-6 — nextStep / prevStep через computed steps ───
 
     describe('nextStep / prevStep', () => {
-        it('fop: type-name → requisites → taxation → purpose-banks', () => {
+        it('fop: type-name → requisites → taxation → purpose', () => {
             const { setType, nextStep } = useBusinessWizardStore.getState();
             setType('fop');
             expect(useBusinessWizardStore.getState().currentStep).toBe(
@@ -492,16 +490,16 @@ describe('useBusinessWizardStore', () => {
             );
             nextStep();
             expect(useBusinessWizardStore.getState().currentStep).toBe(
-                'purpose-banks'
+                'purpose'
             );
             // Final step: nextStep — no-op
             nextStep();
             expect(useBusinessWizardStore.getState().currentStep).toBe(
-                'purpose-banks'
+                'purpose'
             );
         });
 
-        it("individual: type-name → requisites → purpose-banks (skip 'taxation')", () => {
+        it("individual: type-name → requisites → purpose (skip 'taxation')", () => {
             const { setType, nextStep } = useBusinessWizardStore.getState();
             setType('individual');
             nextStep();
@@ -509,9 +507,9 @@ describe('useBusinessWizardStore', () => {
                 'requisites'
             );
             nextStep();
-            // Очікуємо, що skip перейде одразу на purpose-banks
+            // Очікуємо, що skip перейде одразу на purpose
             expect(useBusinessWizardStore.getState().currentStep).toBe(
-                'purpose-banks'
+                'purpose'
             );
         });
 
@@ -520,9 +518,9 @@ describe('useBusinessWizardStore', () => {
                 useBusinessWizardStore.getState();
             setType('organization');
             nextStep(); // → requisites
-            nextStep(); // → purpose-banks (skip taxation)
+            nextStep(); // → purpose (skip taxation)
             expect(useBusinessWizardStore.getState().currentStep).toBe(
-                'purpose-banks'
+                'purpose'
             );
             prevStep(); // → requisites (без taxation у history)
             expect(useBusinessWizardStore.getState().currentStep).toBe(
@@ -543,7 +541,7 @@ describe('useBusinessWizardStore', () => {
             // Edge-case: користувач на Step 'taxation' після fop, повертається
             // на Step 1 і змінює тип на individual. computeStepsForType дає
             // 3-крок-list без 'taxation' — поточний `currentStep` тепер
-            // irrelevant. nextStep має fallback'ити на 'purpose-banks'.
+            // irrelevant. nextStep має fallback'ити на 'purpose'.
             const { setType, nextStep, setStep } =
                 useBusinessWizardStore.getState();
             setType('fop');
@@ -556,7 +554,7 @@ describe('useBusinessWizardStore', () => {
             setStep('type-name');
             setType('individual');
             // Стан: currentStep='type-name', steps=[type-name, requisites,
-            // purpose-banks]. Це ОК, юзер просто йде через 3-крок-flow.
+            // purpose]. Це ОК, юзер просто йде через 3-крок-flow.
             expect(useBusinessWizardStore.getState().currentStep).toBe(
                 'type-name'
             );

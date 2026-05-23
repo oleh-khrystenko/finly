@@ -14,7 +14,6 @@ const baseProps = {
         type: 'fop' as const,
         name: 'Іваненко',
         slug: 'IvanEnko',
-        acceptedBanks: ['privatbank', 'monobank'] as BankCode[],
         seoIndexEnabled: false,
     },
     nbuLinks: {
@@ -77,20 +76,18 @@ describe('PublicAccountView (Sprint 9 §SP-4 + §SP-9)', () => {
     });
 
     describe('Bank-grid (Sprint 3 11-bank-inactive pattern)', () => {
-        it('рендерить bank-tile для кожного acceptedBanks елемента (inactive)', () => {
+        it('рендерить bank-tile для кожного MVP_BANKS елемента (inactive)', () => {
             render(<PublicAccountView {...baseProps} />);
-            // BANK_LABEL для privatbank і monobank.
+            // BANK_LABEL для privatbank і monobank — обидва присутні у MVP_BANKS.
             expect(screen.getByText('ПриватБанк')).toBeInTheDocument();
             expect(screen.getByText('monobank')).toBeInTheDocument();
         });
 
-        it('aria-disabled на bank-tile (inactive до Sprint 5)', () => {
-            const { container } = render(<PublicAccountView {...baseProps} />);
-            const disabledTiles = container.querySelectorAll(
-                '[aria-disabled]'
-            );
-            // 2 banks у acceptedBanks → 2 inactive tiles.
-            expect(disabledTiles).toHaveLength(2);
+        it('aria-disabled на bank-tile (inactive до Sprint 5)', async () => {
+            render(<PublicAccountView {...baseProps} />);
+            const { MVP_BANKS } = await import('@finly/types');
+            const disabledTiles = screen.getAllByTitle('Незабаром');
+            expect(disabledTiles).toHaveLength(MVP_BANKS.length);
         });
     });
 

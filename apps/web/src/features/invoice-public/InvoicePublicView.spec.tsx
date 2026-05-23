@@ -13,7 +13,6 @@ const baseProps = {
         type: 'fop' as const,
         name: 'Іваненко',
         slug: 'IvanEnko',
-        acceptedBanks: ['privatbank' as const, 'monobank' as const],
     },
     account: {
         slug: 'aBc12345',

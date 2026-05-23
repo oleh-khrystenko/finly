@@ -233,7 +233,7 @@ describe('QrLandingResult — claim CTA по auth-state', () => {
         expect(mockCreateBusiness).not.toHaveBeenCalled();
     });
 
-    it('logged-in + complete profile: 2-step claim → redirect на per-account з ?completed-from=landing', async () => {
+    it('logged-in + complete profile: 2-step claim → redirect на per-account', async () => {
         seedFilledState();
         setAuthedWithCompleteProfile();
         mockCreateBusiness.mockResolvedValue({ slug: 'iva-X3kQ' });
@@ -260,7 +260,7 @@ describe('QrLandingResult — claim CTA по auth-state', () => {
                 VALID_FORM
             );
             expect(mockRouterReplace).toHaveBeenCalledWith(
-                '/business/iva-X3kQ/account/acc-aB12cD34?completed-from=landing'
+                '/business/iva-X3kQ/account/acc-aB12cD34'
             );
             expect(mockToastSuccess).toHaveBeenCalledWith(
                 'Бізнес і рахунок збережено'

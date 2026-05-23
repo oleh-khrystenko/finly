@@ -31,7 +31,6 @@ function makeBusiness(
         isVatPayer:
             overrides.type === 'fop' || overrides.type === 'tov' ? false : null,
         paymentPurposeTemplate: 'Оплата',
-        acceptedBanks: ['privatbank'],
         seoIndexEnabled: false,
         deletedAt: null,
         createdAt: new Date('2026-05-01'),

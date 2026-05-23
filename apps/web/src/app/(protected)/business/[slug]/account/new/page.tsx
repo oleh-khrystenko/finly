@@ -27,8 +27,8 @@ import { useQrLandingDraftStore } from '@/entities/qr-landing-draft';
  *    hook) — landing-store hydrate-ється асинхронно з localStorage; pre-fill
  *    IBAN до hydration-complete зчитав би порожній snapshot.
  *  - На submit success — `AccountCreateForm` сам читає prefillIban з prop-у;
- *    success-redirect на per-account-page з `?completed-from=landing` banner-
- *    trigger; cleanup landing-draft робиться там же.
+ *    success-redirect на per-account-page + landing-draft cleanup
+ *    (`clearAll`) робиться там же.
  */
 interface LoadedData {
     paramSlug: string;

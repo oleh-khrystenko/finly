@@ -35,7 +35,7 @@ import { BusinessesService } from './businesses.service';
  * BusinessesModule (для cascade-delete-business). Sort `{ createdAt: 1 }` —
  * customer-perspective "перший-створений = основний-рахунок зверху".
  *
- * **Whitelist 6 полів** + cache `public, max-age=3600, SWR=86400`. Реквізити
+ * **Whitelist 5 полів** + cache `public, max-age=3600, SWR=86400`. Реквізити
  * leak-vector лише через `nbuLinks` на per-account-page (Base64URL у платіжній
  * команді банку), не у JSON.
  *
@@ -75,7 +75,6 @@ export class PublicBusinessesController {
             type: business.type,
             name: business.name,
             slug: business.slug,
-            acceptedBanks: business.acceptedBanks,
             seoIndexEnabled: business.seoIndexEnabled,
             accounts: accounts.map((a) => ({
                 slug: a.slug,

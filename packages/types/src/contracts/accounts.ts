@@ -136,7 +136,6 @@ export const PublicAccountViewSchema = z.object({
         type: businessTypeSchema,
         name: businessNameSchema,
         slug: businessSlugSchema,
-        acceptedBanks: z.array(bankCodeSchema),
         seoIndexEnabled: z.boolean(),
     }),
     nbuLinks: z.object({

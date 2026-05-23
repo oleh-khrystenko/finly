@@ -10,8 +10,8 @@ import { type BusinessType } from '@finly/types';
  * фізособа збирає donate-и → "переказ"; ФОП/ТОВ продає → "платіж";
  * неприбуткова організація приймає членські внески/пожертви → "внесок".
  *
- * Description однакова для всіх типів — обидва consumer-и (`Step4PurposeBanks`
- * у wizard, `BanksSection` у edit) показують один і той самий пояснювальний
+ * Description однакова для всіх типів — обидва consumer-и (`Step4Purpose` у
+ * wizard, `PurposeSection` у edit) показують один і той самий пояснювальний
  * хінт. Виносити окремі description per-type було б шумом без сигналу.
  *
  * Discriminator-таблиця замість `if/else` — додавання нового `BusinessType`

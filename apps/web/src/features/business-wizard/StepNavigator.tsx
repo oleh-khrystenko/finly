@@ -98,12 +98,11 @@ export default function StepNavigator({ current, steps, onJumpBack }: Props) {
 
             {/*
              * Desktop horizontal: step-items + connectors як alternating
-             * sibling-`<li>` (а не nested), щоб довгі labels ("Призначення і
-             * банки") не wrap-ились. Title-li — `shrink-0` (натуральна
-             * ширина + `whitespace-nowrap`), connector-li — `flex-1`
-             * (заповнює простір між titles). Раніше було `flex-1` на title-
-             * li → всі 4 кроки отримували рівну ширину, і довший label не
-             * вміщався → wrap.
+             * sibling-`<li>` (а не nested), щоб довгі labels не wrap-ились.
+             * Title-li — `shrink-0` (натуральна ширина + `whitespace-nowrap`),
+             * connector-li — `flex-1` (заповнює простір між titles). Раніше
+             * було `flex-1` на title-li → всі кроки отримували рівну ширину,
+             * і довший label не вміщався → wrap.
              */}
             <ol className="hidden items-center gap-2 sm:flex">
                 {steps.map((step, idx) => {

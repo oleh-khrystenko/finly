@@ -106,7 +106,6 @@ export class PublicInvoicesController {
                 type: business.type,
                 name: snapshot?.recipientName ?? business.name,
                 slug: business.slug,
-                acceptedBanks: business.acceptedBanks,
             },
             account: {
                 slug: account.slug,

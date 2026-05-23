@@ -169,7 +169,6 @@ describe('OrphanProfileCleanupService (Sprint 12 §12.1c, MongoMemoryReplSet)', 
             taxationSystem: 'simplified-3',
             isVatPayer: false,
             paymentPurposeTemplate: 'Оплата',
-            acceptedBanks: ['privatbank'],
             seoIndexEnabled: false,
         });
         await businessModel.collection.updateOne(

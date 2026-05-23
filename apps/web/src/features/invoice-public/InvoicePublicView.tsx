@@ -27,7 +27,6 @@ interface Props {
         type: BusinessType;
         name: string;
         slug: string;
-        acceptedBanks: BankCode[];
     };
     /**
      * Nested account view (Sprint 9 §SP-6). Клієнт бачить через який рахунок

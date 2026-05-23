@@ -60,7 +60,6 @@ function makeView(
         type: 'fop',
         name: 'Іваненко',
         slug: 'IvanEnko',
-        acceptedBanks: ['privatbank', 'monobank'],
         seoIndexEnabled: false,
         accounts: [],
         ...overrides,

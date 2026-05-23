@@ -27,8 +27,7 @@ type VerifyStatus = 'verifying' | 'success' | 'deleted' | 'error';
  *
  *  - `claim == null` → fall-through на `redirectTarget` (register/login/default
  *    без claim).
- *  - `'success'` → `clearAll()` + redirect на per-account з banner-trigger
- *    `?completed-from=landing`.
+ *  - `'success'` → `clearAll()` + redirect на per-account page.
  *  - `'business-failed'` → `setFormData(failedClaimDraft)` +
  *    `setIntent('claim-failed-business')` + redirect на
  *    `/business/new?from=landing` (wizard pre-fill через `?from=landing`).
@@ -49,7 +48,7 @@ function handleClaimRedirect(
 
     if (claim.state === 'success') {
         store.clearAll();
-        return `/business/${claim.claimedBusinessSlug}/account/${claim.claimedAccountSlug}?completed-from=landing`;
+        return `/business/${claim.claimedBusinessSlug}/account/${claim.claimedAccountSlug}`;
     }
 
     if (claim.state === 'business-failed') {

@@ -32,7 +32,6 @@ const sampleView = {
     type: 'fop',
     name: 'Іваненко',
     slug: 'IvanEnko',
-    acceptedBanks: ['privatbank'],
     seoIndexEnabled: false,
     accounts: [
         {

@@ -65,7 +65,6 @@ function makeView(
             type: 'fop',
             name: 'Іваненко',
             slug: 'IvanEnko',
-            acceptedBanks: ['privatbank'],
         },
         account: {
             slug: 'aBc12345',
