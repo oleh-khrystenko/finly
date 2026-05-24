@@ -79,15 +79,13 @@ const INITIAL_STATE = {
  *
  * **localStorage, не sessionStorage**: landing-draft переживає закриття
  * вкладки. ФОП може заповнити форму, піти перевірити email, повернутись через
- * годину — дані мають бути на місці. `businessWizardStore` (sessionStorage)
- * живе у межах однієї auth-session-ії.
+ * годину — дані мають бути на місці.
  *
- * **Окремий store від `businessWizardStore`**: anon-shape (`QrPreviewInput`:
- * 4 поля) і wizard-shape (`Partial<CreateBusinessRequest>` з ~11 полями) —
- * структурно різні. Persistence key різний (`finly:business-wizard`
- * sessionStorage vs `finly:landing-draft` localStorage). Sprint 10 розширення:
- * `intent` state-machine + `claimIdempotencyKey` живуть тут, бо це anon-claim
- * lifecycle, не wizard-state.
+ * **Окремий store від cabinet-create-form-state**: anon-shape
+ * (`QrPreviewInput`: 4 поля) і cabinet-create-shape (`CreateBusinessRequest`
+ * discriminated union) — структурно різні. Sprint 10 розширення: `intent`
+ * state-machine + `claimIdempotencyKey` живуть тут, бо це anon-claim
+ * lifecycle, не cabinet-form-state.
  *
  * **SSR-hydration mismatch**: `useQrLandingDraftStore` на SSR віддає
  * `INITIAL_STATE` (бо localStorage недоступний). Компоненти, що рендеряться

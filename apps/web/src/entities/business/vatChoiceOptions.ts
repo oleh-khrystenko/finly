@@ -5,8 +5,9 @@ import {
 import type { UiRadioCardGroupOption } from '@/shared/ui/UiRadioCardGroup';
 
 /**
- * UI-config поля "Платник ПДВ" як radio-cards (Step3Taxation у wizard +
- * TaxationSection у cabinet edit). Семантика поля **різна** на двох системах:
+ * UI-config поля "Платник ПДВ" як radio-cards (`BusinessCreateForm` на
+ * /business/new + `TaxationSection` у cabinet edit). Семантика поля **різна**
+ * на двох системах:
  *
  *  - **Спрощена-3** — це фактично вибір ставки єдиного податку (ст. 293.3 ПКУ):
  *    3% з окремою сплатою ПДВ vs 5% з ПДВ, що включений у склад ЄП. Платник
@@ -23,8 +24,8 @@ import type { UiRadioCardGroupOption } from '@/shared/ui/UiRadioCardGroup';
  * **Чому в `entities/business/`** (а не `shared/lib/` чи `features/...`):
  * symmetric з `taxIdField.ts` — domain helper, що оперує доменним
  * enum-ом (`VatAllowedTaxationSystem`) і мапить його на UI-семантику. Сonsumer-и
- * — два features (business-wizard, business-edit), shared-розташування уникає
- * cross-feature import-у (`modular-boundaries.md`).
+ * — два features (`business-wizard` /business/new, `business-edit`), shared-
+ * розташування уникає cross-feature import-у (`modular-boundaries.md`).
  *
  * **Чому `VatChoice` як `'no' | 'yes'`, а не `boolean`**: `UiRadioCardGroup`
  * generic над `TValue extends string`. Bool↔string mapping живе тут, щоб

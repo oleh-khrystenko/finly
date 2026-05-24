@@ -110,6 +110,14 @@ const VALIDATION_MESSAGES: Record<string, string> = {
     // "Система оподаткування" у wizard-step і edit-section.
     TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE:
         'Ця система оподаткування недоступна для обраного типу бізнесу',
+
+    // --- Single-form /business/new (BusinessCreateForm) cross-field ---
+    // Коди емітяться superRefine-ом форми, не entity-Zod-схемами з
+    // `@finly/types`. Видимі лише у момент створення бізнесу, коли
+    // обраний тип fop|tov але користувач ще не торкнув taxation-блок.
+    INVALID_TYPE_REQUIRED: 'Оберіть тип одержувача',
+    TAXATION_REQUIRED_FOR_TYPE: 'Оберіть систему оподаткування',
+    INVALID_VAT_REQUIRED: 'Оберіть варіант ПДВ',
 };
 
 const FALLBACK = 'Перевірте правильність значення';

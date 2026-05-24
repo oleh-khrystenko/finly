@@ -129,7 +129,7 @@ export type PayerTaxId = z.infer<typeof payerTaxIdZod>;
  *  2. `BusinessesService.update` cross-check — PATCH без `type`-context-у:
  *     service читає document-resident `type` і використовує цей helper, щоб
  *     обрати правильний валідатор для нового taxId-значення.
- *  3. Frontend `RequisitesSection` / `Step2Requisites` — inline-валідатор поля
+ *  3. Frontend `RequisitesSection` / `BusinessCreateForm` — inline-валідатор поля
  *     "Код одержувача" з `taxIdLengthFor(type)`-aware label / maxLength.
  *
  * **Семантика per `type`:**

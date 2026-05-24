@@ -10,7 +10,7 @@ import {
  *
  * Норматив НБУ §IV.10.5 явно дозволяє два формати: 10-цифровий РНОКПП
  * (фізособа / ФОП) АБО 8-цифровий ЄДРПОУ (юр.особа). Мапінг **мусить бути
- * стабільним і єдиним** — два consumer-и (`Step2Requisites` у wizard,
+ * стабільним і єдиним** — два consumer-и (`BusinessCreateForm` на /business/new,
  * `RequisitesSection` у cabinet edit) повинні рендерити рівно ту саму
  * label-у, placeholder, maxLength і validator. Без shared-helper-а перший
  * drift у label-копії ламає UAT-чекліст PUB-6..9 (різні UA-рядки у двох

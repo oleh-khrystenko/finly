@@ -42,7 +42,7 @@ export type TaxationSystem = (typeof TAXATION_SYSTEMS)[number];
  *  - write-DTO refine на `createTovVariant` (cabinet write);
  *  - service-layer cross-check у `BusinessesService.update` (PATCH, де DTO
  *    не несе `type`);
- *  - UI-filter SELECT-options у `Step3Taxation` / `TaxationSection`.
+ *  - UI-filter SELECT-options у `BusinessCreateForm` / `TaxationSection`.
  */
 export const ALLOWED_TAXATION_SYSTEMS_BY_TYPE: Record<
     BusinessType,

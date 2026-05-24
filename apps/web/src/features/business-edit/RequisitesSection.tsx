@@ -23,7 +23,7 @@ interface Props {
  * Type-aware: РНОКПП (10 цифр + checksum) для individual / fop, ЄДРПОУ (8 цифр
  * без checksum) для tov / organization. Label / placeholder / maxLength /
  * validator — з shared helper-у `taxIdFieldConfig`, що використовується також
- * у wizard `Step2Requisites`.
+ * у `BusinessCreateForm` на /business/new.
  */
 export default function RequisitesSection({ business, onSave }: Props) {
     const taxIdConfig = taxIdFieldConfig(business.type);
