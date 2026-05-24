@@ -4,7 +4,7 @@ import { ENV } from '@/shared/config';
 
 const BASE_URL = ENV.NEXT_PUBLIC_BASE_URL;
 
-const FALLBACK_TITLE = 'Finly';
+const FALLBACK_TITLE = 'Finly — веди справи, а не папери';
 const FALLBACK_DESCRIPTION =
     'Finly — сервіс для українських ФОП та їх бухгалтерів.';
 

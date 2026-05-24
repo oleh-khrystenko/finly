@@ -24,6 +24,7 @@ export function BaseLayout({ children }: BaseLayoutProps) {
                         <Link href="https://finly.com.ua" style={brandLink}>
                             <Text style={brand}>Finly</Text>
                         </Link>
+                        <Text style={tagline}>Веди справи, а не папери.</Text>
                     </Section>
                     {children}
                     <Hr style={divider} />
@@ -84,6 +85,12 @@ const brand: React.CSSProperties = {
     fontWeight: 700,
     color: EMAIL_COLORS.foreground,
     margin: '0',
+};
+
+const tagline: React.CSSProperties = {
+    fontSize: '13px',
+    color: EMAIL_COLORS.mutedForeground,
+    margin: '4px 0 0',
 };
 
 const divider: React.CSSProperties = {

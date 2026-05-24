@@ -61,6 +61,9 @@ export function LandingFooter() {
                     {/* Brand column */}
                     <div className="space-y-4">
                         <Logo />
+                        <p className="text-foreground max-w-xs text-base leading-snug font-medium">
+                            Веди справи, а не папери.
+                        </p>
                         <p className="text-muted-foreground max-w-xs text-sm leading-relaxed">
                             Платіжні QR-коди за стандартом НБУ для українських
                             ФОП і бухгалтерів.

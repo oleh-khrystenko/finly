@@ -1,54 +1,5 @@
-<svg viewBox="-100 -100 200 200" xmlns="http://www.w3.org/2000/svg">
-
-  <!-- === OUTER HEX === -->
-
-  <path fill="#dadee5" d="
-        M 0 -88
-        L 76.210235 -44
-        L 76.210235 44
-        L 55.425626 32
-        L 55.425626 -32
-        L 0 -64
-        L -55.425626 -32
-        L -55.425626 32
-        L 0 64
-        L 0 88
-        L -76.210235 44
-        L -76.210235 -44
-        Z
-    "/>
-
-  <polygon fill="#00b8b9" points="
-        0,88
-        76.210235,44
-        55.425626,32
-        0,64
-    "/>
-
-  <!-- === INNER CUBE === -->
-
-  <!-- TOP -->
-  <polygon fill="#939395" points="
-        0,-40
-        34.641016,-20
-        0,0
-        -34.641016,-20
-    "/>
-
-  <!-- LEFT -->
-  <polygon fill="#767677" points="
-        -34.641016,-20
-        0,0
-        0,40
-        -34.641016,20
-    "/>
-
-  <!-- RIGHT -->
-  <polygon fill="#00b8b9" points="
-        34.641016,-20
-        0,0
-        0,40
-        34.641016,20
-    "/>
-
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+    <path d="M10 46 Q 28 60, 54 14" stroke="#35b276" stroke-width="5" stroke-linecap="round" fill="none"/>
+    <circle cx="10" cy="46" r="5" fill="#35b276"/>
+    <circle cx="54" cy="14" r="5" fill="#35b276"/>
 </svg>
