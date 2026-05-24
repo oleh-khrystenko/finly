@@ -64,18 +64,6 @@ export function LandingFooter() {
                         <p className="text-foreground max-w-xs text-base leading-snug font-medium">
                             Веди справи, а не папери.
                         </p>
-                        <p className="text-muted-foreground max-w-xs text-sm leading-relaxed">
-                            Платіжні QR-коди за стандартом НБУ для українських
-                            ФОП і бухгалтерів.
-                        </p>
-                        <UiButton
-                            as="link"
-                            href="/auth/signin"
-                            variant="filled"
-                            size="sm"
-                        >
-                            Створити сторінку
-                        </UiButton>
                     </div>
 
                     {/* Product column */}
@@ -127,12 +115,22 @@ export function LandingFooter() {
 
             {/* Copyright strip */}
             <div className="border-border border-t">
-                <div className="container mx-auto flex flex-col gap-3 px-6 py-6 text-xs sm:flex-row sm:items-center sm:justify-between">
+                <div className="container mx-auto flex flex-col gap-3 px-6 py-6 text-sm sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-muted-foreground">
                         © {year} Finly. Всі права захищено.
                     </p>
-                    <p className="text-muted-foreground">
-                        Зроблено в Україні
+                    <p className="text-muted-foreground inline-flex items-center gap-1">
+                        Розробка:
+                        <UiButton
+                            as="a"
+                            href="https://cyanship.com"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            variant="link"
+                            size="sm"
+                        >
+                            CyanShip
+                        </UiButton>
                     </p>
                 </div>
             </div>
