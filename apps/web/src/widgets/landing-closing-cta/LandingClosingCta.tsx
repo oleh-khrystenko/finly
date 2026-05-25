@@ -17,11 +17,10 @@ export function LandingClosingCta() {
                     />
                     <div className="relative z-10">
                         <h2 className="text-foreground text-3xl font-semibold tracking-tight sm:text-4xl">
-                            Ринок уже пів року як перейшов на QR
+                            Не кожен клієнт допише до кінця
                         </h2>
                         <p className="text-muted-foreground mx-auto mt-4 max-w-xl text-base sm:text-lg">
-                            Ваш клієнт уже звик платити в один тап у когось
-                            іншого.
+                            29 цифр IBAN — це 29 шансів передумати.
                         </p>
                         <div className="mt-8 flex justify-center">
                             <UiButton
