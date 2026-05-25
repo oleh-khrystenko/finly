@@ -1,7 +1,14 @@
 'use client';
 
 import { type ReactNode, useEffect, useState } from 'react';
-import { ArrowRight, Briefcase, CreditCard, FileText, Plus } from 'lucide-react';
+import {
+    ArrowRight,
+    Briefcase,
+    CreditCard,
+    ExternalLink,
+    FileText,
+    Plus,
+} from 'lucide-react';
 import { AxiosError } from 'axios';
 import {
     BUSINESS_TYPE_LABEL,
@@ -13,17 +20,17 @@ import { useAuthStore } from '@/entities/user';
 import { usePendingDeletesStore } from '@/features/business-edit/pendingDeletesStore';
 import { pluralizeUa } from '@/shared/lib';
 import UiButton from '@/shared/ui/UiButton';
+import UiLink from '@/shared/ui/UiLink';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
 import UiPageHeading from '@/shared/ui/UiPageHeading';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
 
-// Display host без схеми (`pay.finly.com.ua`) для рядка `host/slug` на картці.
-// ENV-конст — frozen на module-load, тож обчислюємо один раз для всього файлу.
-const PAY_HOST = ENV.NEXT_PUBLIC_PAY_PUBLIC_URL.replace(
-    /^https?:\/\//,
-    ''
-).replace(/\/$/, '');
+// `PAY_ORIGIN` — повний `https://pay.finly.com.ua` для href справжнього посилання.
+// `PAY_HOST` — той самий host без схеми для display ("чистий" вигляд). Обчислюємо
+// один раз на module-load (ENV frozen).
+const PAY_ORIGIN = ENV.NEXT_PUBLIC_PAY_PUBLIC_URL.replace(/\/$/, '');
+const PAY_HOST = PAY_ORIGIN.replace(/^https?:\/\//, '');
 
 function extractApiErrorCode(err: unknown): string {
     if (!(err instanceof AxiosError)) return 'unknown';
@@ -196,34 +203,54 @@ function BusinessCard({
 }) {
     const typeLabel = BUSINESS_TYPE_LABEL[business.type];
     const { accountsCount, invoicesCount } = business;
+    const publicHref = `${PAY_ORIGIN}/${business.slug}`;
     // Sprint 9 §Risk #7 mitigation — два counter-и (рахунки + інвойси усього)
     // на business-картці, щоб ФОП з 1 рахунком розумів обсяг без drill-down-у
-    // у per-account-page. "Рахунків" без слова "активних" — рахує всі
-    // документи в `Account`-колекції цього бізнесу. Аналогічно invoicesCount
-    // — всі invoice-документи (включно з expired).
+    // у per-account-page.
     return (
-        <UiSectionCard
-            title={business.name}
-            headerRight={
-                isBookkeeper ? (
+        <article className="border-border bg-card hover:border-foreground/15 flex flex-col gap-3 rounded-xl border p-5 transition-colors md:p-6">
+            <div className="flex items-center justify-between gap-2">
+                <p className="text-muted-foreground truncate text-xs font-medium">
+                    {typeLabel}
+                </p>
+                {isBookkeeper && (
                     <span className="bg-muted text-muted-foreground shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium">
                         Клієнтський
                     </span>
-                ) : undefined
-            }
-            className="flex flex-col gap-4 p-5 md:p-6"
-        >
-            <div className="space-y-1">
-                <p className="text-muted-foreground text-xs">{typeLabel}</p>
-                <p className="text-muted-foreground truncate text-xs">
+                )}
+            </div>
+
+            <h2
+                className="text-foreground line-clamp-2 text-base leading-snug font-semibold break-words"
+                title={business.name}
+            >
+                {business.name}
+            </h2>
+
+            <UiLink
+                href={publicHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                variant="muted"
+                aria-label={`Відкрити публічну сторінку ${business.name} у новій вкладці`}
+                className="group inline-flex min-w-0 items-center gap-1.5 text-xs"
+            >
+                <span className="truncate">
                     {PAY_HOST}/
                     <span className="text-foreground font-mono">
                         {business.slug}
                     </span>
-                </p>
-                <div className="flex flex-wrap gap-x-3 gap-y-1 pt-1">
+                </span>
+                <ExternalLink
+                    aria-hidden
+                    className="size-3.5 shrink-0 opacity-60 transition-opacity group-hover:opacity-100"
+                />
+            </UiLink>
+
+            <div className="mt-auto flex flex-col gap-3 pt-2">
+                <div className="flex flex-wrap gap-x-3 gap-y-1">
                     <p className="text-muted-foreground inline-flex items-center gap-1 text-xs">
-                        <CreditCard className="size-3.5" />
+                        <CreditCard className="size-3.5" aria-hidden />
                         {pluralizeUa(
                             accountsCount,
                             'рахунок',
@@ -233,7 +260,7 @@ function BusinessCard({
                     </p>
                     {invoicesCount > 0 && (
                         <p className="text-muted-foreground inline-flex items-center gap-1 text-xs">
-                            <FileText className="size-3.5" />
+                            <FileText className="size-3.5" aria-hidden />
                             {pluralizeUa(
                                 invoicesCount,
                                 'інвойс',
@@ -243,19 +270,19 @@ function BusinessCard({
                         </p>
                     )}
                 </div>
+                <UiButton
+                    as="link"
+                    href={`/business/${business.slug}${
+                        accountsCount > 0 ? '#accounts' : ''
+                    }`}
+                    variant="outline"
+                    size="sm"
+                    IconRight={<ArrowRight />}
+                    className="w-full justify-center"
+                >
+                    Відкрити
+                </UiButton>
             </div>
-            <UiButton
-                as="link"
-                href={`/business/${business.slug}${
-                    accountsCount > 0 ? '#accounts' : ''
-                }`}
-                variant="outline"
-                size="sm"
-                IconRight={<ArrowRight />}
-                className="w-full justify-center"
-            >
-                Відкрити
-            </UiButton>
-        </UiSectionCard>
+        </article>
     );
 }
