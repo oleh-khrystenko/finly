@@ -19,7 +19,6 @@ import {
     type VatChoice,
 } from '@/entities/business';
 import UiButton from '@/shared/ui/UiButton';
-import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSelect from '@/shared/ui/UiSelect';
 import UiRadioCardGroup from '@/shared/ui/UiRadioCardGroup';
 
@@ -122,6 +121,19 @@ export default function TaxationSection({ business, onSave }: Props) {
         [vatApplicable, draftTaxation]
     );
 
+    // Підтягуємо ТОЙ САМИЙ natural-language label, що показує `UiRadioCardGroup`
+    // у edit mode ("Ставка 3% + ПДВ", "Не зареєстрований" тощо). Якщо ПДВ для
+    // системи юридично не застосовний (Спрощена-1/2) — null, рядок не рендериться.
+    const vatReadLabel = useMemo(() => {
+        if (!isVatChoiceApplicable(business.taxationSystem)) return null;
+        const choice = vatBoolToChoice(business.isVatPayer);
+        return (
+            getVatChoiceOptions(business.taxationSystem).find(
+                (o) => o.value === choice
+            )?.title ?? null
+        );
+    }, [business.taxationSystem, business.isVatPayer]);
+
     const startEdit = () => {
         setDraftTaxation(business.taxationSystem);
         setDraftVat(business.isVatPayer);
@@ -167,85 +179,76 @@ export default function TaxationSection({ business, onSave }: Props) {
         setDraftVat(vatChoiceToBool(next));
     };
 
-    return (
-        <UiSectionCard
-            title="Оподаткування"
-            headerRight={
-                !editing ? (
+    if (!editing) {
+        return (
+            <div className="space-y-2">
+                <p className="text-muted-foreground text-xs font-medium">
+                    Оподаткування
+                </p>
+                <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                        <p className="text-foreground text-sm break-words">
+                            {TAXATION_SYSTEM_LABEL[business.taxationSystem]}
+                        </p>
+                        {vatReadLabel && (
+                            <p className="text-muted-foreground mt-1 text-xs break-words">
+                                {vatReadLabel}
+                            </p>
+                        )}
+                    </div>
                     <UiButton
                         type="button"
-                        variant="icon-compact"
+                        variant="icon"
                         size="sm"
                         onClick={startEdit}
                         aria-label="Редагувати: оподаткування"
                         IconLeft={<Pencil />}
                     />
-                ) : undefined
-            }
-        >
-            {!editing ? (
-                <div className="mt-2 space-y-3">
-                    <div>
-                        <p className="text-muted-foreground text-xs font-medium">
-                            Система оподаткування
-                        </p>
-                        <p className="text-foreground mt-1 text-sm">
-                            {TAXATION_SYSTEM_LABEL[business.taxationSystem]}
-                        </p>
-                    </div>
-                    <div>
-                        <p className="text-muted-foreground text-xs font-medium">
-                            Платник ПДВ
-                        </p>
-                        <p className="text-foreground mt-1 text-sm">
-                            {business.isVatPayer ? 'Так' : 'Ні'}
-                        </p>
-                    </div>
                 </div>
-            ) : (
-                <div className="mt-2 space-y-4">
-                    <UiSelect
-                        label="Система оподаткування"
-                        options={selectOptions}
-                        value={draftTaxation}
-                        onChange={handleTaxationChange}
-                    />
-                    {vatApplicable && vatOptions && (
-                        <UiRadioCardGroup<VatChoice>
-                            label={VAT_CHOICE_SECTION_LABEL[draftTaxation]}
-                            options={vatOptions}
-                            value={vatBoolToChoice(draftVat)}
-                            onChange={handleVatChange}
-                            columns={{ mobile: 1, desktop: 2 }}
-                        />
-                    )}
-                    {error && (
-                        <p className="text-destructive text-xs">{error}</p>
-                    )}
-                    <div className="flex justify-end gap-2">
-                        <UiButton
-                            type="button"
-                            variant="text"
-                            size="sm"
-                            onClick={cancel}
-                            disabled={saving}
-                            IconLeft={<X />}
-                        >
-                            Скасувати
-                        </UiButton>
-                        <UiButton
-                            type="button"
-                            variant="filled"
-                            size="sm"
-                            onClick={() => void save()}
-                            loading={saving}
-                            IconLeft={<Check />}
-                        >
-                            Зберегти
-                        </UiButton>
-                    </div>
-                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-4">
+            <UiSelect
+                label="Система оподаткування"
+                options={selectOptions}
+                value={draftTaxation}
+                onChange={handleTaxationChange}
+            />
+            {vatApplicable && vatOptions && (
+                <UiRadioCardGroup<VatChoice>
+                    label={VAT_CHOICE_SECTION_LABEL[draftTaxation]}
+                    options={vatOptions}
+                    value={vatBoolToChoice(draftVat)}
+                    onChange={handleVatChange}
+                    columns={{ mobile: 1, desktop: 2 }}
+                />
             )}
-        </UiSectionCard>
+            {error && <p className="text-destructive text-xs">{error}</p>}
+            <div className="flex justify-end gap-2">
+                <UiButton
+                    type="button"
+                    variant="text"
+                    size="sm"
+                    onClick={cancel}
+                    disabled={saving}
+                    IconLeft={<X />}
+                >
+                    Скасувати
+                </UiButton>
+                <UiButton
+                    type="button"
+                    variant="filled"
+                    size="sm"
+                    onClick={() => void save()}
+                    loading={saving}
+                    IconLeft={<Check />}
+                >
+                    Зберегти
+                </UiButton>
+            </div>
+        </div>
     );
 }

@@ -4,7 +4,6 @@ import {
     businessPaymentPurposeTemplateSchema,
     type Business,
 } from '@finly/types';
-import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiTextarea from '@/shared/ui/UiTextarea';
 import UiEditableField from '@/shared/ui/UiEditableField';
 import { paymentPurposeTemplateFieldConfig } from '@/entities/business';
@@ -15,38 +14,39 @@ interface Props {
     onSave: (patch: { paymentPurposeTemplate: string }) => Promise<void>;
 }
 
+/**
+ * Sprint 13: «Призначення переказу» — рядок у спільній merged-картці
+ * «Реквізити», без власного UiSectionCard-обгортника (раніше титул картки
+ * дублював лейбл поля).
+ */
 export default function PurposeSection({ business, onSave }: Props) {
     const purposeFieldConfig = paymentPurposeTemplateFieldConfig(business.type);
 
     return (
-        <UiSectionCard title="Призначення">
-            <UiEditableField<string>
-                label={purposeFieldConfig.label}
-                value={business.paymentPurposeTemplate}
-                renderRead={(v) => v}
-                renderEdit={({ value, setValue, error }) => (
-                    <UiTextarea
-                        placeholder={purposeFieldConfig.placeholder}
-                        description={purposeFieldConfig.description}
-                        value={value}
-                        onChange={(e) => setValue(e.target.value)}
-                        error={error}
-                        autoGrow
-                        maxRows={4}
-                    />
-                )}
-                validate={(v) => {
-                    const r =
-                        businessPaymentPurposeTemplateSchema.safeParse(v);
-                    return r.success
-                        ? null
-                        : (mapValidationCode(r.error.issues[0]?.message) ??
-                              null);
-                }}
-                onSave={(paymentPurposeTemplate) =>
-                    onSave({ paymentPurposeTemplate })
-                }
-            />
-        </UiSectionCard>
+        <UiEditableField<string>
+            label={purposeFieldConfig.label}
+            value={business.paymentPurposeTemplate}
+            renderRead={(v) => v}
+            renderEdit={({ value, setValue, error }) => (
+                <UiTextarea
+                    placeholder={purposeFieldConfig.placeholder}
+                    description={purposeFieldConfig.description}
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
+                    error={error}
+                    autoGrow
+                    maxRows={4}
+                />
+            )}
+            validate={(v) => {
+                const r = businessPaymentPurposeTemplateSchema.safeParse(v);
+                return r.success
+                    ? null
+                    : (mapValidationCode(r.error.issues[0]?.message) ?? null);
+            }}
+            onSave={(paymentPurposeTemplate) =>
+                onSave({ paymentPurposeTemplate })
+            }
+        />
     );
 }

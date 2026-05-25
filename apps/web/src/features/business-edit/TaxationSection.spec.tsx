@@ -27,10 +27,11 @@ const baseBusiness: TaxationCapableBusiness = {
 };
 
 describe('TaxationSection — coupled rule (Sprint 3 §C1 + Sprint 13 VAT-cards)', () => {
-    it('read mode показує taxationSystem label + isVatPayer "Так/Ні"', () => {
+    it('read mode показує taxationSystem label + natural-language VAT title (той самий, що у edit-картках)', () => {
         render(<TaxationSection business={baseBusiness} onSave={jest.fn()} />);
         expect(screen.getByText('Спрощена-3')).toBeInTheDocument();
-        expect(screen.getByText('Так')).toBeInTheDocument();
+        // simplified-3 + isVatPayer=true → "Ставка 3% + ПДВ" (з getVatChoiceOptions)
+        expect(screen.getByText('Ставка 3% + ПДВ')).toBeInTheDocument();
     });
 
     it('edit з existing simplified-3 + isVatPayer=true → картка "Ставка 3% + ПДВ" обрана', () => {
