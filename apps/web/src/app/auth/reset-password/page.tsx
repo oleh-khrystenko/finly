@@ -96,13 +96,10 @@ function ResetPasswordContent() {
 
     return (
         <div className="w-full max-w-md space-y-8">
-            <div className="space-y-2 text-center">
+            <div className="text-center">
                 <h1 className="text-foreground text-2xl font-semibold">
                     Встановіть новий пароль
                 </h1>
-                <p className="text-muted-foreground text-sm">
-                    Введіть новий пароль нижче.
-                </p>
             </div>
 
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">

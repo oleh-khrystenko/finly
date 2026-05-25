@@ -18,7 +18,7 @@ const NOTIFICATIONS: Record<string, MessageDict> = {
     auth: {
         magic_link_sent: 'Посилання надіслано на вашу пошту',
         logged_out: 'Ви вийшли з акаунту',
-        account_deleted: 'Акаунт видалено',
+        account_deleted: 'Акаунт деактивовано',
         password_reset: 'Пароль успішно змінено',
     },
     users: {

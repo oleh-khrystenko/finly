@@ -400,12 +400,6 @@ function SigninContent() {
             <h1 className="text-foreground text-3xl font-bold">
                 {state === 'recovery' ? 'Акаунт деактивовано' : 'Вхід до Finly'}
             </h1>
-            {state === 'email' && (
-                <p className="text-muted-foreground mt-2">
-                    Запустіть свій SaaS швидше — auth, payments та i18n з
-                    коробки
-                </p>
-            )}
         </div>
     );
 
@@ -585,8 +579,7 @@ function SigninContent() {
                     <span className="text-foreground font-semibold">
                         {email}
                     </span>
-                    . Перевірте папку «Вхідні» та натисніть на посилання для
-                    входу.
+                    . Перевірте папку «Вхідні».
                 </p>
             </div>
 
@@ -620,8 +613,8 @@ function SigninContent() {
     const renderRecoveryState = () => (
         <div className="space-y-4">
             <p className="text-muted-foreground text-center">
-                Ваш акаунт було видалено {deletedAt ?? ''}. Він буде остаточно
-                видалено через {deletedDaysLeft} днів.
+                Ваш акаунт деактивовано {deletedAt ?? ''}. Остаточне видалення
+                через {deletedDaysLeft} днів.
             </p>
 
             <UiButton
