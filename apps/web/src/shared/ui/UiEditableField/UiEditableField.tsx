@@ -74,10 +74,12 @@ export default function UiEditableField<TValue>({
 
     return (
         <div className="space-y-2">
-            <p className="text-muted-foreground text-xs font-medium">{label}</p>
+            <p className="text-muted-foreground text-base font-medium">
+                {label}
+            </p>
             {!editing ? (
-                <div className="flex items-start justify-between gap-3">
-                    <div className="text-foreground min-w-0 flex-1 text-sm break-words">
+                <div className="flex items-center justify-between gap-3">
+                    <div className="text-foreground min-w-0 flex-1 text-lg break-words">
                         {renderRead(value)}
                     </div>
                     {!disabled && (

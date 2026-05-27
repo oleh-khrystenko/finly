@@ -182,16 +182,16 @@ export default function TaxationSection({ business, onSave }: Props) {
     if (!editing) {
         return (
             <div className="space-y-2">
-                <p className="text-muted-foreground text-xs font-medium">
+                <p className="text-muted-foreground text-base font-medium">
                     Оподаткування
                 </p>
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                        <p className="text-foreground text-sm break-words">
+                        <p className="text-foreground text-lg font-medium break-words">
                             {TAXATION_SYSTEM_LABEL[business.taxationSystem]}
                         </p>
                         {vatReadLabel && (
-                            <p className="text-muted-foreground mt-1 text-xs break-words">
+                            <p className="text-muted-foreground mt-1 text-sm break-words">
                                 {vatReadLabel}
                             </p>
                         )}

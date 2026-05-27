@@ -48,24 +48,24 @@ export default function PublicSection({
 
     return (
         <UiSectionCard title="Публічна сторінка">
-            <div className="space-y-4">
+            <div className="mt-4 space-y-6">
                 <div>
-                    <p className="text-muted-foreground text-xs font-medium">
+                    <p className="text-muted-foreground text-base font-medium">
                         Slug
                     </p>
-                    <p className="text-foreground mt-1 font-mono text-sm">
+                    <p className="text-foreground mt-1.5 font-mono text-lg">
                         {business.slug}
                     </p>
-                    <p className="text-muted-foreground mt-0.5 text-xs">
+                    <p className="text-muted-foreground mt-1 text-base">
                         У безкоштовному тарифі змінити не можна
                     </p>
                 </div>
                 <div>
-                    <p className="text-muted-foreground text-xs font-medium">
+                    <p className="text-muted-foreground text-base font-medium">
                         Посилання на сторінку
                     </p>
-                    <div className="mt-1 flex items-center gap-2">
-                        <code className="bg-muted text-foreground min-w-0 flex-1 truncate rounded-md px-2 py-1 text-xs">
+                    <div className="mt-1.5 flex items-center gap-2">
+                        <code className="bg-muted text-foreground min-w-0 flex-1 truncate rounded-md px-3 py-2 text-base">
                             {publicUrl}
                         </code>
                         <UiButton
@@ -80,13 +80,13 @@ export default function PublicSection({
                 </div>
                 <label
                     htmlFor="seo-toggle"
-                    className="border-border flex cursor-pointer items-start justify-between gap-3 rounded-md border p-3"
+                    className="border-border flex cursor-pointer items-start justify-between gap-3 rounded-lg border p-4"
                 >
                     <div className="flex flex-1 flex-col gap-1">
-                        <span className="text-foreground text-sm font-medium">
+                        <span className="text-foreground text-lg font-medium">
                             Показувати в Google
                         </span>
-                        <span className="text-muted-foreground text-xs">
+                        <span className="text-muted-foreground text-base">
                             Дозволити індексацію публічної сторінки пошуковими
                             системами
                         </span>

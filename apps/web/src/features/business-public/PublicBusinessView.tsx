@@ -101,17 +101,17 @@ function AccountCard({
     // також сидрить single-anchor-per-tap UX (mobile: уся ширина CTA —
     // комфортна tap-target).
     return (
-        <div className="border-border bg-card flex flex-col gap-3 rounded-lg border p-4">
-            <div className="flex min-w-0 flex-col gap-0.5">
-                <span className="text-foreground truncate text-base font-semibold">
+        <div className="border-border bg-card flex flex-col gap-4 rounded-lg border p-5">
+            <div className="flex min-w-0 flex-col gap-1">
+                <span className="text-foreground truncate text-xl font-semibold tracking-tight">
                     {account.name}
                 </span>
                 {bankLabel !== null && (
-                    <span className="text-muted-foreground truncate text-xs">
+                    <span className="text-muted-foreground truncate text-base">
                         {bankLabel}
                     </span>
                 )}
-                <span className="text-muted-foreground font-mono text-xs">
+                <span className="text-muted-foreground font-mono text-base">
                     {account.ibanMask}
                 </span>
             </div>

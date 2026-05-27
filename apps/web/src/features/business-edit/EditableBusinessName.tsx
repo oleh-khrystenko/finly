@@ -95,18 +95,18 @@ export default function EditableBusinessName({ name, onSave }: Props) {
     }
 
     return (
-        <div className="flex min-w-0 items-start gap-2">
-            <h1 className="text-foreground min-w-0 text-2xl font-bold tracking-tight break-words md:text-3xl">
+        <div className="flex min-w-0 items-center gap-2">
+            <h1 className="text-foreground min-w-0 text-3xl font-bold tracking-tight break-words md:text-4xl">
                 {name}
             </h1>
             <UiButton
                 type="button"
                 variant="icon"
-                size="sm"
+                size="md"
                 onClick={startEdit}
                 aria-label="Редагувати назву"
                 IconLeft={<Pencil />}
-                className="mt-1 shrink-0"
+                className="shrink-0"
             />
         </div>
     );

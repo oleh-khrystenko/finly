@@ -155,7 +155,7 @@ export default function AccountsSection({ businessSlug }: Props) {
             )}
 
             {isErrorCurrent && (
-                <p className="text-destructive py-4 text-sm">
+                <p className="text-destructive py-4 text-base">
                     {error?.message}
                 </p>
             )}
@@ -200,20 +200,20 @@ function AccountCard({ account, businessSlug, onDelete }: CardProps) {
     // Власне `<a>` за межами `shared/ui/` заборонено (`docs/conventions/
     // ui-primitives.md` Rule 1) — wrap-варіант через UiButton.
     return (
-        <div className="border-border bg-card flex flex-col gap-3 rounded-lg border p-4">
+        <div className="border-border bg-card flex flex-col gap-3 rounded-lg border p-5">
             <div className="flex flex-1 flex-col gap-1">
-                <p className="text-foreground text-base font-semibold">
+                <p className="text-foreground text-xl font-semibold tracking-tight">
                     {account.name}
                 </p>
                 {account.bankCode !== null && (
-                    <p className="text-muted-foreground text-xs">
+                    <p className="text-muted-foreground text-base">
                         {BANK_LABEL[account.bankCode]}
                     </p>
                 )}
-                <p className="text-muted-foreground font-mono text-xs">
+                <p className="text-muted-foreground font-mono text-base">
                     •{last4}
                 </p>
-                <p className="text-muted-foreground mt-1 text-xs">
+                <p className="text-muted-foreground mt-1.5 text-base">
                     {invoicesLabel}
                 </p>
             </div>
@@ -245,15 +245,15 @@ function AccountCard({ account, businessSlug, onDelete }: CardProps) {
 
 function EmptyState({ createHref }: { createHref: string }) {
     return (
-        <div className="flex flex-col items-center gap-4 py-8 text-center">
-            <div className="bg-muted text-muted-foreground flex size-12 items-center justify-center rounded-full">
-                <CreditCard className="size-6" />
+        <div className="flex flex-col items-center gap-4 py-10 text-center">
+            <div className="bg-muted text-muted-foreground flex size-14 items-center justify-center rounded-full">
+                <CreditCard className="size-7" />
             </div>
-            <div className="space-y-1">
-                <p className="text-foreground text-sm font-medium">
+            <div className="space-y-1.5">
+                <p className="text-foreground text-lg font-semibold">
                     Поки немає жодного рахунку
                 </p>
-                <p className="text-muted-foreground max-w-sm text-xs">
+                <p className="text-muted-foreground max-w-sm text-base">
                     Додайте перший банківський рахунок — клієнт зможе оплатити
                     через QR-код або посилання.
                 </p>
