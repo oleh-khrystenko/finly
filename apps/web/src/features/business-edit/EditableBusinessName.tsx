@@ -95,7 +95,7 @@ export default function EditableBusinessName({ name, onSave }: Props) {
     }
 
     return (
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 items-center justify-between gap-2">
             <h1 className="text-foreground min-w-0 text-3xl font-bold tracking-tight break-words md:text-4xl">
                 {name}
             </h1>
