@@ -3,21 +3,30 @@ import { getModelToken } from '@nestjs/mongoose';
 import { InternalServerErrorException } from '@nestjs/common';
 import { RESERVED_SLUGS } from '@finly/types';
 
+import { BusinessSlugHistory } from './schemas/business-slug-history.schema';
 import { Business } from './schemas/business.schema';
 import { SlugGeneratorService } from './slug-generator.service';
 
 describe('SlugGeneratorService', () => {
     let service: SlugGeneratorService;
     let existsMock: jest.Mock;
+    let historyExistsMock: jest.Mock;
 
     beforeEach(async () => {
-        existsMock = jest.fn();
+        existsMock = jest.fn().mockResolvedValue(null);
+        // Sprint 14 — random-slug колізія з BusinessSlugHistory: default-free.
+        // Окремі it-блоки можуть override через `historyExistsMock.mockResolvedValue(...)`.
+        historyExistsMock = jest.fn().mockResolvedValue(null);
         const module = await Test.createTestingModule({
             providers: [
                 SlugGeneratorService,
                 {
                     provide: getModelToken(Business.name),
                     useValue: { exists: existsMock },
+                },
+                {
+                    provide: getModelToken(BusinessSlugHistory.name),
+                    useValue: { exists: historyExistsMock },
                 },
             ],
         }).compile();

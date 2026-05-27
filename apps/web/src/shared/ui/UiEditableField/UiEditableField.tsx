@@ -25,6 +25,7 @@ export default function UiEditableField<TValue>({
     onSave,
     validate,
     disabled,
+    hideDefaultPencil,
 }: UiEditableFieldProps<TValue>) {
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState<TValue>(value);
@@ -80,9 +81,9 @@ export default function UiEditableField<TValue>({
             {!editing ? (
                 <div className="flex items-center justify-between gap-3">
                     <div className="text-foreground min-w-0 flex-1 text-lg break-words">
-                        {renderRead(value)}
+                        {renderRead(value, { value, startEdit })}
                     </div>
-                    {!disabled && (
+                    {!disabled && !hideDefaultPencil && (
                         // `variant="icon"` (а не `icon-compact`) — UiEditableField
                         // використовується у бізнес-кабінеті та invoice settings,
                         // що рендеряться на mobile-flow. `icon` гарантує

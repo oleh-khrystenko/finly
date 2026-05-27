@@ -1,12 +1,13 @@
 import {
     BadRequestException,
+    ConflictException,
     Injectable,
     InternalServerErrorException,
     NotFoundException,
     Logger,
 } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { Connection, Model, Types, type FilterQuery } from 'mongoose';
+import { ClientSession, Connection, Model, Types, type FilterQuery } from 'mongoose';
 import {
     RESPONSE_CODE,
     VAT_ALLOWED_TAXATION_SYSTEMS,
@@ -31,6 +32,10 @@ import {
     Invoice,
     type InvoiceDocument,
 } from '../invoices/schemas/invoice.schema';
+import {
+    BusinessSlugHistory,
+    BusinessSlugHistoryDocument,
+} from './schemas/business-slug-history.schema';
 import { Business, BusinessDocument } from './schemas/business.schema';
 import { SlugGeneratorService } from './slug-generator.service';
 
@@ -71,6 +76,8 @@ export class BusinessesService {
     constructor(
         @InjectModel(Business.name)
         private readonly businessModel: Model<BusinessDocument>,
+        @InjectModel(BusinessSlugHistory.name)
+        private readonly historyModel: Model<BusinessSlugHistoryDocument>,
         @InjectModel(Account.name)
         private readonly accountModel: Model<AccountDocument>,
         @InjectModel(Invoice.name)
@@ -299,6 +306,12 @@ export class BusinessesService {
      * Case-insensitive lookup. Спільний primitive для cabinet (через guard) і
      * public controller. Повертає `null` якщо не знайдено — caller вирішує,
      * як перетворити на 404 (різні response-shape для cabinet vs public).
+     *
+     * **Cabinet-only.** Public-зона ходить через `getBySlugOrHistorical` —
+     * fallback у `BusinessSlugHistory` для 308-redirect збережених посилань.
+     * Cabinet навмисно strict: stale-URL у власному кабінеті → 404, бо frontend
+     * усі переходи робить з current-state (`business.slug`); stale-URL = stale
+     * browser-tab, не valid flow.
      */
     async getBySlug(slug: string): Promise<BusinessDocument | null> {
         return this.businessModel
@@ -306,11 +319,51 @@ export class BusinessesService {
             .exec();
     }
 
+    /**
+     * Sprint 14 — public lookup з history-fallback. Якщо `slug` не знайдений
+     * у `Business.slugLower`, але є у `BusinessSlugHistory.slugLower` (rename
+     * у межах TTL 90 днів), повертає **поточний** Business документ. Caller
+     * (public controller) повертає view з `business.slug` як canonical; SC
+     * `host-pay/[slug]/page.tsx` ловить `params.slug !== view.slug` і робить
+     * `permanentRedirect()` на canonical URL.
+     *
+     * Один extra query лише на cache-miss old-slug — happy-path (поточний slug)
+     * не платить нічого (`historyExists` не викликається коли business знайдено).
+     */
+    async getBySlugOrHistorical(
+        slug: string
+    ): Promise<BusinessDocument | null> {
+        const slugLower = slug.toLowerCase();
+        const business = await this.businessModel.findOne({ slugLower }).exec();
+        if (business) return business;
+        const historyEntry = await this.historyModel
+            .findOne({ slugLower })
+            .lean<{ businessId: Types.ObjectId }>()
+            .exec();
+        if (!historyEntry) return null;
+        return this.businessModel.findById(historyEntry.businessId).exec();
+    }
+
     async update(
         slug: string,
         dto: UpdateBusinessRequest
     ): Promise<BusinessDocument> {
         const slugLower = slug.toLowerCase();
+
+        // Sprint 14 — vanity-slug edit. Detection by lowercase різниця
+        // (case-only change — `business.slug` оновлюється, але `slugLower`
+        // лишається той самий → history insert не потрібен).
+        const newSlug = dto.slug;
+        const newSlugLower = newSlug?.toLowerCase();
+        const slugRenaming =
+            newSlugLower !== undefined && newSlugLower !== slugLower;
+        let renameOwnerId: Types.ObjectId | null = null;
+        if (slugRenaming) {
+            renameOwnerId = await this.resolveSlugRenameContext(
+                newSlugLower!,
+                slugLower
+            );
+        }
 
         // Sprint 7 §7.5 — type-aware cross-checks на UPDATE. PATCH не несе
         // `type` (immutable post-creation, §SP-8); service читає document-
@@ -418,10 +471,26 @@ export class BusinessesService {
             };
         }
 
+        // Sprint 14 — slug-rename вимагає TX (atomic insert у history +
+        // update Business + optional revert-cleanup). slugLower additionally
+        // у $set для збереження інваріанту `slugLower === slug.toLowerCase()`.
+        const setPayload: Record<string, unknown> = { ...dto };
+        if (slugRenaming) {
+            setPayload.slugLower = newSlugLower!;
+            return this.executeSlugRenameUpdate(
+                filter,
+                setPayload,
+                renameOwnerId!,
+                slugLower,
+                newSlugLower!,
+                hasCoupledFields
+            );
+        }
+
         const updated = await this.businessModel
             .findOneAndUpdate(
                 filter,
-                { $set: dto },
+                { $set: setPayload },
                 { new: true, runValidators: true }
             )
             .exec();
@@ -444,6 +513,178 @@ export class BusinessesService {
         throw new NotFoundException({
             code: RESPONSE_CODE.BUSINESS_NOT_FOUND,
             message: 'Business disappeared between guard and update',
+        });
+    }
+
+    /**
+     * Sprint 14 — pre-write resolve для slug-rename. Робить **один** lookup
+     * на owner-doc (повертає `_id`), потім паралельно перевіряє:
+     *  - reserved-список (роуты апки) — sync;
+     *  - cross-business clash у Business.slugLower;
+     *  - cross-business clash у History.slugLower (`businessId: $ne ownerId`,
+     *    self-history дозволено для revert-сценарію).
+     *
+     * `ownerId` далі передається у TX-flow → дозволяє пропустити повторний
+     * findOne всередині транзакції (раніше один і той же документ читався
+     * двічі на happy-path slug-rename).
+     *
+     * Race-window між цим check-ом і TX-write закриває 11000 на history
+     * unique-індексі — concurrent rename на той самий slug дає один success
+     * + один `SLUG_TAKEN` через duplicate-key handling у `executeSlugRenameUpdate`.
+     */
+    private async resolveSlugRenameContext(
+        newLower: string,
+        oldLower: string
+    ): Promise<Types.ObjectId> {
+        if (this.slugGenerator.isReserved(newLower)) {
+            throw new BadRequestException({
+                code: RESPONSE_CODE.SLUG_RESERVED,
+                message: 'Slug is reserved by the system',
+            });
+        }
+        const owner = await this.businessModel
+            .findOne({ slugLower: oldLower }, { _id: 1 })
+            .lean<{ _id: Types.ObjectId }>()
+            .exec();
+        if (!owner) {
+            throw new NotFoundException({
+                code: RESPONSE_CODE.BUSINESS_NOT_FOUND,
+                message: 'Business not found',
+            });
+        }
+        // Поточний бізнес сидить на `oldLower`, ми перевіряємо `newLower !==
+        // oldLower` — будь-який hit на Business завжди cross-business.
+        // Self-history не блокує (revert-flow видалить запис всередині TX).
+        const [businessClash, historyClash] = await Promise.all([
+            this.businessModel.exists({ slugLower: newLower }),
+            this.historyModel.exists({
+                slugLower: newLower,
+                businessId: { $ne: owner._id },
+            }),
+        ]);
+        if (businessClash) {
+            throw new ConflictException({
+                code: RESPONSE_CODE.SLUG_TAKEN,
+                message: 'Slug already taken by another business',
+            });
+        }
+        if (historyClash) {
+            throw new ConflictException({
+                code: RESPONSE_CODE.SLUG_TAKEN,
+                message: 'Slug is reserved by recent rename of another business',
+            });
+        }
+        return owner._id;
+    }
+
+    /**
+     * TX-обгортка для slug-rename:
+     *  1. Delete self-history-entry з `slugLower === newLower` (revert
+     *     `abc → xyz → abc` дозволяє ре-claim без чекати TTL 90 днів).
+     *  2. Insert старий slug у history (anti-squatting + 308-redirect grace).
+     *  3. `findOneAndUpdate` на Business з `$expr`-filter (coupled VAT)
+     *     і `$set` з новими `slug + slugLower + …rest`.
+     *
+     * `businessId` приходить з pre-write `resolveSlugRenameContext` —
+     * другий findOne всередині TX не робиться. Concurrent delete між pre-
+     * write і TX закриває `findOneAndUpdate` null → throw → TX rollback.
+     *
+     * **11000-handling:**
+     *  - На `history.slugLower` unique: race з concurrent rename на той самий
+     *    slug. Мапаємо у `SLUG_TAKEN`.
+     *  - На `business.slugLower` unique: race з паралельним rename інакого
+     *    бізнесу або create-у на цей slug. Теж `SLUG_TAKEN`.
+     */
+    private async executeSlugRenameUpdate(
+        filter: FilterQuery<BusinessDocument>,
+        setPayload: Record<string, unknown>,
+        businessId: Types.ObjectId,
+        oldLower: string,
+        newLower: string,
+        hasCoupledFields: boolean
+    ): Promise<BusinessDocument> {
+        const session = await this.connection.startSession();
+        try {
+            let updated: BusinessDocument | null = null;
+            await session.withTransaction(async () => {
+                updated = await this.runSlugRenameInsideTx(
+                    filter,
+                    setPayload,
+                    businessId,
+                    oldLower,
+                    hasCoupledFields,
+                    session
+                );
+            });
+            // `updated` встановлюється всередині callback-а. Якщо TX не
+            // throw-нула, updated завжди non-null (helper throws на null-шляхах).
+            return updated!;
+        } catch (err) {
+            if (isDuplicateKeyError(err)) {
+                throw new ConflictException({
+                    code: RESPONSE_CODE.SLUG_TAKEN,
+                    message: 'Slug already taken by another business',
+                });
+            }
+            if (isTransactionsUnsupportedError(err)) {
+                this.logger.error(
+                    `Slug rename failed: replica-set required. oldLower=${oldLower} newLower=${newLower}. Original: ${
+                        err instanceof Error ? err.message : String(err)
+                    }`
+                );
+                throw new InternalServerErrorException({
+                    code: RESPONSE_CODE.TRANSACTION_REQUIRES_REPLICA_SET,
+                    message:
+                        'Slug rename requires Mongo replica-set; check MONGODB_URI',
+                });
+            }
+            throw err;
+        } finally {
+            await session.endSession();
+        }
+    }
+
+    private async runSlugRenameInsideTx(
+        filter: FilterQuery<BusinessDocument>,
+        setPayload: Record<string, unknown>,
+        businessId: Types.ObjectId,
+        oldLower: string,
+        hasCoupledFields: boolean,
+        session: ClientSession
+    ): Promise<BusinessDocument> {
+        const newLower = setPayload.slugLower as string;
+
+        // Revert-flow: дозволяємо `abc → xyz → abc`, не блокуючи self-history.
+        await this.historyModel
+            .deleteMany({ businessId, slugLower: newLower }, { session })
+            .exec();
+
+        await this.historyModel.create(
+            [{ businessId, slugLower: oldLower }],
+            { session }
+        );
+
+        const updated = await this.businessModel
+            .findOneAndUpdate(
+                filter,
+                { $set: setPayload },
+                { new: true, runValidators: true, session }
+            )
+            .exec();
+        if (updated) return updated;
+
+        // Filter не пропустив update. Або coupled-VAT, або concurrent delete
+        // між pre-write resolve і цією TX. Для diagnostics різні error-коди.
+        if (hasCoupledFields) {
+            throw new BadRequestException({
+                code: RESPONSE_CODE.INVALID_VAT_FOR_TAXATION_SYSTEM,
+                message:
+                    'Платник ПДВ дозволений лише на спрощеній-3 або загальній системі',
+            });
+        }
+        throw new NotFoundException({
+            code: RESPONSE_CODE.BUSINESS_NOT_FOUND,
+            message: 'Business disappeared between resolve and update',
         });
     }
 
@@ -503,11 +744,23 @@ export class BusinessesService {
         const session = await this.connection.startSession();
         try {
             await session.withTransaction(async () => {
-                // Sprint 9 §SP-5 cascade — три collections + business у тій
-                // самій TX. Atomic-or-nothing: або повністю, або нічого.
+                // Sprint 9 §SP-5 + Sprint 14: cascade чотири collections +
+                // business у тій самій TX. Atomic-or-nothing.
+                //
+                // **`historyModel.deleteMany`** (Sprint 14) — без cleanup-у
+                // rename-history-entries деактивованого бізнесу залишилися б
+                // живими до TTL 90 днів. Наслідки: (а) slug блокувався б у
+                // anti-squatting check для інших юзерів, (б)
+                // `getBySlugOrHistorical` робив би "history-hit → findById →
+                // null" 2-query orphan-lookup на кожен public hit
+                // `pay/{deletedSlug}`. Anti-impersonation після delete — окрема
+                // фіча з власною семантикою, не побічний ефект rename-history;
+                // банк-апі рендерить payee name з QR-payload, customer бачить
+                // mismatch і відхиляє платіж.
                 await this.invoiceModel.deleteMany({ businessId }, { session });
                 await this.accountModel.deleteMany({ businessId }, { session });
                 await this.counterModel.deleteMany({ businessId }, { session });
+                await this.historyModel.deleteMany({ businessId }, { session });
                 await this.businessModel.deleteOne(
                     { _id: businessId },
                     { session }

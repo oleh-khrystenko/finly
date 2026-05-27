@@ -60,7 +60,14 @@ export class PublicBusinessesController {
     async getPublic(
         @Param('slug') slug: string
     ): Promise<{ data: PublicBusinessView }> {
-        const business = await this.businessesService.getBySlug(slug);
+        // Sprint 14 — `getBySlugOrHistorical` fallback-ить у BusinessSlugHistory
+        // після miss у Business; повертає current Business. SC
+        // `host-pay/[slug]/page.tsx` порівнює `params.slug !== view.slug` і
+        // робить `permanentRedirect()` на canonical URL — тут окремої redirect-
+        // логіки писати не треба, reuse-имо існуючий canonical-case
+        // redirect-механізм.
+        const business =
+            await this.businessesService.getBySlugOrHistorical(slug);
         if (!business) {
             throw new NotFoundException({
                 code: RESPONSE_CODE.BUSINESS_NOT_FOUND,

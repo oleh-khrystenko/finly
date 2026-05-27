@@ -183,7 +183,12 @@ export class PublicInvoicesController {
         account: AccountDocument;
         invoice: InvoiceDocument;
     }> {
-        const business = await this.businessesService.getBySlug(slug);
+        // Sprint 14 — historical business-slug fallback. SC порівнює
+        // `params.slug !== view.business.slug` (invoice-page line 96) і
+        // робить `permanentRedirect()` зі збереженням account/invoice slugs
+        // (обидва immutable).
+        const business =
+            await this.businessesService.getBySlugOrHistorical(slug);
         if (!business) {
             throw new NotFoundException({
                 code: RESPONSE_CODE.BUSINESS_NOT_FOUND,

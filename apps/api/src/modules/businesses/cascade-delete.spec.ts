@@ -20,6 +20,10 @@ import {
 } from '../invoices/schemas/invoice.schema';
 import { BusinessesService } from './businesses.service';
 import {
+    BusinessSlugHistory,
+    BusinessSlugHistorySchema,
+} from './schemas/business-slug-history.schema';
+import {
     Business,
     BusinessDocument,
     BusinessSchema,
@@ -54,6 +58,10 @@ describe('BusinessesService cascade-delete (Sprint 4 §SP-5, MongoMemoryReplSet)
                 MongooseModule.forRoot(mongo.uri),
                 MongooseModule.forFeature([
                     { name: Business.name, schema: BusinessSchema },
+                    {
+                        name: BusinessSlugHistory.name,
+                        schema: BusinessSlugHistorySchema,
+                    },
                     { name: Account.name, schema: AccountSchema },
                     { name: Invoice.name, schema: InvoiceSchema },
                     {

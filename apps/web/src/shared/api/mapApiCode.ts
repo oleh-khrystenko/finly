@@ -109,6 +109,14 @@ const ERRORS: Record<string, MessageDict> = {
         // дозволених систем (dropdown уже відфільтрований).
         taxation_system_not_allowed_for_type:
             'Ця система оподаткування недоступна для обраного типу бізнесу',
+        // Sprint 14 — vanity-slug edit. Користувач намагається встановити slug,
+        // що співпадає з зарезервованим route-namespace-ом (`qr`, `api`,
+        // `host-pay`, …).
+        slug_reserved:
+            'Це посилання зарезервоване системою. Оберіть інше',
+        // Sprint 14 — vanity-slug edit. Slug уже зайнятий іншим бізнесом
+        // (поточний slug або в історії перейменувань 90-денного вікна).
+        slug_taken: 'Це посилання вже зайняте. Оберіть інше',
     },
     // Sprint 9 §SP-1..§SP-3 — accounts UA-messages. ACCOUNT_HAS_INVOICES не тут:
     // backend pre-resolves повідомлення через pluralizeUa (accounts.service.ts

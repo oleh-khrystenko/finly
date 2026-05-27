@@ -192,9 +192,9 @@ export type CreateBusinessRequest = z.infer<typeof CreateBusinessSchema>;
  *  - `invoiceSlugPresetDefault` видалено — переїхав на Account-DTO
  *    (`UpdateAccountSchema`).
  *
- * **`.strict()` modifier** обов'язковий — невідомі ключі payload-а (`slug`,
- * `type`, `ownerId`, `managers`, `slugLower`, `requisites`, `invoiceSlugPreset-
- * Default`) повинні бути reject-ом, не silent-ignore.
+ * **`.strict()` modifier** обов'язковий — невідомі ключі payload-а (`type`,
+ * `ownerId`, `managers`, `slugLower`, `requisites`, `invoiceSlugPresetDefault`)
+ * повинні бути reject-ом, не silent-ignore.
  *
  * **Type-binding для `taxId` і `taxation-fields`** — на service-layer
  * (`BusinessesService.update` читає document-resident `type` з БД, валідує
@@ -217,6 +217,7 @@ export type CreateBusinessRequest = z.infer<typeof CreateBusinessSchema>;
 export const UpdateBusinessSchema = z
     .object({
         name: businessNameSchema,
+        slug: businessSlugSchema,
         taxId: payerTaxIdZod,
         /**
          * Sprint 7 §SP-3 — `nullable()` пропускає `null` через DTO-рівень,

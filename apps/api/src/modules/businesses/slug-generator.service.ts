@@ -8,6 +8,10 @@ import { randomBytes } from 'crypto';
 import { Model } from 'mongoose';
 import { RESERVED_SLUGS, RESPONSE_CODE } from '@finly/types';
 
+import {
+    BusinessSlugHistory,
+    BusinessSlugHistoryDocument,
+} from './schemas/business-slug-history.schema';
 import { Business, BusinessDocument } from './schemas/business.schema';
 
 /**
@@ -74,11 +78,21 @@ export class SlugGeneratorService {
 
     constructor(
         @InjectModel(Business.name)
-        private readonly businessModel: Model<BusinessDocument>
+        private readonly businessModel: Model<BusinessDocument>,
+        @InjectModel(BusinessSlugHistory.name)
+        private readonly historyModel: Model<BusinessSlugHistoryDocument>
     ) {
         // Замість O(N) `Array.includes` для кожного check-у — O(1) Set lookup.
         // RESERVED_SLUGS уже у lowercase (контракт `packages/types/src/constants/`).
         this.reservedLowerSet = new Set(RESERVED_SLUGS);
+    }
+
+    /**
+     * Sprint 14 — public для повторного use у `BusinessesService.update`
+     * (PATCH `slug` теж проходить reserved-check, рівно як random-generation).
+     */
+    isReserved(slugLower: string): boolean {
+        return this.reservedLowerSet.has(slugLower);
     }
 
     async generateRandomSlug(): Promise<string> {
@@ -94,13 +108,17 @@ export class SlugGeneratorService {
                 continue;
             }
 
-            // Lookup по slugLower — case-insensitive uniqueness invariant.
-            // `exists` — найдешевший Mongo query (server-side hit на index,
-            // повертає лише `_id`).
-            const taken = await this.businessModel.exists({
-                slugLower: candidateLower,
-            });
-            if (!taken) {
+            // Sprint 14 — anti-squatting інваріант: random-slug не може
+            // дорівнювати historical-entry іншого бізнесу (поки TTL не expired).
+            // Для 8-char × 62-alphabet простору вірогідність колізії з history —
+            // практично 0, але без перевірки race з recently-renamed-бізнесом
+            // створив би 11000 на insert. Cheap двох-індексованих lookup-ів
+            // дешевше за recovery з 11000 + retry.
+            const [businessTaken, historyTaken] = await Promise.all([
+                this.businessModel.exists({ slugLower: candidateLower }),
+                this.historyModel.exists({ slugLower: candidateLower }),
+            ]);
+            if (!businessTaken && !historyTaken) {
                 return candidate;
             }
         }

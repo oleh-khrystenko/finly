@@ -80,7 +80,7 @@ const VALIDATION_MESSAGES: Record<string, string> = {
     INVALID_SLUG_TOO_SHORT: 'Посилання занадто коротке',
     INVALID_SLUG_TOO_LONG: 'Посилання занадто довге',
     INVALID_SLUG_FORMAT:
-        'Дозволені лише літери, цифри та дефіси (без пробілів і символів)',
+        'Дозволені лише латинські літери, цифри та дефіси (без пробілів, кирилиці й символів)',
 
     // --- Людська частина invoice-slug-у ---
     INVALID_HUMAN_SLUG_PART_LENGTH: 'Назва рахунку — від 1 до 60 символів',

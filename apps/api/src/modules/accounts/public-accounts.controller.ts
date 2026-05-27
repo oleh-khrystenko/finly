@@ -148,7 +148,12 @@ export class PublicAccountsController {
         slug: string,
         accountSlug: string
     ): Promise<{ business: BusinessDocument; account: AccountDocument }> {
-        const business = await this.businessesService.getBySlug(slug);
+        // Sprint 14 — historical business-slug fallback. SC порівнює
+        // `params.slug !== view.business.slug` (account-page line 87) і
+        // робить `permanentRedirect()` на canonical URL зі збереженням
+        // accountSlug (account slugs immutable).
+        const business =
+            await this.businessesService.getBySlugOrHistorical(slug);
         if (!business) {
             throw new NotFoundException({
                 code: RESPONSE_CODE.BUSINESS_NOT_FOUND,

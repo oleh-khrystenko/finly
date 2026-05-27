@@ -1,7 +1,7 @@
 'use client';
 
 import { forwardRef, useId } from 'react';
-import { composeClasses } from '@/shared/lib';
+import { composeClasses, OUTLINED_FIELD_STYLES } from '@/shared/lib';
 import type { UiInputProps, UiInputSize, UiInputVariant } from './types';
 
 const iconSizeStyles: Record<UiInputSize, string> = {
@@ -17,13 +17,14 @@ const sizeStyles: Record<UiInputSize, string> = {
 };
 
 const variantStyles: Record<UiInputVariant, string> = {
-    outlined:
-        'bg-transparent text-foreground border border-border hover:border-muted-foreground focus-within:border-primary',
-    filled: 'bg-secondary text-foreground border border-transparent hover:bg-card focus-within:bg-card',
+    outlined: composeClasses(
+        'bg-transparent text-foreground',
+        OUTLINED_FIELD_STYLES.borderIdle
+    ),
+    filled: 'bg-secondary text-foreground border-transparent hover:bg-card focus-within:bg-card',
 };
 
-const errorStyles =
-    'border-destructive hover:border-destructive focus-within:border-destructive';
+const errorStyles = OUTLINED_FIELD_STYLES.borderError;
 
 const UiInput = forwardRef<HTMLInputElement, UiInputProps>((props, ref) => {
     const {
@@ -54,7 +55,7 @@ const UiInput = forwardRef<HTMLInputElement, UiInputProps>((props, ref) => {
 
     const wrapperClasses = composeClasses(
         'flex items-center gap-2',
-        'rounded-md transition-colors',
+        OUTLINED_FIELD_STYLES.shellBase,
         sizeStyles[size],
         variantStyles[variant],
         error && errorStyles,

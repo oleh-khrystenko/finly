@@ -3,13 +3,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, ExternalLink, Trash2 } from 'lucide-react';
-import { AxiosError } from 'axios';
 import { toast } from 'sonner';
 import {
     BUSINESS_TYPE_LABEL,
     type UpdateBusinessRequest,
 } from '@finly/types';
 import {
+    extractApiErrorCode,
     getApiMessage,
     getBusinessBySlug,
     updateBusiness,
@@ -65,15 +65,7 @@ export default function BusinessSlugPage() {
             })
             .catch((err: unknown) => {
                 if (cancelled) return;
-                const code =
-                    err instanceof AxiosError
-                        ? ((
-                              err.response?.data as
-                                  | { error?: { code?: string } }
-                                  | undefined
-                          )?.error?.code ?? 'unknown')
-                        : 'unknown';
-                setError({ code });
+                setError({ code: extractApiErrorCode(err) });
             });
         return () => {
             cancelled = true;
@@ -93,22 +85,23 @@ export default function BusinessSlugPage() {
                     accountsCount: business.accountsCount,
                     invoicesCount: business.invoicesCount,
                 });
+                // Sprint 14: якщо slug змінився — URL `/business/{old}` стає
+                // stale (effect не re-fetch-не на тому самому params, refresh
+                // дасть 404). `replace` не залишає старий URL у history.
+                if (updated.slug !== business.slug) {
+                    router.replace(`/business/${updated.slug}`);
+                }
                 toast.success('Зміни збережено');
             } catch (err) {
-                const code =
-                    err instanceof AxiosError
-                        ? ((
-                              err.response?.data as
-                                  | { error?: { code?: string } }
-                                  | undefined
-                          )?.error?.code ?? 'unknown')
-                        : 'unknown';
-                const msg = getApiMessage(code, 'businesses');
+                const msg = getApiMessage(
+                    extractApiErrorCode(err),
+                    'businesses'
+                );
                 toast.error(msg);
                 throw new Error(msg);
             }
         },
-        [business]
+        [business, router]
     );
 
     const handleDelete = useCallback(() => {

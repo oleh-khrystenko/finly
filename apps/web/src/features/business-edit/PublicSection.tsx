@@ -1,35 +1,59 @@
 'use client';
 
 import { useState } from 'react';
-import { Check, Copy } from 'lucide-react';
+import { Check, Copy, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
-import { type Business } from '@finly/types';
+import {
+    businessSlugSchema,
+    type Business,
+    type UpdateBusinessRequest,
+} from '@finly/types';
 import UiButton from '@/shared/ui/UiButton';
+import UiEditableField from '@/shared/ui/UiEditableField';
+import UiPrefixInput from '@/shared/ui/UiPrefixInput';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSwitch from '@/shared/ui/UiSwitch';
+import { mapValidationCode } from '@/shared/lib';
 
 interface Props {
     business: Business;
     /** Public payment-page origin (NEXT_PUBLIC_PAY_PUBLIC_URL чи аналог). */
     payPublicOrigin: string;
-    onSave: (patch: Pick<Business, 'seoIndexEnabled'>) => Promise<void>;
+    onSave: (patch: UpdateBusinessRequest) => Promise<void>;
 }
 
+/**
+ * Sprint 14: slug + public URL — один концепт (адреса публічної сторінки),
+ * рендериться як єдине поле через `UiEditableField`. Раніше було два окремі
+ * рядки що дублювали slug-значення (раз "Slug: Xv0RTvfe", раз
+ * "Посилання: pay.finly.com.ua/Xv0RTvfe").
+ *
+ * Read mode — host-prefix у muted-кольорі + slug у foreground (Twitter/GitHub-
+ * стиль) + inline copy-button; pencil-action рендерить UiEditableField.
+ * Edit mode — composite input з немутабельним prefix у `bg-secondary` лівій
+ * частині і редагованою slug-частиною праворуч (єдина рамка).
+ *
+ * Підписковий gate (free-tier — slug random, paid — vanity-edit) приходить
+ * разом з білінгом окремим спринтом; зараз slug відкритий для всіх.
+ */
 export default function PublicSection({
     business,
     payPublicOrigin,
     onSave,
 }: Props) {
-    const [copying, setCopying] = useState(false);
+    const [copied, setCopied] = useState(false);
     const [seoSaving, setSeoSaving] = useState(false);
 
+    const hostnamePrefix = `${payPublicOrigin
+        .replace(/^https?:\/\//, '')
+        .replace(/\/$/, '')}/`;
     const publicUrl = `${payPublicOrigin.replace(/\/$/, '')}/${business.slug}`;
 
     const handleCopy = async () => {
         try {
             await navigator.clipboard.writeText(publicUrl);
-            setCopying(true);
-            setTimeout(() => setCopying(false), 1500);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
         } catch {
             toast.error('Не вдалося скопіювати');
         }
@@ -48,39 +72,75 @@ export default function PublicSection({
 
     return (
         <UiSectionCard title="Публічна сторінка">
-            <div className="mt-4 space-y-6">
-                <div>
-                    <p className="text-muted-foreground text-base font-medium">
-                        Slug
-                    </p>
-                    <p className="text-foreground mt-1.5 font-mono text-lg">
-                        {business.slug}
-                    </p>
-                    <p className="text-muted-foreground mt-1 text-base">
-                        У безкоштовному тарифі змінити не можна
-                    </p>
-                </div>
-                <div>
-                    <p className="text-muted-foreground text-base font-medium">
-                        Посилання на сторінку
-                    </p>
-                    <div className="mt-1.5 flex items-center gap-2">
-                        <code className="bg-muted text-foreground min-w-0 flex-1 truncate rounded-md px-3 py-2 text-base">
-                            {publicUrl}
-                        </code>
-                        <UiButton
-                            type="button"
-                            variant="icon-compact"
-                            size="sm"
-                            onClick={() => void handleCopy()}
-                            aria-label="Копіювати посилання"
-                            IconLeft={copying ? <Check /> : <Copy />}
-                        />
-                    </div>
+            <div className="divide-border mt-4 divide-y">
+                <div className="pb-6">
+                    <UiEditableField<string>
+                        label="Адреса сторінки"
+                        value={business.slug}
+                        hideDefaultPencil
+                        renderRead={(_v, { startEdit }) => (
+                            <div className="flex flex-col gap-3">
+                                <span className="font-mono break-all">
+                                    <span className="text-muted-foreground">
+                                        {hostnamePrefix}
+                                    </span>
+                                    <span className="text-foreground">
+                                        {business.slug}
+                                    </span>
+                                </span>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <UiButton
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={startEdit}
+                                        IconLeft={<Pencil />}
+                                    >
+                                        Редагувати
+                                    </UiButton>
+                                    <UiButton
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => void handleCopy()}
+                                        IconLeft={
+                                            copied ? <Check /> : <Copy />
+                                        }
+                                    >
+                                        {copied
+                                            ? 'Скопійовано'
+                                            : 'Копіювати'}
+                                    </UiButton>
+                                </div>
+                            </div>
+                        )}
+                        renderEdit={({ value, setValue, error }) => (
+                            <UiPrefixInput
+                                prefix={hostnamePrefix}
+                                value={value}
+                                onChange={(e) => setValue(e.target.value)}
+                                error={error}
+                                aria-label="Адреса сторінки"
+                                autoFocus
+                                autoCapitalize="off"
+                                autoCorrect="off"
+                                spellCheck={false}
+                            />
+                        )}
+                        validate={(v) => {
+                            const r = businessSlugSchema.safeParse(v);
+                            return r.success
+                                ? null
+                                : (mapValidationCode(
+                                      r.error.issues[0]?.message
+                                  ) ?? null);
+                        }}
+                        onSave={(slug) => onSave({ slug })}
+                    />
                 </div>
                 <label
                     htmlFor="seo-toggle"
-                    className="border-border flex cursor-pointer items-start justify-between gap-3 rounded-lg border p-4"
+                    className="flex cursor-pointer items-start justify-between gap-3 pt-6"
                 >
                     <div className="flex flex-1 flex-col gap-1">
                         <span className="text-foreground text-lg font-medium">
@@ -102,3 +162,4 @@ export default function PublicSection({
         </UiSectionCard>
     );
 }
+

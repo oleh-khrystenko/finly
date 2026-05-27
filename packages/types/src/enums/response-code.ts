@@ -129,6 +129,19 @@ export const RESPONSE_CODE = {
      * скороченого списку, не прибрати поле і не змінити VAT.
      */
     TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE: 'TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE',
+    /**
+     * Sprint 14 — vanity-slug edit. PATCH `slug` потрапив у reserved-список
+     * (`qr`, `api`, `host-pay`, …) — slug не може ні створюватись, ні
+     * редагуватись на ці значення (конфлікт з route-namespace-ами апки).
+     */
+    SLUG_RESERVED: 'SLUG_RESERVED',
+    /**
+     * Sprint 14 — vanity-slug edit. PATCH `slug` зайнятий іншим бізнесом —
+     * або в `Business.slugLower` (поточний slug), або в `BusinessSlugHistory.
+     * slugLower` (rename-history, anti-squatting window). Recovery-path для UI:
+     * обрати інше значення.
+     */
+    SLUG_TAKEN: 'SLUG_TAKEN',
 
     // --- invoices error (Sprint 4 §4.2 §4.8) ---
     /** Invoice не знайдено в межах business-у. `InvoiceAccessGuard` / `InvoicesService.getBySlug`. UA: "Рахунок не знайдено". */
@@ -280,6 +293,8 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.TAXATION_REQUIRED_FOR_TYPE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.TAX_ID_FORMAT_MISMATCH_TYPE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.SLUG_RESERVED]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.SLUG_TAKEN]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVOICE_NOT_FOUND]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVOICE_SLUG_GENERATION_FAILED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVOICE_AMOUNT_LOCKED_REQUIRES_AMOUNT]: RESPONSE_TYPE.ERROR,
