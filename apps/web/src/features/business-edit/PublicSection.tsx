@@ -140,23 +140,27 @@ export default function PublicSection({
                 </div>
                 <label
                     htmlFor="seo-toggle"
-                    className="flex cursor-pointer items-start justify-between gap-3 pt-6"
+                    className="flex cursor-pointer flex-col gap-1 pt-6"
                 >
-                    <div className="flex flex-1 flex-col gap-1">
+                    <span className="flex items-center justify-between gap-3">
                         <span className="text-foreground text-lg font-medium">
-                            Показувати в Google
+                            {business.seoIndexEnabled
+                                ? 'Сторінка відкрита для пошукової системи Google'
+                                : 'Сторінка прихована від пошукової системи Google'}
                         </span>
-                        <span className="text-muted-foreground text-base">
-                            Дозволити індексацію публічної сторінки пошуковими
-                            системами
-                        </span>
-                    </div>
-                    <UiSwitch
-                        id="seo-toggle"
-                        checked={business.seoIndexEnabled}
-                        disabled={seoSaving}
-                        onChange={(next) => void handleSeoToggle(next)}
-                    />
+                        <UiSwitch
+                            id="seo-toggle"
+                            className="shrink-0"
+                            checked={business.seoIndexEnabled}
+                            disabled={seoSaving}
+                            onChange={(next) => void handleSeoToggle(next)}
+                        />
+                    </span>
+                    <span className="text-muted-foreground text-base">
+                        Керує показом сторінки в пошуку Google. Зміни
+                        відображаються не миттєво. Сторінка завжди доступна за
+                        прямим посиланням.
+                    </span>
                 </label>
             </div>
         </UiSectionCard>
