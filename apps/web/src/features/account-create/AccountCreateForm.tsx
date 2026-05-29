@@ -19,7 +19,6 @@ import { getZodFieldError } from '@/shared/lib';
 import { useQrLandingDraftStore } from '@/entities/qr-landing-draft';
 import UiButton from '@/shared/ui/UiButton';
 import UiInput from '@/shared/ui/UiInput';
-import UiSectionCard from '@/shared/ui/UiSectionCard';
 
 interface Props {
     businessSlug: string;
@@ -135,36 +134,28 @@ export default function AccountCreateForm({
             onSubmit={(e) => {
                 void handleSubmit(onSubmit)(e);
             }}
-            className="space-y-4"
+            className="space-y-6"
             noValidate
         >
-            <UiSectionCard title="IBAN рахунку">
+            <div className="border-border bg-card space-y-6 rounded-xl border p-5 md:p-6">
                 <UiInput
                     label="IBAN"
                     placeholder="UA213223130000026007233566001"
+                    description="IBAN неможливо буде змінити після створення. Якщо помилитеся — видаліть рахунок і створіть новий."
                     inputMode="text"
                     {...register('iban')}
                     error={getZodFieldError(errors.iban)}
                 />
-                <p className="text-muted-foreground mt-2 text-xs">
-                    IBAN неможливо буде змінити після створення. Якщо помилитеся
-                    — видаліть рахунок і створіть новий.
-                </p>
-            </UiSectionCard>
 
-            <UiSectionCard title="Назва рахунку">
                 <UiInput
                     label="Назва"
                     placeholder="За замовчуванням підтягнеться з банку"
+                    description="Залиште порожнім — назва підтягнеться автоматично з МФО (наприклад, «ПриватБанк •2580»)."
                     {...register('name')}
                     error={getZodFieldError(errors.name)}
                     maxLength={60}
                 />
-                <p className="text-muted-foreground mt-2 text-xs">
-                    Залиште порожнім — назва підтягнеться автоматично з МФО
-                    (наприклад, «ПриватБанк •2580»).
-                </p>
-            </UiSectionCard>
+            </div>
 
             <div className="flex justify-end gap-3 pt-2">
                 <UiButton
