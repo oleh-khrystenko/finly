@@ -182,7 +182,7 @@ export default function TaxationSection({ business, onSave }: Props) {
     if (!editing) {
         return (
             <div className="space-y-2">
-                <p className="text-muted-foreground text-sm font-medium">
+                <p className="text-muted-foreground text-base font-medium">
                     Оподаткування
                 </p>
                 <div className="flex items-center justify-between gap-3">

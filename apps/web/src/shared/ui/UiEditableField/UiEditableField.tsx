@@ -75,9 +75,11 @@ export default function UiEditableField<TValue>({
 
     return (
         <div className="space-y-2">
-            <p className="text-muted-foreground text-sm font-medium">
-                {label}
-            </p>
+            {label && (
+                <p className="text-muted-foreground text-base font-medium">
+                    {label}
+                </p>
+            )}
             {!editing ? (
                 <div className="flex items-center justify-between gap-3">
                     <div className="text-foreground min-w-0 flex-1 text-lg break-words">
@@ -93,7 +95,9 @@ export default function UiEditableField<TValue>({
                             variant="icon"
                             size="sm"
                             onClick={startEdit}
-                            aria-label={`Редагувати: ${label}`}
+                            aria-label={
+                                label ? `Редагувати: ${label}` : 'Редагувати'
+                            }
                             IconLeft={<Pencil />}
                         />
                     )}

@@ -24,7 +24,14 @@ export interface UiEditableFieldReadArgs<TValue> {
 }
 
 export interface UiEditableFieldProps<TValue> {
-    label: string;
+    /**
+     * Лейбл-якір над значенням (read-view key-value). Опціональний: у картці
+     * з єдиним предметом, де заголовок картки вже описує поле (напр.
+     * «Публічна сторінка» → адреса), лейбл дублював би титул — тоді не
+     * передаємо, `<p>` не рендериться. Для accessibility edit-контрол має
+     * власний `aria-label`.
+     */
+    label?: string;
     value: TValue;
     /**
      * Renderer для read-only вигляду. Другий аргумент — `{startEdit}`-callback

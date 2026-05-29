@@ -156,7 +156,7 @@ export default function BusinessSlugPage() {
                 </UiButton>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="flex min-w-0 w-full flex-col gap-1">
-                        <p className="text-muted-foreground text-sm font-semibold tracking-wide uppercase">
+                        <p className="text-muted-foreground text-xl font-semibold tracking-wide uppercase">
                             {typeLabel}
                         </p>
                         <EditableBusinessName
@@ -170,7 +170,7 @@ export default function BusinessSlugPage() {
                         target="_blank"
                         rel="noopener noreferrer"
                         variant="outline"
-                        size="sm"
+                        size="md"
                         IconRight={<ExternalLink />}
                     >
                         Відкрити в новій вкладці
@@ -188,7 +188,7 @@ export default function BusinessSlugPage() {
                 <AccountsSection businessSlug={business.slug} />
 
                 {/* Danger zone */}
-                <UiSectionCard title="Небезпечна зона">
+                <UiSectionCard title="Небезпечна зона" variant="destructive">
                     <p className="text-muted-foreground mt-2 text-base">
                         Видалення повне і незворотне. Усі рахунки і виставлені
                         інвойси цього бізнесу будуть видалені. Клієнти, які

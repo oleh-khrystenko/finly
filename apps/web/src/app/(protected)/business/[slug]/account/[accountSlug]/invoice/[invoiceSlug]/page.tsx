@@ -284,7 +284,7 @@ export default function InvoiceCabinetPage() {
                     accountSlug={account.slug}
                 />
 
-                <UiSectionCard title="Небезпечна зона">
+                <UiSectionCard title="Небезпечна зона" variant="destructive">
                     <p className="text-muted-foreground mt-2 text-sm">
                         Видалення повне і незворотне. Клієнт, що має збережене
                         посилання, не зможе оплатити.

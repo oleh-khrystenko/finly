@@ -75,7 +75,6 @@ export default function PublicSection({
             <div className="divide-border mt-4 divide-y">
                 <div className="pb-6">
                     <UiEditableField<string>
-                        label="Адреса сторінки"
                         value={business.slug}
                         hideDefaultPencil
                         renderRead={(_v, { startEdit }) => (

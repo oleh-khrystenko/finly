@@ -140,7 +140,7 @@ export default function AccountsSection({ businessSlug }: Props) {
                         as="link"
                         href={createHref}
                         variant="filled"
-                        size="sm"
+                        size="md"
                         IconLeft={<Plus />}
                     >
                         Додати рахунок
@@ -262,7 +262,7 @@ function EmptyState({ createHref }: { createHref: string }) {
                 as="link"
                 href={createHref}
                 variant="filled"
-                size="sm"
+                size="md"
                 IconLeft={<Plus />}
             >
                 Додати рахунок
