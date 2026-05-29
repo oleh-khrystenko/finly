@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Check, Copy, Pencil } from 'lucide-react';
+import { Check, Copy, ExternalLink, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import {
     businessSlugSchema,
@@ -87,28 +87,42 @@ export default function PublicSection({
                                         {business.slug}
                                     </span>
                                 </span>
-                                <div className="flex flex-wrap items-center gap-2">
+                                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                                     <UiButton
-                                        type="button"
+                                        as="a"
+                                        href={publicUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
                                         variant="outline"
-                                        size="sm"
-                                        onClick={startEdit}
-                                        IconLeft={<Pencil />}
+                                        size="md"
+                                        IconLeft={<ExternalLink />}
+                                        className="w-full sm:w-auto"
                                     >
-                                        Редагувати
+                                        Відкрити в новій вкладці
                                     </UiButton>
                                     <UiButton
                                         type="button"
                                         variant="outline"
-                                        size="sm"
+                                        size="md"
                                         onClick={() => void handleCopy()}
                                         IconLeft={
                                             copied ? <Check /> : <Copy />
                                         }
+                                        className="w-full sm:w-auto"
                                     >
                                         {copied
                                             ? 'Скопійовано'
                                             : 'Копіювати'}
+                                    </UiButton>
+                                    <UiButton
+                                        type="button"
+                                        variant="outline"
+                                        size="md"
+                                        onClick={startEdit}
+                                        IconLeft={<Pencil />}
+                                        className="w-full sm:w-auto"
+                                    >
+                                        Редагувати
                                     </UiButton>
                                 </div>
                             </div>

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, ExternalLink, Trash2 } from 'lucide-react';
+import { ArrowLeft, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
     BUSINESS_TYPE_LABEL,
@@ -137,12 +137,11 @@ export default function BusinessSlugPage() {
 
     if (!business) return null;
 
-    const publicUrl = `${ENV.NEXT_PUBLIC_PAY_PUBLIC_URL.replace(/\/$/, '')}/${business.slug}`;
     const typeLabel = BUSINESS_TYPE_LABEL[business.type];
 
     return (
         <UiPageContainer className="space-y-6 py-8 md:py-12">
-            {/* Top toolbar: back-link, heading, open-tab. */}
+            {/* Top toolbar: back-link + identity heading. */}
             <div className="flex flex-col gap-4">
                 <UiButton
                     as="link"
@@ -154,38 +153,25 @@ export default function BusinessSlugPage() {
                 >
                     Назад до списку
                 </UiButton>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="flex min-w-0 w-full flex-col gap-1">
-                        <p className="text-muted-foreground text-xl font-semibold tracking-wide uppercase">
-                            {typeLabel}
-                        </p>
-                        <EditableBusinessName
-                            name={business.name}
-                            onSave={(name) => handlePatch({ name })}
-                        />
-                    </div>
-                    <UiButton
-                        as="a"
-                        href={publicUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        variant="outline"
-                        size="md"
-                        IconRight={<ExternalLink />}
-                    >
-                        Відкрити в новій вкладці
-                    </UiButton>
+                <div className="flex min-w-0 flex-col gap-1">
+                    <p className="text-muted-foreground text-xl font-semibold tracking-wide uppercase">
+                        {typeLabel}
+                    </p>
+                    <EditableBusinessName
+                        name={business.name}
+                        onSave={(name) => handlePatch({ name })}
+                    />
                 </div>
             </div>
 
             <div className="space-y-4">
-                <RequisitesCard business={business} onSave={handlePatch} />
                 <PublicSection
                     business={business}
                     payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
                     onSave={handlePatch}
                 />
                 <AccountsSection businessSlug={business.slug} />
+                <RequisitesCard business={business} onSave={handlePatch} />
 
                 {/* Danger zone */}
                 <UiSectionCard title="Небезпечна зона" variant="destructive">
