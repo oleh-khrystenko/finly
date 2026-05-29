@@ -140,7 +140,7 @@ const UiTextarea = forwardRef<HTMLTextAreaElement, UiTextareaProps>(
                     description && (
                         <p
                             id={descriptionId}
-                            className="text-muted-foreground mt-1 text-xs"
+                            className="text-muted-foreground mt-1 text-sm"
                         >
                             {description}
                         </p>

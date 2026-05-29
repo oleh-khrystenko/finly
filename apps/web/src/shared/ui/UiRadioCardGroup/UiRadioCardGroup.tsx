@@ -92,7 +92,7 @@ function UiRadioCardGroup<TValue extends string>(
             {description && (
                 <p
                     id={descriptionId}
-                    className="text-muted-foreground mb-2 text-xs"
+                    className="text-muted-foreground mb-2 text-sm"
                 >
                     {description}
                 </p>
@@ -134,7 +134,7 @@ function UiRadioCardGroup<TValue extends string>(
                             {option.title}
                         </span>
                         {option.description && (
-                            <span className="text-muted-foreground text-xs leading-snug">
+                            <span className="text-muted-foreground text-sm leading-snug">
                                 {option.description}
                             </span>
                         )}

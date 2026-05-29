@@ -182,7 +182,7 @@ export default function TaxationSection({ business, onSave }: Props) {
     if (!editing) {
         return (
             <div className="space-y-2">
-                <p className="text-muted-foreground text-base font-medium">
+                <p className="text-muted-foreground text-sm font-medium">
                     Оподаткування
                 </p>
                 <div className="flex items-center justify-between gap-3">
@@ -226,7 +226,7 @@ export default function TaxationSection({ business, onSave }: Props) {
                     columns={{ mobile: 1, desktop: 2 }}
                 />
             )}
-            {error && <p className="text-destructive text-xs">{error}</p>}
+            {error && <p className="text-destructive text-sm">{error}</p>}
             <div className="flex justify-end gap-2">
                 <UiButton
                     type="button"

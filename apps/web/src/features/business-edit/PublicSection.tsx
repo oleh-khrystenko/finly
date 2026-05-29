@@ -156,7 +156,7 @@ export default function PublicSection({
                             onChange={(next) => void handleSeoToggle(next)}
                         />
                     </span>
-                    <span className="text-muted-foreground text-base">
+                    <span className="text-muted-foreground text-sm">
                         Керує показом сторінки в пошуку Google. Зміни
                         відображаються не миттєво. Сторінка завжди доступна за
                         прямим посиланням.

@@ -156,7 +156,7 @@ export default function BusinessSlugPage() {
                 </UiButton>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="flex min-w-0 w-full flex-col gap-1">
-                        <p className="text-muted-foreground text-xl font-medium">
+                        <p className="text-muted-foreground text-sm font-semibold tracking-wide uppercase">
                             {typeLabel}
                         </p>
                         <EditableBusinessName

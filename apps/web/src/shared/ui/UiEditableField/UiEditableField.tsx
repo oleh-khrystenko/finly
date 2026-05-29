@@ -75,7 +75,7 @@ export default function UiEditableField<TValue>({
 
     return (
         <div className="space-y-2">
-            <p className="text-muted-foreground text-base font-medium">
+            <p className="text-muted-foreground text-sm font-medium">
                 {label}
             </p>
             {!editing ? (

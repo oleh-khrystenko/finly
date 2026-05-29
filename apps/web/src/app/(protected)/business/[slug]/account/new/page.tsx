@@ -134,16 +134,6 @@ function NewAccountContent() {
 
     return (
         <UiPageContainer className="space-y-6 py-8 md:py-12">
-            <UiButton
-                as="link"
-                href={`/business/${business.slug}`}
-                variant="text"
-                size="sm"
-                IconLeft={<ArrowLeft />}
-                className="self-start px-0"
-            >
-                Назад до бізнесу
-            </UiButton>
             <UiPageHeading>Додати рахунок</UiPageHeading>
             <AccountCreateForm
                 businessSlug={business.slug}

@@ -110,7 +110,7 @@ const UiInput = forwardRef<HTMLInputElement, UiInputProps>((props, ref) => {
                 description && (
                     <p
                         id={descriptionId}
-                        className="text-muted-foreground mt-1 text-xs"
+                        className="text-muted-foreground mt-1 text-sm"
                     >
                         {description}
                     </p>
