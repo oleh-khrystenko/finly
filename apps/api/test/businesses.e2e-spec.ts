@@ -793,28 +793,35 @@ describe('Businesses E2E', () => {
             expect(data.taxId).toBe(VALID_TAX_ID);
         });
 
-        it('reject спробу змінити slug через PATCH — 400 (slug-immutability via .strict())', async () => {
+        it('Sprint 14 — vanity-slug edit через PATCH (200): slug перейменовується, старий slugLower звільняється', async () => {
             const user = await createUser();
             const created = await supertest(app.getHttpServer())
                 .post('/api/businesses/me')
                 .set('Authorization', bearerFor(user))
                 .send(VALID_CREATE_PAYLOAD);
             const { slug } = (created.body as { data: { slug: string } }).data;
+            const newSlug = 'nova-vanity-adresa';
 
             const res = await supertest(app.getHttpServer())
                 .patch(`/api/businesses/me/${slug}`)
                 .set('Authorization', bearerFor(user))
-                .send({ slug: 'evil-vanity' })
-                .expect(400);
+                .send({ slug: newSlug })
+                .expect(200);
 
-            const body = res.body as { error: { code: string } };
-            expect(body.error.code).toBe('VALIDATION_ERROR');
+            const body = res.body as { data: { slug: string } };
+            expect(body.data.slug).toBe(newSlug);
 
-            // Перевіримо, що БД не змінилась
-            const stillThere = await businessModel.findOne({
+            // БД: документ тепер під новим slugLower, зі збереженим case.
+            const renamed = await businessModel.findOne({
+                slugLower: newSlug.toLowerCase(),
+            });
+            expect(renamed?.slug).toBe(newSlug);
+
+            // Старий slugLower більше не вказує на живий документ (звільнений).
+            const oldStillResolves = await businessModel.findOne({
                 slugLower: slug.toLowerCase(),
             });
-            expect(stillThere?.slug).toBe(slug);
+            expect(oldStillResolves).toBeNull();
         });
 
         it.each([
@@ -1146,7 +1153,9 @@ describe('Businesses E2E', () => {
         it('?download=1 → Content-Disposition attachment', async () => {
             const slug = await seedBusinessSlug();
             const res = await supertest(app.getHttpServer())
-                .get(`/api/businesses/public/${slug}/qr/business.png?download=1`)
+                .get(
+                    `/api/businesses/public/${slug}/qr/business.png?download=1`
+                )
                 .expect(200);
             expect(res.headers['content-disposition']).toContain('attachment');
         });
