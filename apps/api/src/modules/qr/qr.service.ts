@@ -5,7 +5,9 @@ import {
     build002Payload,
     build003Payload,
     buildNbuPayloadLink,
+    DEFAULT_QR_SIZE_NAME,
     encodePayloadAsBase64Url,
+    resolveQrSizePx,
     type AllowedNbuPayloadLinkHost003,
     type PayloadInput,
     type PayloadVersion,
@@ -21,18 +23,82 @@ import { QrLogoCompositor } from './renderers/qr-logo.compositor';
  * Опції рендеру QR (загальні для обох public-методів).
  *
  * Дефолти узгоджені з нормативом 003 і sprint plan §2.0:
- *   sizePx: 512 — оптимальний розмір для друку візиток та екрана.
+ *   sizePx: `QR_SIZE_PX[DEFAULT_QR_SIZE_NAME]` — помірний екранний розмір.
  *   errorCorrection: 'Q' — норматив 003 (Додаток 4 §IV.10.4 ст. 28).
- *   includeLogo: true — норматив-asset зі знаком гривні в центрі (Додаток 1
- *     §III.13 ст. 5). Custom-logo бізнесу — Sprint 6.
- *   logoMaxRatio: 0.2 — safe upper-bound під Q-correction (~25%).
+ *
+ * Центр і смуги задаються **брендом** (тип-рівневий дескриптор `QrBrand`),
+ * не цими опціями — це точка розширення під майбутній клієнтський шар C.
  */
 export interface QrRenderOptions {
     sizePx?: number;
     errorCorrection?: QrErrorCorrectionLevel;
-    includeLogo?: boolean;
-    logoMaxRatio?: number;
 }
+
+/** Формат центрального asset-у тип-2 (Sprint 14 §Q5). */
+export type QrUrlCenterFormat = 'rect' | 'square';
+
+/** Опції рендеру URL-QR (тип-2) — центр обирається з двох форматів. */
+export interface QrUrlRenderOptions extends QrRenderOptions {
+    /** Дефолт `'rect'` (лого + назва). `'square'` — лише лого (під шар C). */
+    centerFormat?: QrUrlCenterFormat;
+}
+
+/**
+ * Тип-рівневий дескриптор брендингу QR (Sprint 14). Визначає центральний
+ * asset і опційні смуги. Дефолти задаються тут (BRAND_*), не у
+ * низькорівневому compositor-і — це точка підміни під клієнтський брендинг
+ * (шар C): платний шар замінить asset-файли й тексти, не торкаючись рендеру.
+ *
+ * Усі шляхи — імена файлів у `assets/` (build-time baked PNG, копіюються у
+ * `dist` через nest-cli). Центр чорно-білий, смуги чорно-білі — QR лишається
+ * Ч/Б (різниця тип-1/тип-2 несеться центром і смугами, не кольором).
+ */
+interface QrBrand {
+    centerAssetFile: string;
+    centerWidthRatio: number;
+    topBandFile?: string;
+    bottomBandFile?: string;
+}
+
+/**
+ * Тип-1 (НБУ-payload): нормативний центр (білий круг зі знаком гривні,
+ * недоторканний), верхня смуга «Створено за стандартами НБУ», нижня смуга
+ * Finly. Центр-ratio 0.2 — той самий нормативний safe-bound, що до Sprint 14.
+ */
+const BRAND_NBU: QrBrand = {
+    centerAssetFile: 'hryvnia-symbol.png',
+    centerWidthRatio: 0.2,
+    topBandFile: 'band-nbu-standard.png',
+    bottomBandFile: 'band-finly.png',
+};
+
+/**
+ * Тип-2 (URL), дефолтний прямокутний центр (Finly лого + назва) + нижня смуга
+ * зі слоганом, без верхньої смуги (асиметрія сама собою відрізняє від тип-1).
+ *
+ * **Перекриття rect == square == повний `centerWidthRatio²`-квадрат.**
+ * `compose` робить `fit:'contain'` з НЕпрозорим білим background — landscape-
+ * asset добивається білим до повного квадрата `(ratio·qrSize)²`, і це біле
+ * поле стирає модулі QR так само, як сам логотип. Тому ratio лімітує перекриту
+ * площу однаково для обох форматів — шар C, піднімаючи ratio для rect, мусить
+ * тримати той самий нормативний cap (`QR_LOGO_MAX_RATIO`), що для квадрата.
+ */
+const BRAND_URL_RECT: QrBrand = {
+    centerAssetFile: 'center-finly-rect.png',
+    centerWidthRatio: 0.2,
+    bottomBandFile: 'band-slogan.png',
+};
+
+/**
+ * Тип-2 (URL), квадратний центр (лише лого). У UI MVP не використовується
+ * (дефолт — rect), але каркас рендерить обидва формати під round-trip-тестами,
+ * щоб шар C просто увімкнув вибір без переробки (Sprint 14 §Q5).
+ */
+const BRAND_URL_SQUARE: QrBrand = {
+    centerAssetFile: 'center-finly-square.png',
+    centerWidthRatio: 0.2,
+    bottomBandFile: 'band-slogan.png',
+};
 
 /**
  * Опції рендеру для format 003. Host — required: норматив дозволяє два host-и
@@ -44,10 +110,8 @@ export interface QrRenderOptions003 extends QrRenderOptions {
 }
 
 const DEFAULT_RENDER_OPTIONS = {
-    sizePx: 512,
+    sizePx: resolveQrSizePx(DEFAULT_QR_SIZE_NAME),
     errorCorrection: 'Q' as const,
-    includeLogo: true,
-    logoMaxRatio: 0.2,
 };
 
 /**
@@ -77,14 +141,11 @@ const DEFAULT_RENDER_OPTIONS = {
 @Injectable()
 export class QrService {
     /**
-     * Шлях до нормативного asset-у — білий круг зі знаком гривні (Додаток 1
-     * §III.13 ст. 5 постанови НБУ № 97). Sprint 3 рішення C5: Finly-брендинг
-     * живе у верстці сторінки, не в QR; центральний asset — норматив, не лого.
-     * `__dirname` тут = `dist/modules/qr` у production або `src/modules/qr` у
-     * dev — обидва відносні шляхи працюють однаково (asset копіюється у dist
-     * через nest-cli `assets` config).
+     * Тека з brand-asset-ами (build-time baked PNG). `__dirname` = `dist/
+     * modules/qr` у production або `src/modules/qr` у dev — обидва шляхи
+     * валідні (asset-и копіюються у dist через nest-cli `assets` config).
      */
-    private readonly logoPath = join(__dirname, 'assets', 'hryvnia-symbol.png');
+    private readonly assetsDir = join(__dirname, 'assets');
 
     constructor(
         private readonly imageRenderer: QrImageRenderer,
@@ -92,13 +153,19 @@ export class QrService {
     ) {}
 
     /**
-     * QR для публічної сторінки бізнесу/інвойсу (`pay.finly.com.ua/{slug}`).
+     * QR тип-2 для публічної сторінки (`pay.finly.com.ua/{slug...}`): Finly-
+     * центр + нижня смуга зі слоганом, без верхньої смуги. Дефолтний центр —
+     * прямокутний (лого + назва); `centerFormat: 'square'` — лише лого.
      */
     async renderForUrl(
         url: string,
-        options?: QrRenderOptions
+        options?: QrUrlRenderOptions
     ): Promise<Buffer> {
-        return this.renderText(url, options);
+        const brand =
+            options?.centerFormat === 'square'
+                ? BRAND_URL_SQUARE
+                : BRAND_URL_RECT;
+        return this.renderBranded(url, brand, options);
     }
 
     /**
@@ -109,7 +176,7 @@ export class QrService {
      *   1. build payload (Zod-валідація → field-asserts → join('\n')).
      *   2. encode Base64URL.
      *   3. wrap у `https://<host>/<b64>` (host визначається версією).
-     *   4. render PNG + optional logo overlay.
+     *   4. render PNG + тип-1 брендинг (нормативний центр + смуги НБУ/Finly).
      */
     async renderForNbuPayload(
         input: PayloadInput,
@@ -142,7 +209,7 @@ export class QrService {
                       host: (options as QrRenderOptions003 | undefined)?.host,
                   })
                 : buildNbuPayloadLink(version, base64Url);
-        return this.renderText(link, options);
+        return this.renderBranded(link, BRAND_NBU, options);
     }
 
     /**
@@ -165,8 +232,14 @@ export class QrService {
         return buildNbuPayloadLink('003', base64Url, { host });
     }
 
-    private async renderText(
+    /**
+     * Спільний брендований pipeline для обох типів: render QR → центр-overlay
+     * → смуги. Центр і смуги беруться з `brand`-дескриптора; розмір — з опцій
+     * (whitelist `QR_SIZE_PX` резолвиться у controller-і, сюди приходить px).
+     */
+    private async renderBranded(
         text: string,
+        brand: QrBrand,
         options?: QrRenderOptions
     ): Promise<Buffer> {
         const opts = { ...DEFAULT_RENDER_OPTIONS, ...options };
@@ -174,12 +247,19 @@ export class QrService {
             sizePx: opts.sizePx,
             errorCorrection: opts.errorCorrection,
         });
-        if (!opts.includeLogo) {
-            return qrPng;
-        }
-        return this.logoCompositor.compose(qrPng, this.logoPath, {
-            qrSizePx: opts.sizePx,
-            logoMaxRatio: opts.logoMaxRatio,
+        const withCenter = await this.logoCompositor.compose(
+            qrPng,
+            join(this.assetsDir, brand.centerAssetFile),
+            { qrSizePx: opts.sizePx, logoMaxRatio: brand.centerWidthRatio }
+        );
+        return this.logoCompositor.addBands(withCenter, {
+            width: opts.sizePx,
+            topBandPath: brand.topBandFile
+                ? join(this.assetsDir, brand.topBandFile)
+                : undefined,
+            bottomBandPath: brand.bottomBandFile
+                ? join(this.assetsDir, brand.bottomBandFile)
+                : undefined,
         });
     }
 }

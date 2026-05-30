@@ -69,19 +69,18 @@ describe('QrService — integration (real sharp + qrcode + jsqr)', () => {
             expect(decoded).toBe(url);
         });
 
-        it('PNG з накладеним лого все одно сканується (Q-correction tolerance)', async () => {
+        it('брендований тип-2 (rect-центр + смуга) все одно сканується', async () => {
             const url = 'https://pay.finly.com.ua/test';
-            const png = await service.renderForUrl(url, {
-                includeLogo: true,
-                logoMaxRatio: 0.2,
-            });
+            const png = await service.renderForUrl(url);
             const decoded = await decodeQr(png);
             expect(decoded).toBe(url);
         });
 
-        it('PNG без лого — теж сканується (sanity baseline)', async () => {
+        it('тип-2 зі square-центром теж сканується', async () => {
             const url = 'https://pay.finly.com.ua/test';
-            const png = await service.renderForUrl(url, { includeLogo: false });
+            const png = await service.renderForUrl(url, {
+                centerFormat: 'square',
+            });
             const decoded = await decodeQr(png);
             expect(decoded).toBe(url);
         });
@@ -139,8 +138,6 @@ describe('QrService — integration (real sharp + qrcode + jsqr)', () => {
                 '003',
                 {
                     host: NBU_HOST_PRIMARY,
-                    includeLogo: true,
-                    logoMaxRatio: 0.2,
                 }
             );
             const decoded = await decodeQr(png);
@@ -244,28 +241,14 @@ describe('QrService — integration (real sharp + qrcode + jsqr)', () => {
         });
     });
 
-    describe('logo overlay viability', () => {
-        it('logoMaxRatio = 0.20 (max-allowed) — QR все ще читається', async () => {
+    describe('branded overlay viability', () => {
+        it('брендований тип-2 на print-розмірі (1024) сканується', async () => {
             const png = await service.renderForUrl(
                 'https://pay.finly.com.ua/x',
-                {
-                    includeLogo: true,
-                    logoMaxRatio: 0.2,
-                    sizePx: 512,
-                }
+                { sizePx: 1024 }
             );
             const decoded = await decodeQr(png);
             expect(decoded).toBe('https://pay.finly.com.ua/x');
-        });
-
-        it('logoMaxRatio > 0.20 — throw QR_LOGO_TOO_LARGE (норматив guard)', async () => {
-            await expect(
-                service.renderForUrl('https://pay.finly.com.ua/x', {
-                    includeLogo: true,
-                    logoMaxRatio: 0.25,
-                    sizePx: 512,
-                })
-            ).rejects.toMatchObject({ code: 'QR_LOGO_TOO_LARGE' });
-        });
+        }, 20000);
     });
 });
