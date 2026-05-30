@@ -250,5 +250,48 @@ describe('QrService — integration (real sharp + qrcode + jsqr)', () => {
             const decoded = await decodeQr(png);
             expect(decoded).toBe('https://pay.finly.com.ua/x');
         }, 20000);
+
+        it('тип-2 з довгим URL (довгі slug-и) сканується', async () => {
+            const url =
+                'https://pay.finly.com.ua/dovga-nazva-biznesu-tovarystva/rakhunok-aB3xQ9k7Zz/zamovlennia-na-postachannia-tovariv-2026-001-Xv0RTvfe';
+            const png = await service.renderForUrl(url);
+            const decoded = await decodeQr(png);
+            expect(decoded).toBe(url);
+        });
+
+        it('тип-2 square-центр на print-розмірі сканується', async () => {
+            const url = 'https://pay.finly.com.ua/x';
+            const png = await service.renderForUrl(url, {
+                centerFormat: 'square',
+                sizePx: 1024,
+            });
+            const decoded = await decodeQr(png);
+            expect(decoded).toBe(url);
+        }, 20000);
+
+        it('тип-1 (003) на print-розмірі сканується (дві смуги + центр)', async () => {
+            const png = await service.renderForNbuPayload(VALID_INPUT, '003', {
+                host: NBU_HOST_PRIMARY,
+                sizePx: 1024,
+            });
+            const decoded = await decodeQr(png);
+            expect(decoded).not.toBeNull();
+            expect(decoded).toMatch(/^https:\/\/qr\.bank\.gov\.ua\//);
+        }, 20000);
+
+        it('смуги розширюють полотно: тип-1 і тип-2 вищі за ширину', async () => {
+            const t1 = await service.renderForNbuPayload(VALID_INPUT, '003', {
+                host: NBU_HOST_PRIMARY,
+            });
+            const t2 = await service.renderForUrl('https://pay.finly.com.ua/x');
+            const m1 = await sharp(t1).metadata();
+            const m2 = await sharp(t2).metadata();
+            expect(m1.height ?? 0).toBeGreaterThan(m1.width ?? 0);
+            expect(m2.height ?? 0).toBeGreaterThan(m2.width ?? 0);
+            // Тип-1 має дві смуги, тип-2 — одну → тип-1 вищий відносно ширини.
+            expect((m1.height ?? 0) - (m1.width ?? 0)).toBeGreaterThan(
+                (m2.height ?? 0) - (m2.width ?? 0)
+            );
+        });
     });
 });

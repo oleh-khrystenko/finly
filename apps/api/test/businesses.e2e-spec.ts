@@ -1111,6 +1111,50 @@ describe('Businesses E2E', () => {
         });
     });
 
-    // Sprint 9: QR endpoints видалено з business-controller-а — переїхали на
-    // `PublicAccountsController` (`/businesses/public/:slug/account/:accountSlug/qr/...`).
+    // Sprint 9: NBU QR endpoints живуть на `PublicAccountsController`
+    // (`/businesses/public/:slug/account/:accountSlug/qr/...`).
+    //
+    // Sprint 14: на business-level повертається тип-2 QR (вітрина бізнесу).
+    // Тип-1 (NBU-payload) тут неможливий — IBAN живе на рахунку.
+    describe('GET /businesses/public/:slug/qr/business.png (Sprint 14)', () => {
+        async function seedBusinessSlug(): Promise<string> {
+            const user = await createUser();
+            const created = await supertest(app.getHttpServer())
+                .post('/api/businesses/me')
+                .set('Authorization', bearerFor(user))
+                .send(VALID_CREATE_PAYLOAD);
+            return (created.body as { data: { slug: string } }).data.slug;
+        }
+
+        it('повертає Content-Type image/png', async () => {
+            const slug = await seedBusinessSlug();
+            const res = await supertest(app.getHttpServer())
+                .get(`/api/businesses/public/${slug}/qr/business.png`)
+                .expect(200);
+            expect(res.headers['content-type']).toBe('image/png');
+        });
+
+        it('?size=<довільне> → 400 (whitelist)', async () => {
+            const slug = await seedBusinessSlug();
+            await supertest(app.getHttpServer())
+                .get(`/api/businesses/public/${slug}/qr/business.png?size=9999`)
+                .expect(400);
+        });
+
+        // size=screen (дефолт-розмір) — attachment-заголовок не залежить від
+        // розміру; print-рендер (важчий 1024px) покрито integration round-trip.
+        it('?download=1 → Content-Disposition attachment', async () => {
+            const slug = await seedBusinessSlug();
+            const res = await supertest(app.getHttpServer())
+                .get(`/api/businesses/public/${slug}/qr/business.png?download=1`)
+                .expect(200);
+            expect(res.headers['content-disposition']).toContain('attachment');
+        });
+
+        it('404 на неіснуючому slug', async () => {
+            await supertest(app.getHttpServer())
+                .get('/api/businesses/public/missing-slug/qr/business.png')
+                .expect(404);
+        });
+    });
 });
