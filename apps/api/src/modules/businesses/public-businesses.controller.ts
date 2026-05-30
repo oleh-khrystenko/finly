@@ -4,9 +4,12 @@ import {
     Header,
     NotFoundException,
     Param,
+    Query,
+    Res,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { Response } from 'express';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import {
     PublicBusinessSchema,
@@ -15,10 +18,18 @@ import {
 } from '@finly/types';
 
 import { SkipOnboarding } from '../../common/decorators/skip-onboarding.decorator';
+import { ENV } from '../../config/env';
 import {
     Account,
     type AccountDocument,
 } from '../accounts/schemas/account.schema';
+import {
+    applyQrDownloadDisposition,
+    isQrDownloadRequested,
+    resolveQrSizePxFromQuery,
+} from '../qr/qr-image-request';
+import { QrService } from '../qr/qr.service';
+import type { BusinessDocument } from './schemas/business.schema';
 import { BusinessesService } from './businesses.service';
 
 /**
@@ -48,7 +59,8 @@ export class PublicBusinessesController {
     constructor(
         private readonly businessesService: BusinessesService,
         @InjectModel(Account.name)
-        private readonly accountModel: Model<AccountDocument>
+        private readonly accountModel: Model<AccountDocument>,
+        private readonly qrService: QrService
     ) {}
 
     @SkipOnboarding()
@@ -66,14 +78,7 @@ export class PublicBusinessesController {
         // робить `permanentRedirect()` на canonical URL — тут окремої redirect-
         // логіки писати не треба, reuse-имо існуючий canonical-case
         // redirect-механізм.
-        const business =
-            await this.businessesService.getBySlugOrHistorical(slug);
-        if (!business) {
-            throw new NotFoundException({
-                code: RESPONSE_CODE.BUSINESS_NOT_FOUND,
-                message: 'Business not found',
-            });
-        }
+        const business = await this.getBusinessOrThrow(slug);
         const accounts = await this.accountModel
             .find({ businessId: business._id })
             .sort({ createdAt: 1 })
@@ -91,5 +96,51 @@ export class PublicBusinessesController {
             })),
         });
         return { data: view };
+    }
+
+    /**
+     * Sprint 14 — QR тип-2 на публічну сторінку-вітрину бізнесу
+     * (`pay.finly.com.ua/{businessSlug}`). Симетричний до account/invoice
+     * `qr/business.png`. Тип-1 (НБУ-payload) на рівні бізнесу неможливий —
+     * IBAN живе на рахунку, не на бізнесі.
+     *
+     * `?size=screen|print` (дефолт екранний), `?download=1` — attachment для
+     * друку. Кеш per-розмір автоматичний (URL включає query).
+     */
+    @SkipOnboarding()
+    @Get(':slug/qr/business.png')
+    @Header('Content-Type', 'image/png')
+    @Header(
+        'Cache-Control',
+        'public, max-age=3600, stale-while-revalidate=86400'
+    )
+    async getBusinessQr(
+        @Param('slug') slug: string,
+        @Query('size') sizeParam: string | undefined,
+        @Query('download') downloadParam: string | undefined,
+        @Res() res: Response
+    ): Promise<void> {
+        const sizePx = resolveQrSizePxFromQuery(sizeParam);
+        const business = await this.getBusinessOrThrow(slug);
+        const url = `${ENV.PAY_PUBLIC_URL.replace(/\/$/, '')}/${business.slug}`;
+        const png = await this.qrService.renderForUrl(url, { sizePx });
+        applyQrDownloadDisposition(
+            res,
+            isQrDownloadRequested(downloadParam),
+            `qr-${business.slug}.png`
+        );
+        res.send(png);
+    }
+
+    private async getBusinessOrThrow(slug: string): Promise<BusinessDocument> {
+        const business =
+            await this.businessesService.getBySlugOrHistorical(slug);
+        if (!business) {
+            throw new NotFoundException({
+                code: RESPONSE_CODE.BUSINESS_NOT_FOUND,
+                message: 'Business not found',
+            });
+        }
+        return business;
     }
 }

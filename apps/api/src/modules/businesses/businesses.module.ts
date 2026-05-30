@@ -7,6 +7,7 @@ import {
     InvoiceSlugCounterSchema,
 } from '../invoices/schemas/invoice-slug-counter.schema';
 import { Invoice, InvoiceSchema } from '../invoices/schemas/invoice.schema';
+import { QrModule } from '../qr/qr.module';
 import { UsersModule } from '../users/users.module';
 import { BusinessAccessGuard } from './business-access.guard';
 import { BusinessesController } from './businesses.controller';
@@ -52,6 +53,7 @@ import { SlugGeneratorService } from './slug-generator.service';
             { name: InvoiceSlugCounter.name, schema: InvoiceSlugCounterSchema },
         ]),
         UsersModule,
+        QrModule,
     ],
     controllers: [BusinessesController, PublicBusinessesController],
     providers: [BusinessesService, SlugGeneratorService, BusinessAccessGuard],

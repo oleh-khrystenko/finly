@@ -23,6 +23,11 @@ import { SkipOnboarding } from '../../common/decorators/skip-onboarding.decorato
 import { ENV } from '../../config/env';
 import { BusinessesService } from '../businesses/businesses.service';
 import type { BusinessDocument } from '../businesses/schemas/business.schema';
+import {
+    applyQrDownloadDisposition,
+    isQrDownloadRequested,
+    resolveQrSizePxFromQuery,
+} from '../qr/qr-image-request';
 import { QrService } from '../qr/qr.service';
 import { AccountsService } from './accounts.service';
 import { buildPayloadInputFromAccount } from './payload-mapper';
@@ -104,14 +109,22 @@ export class PublicAccountsController {
     async getBusinessQr(
         @Param('slug') slug: string,
         @Param('accountSlug') accountSlug: string,
+        @Query('size') sizeParam: string | undefined,
+        @Query('download') downloadParam: string | undefined,
         @Res() res: Response
     ): Promise<void> {
+        const sizePx = resolveQrSizePxFromQuery(sizeParam);
         const { business, account } = await this.lookupOrThrow(
             slug,
             accountSlug
         );
         const url = `${ENV.PAY_PUBLIC_URL.replace(/\/$/, '')}/${business.slug}/${account.slug}`;
-        const png = await this.qrService.renderForUrl(url);
+        const png = await this.qrService.renderForUrl(url, { sizePx });
+        applyQrDownloadDisposition(
+            res,
+            isQrDownloadRequested(downloadParam),
+            `qr-${account.slug}.png`
+        );
         res.send(png);
     }
 
@@ -130,9 +143,12 @@ export class PublicAccountsController {
         @Param('slug') slug: string,
         @Param('accountSlug') accountSlug: string,
         @Query('host') hostParam: string | undefined,
+        @Query('size') sizeParam: string | undefined,
+        @Query('download') downloadParam: string | undefined,
         @Res() res: Response
     ): Promise<void> {
         const host = resolveNbuHost(hostParam);
+        const sizePx = resolveQrSizePxFromQuery(sizeParam);
         const { business, account } = await this.lookupOrThrow(
             slug,
             accountSlug
@@ -140,7 +156,13 @@ export class PublicAccountsController {
         const input = buildPayloadInputFromAccount(business, account);
         const png = await this.qrService.renderForNbuPayload(input, '003', {
             host,
+            sizePx,
         });
+        applyQrDownloadDisposition(
+            res,
+            isQrDownloadRequested(downloadParam),
+            `qr-nbu-${host === NBU_HOST_PRIMARY ? 'primary' : 'legacy'}-${account.slug}.png`
+        );
         res.send(png);
     }
 
