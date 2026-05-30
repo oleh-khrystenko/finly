@@ -5,6 +5,7 @@ import {
     type PublicAccountListItem,
 } from '@finly/types';
 import UiButton from '@/shared/ui/UiButton';
+import UiQrImage from '@/shared/ui/UiQrImage';
 
 interface Props {
     /**
@@ -21,6 +22,8 @@ interface Props {
      * 1-Account випадок резолвиться `redirect()` у Server Component перед render-ом.
      */
     accounts: PublicAccountListItem[];
+    /** API endpoint origin для QR-картинки (`/api` для same-origin proxy). */
+    apiBase?: string;
 }
 
 /**
@@ -52,12 +55,14 @@ export default function PublicBusinessView({
     name,
     slug,
     accounts,
+    apiBase = '/api',
 }: Props) {
     if (accounts.length === 0) {
         return <EmptyState name={name} />;
     }
 
     const heading = `Платіж на користь ${name}`;
+    const qrSrc = `${apiBase}/businesses/public/${encodeURIComponent(slug)}/qr/business.png`;
     return (
         <div className="mx-auto max-w-xl space-y-8 px-4 py-8">
             <header className="space-y-2 text-center">
@@ -76,6 +81,17 @@ export default function PublicBusinessView({
                     </li>
                 ))}
             </ul>
+
+            <figure className="space-y-2 text-center">
+                <UiQrImage
+                    src={qrSrc}
+                    alt="QR на цю сторінку"
+                    className="border-border mx-auto w-full max-w-[240px] rounded-md border bg-white p-2"
+                />
+                <figcaption className="text-muted-foreground text-sm">
+                    QR на цю сторінку — для вивіски чи поширення
+                </figcaption>
+            </figure>
         </div>
     );
 }

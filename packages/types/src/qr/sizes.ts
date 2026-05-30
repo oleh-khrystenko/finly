@@ -20,6 +20,9 @@ export const QR_SIZE_NAMES = Object.keys(QR_SIZE_PX) as QrSizeName[];
 /** Дефолт без параметра — помірний екранний розмір. */
 export const DEFAULT_QR_SIZE_NAME: QrSizeName = 'screen';
 
+/** Розмір для друкарського завантаження (кнопка «Друк»). */
+export const PRINT_QR_SIZE_NAME: QrSizeName = 'print';
+
 export function isQrSizeName(value: string): value is QrSizeName {
     return value in QR_SIZE_PX;
 }
