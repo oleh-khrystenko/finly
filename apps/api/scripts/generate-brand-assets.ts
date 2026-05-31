@@ -64,14 +64,28 @@ interface BandConfig {
 const BAND: BandConfig = { width: 1024, height: 220, padX: 80, maxFontSize: 132 };
 
 /**
+ * Окрема конфігурація finly-смуги (верхня смуга тип-1). Нижча за `BAND` (170 vs
+ * 220) → менше повітря над лого (верхній край) і під ним (до QR-матриці), бо
+ * контент центрується вертикально. `logoRatio` 0.66 робить лого+wordmark трохи
+ * дрібнішими; cap-height тексту й gap у `logoWithWordmark` пропорційні
+ * `logoSize`, тож співвідношення лого↔«Finly» зберігається при будь-якому ratio.
+ * НЕ чіпає `BAND` (slogan-смуга тип-2 її переюзає).
+ */
+const FINLY_BAND = { width: 1024, height: 170, logoRatio: 0.66 } as const;
+
+/**
  * Окрема конфігурація для НБУ-compliance-підпису (нижній footer тип-1). На
  * відміну від `BAND`, текст НЕ тягнеться на всю ширину: `maxFontSize` 32
- * прив'язує розмір (фраза спанить ~48% ширини, не 84%), а низька смуга
- * (60 vs 220 → ~6% сторони QR) прибирає вертикальну порожнечу навколо тексту.
+ * прив'язує розмір (фраза спанить ~48% ширини, не 84%).
+ *
+ * Висота 88 дає вертикальний відступ ~29 px з кожного боку (текст bbHeight
+ * ≈ 29.8, центрований) — рівно як верхній відступ край→лого у finly-смузі
+ * ((170 − 170·0.66)/2 ≈ 28.9). Тож нижній край симетричний верхньому, а весь
+ * вертикальний ритм (край→лого→QR→підпис→край) — рівномірний.
  */
 const CAPTION_BAND: BandConfig = {
     width: 1024,
-    height: 60,
+    height: 88,
     padX: 80,
     maxFontSize: 32,
 };
@@ -179,10 +193,10 @@ function textBandSvg(text: string, band: BandConfig): string {
 }
 
 function logoBandSvg(): string {
-    const bg = `<rect width="${BAND.width}" height="${BAND.height}" fill="${WHITE}"/>`;
-    const body =
-        bg + logoWithWordmark(BAND.width, BAND.height, BAND.height * 0.62);
-    return svgDoc(BAND.width, BAND.height, body);
+    const { width, height, logoRatio } = FINLY_BAND;
+    const bg = `<rect width="${width}" height="${height}" fill="${WHITE}"/>`;
+    const body = bg + logoWithWordmark(width, height, height * logoRatio);
+    return svgDoc(width, height, body);
 }
 
 function centerSquareSvg(): string {

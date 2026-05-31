@@ -16,6 +16,12 @@ const mulish = localFont({
             style: 'normal',
         },
     ],
+    // Mulish — variable-шрифт (axis ваги 200→1000, дефолт ExtraLight 200).
+    // Без явного діапазону `@font-face` затискає вагу на дефолт і `font-bold`
+    // дає синтетичний faux-bold замість справжнього майстра Bold(700). Діапазон
+    // відкриває весь axis, тож `font-bold` тягне реальні 700 — той самий майстер,
+    // що запікається у QR-lockup (`Mulish_700Bold.ttf`).
+    weight: '200 1000',
     display: 'swap',
 });
 
