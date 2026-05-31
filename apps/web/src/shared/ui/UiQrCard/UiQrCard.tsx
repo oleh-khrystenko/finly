@@ -89,7 +89,7 @@ const UiQrCard = ({
             <UiQrImage
                 src={inlineSrc}
                 alt={alt}
-                className="w-full rounded-md bg-white p-3"
+                className="w-full rounded-md bg-white"
             />
         </div>
     );

@@ -142,7 +142,7 @@ export function QrLandingResult({ form }: QrLandingResultProps) {
             <UiQrImage
                 src={`data:image/png;base64,${result.qrPngBase64}`}
                 alt="Платіжний QR-код за стандартом НБУ"
-                className="border-border bg-card w-full rounded-xl border p-4"
+                className="border-border bg-card w-full rounded-xl border"
             />
 
             <div className="border-border bg-muted/20 rounded-md border px-3 py-2">

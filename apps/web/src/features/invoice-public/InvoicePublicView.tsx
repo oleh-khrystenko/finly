@@ -231,7 +231,7 @@ function PaymentSection({
                         <UiQrImage
                             src={qrPrimary}
                             alt="QR на основну адресу"
-                            className="border-border mx-auto w-full max-w-[240px] rounded-md border bg-white p-2"
+                            className="border-border mx-auto w-full max-w-[240px] rounded-md border bg-white"
                         />
                         <figcaption className="text-muted-foreground text-sm">
                             Основна адреса
@@ -241,7 +241,7 @@ function PaymentSection({
                         <UiQrImage
                             src={qrLegacy}
                             alt="QR на запасну адресу"
-                            className="border-border mx-auto w-full max-w-[240px] rounded-md border bg-white p-2"
+                            className="border-border mx-auto w-full max-w-[240px] rounded-md border bg-white"
                         />
                         <figcaption className="text-muted-foreground text-sm">
                             Запасний варіант — якщо перший не відкрився
@@ -254,7 +254,7 @@ function PaymentSection({
                 <UiQrImage
                     src={qrPage}
                     alt="QR на цю сторінку"
-                    className="border-border mx-auto w-full max-w-[240px] rounded-md border bg-white p-2"
+                    className="border-border mx-auto w-full max-w-[240px] rounded-md border bg-white"
                 />
                 <figcaption className="text-muted-foreground text-sm">
                     Відкрити цю сторінку — для вивіски чи поширення

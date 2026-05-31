@@ -11,9 +11,11 @@
  * SVG `<text>`, тому рендер не залежить від системних шрифтів ні на build-,
  * ні на runtime-машині (Sprint 14 README, ризик «рендеринг тексту на сервері»).
  *
- * **Колір.** Увесь брендинг чорно-білий: текст і лого Finly рендеряться
- * `#000000` на білому. Sprint 14: «розрізнення несуть центр і рамки, не колір»
- * — QR лишається строго Ч/Б для максимальної сканованості.
+ * **Колір.** Бренд-lockup як у шапці сайту: логотип — рідний зелений SVG
+ * (`#00733E` = `--primary`), а wordmark «Finly» і текст-підписи — `INK`
+ * (`--foreground` світлої теми, тепло-темний, НЕ чистий чорний). Колір — лише
+ * у смугах і центральних плашках, ПОЗА матрицею QR: сама матриця лишається
+ * чорно-білою, тож сканованість не зачеплена.
  *
  * Смуги — повноширинні білі strip-и (рендеряться поза quiet-zone у
  * compositor-і). Центральні asset-и — лого/лого+назва на білій rounded-плашці
@@ -38,10 +40,41 @@ const BRAND_TEXT = {
     wordmark: 'Finly',
 } as const;
 
-const FILL = '#000000';
+/**
+ * Колір тексту (wordmark + підписи). Дорівнює `--foreground` світлої теми
+ * (`oklch(0.2 0.018 65)` → `#1c140d`) — тепло-темний, НЕ чистий чорний, рівно
+ * як сайт малює «Finly» (`text-foreground`). Логотип лишається у рідному
+ * зеленому SVG (`#00733E` = `--primary`) — той самий бренд-lockup, що в шапці
+ * сайту: зелений знак + темний wordmark.
+ *
+ * Колір живе ТІЛЬКИ у смугах/центральних плашках — поза матрицею QR. Сама
+ * матриця лишається чорно-білою (сканованість не зачеплена); брендинг у центрі
+ * тип-2 лежить на білій плашці, що й так вилучена error-correction-ом.
+ */
+const INK = '#1C140D';
 const WHITE = '#FFFFFF';
 
-const BAND = { width: 1024, height: 220, padX: 80, maxFontSize: 132 } as const;
+interface BandConfig {
+    width: number;
+    height: number;
+    padX: number;
+    maxFontSize: number;
+}
+
+const BAND: BandConfig = { width: 1024, height: 220, padX: 80, maxFontSize: 132 };
+
+/**
+ * Окрема конфігурація для НБУ-compliance-підпису (нижній footer тип-1). На
+ * відміну від `BAND`, текст НЕ тягнеться на всю ширину: `maxFontSize` 32
+ * прив'язує розмір (фраза спанить ~48% ширини, не 84%), а низька смуга
+ * (60 vs 220 → ~6% сторони QR) прибирає вертикальну порожнечу навколо тексту.
+ */
+const CAPTION_BAND: BandConfig = {
+    width: 1024,
+    height: 60,
+    padX: 80,
+    maxFontSize: 32,
+};
 const CENTER_SQUARE = { size: 1024, logoRatio: 0.6, plateRadius: 96 } as const;
 const CENTER_RECT = {
     width: 1280,
@@ -75,52 +108,54 @@ function centeredText(
     const bb = path.getBoundingBox();
     const offsetX = (boxW - (bb.x2 - bb.x1)) / 2 - bb.x1;
     const offsetY = (boxH - (bb.y2 - bb.y1)) / 2 - bb.y1;
-    return `<path transform="translate(${offsetX} ${offsetY})" d="${path.toPathData(2)}" fill="${FILL}"/>`;
+    return `<path transform="translate(${offsetX} ${offsetY})" d="${path.toPathData(2)}" fill="${INK}"/>`;
 }
 
-/** Inner-вміст Finly-лого, перефарбований у чорний (source — зелений бренд). */
-function blackLogoInner(): string {
+/** Inner-вміст Finly-лого у рідному зеленому (source-SVG уже `#00733E`). */
+function logoInner(): string {
     const svg = readFileSync(
         join(__dirname, 'assets', 'finly-logo.svg'),
         'utf8'
     );
-    const inner = svg
+    return svg
         .replace(/^[\s\S]*?<svg[^>]*>/, '')
         .replace(/<\/svg>\s*$/, '');
-    return inner.replace(/fill="#[0-9A-Fa-f]{6}"/g, `fill="${FILL}"`);
 }
 
 /** Лого Finly, вписане у квадрат `logoSize` з лівим-верхом у `(x, y)`. */
 function logoSvg(x: number, y: number, logoSize: number): string {
-    return `<svg x="${x}" y="${y}" width="${logoSize}" height="${logoSize}" viewBox="0 0 1080 1080">${blackLogoInner()}</svg>`;
+    return `<svg x="${x}" y="${y}" width="${logoSize}" height="${logoSize}" viewBox="0 0 1080 1080">${logoInner()}</svg>`;
 }
 
 /**
- * Група «лого + назва Finly», відцентрована у box-і. Назва масштабується так,
- * щоб її visual-height ≈ 0.6·logoSize (оптично рівна лого). Лого зліва, назва
- * справа з gap.
+ * Група «лого + назва Finly», відцентрована у box-і. Назва масштабується за
+ * **cap-height** (а не повним bounding-box-ом): visual cap ≈ 0.68·logoSize, тож
+ * текст оптично рівний лого, а не вдвічі дрібніший. Вертикаль центрується по
+ * cap-блоку [ascender-top, baseline] — виносний елемент «y» НЕ зсуває текст
+ * униз (стара повна-box центровка садила wordmark нижче лого). Лого зліва,
+ * назва справа з gap.
  */
 function logoWithWordmark(
     boxW: number,
     boxH: number,
     logoSize: number
 ): string {
-    const probe = font.getPath(BRAND_TEXT.wordmark, 0, 0, logoSize);
-    const probeBb = probe.getBoundingBox();
-    const fontSize = (logoSize * (logoSize * 0.6)) / (probeBb.y2 - probeBb.y1);
+    const capTarget = logoSize * 0.68;
+    const probe = font.getPath(BRAND_TEXT.wordmark, 0, 0, 1000);
+    const probeCap = -probe.getBoundingBox().y1;
+    const fontSize = (capTarget * 1000) / probeCap;
     const path = font.getPath(BRAND_TEXT.wordmark, 0, 0, fontSize);
     const bb = path.getBoundingBox();
     const wmW = bb.x2 - bb.x1;
-    const wmH = bb.y2 - bb.y1;
     const gap = logoSize * 0.16;
     const contentW = logoSize + gap + wmW;
     const startX = (boxW - contentW) / 2;
     const logoY = (boxH - logoSize) / 2;
     const wmX = startX + logoSize + gap - bb.x1;
-    const wmY = (boxH - wmH) / 2 - bb.y1;
+    const wmY = boxH / 2 - bb.y1 / 2;
     return (
         logoSvg(startX, logoY, logoSize) +
-        `<path transform="translate(${wmX} ${wmY})" d="${path.toPathData(2)}" fill="${FILL}"/>`
+        `<path transform="translate(${wmX} ${wmY})" d="${path.toPathData(2)}" fill="${INK}"/>`
     );
 }
 
@@ -129,18 +164,18 @@ function svgDoc(width: number, height: number, body: string): string {
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${body}</svg>`;
 }
 
-function textBandSvg(text: string): string {
-    const bg = `<rect width="${BAND.width}" height="${BAND.height}" fill="${WHITE}"/>`;
+function textBandSvg(text: string, band: BandConfig): string {
+    const bg = `<rect width="${band.width}" height="${band.height}" fill="${WHITE}"/>`;
     const body =
         bg +
         centeredText(
             text,
-            BAND.width,
-            BAND.height,
-            BAND.padX,
-            BAND.maxFontSize
+            band.width,
+            band.height,
+            band.padX,
+            band.maxFontSize
         );
-    return svgDoc(BAND.width, BAND.height, body);
+    return svgDoc(band.width, band.height, body);
 }
 
 function logoBandSvg(): string {
@@ -176,10 +211,10 @@ async function writePng(svg: string, fileName: string): Promise<void> {
 
 async function main(): Promise<void> {
     await writePng(
-        textBandSvg(BRAND_TEXT.nbuStandard),
+        textBandSvg(BRAND_TEXT.nbuStandard, CAPTION_BAND),
         'band-nbu-standard.png'
     );
-    await writePng(textBandSvg(BRAND_TEXT.slogan), 'band-slogan.png');
+    await writePng(textBandSvg(BRAND_TEXT.slogan, BAND), 'band-slogan.png');
     await writePng(logoBandSvg(), 'band-finly.png');
     await writePng(centerSquareSvg(), 'center-finly-square.png');
     await writePng(centerRectSvg(), 'center-finly-rect.png');

@@ -50,8 +50,10 @@ export interface QrUrlRenderOptions extends QrRenderOptions {
  * (шар C): платний шар замінить asset-файли й тексти, не торкаючись рендеру.
  *
  * Усі шляхи — імена файлів у `assets/` (build-time baked PNG, копіюються у
- * `dist` через nest-cli). Центр чорно-білий, смуги чорно-білі — QR лишається
- * Ч/Б (різниця тип-1/тип-2 несеться центром і смугами, не кольором).
+ * `dist` через nest-cli). Смуги й центральні плашки несуть бренд-кольори
+ * (зелений логотип + темний `--foreground` текст), але сама матриця QR
+ * лишається чорно-білою — сканованість не зачеплена. Різниця тип-1/тип-2
+ * несеться структурою (центр + порядок смуг).
  */
 interface QrBrand {
     centerAssetFile: string;
@@ -62,14 +64,16 @@ interface QrBrand {
 
 /**
  * Тип-1 (НБУ-payload): нормативний центр (білий круг зі знаком гривні,
- * недоторканний), верхня смуга «Створено за стандартами НБУ», нижня смуга
- * Finly. Центр-ratio 0.2 — той самий нормативний safe-bound, що до Sprint 14.
+ * недоторканний), верхня смуга Finly (бренд-шапка), нижня смуга дрібним
+ * footer-ом «Створено за стандартами НБУ». Центр-ratio 0.2 — той самий
+ * нормативний safe-bound, що до Sprint 14. Порядок смуг: бренд-якір зверху,
+ * compliance-підпис дрібним внизу.
  */
 const BRAND_NBU: QrBrand = {
     centerAssetFile: 'hryvnia-symbol.png',
     centerWidthRatio: 0.2,
-    topBandFile: 'band-nbu-standard.png',
-    bottomBandFile: 'band-finly.png',
+    topBandFile: 'band-finly.png',
+    bottomBandFile: 'band-nbu-standard.png',
 };
 
 /**

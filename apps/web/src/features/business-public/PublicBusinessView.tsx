@@ -86,7 +86,7 @@ export default function PublicBusinessView({
                 <UiQrImage
                     src={qrSrc}
                     alt="QR на цю сторінку"
-                    className="border-border mx-auto w-full max-w-[240px] rounded-md border bg-white p-2"
+                    className="border-border mx-auto w-full max-w-[240px] rounded-md border bg-white"
                 />
                 <figcaption className="text-muted-foreground text-sm">
                     QR на цю сторінку — для вивіски чи поширення

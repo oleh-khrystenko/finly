@@ -137,7 +137,7 @@ describe('QrService — orchestration (mocked renderers)', () => {
             expect(renderedText).toMatch(/^https:\/\/bank\.gov\.ua\/qr\//);
         });
 
-        it('брендує тип-1: нормативний центр (гривня) + верхня НБУ + нижня Finly смуги', async () => {
+        it('брендує тип-1: нормативний центр (гривня) + верхня Finly + нижня НБУ смуги', async () => {
             await service.renderForNbuPayload(VALID_INPUT, '003', {
                 host: NBU_HOST_PRIMARY,
             });
@@ -149,10 +149,10 @@ describe('QrService — orchestration (mocked renderers)', () => {
             expect(logoCompositor.addBands).toHaveBeenCalledWith(
                 expect.any(Buffer),
                 expect.objectContaining({
-                    topBandPath: expect.stringContaining(
+                    topBandPath: expect.stringContaining('band-finly.png'),
+                    bottomBandPath: expect.stringContaining(
                         'band-nbu-standard.png'
                     ),
-                    bottomBandPath: expect.stringContaining('band-finly.png'),
                 })
             );
         });
