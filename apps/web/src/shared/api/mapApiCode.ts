@@ -117,6 +117,12 @@ const ERRORS: Record<string, MessageDict> = {
         // Sprint 14 — vanity-slug edit. Slug уже зайнятий іншим бізнесом
         // (поточний slug або в історії перейменувань 90-денного вікна).
         slug_taken: 'Це посилання вже зайняте. Оберіть інше',
+        // Placeholder-free копія `default`-throttler 429 (60/min/IP на cabinet).
+        // Generic `rate_limit_exceeded` має `{minutes}`-placeholder, а cabinet-
+        // callsite-и не мають джерела TTL для interpolate-у → literal `{minutes}`
+        // протік би у UI. Symmetric з `qr.rate_limit_exceeded` (LAND-7).
+        rate_limit_exceeded:
+            'Забагато запитів. Зачекайте хвилину і спробуйте ще раз',
     },
     // Sprint 9 §SP-1..§SP-3 — accounts UA-messages. ACCOUNT_HAS_INVOICES не тут:
     // backend pre-resolves повідомлення через pluralizeUa (accounts.service.ts
@@ -130,6 +136,8 @@ const ERRORS: Record<string, MessageDict> = {
         account_iban_duplicate: 'Цей IBAN вже доданий до бізнесу',
         account_create_failed:
             'Не вдалося створити рахунок. Спробуйте ще раз',
+        rate_limit_exceeded:
+            'Забагато запитів. Зачекайте хвилину і спробуйте ще раз',
     },
     invoices: {
         // Sprint 9 disambiguation — слово "рахунок" відведено під Account
@@ -146,6 +154,8 @@ const ERRORS: Record<string, MessageDict> = {
         // expired QR-image (e.g., cached link, scraping).
         invoice_expired: 'Термін інвойсу минув',
         invoice_valid_until_in_past: 'Термін дії не може бути у минулому',
+        rate_limit_exceeded:
+            'Забагато запитів. Зачекайте хвилину і спробуйте ще раз',
     },
     // Sprint 8 fix — overall payload-size overflow після build NBU-payload.
     // Поле reєструється для API-side error mapping (`getApiMessage(code,

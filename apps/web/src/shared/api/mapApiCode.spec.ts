@@ -157,4 +157,21 @@ describe('getApiMessage', () => {
             expect(msg).toBe('Забагато запитів. Спробуйте через 5 хвилин');
         });
     });
+
+    // Cabinet `default`-throttler 429 (60/min/IP). Сторінки businesses/
+    // accounts/invoices викликають getApiMessage(code, module) без vars —
+    // generic placeholder `{minutes}` протік би у UI як literal. Кожен
+    // cabinet-модуль має placeholder-free копію (symmetric з qr-module).
+    describe('cabinet rate_limit_exceeded (placeholder-free)', () => {
+        it.each(['businesses', 'accounts', 'invoices'])(
+            'RATE_LIMIT_EXCEEDED у "%s"-module — копія без literal {minutes}',
+            (module) => {
+                const msg = getApiMessage('RATE_LIMIT_EXCEEDED', module);
+                expect(msg).toBe(
+                    'Забагато запитів. Зачекайте хвилину і спробуйте ще раз'
+                );
+                expect(msg).not.toMatch(/\{minutes\}/);
+            }
+        );
+    });
 });
