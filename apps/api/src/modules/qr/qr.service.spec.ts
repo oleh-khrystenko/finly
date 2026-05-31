@@ -48,11 +48,11 @@ describe('QrService — orchestration (mocked renderers)', () => {
     });
 
     describe('renderForUrl', () => {
-        it('передає URL без змін у imageRenderer.render', async () => {
+        it('передає URL без змін у imageRenderer.render на H-корекції (тип-2 поза NBU-нормативом)', async () => {
             await service.renderForUrl('https://pay.finly.com.ua/ivanenko');
             expect(imageRenderer.render).toHaveBeenCalledWith(
                 'https://pay.finly.com.ua/ivanenko',
-                expect.objectContaining({ errorCorrection: 'Q', sizePx: 512 })
+                expect.objectContaining({ errorCorrection: 'H', sizePx: 512 })
             );
         });
 
@@ -121,12 +121,16 @@ describe('QrService — orchestration (mocked renderers)', () => {
             expect(renderedText).toMatch(/^https:\/\/bank\.gov\.ua\/qr\//);
         });
 
-        it('будує 003-payload з NBU_HOST_PRIMARY і обгортає в qr.bank.gov.ua/...', async () => {
+        it('будує 003-payload з NBU_HOST_PRIMARY і обгортає в qr.bank.gov.ua/...; тип-1 лишається на Q-корекції (норматив 003)', async () => {
             await service.renderForNbuPayload(VALID_INPUT, '003', {
                 host: NBU_HOST_PRIMARY,
             });
             const renderedText = imageRenderer.render.mock.calls[0]?.[0];
             expect(renderedText).toMatch(/^https:\/\/qr\.bank\.gov\.ua\//);
+            expect(imageRenderer.render).toHaveBeenCalledWith(
+                expect.any(String),
+                expect.objectContaining({ errorCorrection: 'Q' })
+            );
         });
 
         it('будує 003-payload з NBU_HOST_LEGACY і обгортає в bank.gov.ua/qr/...', async () => {

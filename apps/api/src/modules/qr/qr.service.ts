@@ -57,7 +57,19 @@ export interface QrUrlRenderOptions extends QrRenderOptions {
  */
 interface QrBrand {
     centerAssetFile: string;
-    centerWidthRatio: number;
+    /**
+     * Дефолт-висота центральної плашки як frac QR-сторони. Ширина НЕ задається —
+     * `compose` бере її з аспекту asset-у і тисне висоту вниз під стелю площі
+     * (`QR_OVERLAY_MAX_AREA_RATIO`). Тож плашка обтікає лого+назву: коротка —
+     * маленька, довга — пласка широка до стелі.
+     */
+    centerIdealHeightRatio: number;
+    /**
+     * Рівень корекції QR для цього типу. Тип-1 (NBU) — `Q` (норматив 003
+     * M/Q-only). Тип-2 (звичайний URL, поза нормативом) — `H`, бо несе більшу
+     * прямокутну плашку лого+назви і потребує максимуму надлишковості.
+     */
+    errorCorrection: QrErrorCorrectionLevel;
     topBandFile?: string;
     bottomBandFile?: string;
 }
@@ -71,36 +83,44 @@ interface QrBrand {
  */
 const BRAND_NBU: QrBrand = {
     centerAssetFile: 'hryvnia-symbol.png',
-    centerWidthRatio: 0.2,
+    // Hryvnia asset квадратний (1:1) → плашка 0.2×0.2 (4% площі), як до 14.x.
+    centerIdealHeightRatio: 0.2,
+    errorCorrection: 'Q',
     topBandFile: 'band-finly.png',
     bottomBandFile: 'band-nbu-standard.png',
 };
 
 /**
- * Тип-2 (URL), дефолтний прямокутний центр (Finly лого + назва) + нижня смуга
- * зі слоганом, без верхньої смуги (асиметрія сама собою відрізняє від тип-1).
+ * Тип-2 (URL), дефолтний ПРЯМОКУТНИЙ центр (лого + назва) + нижня смуга зі
+ * слоганом, без верхньої (асиметрія сама відрізняє від тип-1).
  *
- * **Перекриття rect == square == повний `centerWidthRatio²`-квадрат.**
- * `compose` робить `fit:'contain'` з НЕпрозорим білим background — landscape-
- * asset добивається білим до повного квадрата `(ratio·qrSize)²`, і це біле
- * поле стирає модулі QR так само, як сам логотип. Тому ratio лімітує перекриту
- * площу однаково для обох форматів — шар C, піднімаючи ratio для rect, мусить
- * тримати той самий нормативний cap (`QR_LOGO_MAX_RATIO`), що для квадрата.
+ * **Контент-орієнтована плашка (Sprint 14.x).** Asset `center-finly-rect.png`
+ * пікається «в обтяжку» (аспект = природний аспект лого+назви), а `compose`
+ * сам обирає розмір: дефолт-висота `centerIdealHeightRatio`, далі стеля площі
+ * (`QR_OVERLAY_MAX_AREA_RATIO`) і cap ширини. Тож Finly дає маленьку плашку
+ * (~10% площі), а довга назва — пласку широку до стелі. Жодних хардкод W×H.
+ * Корекція `H` (поза NBU-нормативом — звичайний URL) дає максимум надлишковості.
+ *
+ * Майбутній шар C підмінить asset на лого+назву клієнта (теж «в обтяжку») —
+ * рушій розміру лишається без змін.
  */
 const BRAND_URL_RECT: QrBrand = {
     centerAssetFile: 'center-finly-rect.png',
-    centerWidthRatio: 0.2,
+    centerIdealHeightRatio: 0.19,
+    errorCorrection: 'H',
     bottomBandFile: 'band-slogan.png',
 };
 
 /**
  * Тип-2 (URL), квадратний центр (лише лого). У UI MVP не використовується
  * (дефолт — rect), але каркас рендерить обидва формати під round-trip-тестами,
- * щоб шар C просто увімкнув вибір без переробки (Sprint 14 §Q5).
+ * щоб шар C просто увімкнув вибір без переробки (Sprint 14 §Q5). Квадрат-asset
+ * (1:1) → плашка 0.2×0.2 (4% площі) — безпечна зона навіть для строгого jsQR.
  */
 const BRAND_URL_SQUARE: QrBrand = {
     centerAssetFile: 'center-finly-square.png',
-    centerWidthRatio: 0.2,
+    centerIdealHeightRatio: 0.2,
+    errorCorrection: 'H',
     bottomBandFile: 'band-slogan.png',
 };
 
@@ -247,14 +267,20 @@ export class QrService {
         options?: QrRenderOptions
     ): Promise<Buffer> {
         const opts = { ...DEFAULT_RENDER_OPTIONS, ...options };
+        // Корекція береться з бренд-дескриптора (тип-1 `Q` за нормативом, тип-2
+        // `H`), але явна опція callsite має пріоритет (тестова гнучкість).
+        const errorCorrection = options?.errorCorrection ?? brand.errorCorrection;
         const qrPng = await this.imageRenderer.render(text, {
             sizePx: opts.sizePx,
-            errorCorrection: opts.errorCorrection,
+            errorCorrection,
         });
         const withCenter = await this.logoCompositor.compose(
             qrPng,
             join(this.assetsDir, brand.centerAssetFile),
-            { qrSizePx: opts.sizePx, logoMaxRatio: brand.centerWidthRatio }
+            {
+                qrSizePx: opts.sizePx,
+                idealHeightRatio: brand.centerIdealHeightRatio,
+            }
         );
         return this.logoCompositor.addBands(withCenter, {
             width: opts.sizePx,

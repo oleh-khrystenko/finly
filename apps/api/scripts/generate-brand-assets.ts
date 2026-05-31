@@ -90,11 +90,24 @@ const CAPTION_BAND: BandConfig = {
     maxFontSize: 32,
 };
 const CENTER_SQUARE = { size: 1024, logoRatio: 0.6, plateRadius: 96 } as const;
-const CENTER_RECT = {
-    width: 1280,
-    height: 720,
-    logoRatio: 0.52,
-    plateRadius: 96,
+
+/**
+ * Rect-центр тип-2 НЕ має фіксованих W×H. Asset пікається «в обтяжку» —
+ * канвас = (лого + gap + wordmark) + рівномірний padding, тож його аспект =
+ * природний аспект lockup-у. Розмір плашки на QR обирає `compose` із цього
+ * аспекту: дефолт-висота, стеля площі (`QR_OVERLAY_MAX_AREA_RATIO`), cap ширини.
+ * Так коротка назва дає маленьку плашку, довга — пласку широку до стелі.
+ *
+ * `LOGO_PX` — лише робоча роздільність asset-у (не розмір на QR). `PAD_*` —
+ * частки лого: менший padY тримає плашку «низькою», тож аспект ближчий до
+ * плаского (під довгі назви). У майбутньому шарі C цей самий генератор пектиме
+ * asset з лого+назвою клієнта — компонувальник лишається без змін.
+ */
+const CENTER_RECT_LOCKUP = {
+    logoPx: 400,
+    padXRatio: 0.24,
+    padYRatio: 0.18,
+    plateRadiusRatio: 0.16,
 } as const;
 
 const fontPath =
@@ -209,9 +222,28 @@ function centerSquareSvg(): string {
 }
 
 function centerRectSvg(): string {
-    const { width, height, logoRatio, plateRadius } = CENTER_RECT;
-    const plate = `<rect width="${width}" height="${height}" rx="${plateRadius}" ry="${plateRadius}" fill="${WHITE}"/>`;
-    const body = plate + logoWithWordmark(width, height, height * logoRatio);
+    const { logoPx, padXRatio, padYRatio, plateRadiusRatio } =
+        CENTER_RECT_LOCKUP;
+    // Природна ширина lockup-у (лого + gap + wordmark) — щоб посадити канвас
+    // «в обтяжку». Метрики wordmark — ті самі, що у `logoWithWordmark`.
+    const capTarget = logoPx * 0.68;
+    const probeCap = -font
+        .getPath(BRAND_TEXT.wordmark, 0, 0, 1000)
+        .getBoundingBox().y1;
+    const fontSize = (capTarget * 1000) / probeCap;
+    const bb = font
+        .getPath(BRAND_TEXT.wordmark, 0, 0, fontSize)
+        .getBoundingBox();
+    const wordmarkWidth = bb.x2 - bb.x1;
+    const gap = logoPx * 0.16;
+    const contentWidth = logoPx + gap + wordmarkWidth;
+
+    const width = Math.round(contentWidth + 2 * logoPx * padXRatio);
+    const height = Math.round(logoPx + 2 * logoPx * padYRatio);
+    const radius = Math.round(height * plateRadiusRatio);
+
+    const plate = `<rect width="${width}" height="${height}" rx="${radius}" ry="${radius}" fill="${WHITE}"/>`;
+    const body = plate + logoWithWordmark(width, height, logoPx);
     return svgDoc(width, height, body);
 }
 
