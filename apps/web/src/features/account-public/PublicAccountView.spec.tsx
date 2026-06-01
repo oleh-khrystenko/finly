@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import type { BankCode } from '@finly/types';
 import PublicAccountView from './PublicAccountView';
 
@@ -75,19 +75,29 @@ describe('PublicAccountView (Sprint 9 §SP-4 + §SP-9)', () => {
         });
     });
 
-    describe('Bank-grid (Sprint 3 11-bank-inactive pattern)', () => {
-        it('рендерить bank-tile для кожного MVP_BANKS елемента (inactive)', () => {
+    describe('Bank-grid (Sprint 5 — активні per-bank deep-links)', () => {
+        it('рендерить активну bank-кнопку для кожного MVP_BANKS елемента', async () => {
             render(<PublicAccountView {...baseProps} />);
-            // BANK_LABEL для privatbank і monobank — обидва присутні у MVP_BANKS.
+            const { MVP_BANKS } = await import('@finly/types');
+            const tiles = screen.getAllByRole('button', {
+                name: /^Оплатити через /,
+            });
+            expect(tiles).toHaveLength(MVP_BANKS.length);
+            // BANK_LABEL для privatbank і monobank — обидва присутні.
             expect(screen.getByText('ПриватБанк')).toBeInTheDocument();
             expect(screen.getByText('monobank')).toBeInTheDocument();
         });
 
-        it('aria-disabled на bank-tile (inactive до Sprint 5)', async () => {
+        it('bank-кнопка інтерактивна (type=button, не disabled) — клік не кидає', () => {
             render(<PublicAccountView {...baseProps} />);
-            const { MVP_BANKS } = await import('@finly/types');
-            const disabledTiles = screen.getAllByTitle('Незабаром');
-            expect(disabledTiles).toHaveLength(MVP_BANKS.length);
+            const tile = screen.getByRole('button', {
+                name: 'Оплатити через monobank',
+            });
+            expect(tile).toHaveAttribute('type', 'button');
+            expect(tile).not.toBeDisabled();
+            // Сам per-bank link-build покритий `packages/types` banks.spec.ts;
+            // тут навігацію не асертимо (jsdom `location` non-configurable).
+            expect(() => fireEvent.click(tile)).not.toThrow();
         });
     });
 

@@ -6,6 +6,7 @@ import {
     type BankCode,
     type BusinessType,
 } from '@finly/types';
+import UiBankAppGrid from '@/shared/ui/UiBankAppGrid';
 import UiButton from '@/shared/ui/UiButton';
 import UiQrImage from '@/shared/ui/UiQrImage';
 import { formatKopecksAsHryvnia } from '@/entities/invoice';
@@ -192,7 +193,18 @@ function PaymentSection({
         <div className="space-y-6">
             <div className="space-y-3">
                 <h2 className="text-foreground text-center text-base font-semibold">
-                    Відкрити в банк-додатку
+                    Оберіть банк, з якого бажаєте оплатити
+                </h2>
+                {/* Sprint 5 — активна per-bank сітка (див. PublicAccountView). */}
+                <UiBankAppGrid
+                    nbuLegacyLink={nbuLinks.legacy}
+                    nbuFallbackLink={nbuLinks.primary}
+                />
+            </div>
+
+            <div className="space-y-3">
+                <h2 className="text-foreground text-center text-base font-semibold">
+                    Або відкрити в іншому банку
                 </h2>
                 {/* 2 active CTAs — зовнішні платіжні `bank://`-схеми, тож
                     native <a> через UiButton as="a" (Next <Link> підставив би

@@ -15,3 +15,4 @@ export {
 } from './money';
 export { useAutoCancelOnRouteChange } from './useAutoCancelOnRouteChange';
 export { useHasHydrated } from './useHasHydrated';
+export { detectClientPlatform, type ClientPlatform } from './clientPlatform';
