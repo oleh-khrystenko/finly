@@ -34,7 +34,7 @@ describe('QrService — orchestration (mocked renderers)', () => {
                 },
                 {
                     provide: QrLogoCompositor,
-                    useValue: { compose: jest.fn() },
+                    useValue: { compose: jest.fn(), addBands: jest.fn() },
                 },
             ],
         }).compile();
@@ -43,33 +43,57 @@ describe('QrService — orchestration (mocked renderers)', () => {
         logoCompositor = moduleRef.get(QrLogoCompositor);
 
         imageRenderer.render.mockResolvedValue(Buffer.from('fake-qr'));
-        logoCompositor.compose.mockResolvedValue(Buffer.from('fake-qr+logo'));
+        logoCompositor.compose.mockResolvedValue(Buffer.from('fake-qr+center'));
+        logoCompositor.addBands.mockResolvedValue(Buffer.from('fake-branded'));
     });
 
     describe('renderForUrl', () => {
-        it('передає URL без змін у imageRenderer.render', async () => {
+        it('передає URL без змін у imageRenderer.render на H-корекції (тип-2 поза NBU-нормативом)', async () => {
             await service.renderForUrl('https://pay.finly.com.ua/ivanenko');
             expect(imageRenderer.render).toHaveBeenCalledWith(
                 'https://pay.finly.com.ua/ivanenko',
-                expect.objectContaining({ errorCorrection: 'Q', sizePx: 512 })
+                expect.objectContaining({ errorCorrection: 'H', sizePx: 512 })
             );
         });
 
-        it('за дефолтом накладає лого через logoCompositor', async () => {
+        it('брендує тип-2: центр + смуги, повертає вихід addBands', async () => {
             const result = await service.renderForUrl(
                 'https://pay.finly.com.ua/x'
             );
             expect(logoCompositor.compose).toHaveBeenCalled();
-            expect(result.toString()).toBe('fake-qr+logo');
+            expect(logoCompositor.addBands).toHaveBeenCalled();
+            expect(result.toString()).toBe('fake-branded');
         });
 
-        it('пропускає logoCompositor, якщо includeLogo=false', async () => {
-            const result = await service.renderForUrl(
-                'https://pay.finly.com.ua/x',
-                { includeLogo: false }
+        it('дефолтний центр тип-2 — прямокутний (лого + назва)', async () => {
+            await service.renderForUrl('https://pay.finly.com.ua/x');
+            expect(logoCompositor.compose).toHaveBeenCalledWith(
+                expect.any(Buffer),
+                expect.stringContaining('center-finly-rect.png'),
+                expect.any(Object)
             );
-            expect(logoCompositor.compose).not.toHaveBeenCalled();
-            expect(result.toString()).toBe('fake-qr');
+        });
+
+        it('centerFormat=square — квадратний центр (лише лого)', async () => {
+            await service.renderForUrl('https://pay.finly.com.ua/x', {
+                centerFormat: 'square',
+            });
+            expect(logoCompositor.compose).toHaveBeenCalledWith(
+                expect.any(Buffer),
+                expect.stringContaining('center-finly-square.png'),
+                expect.any(Object)
+            );
+        });
+
+        it('тип-2 не має верхньої смуги, має нижню (слоган)', async () => {
+            await service.renderForUrl('https://pay.finly.com.ua/x');
+            expect(logoCompositor.addBands).toHaveBeenCalledWith(
+                expect.any(Buffer),
+                expect.objectContaining({
+                    topBandPath: undefined,
+                    bottomBandPath: expect.stringContaining('band-slogan.png'),
+                })
+            );
         });
 
         it('передає custom sizePx у обидва шари', async () => {
@@ -83,6 +107,10 @@ describe('QrService — orchestration (mocked renderers)', () => {
                 expect.any(String),
                 expect.objectContaining({ qrSizePx: 1024 })
             );
+            expect(logoCompositor.addBands).toHaveBeenCalledWith(
+                expect.any(Buffer),
+                expect.objectContaining({ width: 1024 })
+            );
         });
     });
 
@@ -93,12 +121,16 @@ describe('QrService — orchestration (mocked renderers)', () => {
             expect(renderedText).toMatch(/^https:\/\/bank\.gov\.ua\/qr\//);
         });
 
-        it('будує 003-payload з NBU_HOST_PRIMARY і обгортає в qr.bank.gov.ua/...', async () => {
+        it('будує 003-payload з NBU_HOST_PRIMARY і обгортає в qr.bank.gov.ua/...; тип-1 лишається на Q-корекції (норматив 003)', async () => {
             await service.renderForNbuPayload(VALID_INPUT, '003', {
                 host: NBU_HOST_PRIMARY,
             });
             const renderedText = imageRenderer.render.mock.calls[0]?.[0];
             expect(renderedText).toMatch(/^https:\/\/qr\.bank\.gov\.ua\//);
+            expect(imageRenderer.render).toHaveBeenCalledWith(
+                expect.any(String),
+                expect.objectContaining({ errorCorrection: 'Q' })
+            );
         });
 
         it('будує 003-payload з NBU_HOST_LEGACY і обгортає в bank.gov.ua/qr/...', async () => {
@@ -107,6 +139,26 @@ describe('QrService — orchestration (mocked renderers)', () => {
             });
             const renderedText = imageRenderer.render.mock.calls[0]?.[0];
             expect(renderedText).toMatch(/^https:\/\/bank\.gov\.ua\/qr\//);
+        });
+
+        it('брендує тип-1: нормативний центр (гривня) + верхня Finly + нижня НБУ смуги', async () => {
+            await service.renderForNbuPayload(VALID_INPUT, '003', {
+                host: NBU_HOST_PRIMARY,
+            });
+            expect(logoCompositor.compose).toHaveBeenCalledWith(
+                expect.any(Buffer),
+                expect.stringContaining('hryvnia-symbol.png'),
+                expect.any(Object)
+            );
+            expect(logoCompositor.addBands).toHaveBeenCalledWith(
+                expect.any(Buffer),
+                expect.objectContaining({
+                    topBandPath: expect.stringContaining('band-finly.png'),
+                    bottomBandPath: expect.stringContaining(
+                        'band-nbu-standard.png'
+                    ),
+                })
+            );
         });
 
         it('кидає PayloadValidationError(PAYLOAD_HOST_REQUIRED) для 003 без host (callsite, що обійшов TypeScript-overload)', async () => {

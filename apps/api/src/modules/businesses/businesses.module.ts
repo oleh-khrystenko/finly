@@ -7,11 +7,16 @@ import {
     InvoiceSlugCounterSchema,
 } from '../invoices/schemas/invoice-slug-counter.schema';
 import { Invoice, InvoiceSchema } from '../invoices/schemas/invoice.schema';
+import { QrModule } from '../qr/qr.module';
 import { UsersModule } from '../users/users.module';
 import { BusinessAccessGuard } from './business-access.guard';
 import { BusinessesController } from './businesses.controller';
 import { BusinessesService } from './businesses.service';
 import { PublicBusinessesController } from './public-businesses.controller';
+import {
+    BusinessSlugHistory,
+    BusinessSlugHistorySchema,
+} from './schemas/business-slug-history.schema';
 import { Business, BusinessSchema } from './schemas/business.schema';
 import { SlugGeneratorService } from './slug-generator.service';
 
@@ -39,11 +44,16 @@ import { SlugGeneratorService } from './slug-generator.service';
     imports: [
         MongooseModule.forFeature([
             { name: Business.name, schema: BusinessSchema },
+            {
+                name: BusinessSlugHistory.name,
+                schema: BusinessSlugHistorySchema,
+            },
             { name: Account.name, schema: AccountSchema },
             { name: Invoice.name, schema: InvoiceSchema },
             { name: InvoiceSlugCounter.name, schema: InvoiceSlugCounterSchema },
         ]),
         UsersModule,
+        QrModule,
     ],
     controllers: [BusinessesController, PublicBusinessesController],
     providers: [BusinessesService, SlugGeneratorService, BusinessAccessGuard],

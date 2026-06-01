@@ -1,4 +1,5 @@
 export { composeClasses } from './utils';
+export { OUTLINED_FIELD_STYLES } from './outlinedFieldStyles';
 export { isValidRedirect, saveRedirect, consumeRedirect } from './redirect';
 export { getTimezone } from './timezone';
 export { mapValidationCode } from './mapValidationCode';
@@ -14,3 +15,4 @@ export {
 } from './money';
 export { useAutoCancelOnRouteChange } from './useAutoCancelOnRouteChange';
 export { useHasHydrated } from './useHasHydrated';
+export { detectClientPlatform, type ClientPlatform } from './clientPlatform';

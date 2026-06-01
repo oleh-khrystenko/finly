@@ -9,7 +9,7 @@ describe('validateSameOriginPath', () => {
         it('accepts a path with query string', () => {
             expect(
                 validateSameOriginPath(
-                    '/business/foo/account/bar?completed-from=landing',
+                    '/business/foo/account/bar?ref=invite',
                 ),
             ).toBe(true);
         });

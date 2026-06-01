@@ -14,7 +14,6 @@ import {
 } from '@/shared/ui/UiModal';
 import UiButton from '@/shared/ui/UiButton';
 import UiPasswordInput from '@/shared/ui/UiPasswordInput';
-import UiSpinner from '@/shared/ui/UiSpinner';
 import { confirmDeleteAccount } from '@/shared/api';
 import { useDeleteAccountDialogStore } from './deleteAccountDialogStore';
 
@@ -125,13 +124,10 @@ export default function DeleteAccountDialog() {
                                 type="submit"
                                 variant="destructive-outline"
                                 size="md"
-                                disabled={isSubmitting || !password}
+                                disabled={!password}
+                                loading={isSubmitting}
                             >
-                                {isSubmitting ? (
-                                    <UiSpinner size="sm" />
-                                ) : (
-                                    'Видалити акаунт'
-                                )}
+                                Видалити акаунт
                             </UiButton>
                         </div>
                     </form>

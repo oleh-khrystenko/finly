@@ -12,6 +12,7 @@ import {
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { Response } from 'express';
 import {
+    buildQrDownloadFilename,
     NBU_HOST_LEGACY,
     NBU_HOST_PRIMARY,
     PublicInvoiceSchema,
@@ -26,6 +27,11 @@ import { AccountsService } from '../accounts/accounts.service';
 import type { AccountDocument } from '../accounts/schemas/account.schema';
 import { BusinessesService } from '../businesses/businesses.service';
 import type { BusinessDocument } from '../businesses/schemas/business.schema';
+import {
+    applyQrDownloadDisposition,
+    isQrDownloadRequested,
+    resolveQrSizePxFromQuery,
+} from '../qr/qr-image-request';
 import { QrService } from '../qr/qr.service';
 import { isInvoiceExpired } from './expiry';
 import { InvoicesService } from './invoices.service';
@@ -106,7 +112,6 @@ export class PublicInvoicesController {
                 type: business.type,
                 name: snapshot?.recipientName ?? business.name,
                 slug: business.slug,
-                acceptedBanks: business.acceptedBanks,
             },
             account: {
                 slug: account.slug,
@@ -126,8 +131,11 @@ export class PublicInvoicesController {
         @Param('slug') slug: string,
         @Param('accountSlug') accountSlug: string,
         @Param('invoiceSlug') invoiceSlug: string,
+        @Query('size') sizeParam: string | undefined,
+        @Query('download') downloadParam: string | undefined,
         @Res() res: Response
     ): Promise<void> {
+        const sizePx = resolveQrSizePxFromQuery(sizeParam);
         const { business, account, invoice } = await this.lookupOrThrow(
             slug,
             accountSlug,
@@ -140,8 +148,17 @@ export class PublicInvoicesController {
             });
         }
         const url = `${ENV.PAY_PUBLIC_URL.replace(/\/$/, '')}/${business.slug}/${account.slug}/${invoice.slug}`;
-        const png = await this.qrService.renderForUrl(url);
+        const png = await this.qrService.renderForUrl(url, { sizePx });
         res.setHeader('Content-Type', 'image/png');
+        applyQrDownloadDisposition(
+            res,
+            isQrDownloadRequested(downloadParam),
+            buildQrDownloadFilename('page', {
+                businessSlug: business.slug,
+                accountSlug: account.slug,
+                invoiceSlug: invoice.slug,
+            })
+        );
         res.send(png);
     }
 
@@ -153,9 +170,12 @@ export class PublicInvoicesController {
         @Param('accountSlug') accountSlug: string,
         @Param('invoiceSlug') invoiceSlug: string,
         @Query('host') hostParam: string | undefined,
+        @Query('size') sizeParam: string | undefined,
+        @Query('download') downloadParam: string | undefined,
         @Res() res: Response
     ): Promise<void> {
         const host = resolveNbuHost(hostParam);
+        const sizePx = resolveQrSizePxFromQuery(sizeParam);
         const { business, account, invoice } = await this.lookupOrThrow(
             slug,
             accountSlug,
@@ -170,8 +190,23 @@ export class PublicInvoicesController {
         const input = buildPayloadInputFromInvoice(business, account, invoice);
         const png = await this.qrService.renderForNbuPayload(input, '003', {
             host,
+            sizePx,
         });
         res.setHeader('Content-Type', 'image/png');
+        applyQrDownloadDisposition(
+            res,
+            isQrDownloadRequested(downloadParam),
+            buildQrDownloadFilename(
+                host === NBU_HOST_PRIMARY
+                    ? 'payment-primary'
+                    : 'payment-legacy',
+                {
+                    businessSlug: business.slug,
+                    accountSlug: account.slug,
+                    invoiceSlug: invoice.slug,
+                }
+            )
+        );
         res.send(png);
     }
 
@@ -184,7 +219,12 @@ export class PublicInvoicesController {
         account: AccountDocument;
         invoice: InvoiceDocument;
     }> {
-        const business = await this.businessesService.getBySlug(slug);
+        // Sprint 14 — historical business-slug fallback. SC порівнює
+        // `params.slug !== view.business.slug` (invoice-page line 96) і
+        // робить `permanentRedirect()` зі збереженням account/invoice slugs
+        // (обидва immutable).
+        const business =
+            await this.businessesService.getBySlugOrHistorical(slug);
         if (!business) {
             throw new NotFoundException({
                 code: RESPONSE_CODE.BUSINESS_NOT_FOUND,

@@ -38,10 +38,10 @@ describe('BUSINESS_TYPE_LABEL', () => {
 
     it('exposes the agreed Sprint 7 §SP-1 labels', () => {
         expect(BUSINESS_TYPE_LABEL).toEqual({
-            individual: 'Я особисто',
+            individual: 'Фізособа',
             fop: 'ФОП',
             tov: 'ТОВ',
-            organization: 'ОСББ / фонд / громадська',
+            organization: 'Неприбуткова організація',
         });
     });
 });

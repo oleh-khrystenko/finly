@@ -26,7 +26,23 @@ Feature / Page / Widget / shared/ui/
 
 Файл: `apps/web/src/shared/styles/themes.css`
 
-Формат: `{color}` + `{color}-foreground` пари. Всі кольори монохромні (oklch з нульовою хромою), крім `destructive`, `success`, `warning`.
+Формат: `{color}` + `{color}-foreground` пари.
+
+**Нейтрали — inverted-paper схема на одній tone-axis (hue 65 ↔ 85), дзеркальна за темою.** Розподіл за **роллю токена**, не за L:
+
+| Роль                                                                                  | Light hue              | Dark hue             | L-поведінка                  |
+| ------------------------------------------------------------------------------------- | ---------------------- | -------------------- | ---------------------------- |
+| **Surfaces** (background, card, muted, secondary, accent, border, input)              | **85** (paper-cream)   | **65** (warm-brown)  | Світлі у light, темні у dark |
+| **Text** (foreground, muted-foreground, card/secondary/accent/muted-foreground)       | **65** (warm-brown)    | **85** (paper-cream) | Темні у light, світлі у dark |
+| **`primary-foreground`** (CTA-button label)                                           | **85** (paper, L≈0.99) | **65** (brown, L≈0.18) | Інверсія за темою          |
+| **`success-foreground`** (success-state label)                                        | **85** (paper, L≈0.99) | **65** (brown, L≈0.18) | Інверсія за темою          |
+| **`destructive-foreground`** (alarm-button label)                                     | **85** (paper, L≈0.99) | **85** (paper, L≈0.98) | **Завжди світлий**           |
+
+Chroma нейтралів ≤ 0.018 — ледь-помітний tint без cafe-yellow агресії.
+
+**Чому `primary-foreground` і `destructive-foreground` різні**: `primary` — CTA (нейтральний бренд-acent), його label інвертується за темою як звичайний foreground. `destructive` — **alarm-signal**, де червоно-теракотовий fill повинен зберігати максимальну впізнаваність у обох темах. Темний brown-текст на теракоті у dark гасив би «гучність» сигналу — Linear, Stripe, GitHub, Tailwind UI тримають destructive label завжди-світлим саме з цієї причини. Це навмисний виняток з inverse-логіки, а не помилка.
+
+**Акцентні кольори насичені:** `primary` (emerald hue 158), `destructive` (теракот hue 25), `success` (pure-green hue 145), `warning` (amber hue 75).
 
 | Група           | Tailwind-клас                                                       | CSS-змінна                                            | Призначення                                 |
 | --------------- | ------------------------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------- |
@@ -41,7 +57,7 @@ Feature / Page / Widget / shared/ui/
 | **Border**      | `border-border`                                                     | `var(--border)`                                       | Межі, роздільники                           |
 | **Input**       | `bg-input`, `border-input`                                          | `var(--input)`                                        | Input borders/bg                            |
 | **Ring**        | `ring-ring`                                                         | `var(--ring)`                                         | Focus rings                                 |
-| **Success**     | `text-success`, `bg-success`                                        | `var(--success)`                                      | Успішні стани, toast notifications          |
+| **Success**     | `text-success`, `bg-success`, `text-success-foreground`             | `var(--success)`, `var(--success-foreground)`         | Успішні стани, toast notifications, label на success-fill |
 | **Warning**     | `text-warning`, `bg-warning`                                        | `var(--warning)`                                      | Попередження, toast notifications           |
 
 **Utility tokens:**
@@ -49,6 +65,12 @@ Feature / Page / Widget / shared/ui/
 | Токен      | Значення   | Tailwind-клас         | Призначення        |
 | ---------- | ---------- | --------------------- | ------------------ |
 | `--radius` | `0.625rem` | `rounded-sm/md/lg/xl` | Base border-radius |
+
+**Theme-invariant tokens** — мають однакове значення у `:root` і `.dark`, бо описують фізичний об'єкт ілюстрації, а не елемент UI. Не плутати з surfaces/text-токенами вище — ті інвертуються за темою.
+
+| Токен            | Значення                | Tailwind-клас       | Призначення                                                                                          |
+| ---------------- | ----------------------- | ------------------- | ---------------------------------------------------------------------------------------------------- |
+| `--device-frame` | `oklch(0.1 0.008 65)`   | `bg-device-frame`   | Корпус device-mockup-у (рамка/Dynamic Island PhoneMockup). Завжди near-black — фізичний space-gray. |
 
 ## Rules
 
@@ -79,6 +101,28 @@ Feature / Page / Widget / shared/ui/
 Прямі `font-family` декларації в CSS чи inline-стилях **заборонені**.
 
 Дозволено лише Tailwind-утиліти для характеристик шрифту: `font-bold`, `text-sm`, `tracking-wide` тощо.
+
+#### Type-scale
+
+Системна шкала розмірів. Беремо розмір **за роллю елемента**, не «на око»:
+
+| Токен               | px    | Призначення                                                       |
+| ------------------- | ----- | ----------------------------------------------------------------- |
+| `text-sm`           | 14    | **підлога** — хінти/описи, помилки, лейбли над інпутом, вторинний текст |
+| `text-base`         | 16    | body, абзаци, лейбли read-view (key-value рядки)                  |
+| `text-lg`           | 18    | значення поля (read-view), lead                                   |
+| `text-2xl`          | 24    | заголовок секції (h2)                                             |
+| `text-3xl → md:4xl` | 30→36 | заголовок сторінки (h1)                                           |
+| `text-xs`           | 12    | **резерв** — лише рідкісні щільні блоки, не за замовчуванням       |
+
+**Правила:**
+
+1. **14px — підлога.** `text-sm` (14) — найдрібніший шрифт за замовчуванням. Нижче 14px комфорт різко падає, особливо на mobile.
+2. **`text-xs` (12) — виняток, не старт.** Лише щільні блоки з обмеженим простором (badge, табличні підписи). Підлога на 14 лишає 12 як аварійний щабель нижче — якщо стартувати з 12, падати нема куди.
+3. **Помилки — мінімум 14px.** Повідомлення про помилку треба легко прочитати; ховати його дрібним кеглем — антипатерн. Усі `error`-рядки у примітивах на `text-sm`.
+4. **Лейбл за роллю: read-view ≠ форма.** Лейбл у **read-view** (key-value рядок — «РНОКПП», «Оподаткування») — це **якір сканування**, тому body-tier `text-base` (16). Лейбл **над інпутом** у формі вводу — `text-sm` (14): фокус на самому полі. Не плутати: однакове слово «лейбл», різні ролі.
+5. **Ієрархія, не розмір заради розміру.** Контраст лейбл↔значення тримати кольором (`text-muted-foreground` лейбл / `text-foreground` значення) + вагою, а не лише кеглем. Generic eyebrow/kicker — найменший (`text-sm`). **Виняток** — українська орг.-правова форма (ТОВ/ФОП): це частина юридичної назви, не kicker → титул-tier (`text-xl`), не 14.
+6. **Шкала живе у shared-примітивах.** Розміри лейблів/хінтів/помилок задають `UiInput`, `UiTextarea`, `UiRadioCardGroup`, `UiEditableField` — не локальні класи сторінок. Сторінки споживають готову шкалу. Reference-implementation — `app/(protected)/business/[slug]/page.tsx`.
 
 ### 4. Анімації
 

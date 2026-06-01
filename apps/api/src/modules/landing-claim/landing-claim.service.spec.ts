@@ -70,8 +70,7 @@ describe('LandingClaimService.attemptLandingClaim (Sprint 10 §10.1)', () => {
             claimedAccountSlug: 'AcctSlg1',
         });
         // BusinessesService.create викликаний з mapLandingDraftToCreateBusinessRequest
-        // shape: type='individual', acceptedBanks=MVP_BANKS, claimIdempotencyKey
-        // top-level.
+        // shape: type='individual', claimIdempotencyKey top-level.
         const createDtoArg = businessesService.create.mock.calls[0][1];
         expect(createDtoArg).toMatchObject({
             type: 'individual',
@@ -319,7 +318,7 @@ describe('LandingClaimService.attemptLandingClaim (Sprint 10 §10.1)', () => {
 
             expect(usersService.setPendingPostLoginTarget).toHaveBeenCalledWith(
                 CTX.userId,
-                '/business/BizSlug1/account/AcctSlg1?completed-from=landing'
+                '/business/BizSlug1/account/AcctSlg1'
             );
         });
 
@@ -343,7 +342,7 @@ describe('LandingClaimService.attemptLandingClaim (Sprint 10 §10.1)', () => {
 
             expect(usersService.setPendingPostLoginTarget).toHaveBeenCalledWith(
                 CTX.userId,
-                '/business/BizSlug1/account/AcctSlg1?completed-from=landing'
+                '/business/BizSlug1/account/AcctSlg1'
             );
         });
 

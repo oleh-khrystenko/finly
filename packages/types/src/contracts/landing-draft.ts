@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-import { MVP_BANKS } from '../constants/banks';
 import { QrPreviewInputSchema } from './qr-preview';
 import type { CreateBusinessRequest } from './businesses';
 
@@ -63,8 +62,6 @@ export type LandingDraft = z.infer<typeof LandingDraftSchema>;
  *    POST (Sprint 9 §SP-1 split).
  *  - `type` — фіксовано `'individual'` (anon-форма зачинена per QrPreviewInput-
  *    Schema rationale).
- *  - `acceptedBanks` — повний набір `MVP_BANKS` (anon-користувач не вибирає
- *    банки явно; default-set = всі підтримувані MVP).
  *  - `claimIdempotencyKey` — top-level, обов'язково присутній у write-DTO для
  *    backend dedup через partial-unique `(ownerId, claimIdempotencyKey)`.
  */
@@ -77,7 +74,6 @@ export function mapLandingDraftToCreateBusinessRequest(
         name: draft.receiverName,
         taxId: draft.taxId,
         paymentPurposeTemplate: draft.purpose,
-        acceptedBanks: [...MVP_BANKS],
         claimIdempotencyKey,
     };
 }

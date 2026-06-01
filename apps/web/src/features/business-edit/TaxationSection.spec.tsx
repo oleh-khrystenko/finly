@@ -20,31 +20,36 @@ const baseBusiness: TaxationCapableBusiness = {
     taxationSystem: 'simplified-3',
     isVatPayer: true,
     paymentPurposeTemplate: 'Оплата',
-    acceptedBanks: ['privatbank'],
     seoIndexEnabled: false,
     deletedAt: null,
     createdAt: new Date('2026-05-01'),
     updatedAt: new Date('2026-05-01'),
 };
 
-describe('TaxationSection — coupled rule (Sprint 3 §C1)', () => {
-    it('read mode показує taxationSystem label + isVatPayer "Так/Ні"', () => {
+describe('TaxationSection — coupled rule (Sprint 3 §C1 + Sprint 13 VAT-cards)', () => {
+    it('read mode показує taxationSystem label + natural-language VAT title (той самий, що у edit-картках)', () => {
         render(<TaxationSection business={baseBusiness} onSave={jest.fn()} />);
         expect(screen.getByText('Спрощена-3')).toBeInTheDocument();
-        expect(screen.getByText('Так')).toBeInTheDocument();
+        // simplified-3 + isVatPayer=true → "Ставка 3% + ПДВ" (з getVatChoiceOptions)
+        expect(screen.getByText('Ставка 3% + ПДВ')).toBeInTheDocument();
     });
 
-    it('VAT switch checked + enabled з existing simplified-3 + isVatPayer=true', () => {
+    it('edit з existing simplified-3 + isVatPayer=true → картка "Ставка 3% + ПДВ" обрана', () => {
         render(<TaxationSection business={baseBusiness} onSave={jest.fn()} />);
         fireEvent.click(screen.getByLabelText('Редагувати: оподаткування'));
-        const vatSwitch = screen.getByRole('switch', {
-            name: /платник пдв/i,
+
+        const vatYes = screen.getByRole('radio', {
+            name: /ставка 3% \+ ПДВ/i,
         });
-        expect(vatSwitch).toHaveAttribute('aria-checked', 'true');
-        expect(vatSwitch).not.toBeDisabled();
+        expect(vatYes).toHaveAttribute('aria-checked', 'true');
+
+        const vatNo = screen.getByRole('radio', {
+            name: /ставка 5% без ПДВ/i,
+        });
+        expect(vatNo).toHaveAttribute('aria-checked', 'false');
     });
 
-    it('VAT switch disabled з existing simplified-1 (coupled-rule UI guard)', () => {
+    it('edit з existing simplified-1 — VAT radio-cards секція прихована (юр-обмеження)', () => {
         const businessWithSimp1: TaxationCapableBusiness = {
             ...baseBusiness,
             taxationSystem: 'simplified-1',
@@ -54,13 +59,34 @@ describe('TaxationSection — coupled rule (Sprint 3 §C1)', () => {
             <TaxationSection business={businessWithSimp1} onSave={jest.fn()} />
         );
         fireEvent.click(screen.getByLabelText('Редагувати: оподаткування'));
-        const vatSwitch = screen.getByRole('switch', {
-            name: /платник пдв/i,
-        });
-        expect(vatSwitch).toBeDisabled();
+
+        // На Спрощеній-1 ПДВ заборонений (ст. 293.3 ПКУ) — секція не рендериться.
         expect(
-            screen.getByText(/пдв доступний для спрощеної-3 і загальної/i)
-        ).toBeInTheDocument();
+            screen.queryByRole('radio', { name: /ставка/i })
+        ).not.toBeInTheDocument();
+        expect(
+            screen.queryByRole('radio', { name: /зареєстрований/i })
+        ).not.toBeInTheDocument();
+    });
+
+    it('edit з existing Загальна → картки "Зареєстрований / Не зареєстрований"', () => {
+        const generalBusiness: TaxationCapableBusiness = {
+            ...baseBusiness,
+            taxationSystem: 'general',
+            isVatPayer: true,
+        };
+        render(
+            <TaxationSection business={generalBusiness} onSave={jest.fn()} />
+        );
+        fireEvent.click(screen.getByLabelText('Редагувати: оподаткування'));
+
+        // Інший набір карток — Загальна оперує фактом реєстрації, не ставкою.
+        expect(
+            screen.getByRole('radio', { name: /^Зареєстрований платник ПДВ/i })
+        ).toHaveAttribute('aria-checked', 'true');
+        expect(
+            screen.getByRole('radio', { name: /^Не зареєстрований/i })
+        ).toHaveAttribute('aria-checked', 'false');
     });
 
     it('Save: викликає onSave з обома полями за один PATCH', async () => {
@@ -77,21 +103,64 @@ describe('TaxationSection — coupled rule (Sprint 3 §C1)', () => {
         });
     });
 
-    it('coupled flip: simplified-3 → simplified-1 миттєво ставить isVatPayer=false (Sprint 3 §3.8 DoD)', async () => {
-        // Sprint plan §3.8 DoD дослівно: "зміна `simplified-3 → simplified-1`
-        // миттєво ставить `isVatPayer=false`". Це UI-guard, що не дозволяє
-        // submit невалідну coupled-пару (повторює C1 invariant з backend).
+    it('ТОВ: dropdown містить лише simplified-3 і general (ПКУ розд. XIV — групи 1/2 заборонені для юр.осіб)', async () => {
+        const tovBusiness: TaxationCapableBusiness = {
+            ...baseBusiness,
+            type: 'tov',
+            taxId: '12345678',
+            taxationSystem: 'simplified-3',
+            isVatPayer: true,
+        };
+        render(<TaxationSection business={tovBusiness} onSave={jest.fn()} />);
+        fireEvent.click(screen.getByLabelText('Редагувати: оподаткування'));
+
+        // Headless UI Listbox: відкриваємо select клацанням на trigger.
+        fireEvent.click(screen.getByRole('button', { name: /спрощена-3/i }));
+
+        const options = await screen.findAllByRole('option');
+        const optionLabels = options.map((o) => o.textContent ?? '');
+        expect(optionLabels).toEqual(
+            expect.arrayContaining(['Спрощена-3', 'Загальна'])
+        );
+        expect(optionLabels).not.toEqual(
+            expect.arrayContaining(['Спрощена-1'])
+        );
+        expect(optionLabels).not.toEqual(
+            expect.arrayContaining(['Спрощена-2'])
+        );
+    });
+
+    it('ФОП: dropdown містить усі 4 системи', async () => {
+        render(<TaxationSection business={baseBusiness} onSave={jest.fn()} />);
+        fireEvent.click(screen.getByLabelText('Редагувати: оподаткування'));
+        fireEvent.click(screen.getByRole('button', { name: /спрощена-3/i }));
+        const options = await screen.findAllByRole('option');
+        const optionLabels = options.map((o) => o.textContent ?? '');
+        expect(optionLabels).toEqual(
+            expect.arrayContaining([
+                'Спрощена-1',
+                'Спрощена-2',
+                'Спрощена-3',
+                'Загальна',
+            ])
+        );
+    });
+
+    it('coupled flip: simplified-3 → simplified-1 ховає VAT-картки і обнуляє draftVat (Sprint 3 §3.8 DoD)', async () => {
+        // Sprint plan §3.8 DoD: зміна `simplified-3 → simplified-1` має скинути
+        // `isVatPayer` на false, бо ПДВ юридично заборонений на Спрощеній-1/2.
+        // Sprint 13 — секція з radio-картками просто ховається (замість disabled-
+        // switch); coupled-rule зберігається через primary state: при submit
+        // надсилаємо `isVatPayer: false`.
         const onSave = jest.fn().mockResolvedValue(undefined);
         render(<TaxationSection business={baseBusiness} onSave={onSave} />);
 
         fireEvent.click(screen.getByLabelText('Редагувати: оподаткування'));
 
-        // VAT switch checked + enabled (existing simplified-3 + isVatPayer=true)
-        const vatSwitch = screen.getByRole('switch', {
-            name: /платник пдв/i,
-        });
-        expect(vatSwitch).toHaveAttribute('aria-checked', 'true');
-        expect(vatSwitch).not.toBeDisabled();
+        // VAT-картки видимі на simplified-3.
+        expect(
+            screen.getByRole('radio', { name: /ставка 3% \+ ПДВ/i })
+        ).toBeInTheDocument();
 
         // Open Headless UI Listbox + select 'Спрощена-1'.
         const taxationButton = screen.getByRole('button', {
@@ -103,10 +172,11 @@ describe('TaxationSection — coupled rule (Sprint 3 §C1)', () => {
         });
         fireEvent.click(simp1Option);
 
-        // Coupled-flip: VAT auto-flipped to false + disabled (UI guard).
+        // Coupled-flip: VAT-картки зникли з DOM.
         await waitFor(() => {
-            expect(vatSwitch).toHaveAttribute('aria-checked', 'false');
-            expect(vatSwitch).toBeDisabled();
+            expect(
+                screen.queryByRole('radio', { name: /ставка/i })
+            ).not.toBeInTheDocument();
         });
 
         // Save → onSave з coupled-валідною парою (isVatPayer=false для simplified-1).

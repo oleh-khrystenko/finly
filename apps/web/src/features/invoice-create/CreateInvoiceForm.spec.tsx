@@ -52,7 +52,6 @@ const baseBusiness: Business = {
     taxationSystem: 'simplified-3',
     isVatPayer: false,
     paymentPurposeTemplate: 'Оплата за послуги',
-    acceptedBanks: ['privatbank'],
     seoIndexEnabled: false,
     deletedAt: null,
     createdAt: new Date('2026-05-01T10:00:00Z'),

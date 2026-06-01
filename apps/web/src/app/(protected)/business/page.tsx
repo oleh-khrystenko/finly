@@ -1,7 +1,14 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, Briefcase, CreditCard, FileText, Plus } from 'lucide-react';
+import { type ReactNode, useEffect, useState } from 'react';
+import {
+    ArrowRight,
+    Briefcase,
+    CreditCard,
+    ExternalLink,
+    FileText,
+    Plus,
+} from 'lucide-react';
 import { AxiosError } from 'axios';
 import {
     BUSINESS_TYPE_LABEL,
@@ -13,13 +20,22 @@ import { useAuthStore } from '@/entities/user';
 import { usePendingDeletesStore } from '@/features/business-edit/pendingDeletesStore';
 import { pluralizeUa } from '@/shared/lib';
 import UiButton from '@/shared/ui/UiButton';
+import UiLink from '@/shared/ui/UiLink';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
 import UiPageHeading from '@/shared/ui/UiPageHeading';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
 
-function stripScheme(url: string): string {
-    return url.replace(/^https?:\/\//, '').replace(/\/$/, '');
+// `PAY_ORIGIN` — повний `https://pay.finly.com.ua` для href справжнього посилання.
+// `PAY_HOST` — той самий host без схеми для display ("чистий" вигляд). Обчислюємо
+// один раз на module-load (ENV frozen).
+const PAY_ORIGIN = ENV.NEXT_PUBLIC_PAY_PUBLIC_URL.replace(/\/$/, '');
+const PAY_HOST = PAY_ORIGIN.replace(/^https?:\/\//, '');
+
+function extractApiErrorCode(err: unknown): string {
+    if (!(err instanceof AxiosError)) return 'unknown';
+    const data = err.response?.data as { error?: { code?: string } } | undefined;
+    return data?.error?.code ?? 'unknown';
 }
 
 /**
@@ -34,29 +50,15 @@ function stripScheme(url: string): string {
  * плутався, чому "його" бізнес не видно.
  */
 export default function BusinessListPage() {
-    const user = useAuthStore((s) => s.user);
-    const isBookkeeper = user?.worksAsBookkeeper ?? false;
-
-    const [items, setItems] = useState<BusinessWithCounts[] | null>(
-        null
+    const isBookkeeper = useAuthStore(
+        (s) => s.user?.worksAsBookkeeper ?? false
     );
+    const [items, setItems] = useState<BusinessWithCounts[] | null>(null);
     const [error, setError] = useState<string | null>(null);
     // Optimistic delete-removal (Sprint 3 §3.8 §C2). pendingDeletes-store
     // ловить slugs, що в межах 5s-undo-вікна; UI ховає їх до того, як
-    // фактичний DELETE спрацює. Subscribe-селектор повертає Set, useState
-    // re-render при change.
+    // фактичний DELETE спрацює.
     const pendingDeleteSlugs = usePendingDeletesStore((s) => s.slugs);
-
-    const payHost = useMemo(
-        () => stripScheme(ENV.NEXT_PUBLIC_PAY_PUBLIC_URL),
-        []
-    );
-
-    const visibleItems = useMemo(
-        () =>
-            items ? items.filter((i) => !pendingDeleteSlugs.has(i.slug)) : null,
-        [items, pendingDeleteSlugs]
-    );
 
     // Re-fetch при перемиканні toggle — backend filter залежить від
     // `worksAsBookkeeper` стану user-а. State-mutation тільки в async-callback-ах
@@ -75,15 +77,7 @@ export default function BusinessListPage() {
             })
             .catch((err: unknown) => {
                 if (cancelled) return;
-                const code =
-                    err instanceof AxiosError
-                        ? ((
-                              err.response?.data as
-                                  | { error?: { code?: string } }
-                                  | undefined
-                          )?.error?.code ?? 'unknown')
-                        : 'unknown';
-                setError(getApiMessage(code, 'businesses'));
+                setError(getApiMessage(extractApiErrorCode(err), 'businesses'));
             });
         return () => {
             cancelled = true;
@@ -100,20 +94,17 @@ export default function BusinessListPage() {
         );
     }
 
+    const visibleItems = (items ?? []).filter(
+        (i) => !pendingDeleteSlugs.has(i.slug)
+    );
+    const isEmpty = visibleItems.length === 0;
+
     return (
         <UiPageContainer className="space-y-8 py-12 md:py-16">
             <div className="flex flex-wrap items-start justify-between gap-4">
                 <UiPageHeading>Бізнеси</UiPageHeading>
-                {visibleItems && visibleItems.length > 0 && (
-                    <UiButton
-                        as="link"
-                        href="/business/new"
-                        variant="filled"
-                        size="md"
-                        IconLeft={<Plus />}
-                    >
-                        Створити бізнес
-                    </UiButton>
+                {!isEmpty && (
+                    <CreateBusinessButton>Створити бізнес</CreateBusinessButton>
                 )}
             </div>
 
@@ -125,21 +116,10 @@ export default function BusinessListPage() {
                 </UiSectionCard>
             )}
 
-            {visibleItems && visibleItems.length === 0 && !error && (
-                <EmptyState isBookkeeper={isBookkeeper} />
-            )}
+            {isEmpty && !error && <EmptyState isBookkeeper={isBookkeeper} />}
 
-            {visibleItems && visibleItems.length > 0 && (
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                    {visibleItems.map((b) => (
-                        <BusinessCard
-                            key={b.id}
-                            business={b}
-                            isBookkeeper={isBookkeeper}
-                            payHost={payHost}
-                        />
-                    ))}
-                </div>
+            {!isEmpty && (
+                <BusinessGrid items={visibleItems} isBookkeeper={isBookkeeper} />
             )}
         </UiPageContainer>
     );
@@ -169,15 +149,47 @@ function EmptyState({ isBookkeeper }: { isBookkeeper: boolean }) {
                     {description}
                 </p>
             </div>
-            <UiButton
-                as="link"
-                href="/business/new"
-                variant="filled"
-                size="md"
-                IconLeft={<Plus />}
-            >
-                {ctaLabel}
-            </UiButton>
+            <CreateBusinessButton>{ctaLabel}</CreateBusinessButton>
+        </div>
+    );
+}
+
+/**
+ * Кнопка-перехід на `/business/new`. Використовуємо `as="link"` (anchor-семантика
+ * для middle/Ctrl-click → нова вкладка, контекстного меню, hover-URL); pending-
+ * спінер під час client-side навігації приходить безкоштовно з `useLinkStatus`
+ * усередині `UiButton`.
+ */
+function CreateBusinessButton({ children }: { children: ReactNode }) {
+    return (
+        <UiButton
+            as="link"
+            href="/business/new"
+            variant="filled"
+            size="md"
+            IconLeft={<Plus />}
+        >
+            {children}
+        </UiButton>
+    );
+}
+
+function BusinessGrid({
+    items,
+    isBookkeeper,
+}: {
+    items: BusinessWithCounts[];
+    isBookkeeper: boolean;
+}) {
+    return (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {items.map((business) => (
+                <BusinessCard
+                    key={business.id}
+                    business={business}
+                    isBookkeeper={isBookkeeper}
+                />
+            ))}
         </div>
     );
 }
@@ -185,42 +197,60 @@ function EmptyState({ isBookkeeper }: { isBookkeeper: boolean }) {
 function BusinessCard({
     business,
     isBookkeeper,
-    payHost,
 }: {
     business: BusinessWithCounts;
     isBookkeeper: boolean;
-    payHost: string;
 }) {
     const typeLabel = BUSINESS_TYPE_LABEL[business.type];
     const { accountsCount, invoicesCount } = business;
+    const publicHref = `${PAY_ORIGIN}/${business.slug}`;
     // Sprint 9 §Risk #7 mitigation — два counter-и (рахунки + інвойси усього)
     // на business-картці, щоб ФОП з 1 рахунком розумів обсяг без drill-down-у
-    // у per-account-page. "Рахунків" без слова "активних" — рахує всі
-    // документи в `Account`-колекції цього бізнесу. Аналогічно invoicesCount
-    // — всі invoice-документи (включно з expired).
+    // у per-account-page.
     return (
-        <UiSectionCard
-            title={business.name}
-            headerRight={
-                isBookkeeper ? (
+        <article className="border-border bg-card hover:border-foreground/15 flex flex-col gap-3 rounded-xl border p-5 transition-colors md:p-6">
+            <div className="flex items-center justify-between gap-2">
+                <p className="text-muted-foreground truncate text-xs font-medium">
+                    {typeLabel}
+                </p>
+                {isBookkeeper && (
                     <span className="bg-muted text-muted-foreground shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium">
                         Клієнтський
                     </span>
-                ) : undefined
-            }
-            className="flex flex-col gap-4 p-5 md:p-6"
-        >
-            <div className="space-y-1">
-                <p className="text-muted-foreground text-xs">{typeLabel}</p>
-                <p className="text-muted-foreground truncate text-xs">
-                    {payHost}/
+                )}
+            </div>
+
+            <h2
+                className="text-foreground line-clamp-2 text-base leading-snug font-semibold break-words"
+                title={business.name}
+            >
+                {business.name}
+            </h2>
+
+            <UiLink
+                href={publicHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                variant="muted"
+                aria-label={`Відкрити публічну сторінку ${business.name} у новій вкладці`}
+                className="group inline-flex min-w-0 items-center gap-1.5 text-xs"
+            >
+                <span className="truncate">
+                    {PAY_HOST}/
                     <span className="text-foreground font-mono">
                         {business.slug}
                     </span>
-                </p>
-                <div className="flex flex-wrap gap-x-3 gap-y-1 pt-1">
+                </span>
+                <ExternalLink
+                    aria-hidden
+                    className="size-3.5 shrink-0 opacity-60 transition-opacity group-hover:opacity-100"
+                />
+            </UiLink>
+
+            <div className="mt-auto flex flex-col gap-3 pt-2">
+                <div className="flex flex-wrap gap-x-3 gap-y-1">
                     <p className="text-muted-foreground inline-flex items-center gap-1 text-xs">
-                        <CreditCard className="size-3.5" />
+                        <CreditCard className="size-3.5" aria-hidden />
                         {pluralizeUa(
                             accountsCount,
                             'рахунок',
@@ -230,7 +260,7 @@ function BusinessCard({
                     </p>
                     {invoicesCount > 0 && (
                         <p className="text-muted-foreground inline-flex items-center gap-1 text-xs">
-                            <FileText className="size-3.5" />
+                            <FileText className="size-3.5" aria-hidden />
                             {pluralizeUa(
                                 invoicesCount,
                                 'інвойс',
@@ -240,19 +270,19 @@ function BusinessCard({
                         </p>
                     )}
                 </div>
+                <UiButton
+                    as="link"
+                    href={`/business/${business.slug}${
+                        accountsCount > 0 ? '#accounts' : ''
+                    }`}
+                    variant="outline"
+                    size="sm"
+                    IconRight={<ArrowRight />}
+                    className="w-full justify-center"
+                >
+                    Відкрити
+                </UiButton>
             </div>
-            <UiButton
-                as="link"
-                href={`/business/${business.slug}${
-                    accountsCount > 0 ? '#accounts' : ''
-                }`}
-                variant="outline"
-                size="sm"
-                IconRight={<ArrowRight />}
-                className="w-full justify-center"
-            >
-                Відкрити
-            </UiButton>
-        </UiSectionCard>
+        </article>
     );
 }

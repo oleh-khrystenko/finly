@@ -168,7 +168,6 @@ const VALID_BUSINESS_PAYLOAD = {
     taxationSystem: 'simplified-3',
     isVatPayer: false,
     paymentPurposeTemplate: 'Оплата за послуги',
-    acceptedBanks: ['privatbank', 'monobank'],
 };
 
 describe('Accounts E2E (Sprint 9 §SP-1..§SP-3)', () => {

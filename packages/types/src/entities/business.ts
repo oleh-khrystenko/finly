@@ -4,6 +4,7 @@ import { MVP_BANKS } from '../constants/banks';
 import { BUSINESS_TYPES, requiresTaxation } from '../enums/business-type';
 import {
     TAXATION_SYSTEMS,
+    isTaxationAllowedForType,
     isVatAllowedTaxationSystem,
 } from '../enums/taxation-system';
 import { isWithinNbuCharset } from '../qr/charset';
@@ -16,12 +17,11 @@ import { isTaxIdValidForType, payerTaxIdZod } from '../validation/tax-id';
  * Sprint 9 §SP-1 рефакторинг: IBAN переїхав на окрему сутність `Account`
  * (`packages/types/src/entities/account.ts`); Business зберігає тільки
  * юр-property платника (type, name, taxId, taxationSystem, isVatPayer,
- * paymentPurposeTemplate, acceptedBanks, slug, ownership).
+ * paymentPurposeTemplate, slug, ownership).
  *
  * **Що Zod-схема НЕ перевіряє** (свідомо, бо це write-side / runtime-time):
  * - Унікальність `slugLower` глобально — Mongoose unique index.
  * - Резервовані slug-и (`qr`, `api`, `host-pay`, …) — slug-генератор.
- * - Free-tier обмеження на `acceptedBanks` — app-layer у Sprint 6.
  *
  * **Length-обмеження `name` і `paymentPurposeTemplate` derived-from-spec**
  * через `effectiveLimit(...)` = MIN по `PAYLOAD_VERSIONS` (Sprint 2 §2.2).
@@ -42,6 +42,12 @@ import { isTaxIdValidForType, payerTaxIdZod } from '../validation/tax-id';
  *    (Sprint 3 рішення C1) — ПДВ legitимно платять лише на спрощеній-3 чи
  *    загальній. Активний лише коли обидва поля не-null (для individual /
  *    organization тривіально-true: short-circuit на null).
+ * 5. `taxationSystem ∈ ALLOWED_TAXATION_SYSTEMS_BY_TYPE[type]` —
+ *    юр-обмеження за типом бізнесу. ПКУ розд. XIV гл. 1 закріплює групи 1
+ *    і 2 єдиного податку виключно за ФОП; ТОВ можуть бути на групі 3 або
+ *    загальній системі. Активний лише коли `requiresTaxation(type)` і
+ *    `taxationSystem !== null` (інакше — короткозамкнутий iff-refine
+ *    `TAXATION_FIELDS_MISMATCH_TYPE` спрацював би раніше).
  *
  * Жоден з цих refine-ів Mongoose comb-валідатором не виразить — тримаємо у
  * Zod як single source of truth.
@@ -165,7 +171,6 @@ export const BusinessSchema = z
          */
         isVatPayer: z.boolean().nullable(),
         paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
-        acceptedBanks: z.array(bankCodeSchema),
         seoIndexEnabled: z.boolean(),
         deletedAt: z.coerce.date().nullable(),
         createdAt: z.coerce.date(),
@@ -218,6 +223,20 @@ export const BusinessSchema = z
         {
             message: 'INVALID_VAT_FOR_TAXATION_SYSTEM',
             path: ['isVatPayer'],
+        }
+    )
+    .refine(
+        // Юр-обмеження за типом: групи 1/2 єдиного податку — виключно для ФОП.
+        // Активний лише коли `requiresTaxation(type)` і `taxationSystem !==
+        // null`; інакше iff-refine `TAXATION_FIELDS_MISMATCH_TYPE` (вище) вже
+        // забракував би документ як invalid stored state.
+        (b) =>
+            !requiresTaxation(b.type) ||
+            b.taxationSystem === null ||
+            isTaxationAllowedForType(b.type, b.taxationSystem),
+        {
+            message: 'TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE',
+            path: ['taxationSystem'],
         }
     );
 

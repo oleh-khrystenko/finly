@@ -11,7 +11,6 @@ import {
 import UiButton from '@/shared/ui/UiButton';
 import UiCheckbox from '@/shared/ui/UiCheckbox';
 import UiLink from '@/shared/ui/UiLink';
-import UiSpinner from '@/shared/ui/UiSpinner';
 import { acceptTerms } from '@/shared/api';
 import { useAuthStore } from '@/entities/user';
 import { useTermsReacceptDialogStore } from './termsReacceptDialogStore';
@@ -92,14 +91,10 @@ function TermsReacceptForm({ onClose }: { onClose: () => void }) {
                     variant="filled"
                     size="lg"
                     className="w-full justify-center"
-                    disabled={submitting}
+                    loading={submitting}
                     onClick={handleSubmit}
                 >
-                    {submitting ? (
-                        <UiSpinner size="sm" />
-                    ) : (
-                        'Прийняти та продовжити'
-                    )}
+                    Прийняти та продовжити
                 </UiButton>
             </div>
         </>

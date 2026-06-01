@@ -245,13 +245,9 @@ export default function InvoicesSection({
                                 variant="outline"
                                 size="sm"
                                 onClick={() => void loadMore()}
-                                disabled={loadingMore}
+                                loading={loadingMore}
                             >
-                                {loadingMore ? (
-                                    <UiSpinner size="sm" />
-                                ) : (
-                                    `Завантажити ще (${visibleTotal - visibleItems.length})`
-                                )}
+                                {`Завантажити ще (${visibleTotal - visibleItems.length})`}
                             </UiButton>
                         </div>
                     )}

@@ -23,7 +23,9 @@ const UiSectionCard = ({
         )}
     >
         <div className="flex items-center justify-between">
-            <h2 className="text-foreground text-lg font-semibold">{title}</h2>
+            <h2 className="text-foreground text-2xl font-semibold tracking-tight">
+                {title}
+            </h2>
             {headerRight}
         </div>
         {children}

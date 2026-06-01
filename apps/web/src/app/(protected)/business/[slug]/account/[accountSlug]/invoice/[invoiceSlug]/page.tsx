@@ -6,13 +6,11 @@ import { ArrowLeft, ExternalLink, Trash2 } from 'lucide-react';
 import { AxiosError } from 'axios';
 import { toast } from 'sonner';
 import {
-    type AccountWithCounts,
     type BusinessWithCounts,
     type Invoice,
     type UpdateInvoiceRequest,
 } from '@finly/types';
 import {
-    getAccountBySlug,
     getApiMessage,
     getBusinessBySlug,
     getInvoiceBySlug,
@@ -53,7 +51,6 @@ interface LoadedData {
     paramAcc: string;
     paramInv: string;
     business: BusinessWithCounts;
-    account: AccountWithCounts;
     invoice: Invoice;
 }
 
@@ -95,17 +92,15 @@ export default function InvoiceCabinetPage() {
         let cancelled = false;
         Promise.all([
             getBusinessBySlug(paramBiz),
-            getAccountBySlug(paramBiz, paramAcc),
             getInvoiceBySlug(paramBiz, paramAcc, paramInv),
         ])
-            .then(([b, a, inv]) => {
+            .then(([b, inv]) => {
                 if (cancelled) return;
                 setData({
                     paramBiz,
                     paramAcc,
                     paramInv,
                     business: b,
-                    account: a,
                     invoice: inv,
                 });
                 setError(null);
@@ -148,7 +143,7 @@ export default function InvoiceCabinetPage() {
                 setData((prev) =>
                     prev &&
                     prev.business.slug === captured.businessSlug &&
-                    prev.account.slug === captured.accountSlug &&
+                    prev.paramAcc === captured.accountSlug &&
                     prev.invoice.slug === captured.invoiceSlug
                         ? { ...prev, invoice: updated }
                         : prev
@@ -191,20 +186,19 @@ export default function InvoiceCabinetPage() {
         );
     }
 
-    const { business, account, invoice } = data;
+    const { business, paramAcc: accountSlug, invoice } = data;
     const formattedAmount = formatKopecksAsHryvnia(invoice.amount);
-    const publicUrl = `${ENV.NEXT_PUBLIC_PAY_PUBLIC_URL.replace(/\/$/, '')}/${business.slug}/${account.slug}/${invoice.slug}`;
+    const publicUrl = `${ENV.NEXT_PUBLIC_PAY_PUBLIC_URL.replace(/\/$/, '')}/${business.slug}/${accountSlug}/${invoice.slug}`;
 
     const onSave = (patch: UpdateInvoiceRequest) =>
         handlePatch(patch, {
             businessSlug: business.slug,
-            accountSlug: account.slug,
+            accountSlug,
             invoiceSlug: invoice.slug,
         });
 
     const handleDelete = () => {
         const businessSlug = business.slug;
-        const accountSlug = account.slug;
         const invoiceSlug = invoice.slug;
         openDeleteConfirm(invoice, () => {
             scheduleInvoiceDeleteWithUndo({
@@ -228,7 +222,7 @@ export default function InvoiceCabinetPage() {
             <div className="flex flex-col gap-4">
                 <UiButton
                     as="link"
-                    href={`/business/${business.slug}/account/${account.slug}#invoices`}
+                    href={`/business/${business.slug}/account/${accountSlug}#invoices`}
                     variant="text"
                     size="sm"
                     IconLeft={<ArrowLeft />}
@@ -275,16 +269,16 @@ export default function InvoiceCabinetPage() {
                 <SlugSection
                     invoice={invoice}
                     businessSlug={business.slug}
-                    accountSlug={account.slug}
+                    accountSlug={accountSlug}
                     payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
                 />
                 <InvoiceQrSection
                     invoice={invoice}
                     businessSlug={business.slug}
-                    accountSlug={account.slug}
+                    accountSlug={accountSlug}
                 />
 
-                <UiSectionCard title="Небезпечна зона">
+                <UiSectionCard title="Небезпечна зона" variant="destructive">
                     <p className="text-muted-foreground mt-2 text-sm">
                         Видалення повне і незворотне. Клієнт, що має збережене
                         посилання, не зможе оплатити.

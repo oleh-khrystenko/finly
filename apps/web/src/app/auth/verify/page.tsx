@@ -27,8 +27,7 @@ type VerifyStatus = 'verifying' | 'success' | 'deleted' | 'error';
  *
  *  - `claim == null` → fall-through на `redirectTarget` (register/login/default
  *    без claim).
- *  - `'success'` → `clearAll()` + redirect на per-account з banner-trigger
- *    `?completed-from=landing`.
+ *  - `'success'` → `clearAll()` + redirect на per-account page.
  *  - `'business-failed'` → `setFormData(failedClaimDraft)` +
  *    `setIntent('claim-failed-business')` + redirect на
  *    `/business/new?from=landing` (wizard pre-fill через `?from=landing`).
@@ -49,7 +48,7 @@ function handleClaimRedirect(
 
     if (claim.state === 'success') {
         store.clearAll();
-        return `/business/${claim.claimedBusinessSlug}/account/${claim.claimedAccountSlug}?completed-from=landing`;
+        return `/business/${claim.claimedBusinessSlug}/account/${claim.claimedAccountSlug}`;
     }
 
     if (claim.state === 'business-failed') {
@@ -135,11 +134,11 @@ function VerifyContent() {
             <div className="flex flex-col items-center gap-4">
                 <CheckCircle className="text-success h-12 w-12" />
                 <p className="text-foreground text-lg font-semibold">
-                    Акаунт видалено
+                    Акаунт деактивовано
                 </p>
                 <p className="text-muted-foreground max-w-sm text-center text-sm">
-                    Ваш акаунт деактивовано. Протягом 30 днів ви можете
-                    відновити його — просто увійдіть до системи.
+                    Протягом 30 днів ви можете відновити його — просто увійдіть
+                    до системи.
                 </p>
                 <UiButton
                     as="link"
@@ -160,8 +159,7 @@ function VerifyContent() {
                     Посилання недійсне або прострочене
                 </p>
                 <p className="text-muted-foreground text-sm">
-                    {errorMessage ||
-                        'Посилання для входу, яке ви використали, більше не дійсне. Будь ласка, запросіть нове.'}
+                    {errorMessage || 'Запросіть нове посилання.'}
                 </p>
                 <UiButton
                     as="link"

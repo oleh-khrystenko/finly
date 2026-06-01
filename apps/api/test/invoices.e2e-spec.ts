@@ -178,7 +178,6 @@ const VALID_BUSINESS_PAYLOAD = {
     taxationSystem: 'simplified-3',
     isVatPayer: false,
     paymentPurposeTemplate: 'Оплата за послуги',
-    acceptedBanks: ['privatbank', 'monobank'],
 };
 
 const VALID_ACCOUNT_PAYLOAD = {
@@ -1332,7 +1331,6 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                     }
                 ).data.business;
                 expect(Object.keys(business).sort()).toEqual([
-                    'acceptedBanks',
                     'name',
                     'slug',
                     'type',
@@ -1625,6 +1623,44 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                 expect(png[2]).toBe(0x4e);
                 expect(png[3]).toBe(0x47);
             });
+
+            it('Sprint 14 — size-whitelist відхиляє довільне значення (400)', async () => {
+                const user = await createUser();
+                const { slug: businessSlug, accountSlug } =
+                    await createBusinessFor(user);
+                const invoiceSlug = await seedInvoice({
+                    user,
+                    businessSlug,
+                    accountSlug,
+                });
+                // 400 (не render) — машинний `code: VALIDATION_ERROR` покрито
+                // unit-spec-ом `qr-image-request.spec.ts`; тут перевіряємо лише
+                // HTTP-контракт whitelist на повному стеку.
+                await supertest(app.getHttpServer())
+                    .get(
+                        `/api/businesses/public/${businessSlug}/account/${accountSlug}/invoices/${invoiceSlug}/qr/business.png?size=9999`
+                    )
+                    .expect(400);
+            });
+
+            it('Sprint 14 — ?download=1 (size=print) → attachment-заголовок', async () => {
+                const user = await createUser();
+                const { slug: businessSlug, accountSlug } =
+                    await createBusinessFor(user);
+                const invoiceSlug = await seedInvoice({
+                    user,
+                    businessSlug,
+                    accountSlug,
+                });
+                const res = await supertest(app.getHttpServer())
+                    .get(
+                        `/api/businesses/public/${businessSlug}/account/${accountSlug}/invoices/${invoiceSlug}/qr/business.png?size=print&download=1`
+                    )
+                    .expect(200);
+                expect(res.headers['content-disposition']).toContain(
+                    'attachment'
+                );
+            }, 30000);
         });
 
         describe('GET /qr/nbu.png?host=primary|legacy', () => {

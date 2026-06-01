@@ -1,11 +1,7 @@
 'use client';
 
-import {
-    BANK_LABEL,
-    type BankCode,
-    type BusinessType,
-} from '@finly/types';
-import { BANK_DISPLAY } from '@/shared/icons';
+import { BANK_LABEL, type BankCode, type BusinessType } from '@finly/types';
+import UiBankAppGrid from '@/shared/ui/UiBankAppGrid';
 import UiButton from '@/shared/ui/UiButton';
 import UiQrImage from '@/shared/ui/UiQrImage';
 
@@ -17,12 +13,11 @@ interface Props {
         bankCode: BankCode | null;
         ibanMask: string;
     };
-    /** Nested business view (whitelist 5 полів). */
+    /** Nested business view (whitelist 4 поля). */
     business: {
         type: BusinessType;
         name: string;
         slug: string;
-        acceptedBanks: BankCode[];
         seoIndexEnabled: boolean;
     };
     /**
@@ -75,9 +70,10 @@ export default function PublicAccountView({
         : `(${account.ibanMask})`;
     const heading = `Платіж на користь ${business.name} через ${account.name}`;
 
-    const qrPath = `${apiBase}/businesses/public/${encodeURIComponent(business.slug)}/account/${encodeURIComponent(account.slug)}/qr/nbu.png`;
-    const qrPrimary = `${qrPath}?host=primary`;
-    const qrLegacy = `${qrPath}?host=legacy`;
+    const qrBase = `${apiBase}/businesses/public/${encodeURIComponent(business.slug)}/account/${encodeURIComponent(account.slug)}/qr`;
+    const qrPrimary = `${qrBase}/nbu.png?host=primary`;
+    const qrLegacy = `${qrBase}/nbu.png?host=legacy`;
+    const qrPage = `${qrBase}/business.png`;
 
     return (
         <div className="mx-auto max-w-xl space-y-8 px-4 py-8">
@@ -95,31 +91,15 @@ export default function PublicAccountView({
                     Оберіть банк, з якого бажаєте оплатити
                 </h2>
                 {/*
-                 * 11 inactive bank tiles. Іконка з `BANK_DISPLAY` map
-                 * (`apps/web/src/shared/icons/banks/`). Grayscale + opacity-70 +
-                 * cursor-not-allowed маркують inactive стан; Sprint 5 розблокує
-                 * per-bank deep-links без зміни layout.
+                 * Sprint 5 — активна per-bank сітка. Тап → відкриває конкретний
+                 * банк-додаток (iOS приватна схема / Android intent://) з
+                 * заповненими реквізитами; fallback на загальний НБУ-link нижче.
+                 * Деталі — `shared/ui/UiBankAppGrid` + `buildBankAppLink`.
                  */}
-                <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
-                    {business.acceptedBanks.map((bank) => {
-                        const Icon = BANK_DISPLAY[bank];
-                        return (
-                            <div
-                                key={bank}
-                                aria-disabled
-                                className="border-border bg-muted/30 text-muted-foreground flex h-20 cursor-not-allowed flex-col items-center justify-center gap-1.5 rounded-md border px-2 text-center opacity-70 grayscale"
-                                title="Незабаром"
-                            >
-                                <div className="size-10">
-                                    <Icon />
-                                </div>
-                                <span className="text-[10px] leading-tight">
-                                    {BANK_LABEL[bank]}
-                                </span>
-                            </div>
-                        );
-                    })}
-                </div>
+                <UiBankAppGrid
+                    nbuLegacyLink={nbuLinks.legacy}
+                    nbuFallbackLink={nbuLinks.primary}
+                />
             </div>
 
             <div className="space-y-3">
@@ -153,28 +133,44 @@ export default function PublicAccountView({
                 </p>
             </div>
 
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                <figure className="space-y-2 text-center">
-                    <UiQrImage
-                        src={qrPrimary}
-                        alt="QR на основну адресу"
-                        className="border-border mx-auto w-full max-w-[240px] rounded-md border bg-white p-2"
-                    />
-                    <figcaption className="text-muted-foreground text-xs">
-                        Або відскануйте з вашого банк-додатка
-                    </figcaption>
-                </figure>
-                <figure className="space-y-2 text-center">
-                    <UiQrImage
-                        src={qrLegacy}
-                        alt="QR на запасну адресу"
-                        className="border-border mx-auto w-full max-w-[240px] rounded-md border bg-white p-2"
-                    />
-                    <figcaption className="text-muted-foreground text-xs">
-                        Запасний варіант — якщо перший QR не відкрився
-                    </figcaption>
-                </figure>
+            <div className="space-y-3">
+                <h2 className="text-foreground text-center text-base font-semibold">
+                    Сканувати для оплати в банку
+                </h2>
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                    <figure className="space-y-2 text-center">
+                        <UiQrImage
+                            src={qrPrimary}
+                            alt="QR на основну адресу"
+                            className="border-border mx-auto w-full max-w-[240px] rounded-md border bg-white"
+                        />
+                        <figcaption className="text-muted-foreground text-sm">
+                            Основна адреса
+                        </figcaption>
+                    </figure>
+                    <figure className="space-y-2 text-center">
+                        <UiQrImage
+                            src={qrLegacy}
+                            alt="QR на запасну адресу"
+                            className="border-border mx-auto w-full max-w-[240px] rounded-md border bg-white"
+                        />
+                        <figcaption className="text-muted-foreground text-sm">
+                            Запасний варіант — якщо перший не відкрився
+                        </figcaption>
+                    </figure>
+                </div>
             </div>
+
+            <figure className="space-y-2 text-center">
+                <UiQrImage
+                    src={qrPage}
+                    alt="QR на цю сторінку"
+                    className="border-border mx-auto w-full max-w-[240px] rounded-md border bg-white"
+                />
+                <figcaption className="text-muted-foreground text-sm">
+                    Відкрити цю сторінку — для вивіски чи поширення
+                </figcaption>
+            </figure>
         </div>
     );
 }

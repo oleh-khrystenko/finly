@@ -10,7 +10,7 @@ import {
  *
  * Норматив НБУ §IV.10.5 явно дозволяє два формати: 10-цифровий РНОКПП
  * (фізособа / ФОП) АБО 8-цифровий ЄДРПОУ (юр.особа). Мапінг **мусить бути
- * стабільним і єдиним** — два consumer-и (`Step2Requisites` у wizard,
+ * стабільним і єдиним** — два consumer-и (`BusinessCreateForm` на /business/new,
  * `RequisitesSection` у cabinet edit) повинні рендерити рівно ту саму
  * label-у, placeholder, maxLength і validator. Без shared-helper-а перший
  * drift у label-копії ламає UAT-чекліст PUB-6..9 (різні UA-рядки у двох
@@ -50,6 +50,13 @@ export interface TaxIdFieldConfig {
     /** Placeholder — приклад валідного значення для відповідного формату. */
     placeholder: string;
     /**
+     * Human-readable підпис під полем — знімає frictions, які голий
+     * нормативний label не знімає («це особистий код чи фопівський?», «де
+     * взяти?»). Симетрично з `NAME_HELPERS` у Step1: low-friction tone-bridge
+     * між «бюрократичною» абревіатурою-label-ом і паперовою реальністю.
+     */
+    description: string;
+    /**
      * Zod-валідатор, що буде використаний у RHF-resolver-і / `safeParse`.
      * `individualTaxIdZod` для individual / fop (10 + checksum), або
      * `legalEntityTaxIdZod` для tov / organization (8 цифр без checksum).
@@ -71,21 +78,25 @@ const STATIC_CONFIG_BY_TYPE: Record<BusinessType, TaxIdFieldStatic> = {
     individual: {
         label: 'РНОКПП',
         placeholder: '1234567890',
+        description: '10 цифр — як у довідці ДПС',
         validator: individualTaxIdZod,
     },
     fop: {
         label: 'РНОКПП',
         placeholder: '1234567890',
+        description: '10 цифр — особистий код з довідки ДПС',
         validator: individualTaxIdZod,
     },
     tov: {
         label: 'ЄДРПОУ',
         placeholder: '12345678',
+        description: '8 цифр — як у виписці ЄДР',
         validator: legalEntityTaxIdZod,
     },
     organization: {
         label: 'ЄДРПОУ',
         placeholder: '12345678',
+        description: '8 цифр — як у виписці ЄДР',
         validator: legalEntityTaxIdZod,
     },
 };

@@ -578,15 +578,14 @@ describe('UsersService', () => {
 
             await service.setPendingPostLoginTarget(
                 userId,
-                '/business/biz/account/acc?completed-from=landing'
+                '/business/biz/account/acc'
             );
 
             expect(mockModel.updateOne).toHaveBeenCalledWith(
                 { _id: userId },
                 {
                     $set: {
-                        pendingPostLoginTarget:
-                            '/business/biz/account/acc?completed-from=landing',
+                        pendingPostLoginTarget: '/business/biz/account/acc',
                     },
                 }
             );

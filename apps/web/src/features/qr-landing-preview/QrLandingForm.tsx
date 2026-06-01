@@ -75,7 +75,7 @@ export function QrLandingForm({ form }: QrLandingFormProps) {
     return (
         <form
             onSubmit={handleSubmit(onSubmit)}
-            className="space-y-4"
+            className="mx-auto w-full max-w-md space-y-4"
             noValidate
             aria-label="Форма генерації платіжного QR-коду"
         >
@@ -121,11 +121,12 @@ export function QrLandingForm({ form }: QrLandingFormProps) {
                 error={getZodFieldError(errors.purpose)}
             />
 
-            <div className="flex justify-end pt-2">
+            <div className="pt-2">
                 <UiButton
                     type="submit"
                     variant="filled"
                     size="lg"
+                    className="w-full"
                     disabled={!isValid || isSubmitting}
                 >
                     {isSubmitting ? 'Створюємо QR...' : 'Створити QR'}

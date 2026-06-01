@@ -83,7 +83,7 @@ export async function runClaimChain(
         ctx.clearAll();
         toast.success('Бізнес і рахунок збережено');
         ctx.router.replace(
-            `/business/${businessSlug}/account/${account.slug}?completed-from=landing`
+            `/business/${businessSlug}/account/${account.slug}`
         );
     } catch (err) {
         ctx.setFormData(draft);

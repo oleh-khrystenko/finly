@@ -2,14 +2,14 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, ExternalLink, Trash2 } from 'lucide-react';
-import { AxiosError } from 'axios';
+import { ArrowLeft, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
     BUSINESS_TYPE_LABEL,
     type UpdateBusinessRequest,
 } from '@finly/types';
 import {
+    extractApiErrorCode,
     getApiMessage,
     getBusinessBySlug,
     updateBusiness,
@@ -22,36 +22,26 @@ import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
 import {
     AccountsSection,
-    BanksSection,
-    BasicSection,
+    EditableBusinessName,
     PublicSection,
-    RequisitesSection,
-    TaxationSection,
-    hasTaxationFields,
+    QrSection,
+    RequisitesCard,
     scheduleDeleteWithUndo,
     useDeleteBusinessConfirmStore,
 } from '@/features/business-edit';
 
 /**
- * Sprint 3 §3.8 + Sprint 9 §SP-5 — кабінет бізнесу `/business/{slug}`.
+ * Sprint 3 §3.8 + Sprint 9 §SP-5 + Sprint 13 — кабінет бізнесу `/business/{slug}`.
  *
- * **Sprint 9 структура: 7 секцій** (9 → 7):
- *   1. BasicSection (тип, назва)
- *   2. RequisitesSection (тільки `taxId`, IBAN переїхав на Account)
- *   3. TaxationSection (conditional для fop / tov)
- *   4. BanksSection (acceptedBanks)
- *   5. PublicSection (slug, public URL)
- *   6. AccountsSection (cards-list рахунків + CTA "Додати рахунок")
- *   7. DangerSection (видалення бізнесу з cascade-toast)
- *
- * **Видалено vs Sprint 4**:
- *   - InvoicesSection (переїхав на account-cabinet)
- *   - InvoicesSettingsSection (preset-default переїхав на Account)
- *   - QrSection (QR per-account; business-rivni більше не має джерела для
- *     payload, бо IBAN живе на Account)
- *   - Preview-toggle (Sprint 4 prepared cabinet preview-mode для QR-вивіски;
- *     business-rivni тепер показує тільки список рахунків — preview немає
- *     сенсу. Sprint 10+ може повернути account-level preview).
+ * **Sprint 13 структура (5 елементів)**:
+ *   1. Heading area — eyebrow (type) + `EditableBusinessName` (inline-edit h1)
+ *      + "Відкрити в новій вкладці". Замінює стару BasicSection-картку, що
+ *      повністю дублювала heading.
+ *   2. `RequisitesCard` — merged-картка з трьома рядками: РНОКПП + (умовно
+ *      для fop/tov) Оподаткування + Призначення переказу.
+ *   3. PublicSection (slug, public URL).
+ *   4. AccountsSection (cards-list рахунків + CTA "Додати рахунок").
+ *   5. Danger zone — видалення бізнесу з cascade-toast.
  *
  * **`onSave` для taxId / taxation**: PATCH `/businesses/me/{slug}` приймає
  * top-level `taxId`. Backend reject-не зміну `taxId` якщо вона не відповідає
@@ -76,15 +66,7 @@ export default function BusinessSlugPage() {
             })
             .catch((err: unknown) => {
                 if (cancelled) return;
-                const code =
-                    err instanceof AxiosError
-                        ? ((
-                              err.response?.data as
-                                  | { error?: { code?: string } }
-                                  | undefined
-                          )?.error?.code ?? 'unknown')
-                        : 'unknown';
-                setError({ code });
+                setError({ code: extractApiErrorCode(err) });
             });
         return () => {
             cancelled = true;
@@ -104,22 +86,23 @@ export default function BusinessSlugPage() {
                     accountsCount: business.accountsCount,
                     invoicesCount: business.invoicesCount,
                 });
+                // Sprint 14: якщо slug змінився — URL `/business/{old}` стає
+                // stale (effect не re-fetch-не на тому самому params, refresh
+                // дасть 404). `replace` не залишає старий URL у history.
+                if (updated.slug !== business.slug) {
+                    router.replace(`/business/${updated.slug}`);
+                }
                 toast.success('Зміни збережено');
             } catch (err) {
-                const code =
-                    err instanceof AxiosError
-                        ? ((
-                              err.response?.data as
-                                  | { error?: { code?: string } }
-                                  | undefined
-                          )?.error?.code ?? 'unknown')
-                        : 'unknown';
-                const msg = getApiMessage(code, 'businesses');
+                const msg = getApiMessage(
+                    extractApiErrorCode(err),
+                    'businesses'
+                );
                 toast.error(msg);
                 throw new Error(msg);
             }
         },
-        [business]
+        [business, router]
     );
 
     const handleDelete = useCallback(() => {
@@ -155,12 +138,11 @@ export default function BusinessSlugPage() {
 
     if (!business) return null;
 
-    const publicUrl = `${ENV.NEXT_PUBLIC_PAY_PUBLIC_URL.replace(/\/$/, '')}/${business.slug}`;
-    const heading = `${BUSINESS_TYPE_LABEL[business.type]} ${business.name}`;
+    const typeLabel = BUSINESS_TYPE_LABEL[business.type];
 
     return (
         <UiPageContainer className="space-y-6 py-8 md:py-12">
-            {/* Top toolbar: back-link, heading, open-tab. */}
+            {/* Top toolbar: back-link + identity heading. */}
             <div className="flex flex-col gap-4">
                 <UiButton
                     as="link"
@@ -172,48 +154,30 @@ export default function BusinessSlugPage() {
                 >
                     Назад до списку
                 </UiButton>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                    <h1 className="text-foreground text-2xl font-bold tracking-tight md:text-3xl">
-                        {heading}
-                    </h1>
-                    <UiButton
-                        as="a"
-                        href={publicUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        variant="outline"
-                        size="sm"
-                        IconRight={<ExternalLink />}
-                    >
-                        Відкрити в новій вкладці
-                    </UiButton>
+                <div className="flex min-w-0 flex-col gap-1">
+                    <p className="text-muted-foreground text-xl font-semibold tracking-wide uppercase">
+                        {typeLabel}
+                    </p>
+                    <EditableBusinessName
+                        name={business.name}
+                        onSave={(name) => handlePatch({ name })}
+                    />
                 </div>
             </div>
 
             <div className="space-y-4">
-                <BasicSection business={business} onSave={handlePatch} />
-                <RequisitesSection business={business} onSave={handlePatch} />
-                {hasTaxationFields(business) && (
-                    <TaxationSection
-                        business={business}
-                        onSave={handlePatch}
-                    />
-                )}
-                <BanksSection
-                    id="banks"
-                    business={business}
-                    onSave={handlePatch}
-                />
                 <PublicSection
                     business={business}
                     payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
                     onSave={handlePatch}
                 />
+                <QrSection business={business} />
                 <AccountsSection businessSlug={business.slug} />
+                <RequisitesCard business={business} onSave={handlePatch} />
 
                 {/* Danger zone */}
-                <UiSectionCard title="Небезпечна зона">
-                    <p className="text-muted-foreground mt-2 text-sm">
+                <UiSectionCard title="Небезпечна зона" variant="destructive">
+                    <p className="text-muted-foreground mt-2 text-base">
                         Видалення повне і незворотне. Усі рахунки і виставлені
                         інвойси цього бізнесу будуть видалені. Клієнти, які
                         мають збережене посилання, не зможуть оплатити.

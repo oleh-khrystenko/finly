@@ -101,7 +101,7 @@ describe('VerifyPage — claim branching (Sprint 10 / Sprint 13)', () => {
         });
     });
 
-    it('claim.state=success → clearAll + redirect на per-account з ?completed-from=landing', async () => {
+    it('claim.state=success → clearAll + redirect на per-account', async () => {
         useQrLandingDraftStore.setState({
             formData: VALID_DRAFT,
             intent: 'claim-pending',
@@ -123,7 +123,7 @@ describe('VerifyPage — claim branching (Sprint 10 / Sprint 13)', () => {
 
         await waitFor(() => {
             expect(mockRouterReplace).toHaveBeenCalledWith(
-                '/business/iva-X3kQ/account/acc-aB12cD34?completed-from=landing'
+                '/business/iva-X3kQ/account/acc-aB12cD34'
             );
             const s = useQrLandingDraftStore.getState();
             expect(s.formData).toEqual({});

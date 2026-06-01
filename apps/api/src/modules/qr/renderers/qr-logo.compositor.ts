@@ -10,34 +10,66 @@ import sharp = require('sharp');
 import { QrRenderError } from '../errors';
 
 /**
- * Жорстка верхня межа на розмір логотипу відносно QR.
+ * Стеля ПЛОЩІ overlay-плашки відносно QR (частка знищених модулів).
  *
- * Норматив 003 (Додаток 4 §IV.10.4 ст. 28) дозволяє рівень корекції помилок
- * `M` (15%) або `Q` (25%). Sprint 2 §2.0 фіксує дефолт `Q` — дозволено
- * перекривати ~25% площі QR. Беремо `0.20` як safe upper-bound у quadrant'і
- * (під 25% площі з запасом на margins/anti-aliasing).
- *
- * Sprint plan §2.3 початково пропонував `0.30` під `H`-correction, але `H`
- * виходить за норматив 003 — деталі у docs/product/qr-spec/diff-002-003.md
- * "Рівень корекції помилок".
+ * Sprint 14.x: тип-2 (кастомний QR) — звичайний URL на нашу public-сторінку,
+ * НЕ NBU-payload, тож норматив 003 (M/Q-only) на нього не діє. Рендеримо його
+ * на `H`-корекції (~30%) і дозволяємо плашку лого+назви до цієї стелі —
+ * продуктовий баланс «довжина назви» vs «сканованість». Межу валідовано
+ * емпірично (jsQR): суцільна плашка >~16-20% виходить за корекцію навіть на `H`;
+ * реальні камери толерантніші, жива сканованість — ручний UAT
+ * (`docs/manual-checks`). Тип-1 (NBU) — квадрат `0.2×0.2` (4%) на `Q`, з запасом.
  */
-export const QR_LOGO_MAX_RATIO = 0.2;
+export const QR_OVERLAY_MAX_AREA_RATIO = 0.2;
+
+/** Дефолтний cap ширини плашки як frac QR-сторони (overlay не на всю матрицю). */
+export const QR_OVERLAY_DEFAULT_MAX_WIDTH_RATIO = 0.85;
 
 export interface QrLogoComposeOptions {
     /** Ширина QR (= висота, бо QR квадратний). */
     qrSizePx: number;
-    /** Frac від QR-розміру для логотипу. Якщо > QR_LOGO_MAX_RATIO → throw. */
-    logoMaxRatio: number;
+    /**
+     * Дефолт-висота плашки як frac QR-сторони. Ширина НЕ задається — береться з
+     * природного аспекту asset-у (лого+назва пікаються «в обтяжку»), тож плашка
+     * обтікає контент. Коротка назва → маленька плашка цієї висоти; довша →
+     * висота тисне вниз, щоб площа не перевищила `QR_OVERLAY_MAX_AREA_RATIO`
+     * (текст дрібнішає, плашка пласкішає).
+     */
+    idealHeightRatio: number;
+    /** Cap ширини як frac QR-сторони (дефолт `QR_OVERLAY_DEFAULT_MAX_WIDTH_RATIO`). */
+    maxWidthRatio?: number;
+}
+
+/**
+ * Опції додавання брендованих смуг навколо QR (Sprint 14).
+ *
+ * Смуги розширюють полотно **вертикально, поза quiet-zone**: сам QR-buffer
+ * (з нормативним 2-модульним margin-ом) лишається недоторканним, смуги
+ * приклеюються зверху/знизу. Горизонтальний quiet-zone не змінюється — смуги
+ * мають ту саму ширину, що QR.
+ */
+export interface QrBandOptions {
+    /**
+     * Сторона QR у px. QR квадратний (`width === height`), тож це і ширина
+     * полотна, і висота QR-блоку — окремий metadata-прохід не потрібен.
+     * Смуги resize-яться до цієї ширини зі збереженням аспекту.
+     */
+    width: number;
+    /** Asset верхньої смуги (опційно — тип-2 не має верхньої). */
+    topBandPath?: string;
+    /** Asset нижньої смуги (опційно). */
+    bottomBandPath?: string;
 }
 
 /**
  * Накладає центральний asset у центр QR-PNG через `sharp` composite-pipeline.
  *
- * **Sprint 3 рішення C5:** дефолтний asset — нормативний (білий круг зі знаком
- * гривні, постанова НБУ № 97 §II.11–12 ст. 5), не довільне лого. Ця класифікація
- * структурно живе у caller-і (`QrService.logoPath`); compositor параметризований
- * через `logoPath: string` навмисно — Sprint 6 (custom-logo upload, Paid фіча)
- * додасть file-resolver, що приймає R2 key, без зміни renderer-а. Назва класу
+ * **Параметризація центру (Sprint 14).** Вибір asset-у живе у caller-і:
+ * `QrService` тримає тип-рівневі `QrBrand`-дескриптори (нормативний круг
+ * гривні для тип-1, Finly-центр для тип-2) і пробрасує `logoPath` у
+ * `renderBranded`. Compositor — generic over `logoPath: string`: майбутній
+ * клієнтський брендинг (шар C, окремий спринт) підмінить asset-файл (напр.
+ * R2 key через file-resolver) без зміни renderer-а. Назва класу
  * (`Compositor`) залишається generic.
  *
  * Чому окремий клас від `QrImageRenderer`:
@@ -45,9 +77,16 @@ export interface QrLogoComposeOptions {
  *   - `sharp` — native (libvips), важка залежність — ізолюємо composition logic.
  *   - Render+compose split дозволяє переюзати під різні asset-и без рефактора.
  *
- * Лого ніколи не масштабується вгору (`without-enlargement` у resize):
- * якщо asset 1024×1024, а QR 512px і ratio 0.2 → лого 102×102 (downscale).
- * Якщо asset менший за target — залишається оригінальний розмір (без blur).
+ * **Контент-орієнтований розмір (Sprint 14.x).** Caller НЕ задає ширину плашки
+ * — лише `idealHeightRatio`. Ширина береться з природного аспекту asset-у
+ * (`metadata`), тож плашка обтікає лого+назву. Три правила розміру:
+ *   1. Дефолт: висота = `idealHeightRatio·qr`, ширина = `aspect·висота`.
+ *   2. Стеля площі: якщо площа > `QR_OVERLAY_MAX_AREA_RATIO` — висота тисне вниз
+ *      (аспект збережено), текст дрібнішає, плашка пласкішає.
+ *   3. Cap ширини: якщо ширина > `maxWidthRatio·qr` — обрізаємо ширину, висота
+ *      підлаштовується (дуже довгі назви; вище за стек назва ще й truncate-иться).
+ * Аспект asset-у == аспект плашки → `fit:'contain'` не додає полів, прозорі
+ * заокруглені кути показують матрицю QR крізь себе.
  */
 @Injectable()
 export class QrLogoCompositor {
@@ -56,25 +95,44 @@ export class QrLogoCompositor {
         logoPath: string,
         opts: QrLogoComposeOptions
     ): Promise<Buffer> {
-        if (opts.logoMaxRatio > QR_LOGO_MAX_RATIO) {
+        if (opts.idealHeightRatio <= 0 || opts.idealHeightRatio > 1) {
             throw new QrRenderError(
                 'QR_LOGO_TOO_LARGE',
-                `logoMaxRatio ${opts.logoMaxRatio} > ${QR_LOGO_MAX_RATIO} (норматив 003 + Q-correction)`
+                'idealHeightRatio must be in (0, 1]'
             );
         }
-        if (opts.logoMaxRatio <= 0) {
-            throw new QrRenderError(
-                'QR_LOGO_TOO_LARGE',
-                'logoMaxRatio must be > 0'
-            );
-        }
-
-        const logoSizePx = Math.round(opts.qrSizePx * opts.logoMaxRatio);
+        const maxWidthRatio =
+            opts.maxWidthRatio ?? QR_OVERLAY_DEFAULT_MAX_WIDTH_RATIO;
 
         let resizedLogo: Buffer;
         try {
+            const meta = await sharp(logoPath).metadata();
+            if (!meta.width || !meta.height) {
+                throw new Error('asset has no dimensions');
+            }
+            const aspect = meta.width / meta.height;
+
+            // 1. Дефолт-висота, ширина з аспекту.
+            let heightPx = opts.idealHeightRatio * opts.qrSizePx;
+            let widthPx = aspect * heightPx;
+
+            // 2. Стеля площі — стиснути зі збереженням аспекту.
+            const maxAreaPx =
+                QR_OVERLAY_MAX_AREA_RATIO * opts.qrSizePx * opts.qrSizePx;
+            if (widthPx * heightPx > maxAreaPx) {
+                heightPx = Math.sqrt(maxAreaPx / aspect);
+                widthPx = aspect * heightPx;
+            }
+
+            // 3. Cap ширини — обрізати, висота підлаштовується.
+            const maxWidthPx = maxWidthRatio * opts.qrSizePx;
+            if (widthPx > maxWidthPx) {
+                widthPx = maxWidthPx;
+                heightPx = widthPx / aspect;
+            }
+
             resizedLogo = await sharp(logoPath)
-                .resize(logoSizePx, logoSizePx, {
+                .resize(Math.round(widthPx), Math.round(heightPx), {
                     fit: 'contain',
                     background: { r: 255, g: 255, b: 255, alpha: 1 },
                     withoutEnlargement: false,
@@ -101,5 +159,72 @@ export class QrLogoCompositor {
                     : 'sharp composite failed'
             );
         }
+    }
+
+    /**
+     * Приклеює брендовані смуги зверху/знизу QR, розширюючи полотно поза
+     * quiet-zone. Кожна смуга resize-яться до `width` зі збереженням аспекту;
+     * квадратний QR-buffer (сторона = `width`) вставляється між ними без
+     * масштабування. Без жодної смуги — повертає вхід без змін (no-op).
+     */
+    async addBands(qrImage: Buffer, opts: QrBandOptions): Promise<Buffer> {
+        if (!opts.topBandPath && !opts.bottomBandPath) {
+            return qrImage;
+        }
+        try {
+            const top = opts.topBandPath
+                ? await this.resizeBand(opts.topBandPath, opts.width)
+                : null;
+            const bottom = opts.bottomBandPath
+                ? await this.resizeBand(opts.bottomBandPath, opts.width)
+                : null;
+
+            const composites: sharp.OverlayOptions[] = [];
+            let offsetY = 0;
+            if (top) {
+                composites.push({ input: top.buffer, left: 0, top: offsetY });
+                offsetY += top.height;
+            }
+            composites.push({ input: qrImage, left: 0, top: offsetY });
+            offsetY += opts.width;
+            if (bottom) {
+                composites.push({
+                    input: bottom.buffer,
+                    left: 0,
+                    top: offsetY,
+                });
+                offsetY += bottom.height;
+            }
+
+            return await sharp({
+                create: {
+                    width: opts.width,
+                    height: offsetY,
+                    channels: 4,
+                    background: { r: 255, g: 255, b: 255, alpha: 1 },
+                },
+            })
+                .composite(composites)
+                .png()
+                .toBuffer();
+        } catch (cause) {
+            throw new QrRenderError(
+                'QR_RENDER_FAILED',
+                cause instanceof Error
+                    ? cause.message
+                    : 'sharp band compose failed'
+            );
+        }
+    }
+
+    private async resizeBand(
+        bandPath: string,
+        width: number
+    ): Promise<{ buffer: Buffer; height: number }> {
+        const { data, info } = await sharp(bandPath)
+            .resize({ width, withoutEnlargement: false })
+            .png()
+            .toBuffer({ resolveWithObject: true });
+        return { buffer: data, height: info.height };
     }
 }

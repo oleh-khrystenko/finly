@@ -16,7 +16,7 @@ interface Props {
  */
 export default function DangerSection({ onDelete }: Props) {
     return (
-        <UiSectionCard title="Небезпечна зона">
+        <UiSectionCard title="Небезпечна зона" variant="destructive">
             <p className="text-muted-foreground mt-2 text-sm">
                 Видалення повне і незворотне. Клієнти, які мають збережене
                 посилання, не зможуть оплатити.

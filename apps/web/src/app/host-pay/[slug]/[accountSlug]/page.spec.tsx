@@ -60,7 +60,6 @@ function makeView(
             type: 'fop',
             name: 'Іваненко',
             slug: 'IvanEnko',
-            acceptedBanks: ['privatbank', 'monobank'],
             seoIndexEnabled: false,
         },
         nbuLinks: {
@@ -192,7 +191,6 @@ describe('generateMetadata', () => {
                     type: 'fop',
                     name: 'Іваненко',
                     slug: 'IvanEnko',
-                    acceptedBanks: ['privatbank'],
                     seoIndexEnabled: true,
                 },
             })

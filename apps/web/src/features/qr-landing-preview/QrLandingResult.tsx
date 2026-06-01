@@ -53,24 +53,26 @@ export function QrLandingResult({ form }: QrLandingResultProps) {
 
     if (!result) {
         return (
-            <div
-                className="border-border bg-muted/20 flex aspect-square w-full max-w-sm flex-col items-center justify-center gap-3 rounded-xl border border-dashed p-8 text-center"
-                aria-label="Превʼю QR-коду — порожньо"
-            >
+            <div className="mx-auto w-full max-w-md">
                 <div
-                    aria-hidden
-                    className="border-muted-foreground/30 grid grid-cols-3 grid-rows-3 gap-1 opacity-40"
+                    className="border-border bg-muted/20 flex aspect-square w-full flex-col items-center justify-center gap-3 rounded-xl border border-dashed p-8 text-center"
+                    aria-label="Превʼю QR-коду — порожньо"
                 >
-                    {Array.from({ length: 9 }).map((_, i) => (
-                        <div
-                            key={i}
-                            className="bg-muted-foreground/30 h-6 w-6 rounded"
-                        />
-                    ))}
+                    <div
+                        aria-hidden
+                        className="border-muted-foreground/30 grid grid-cols-3 grid-rows-3 gap-1 opacity-40"
+                    >
+                        {Array.from({ length: 9 }).map((_, i) => (
+                            <div
+                                key={i}
+                                className="bg-muted-foreground/30 h-6 w-6 rounded"
+                            />
+                        ))}
+                    </div>
+                    <p className="text-muted-foreground text-sm">
+                        Ваш QR-код зʼявиться тут після введення даних
+                    </p>
                 </div>
-                <p className="text-muted-foreground text-sm">
-                    Ваш QR-код зʼявиться тут після введення даних
-                </p>
             </div>
         );
     }
@@ -136,11 +138,11 @@ export function QrLandingResult({ form }: QrLandingResultProps) {
     };
 
     return (
-        <div className="flex flex-col gap-4">
+        <div className="mx-auto flex w-full max-w-md flex-col gap-4">
             <UiQrImage
                 src={`data:image/png;base64,${result.qrPngBase64}`}
                 alt="Платіжний QR-код за стандартом НБУ"
-                className="border-border bg-card w-full max-w-sm rounded-xl border p-4"
+                className="border-border bg-card w-full rounded-xl border"
             />
 
             <div className="border-border bg-muted/20 rounded-md border px-3 py-2">
@@ -183,6 +185,7 @@ export function QrLandingResult({ form }: QrLandingResultProps) {
                 type="button"
                 variant="filled"
                 size="lg"
+                className="w-full"
                 onClick={handleClaim}
                 disabled={isClaiming}
             >

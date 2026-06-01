@@ -144,7 +144,7 @@ describe('useClaimLandingDraft — success path (POST1 + POST2)', () => {
         localStorage.clear();
     });
 
-    it('обидва POST успішні → clearAll + toast + redirect на per-account з ?completed-from=landing', async () => {
+    it('обидва POST успішні → clearAll + toast + redirect на per-account', async () => {
         mockCreateBusiness.mockResolvedValue({ slug: 'iva-X3kQ' });
         mockCreateAccount.mockResolvedValue({ slug: 'acc-aB12cD34' });
         setAuthedComplete();
@@ -161,7 +161,7 @@ describe('useClaimLandingDraft — success path (POST1 + POST2)', () => {
                 'Бізнес і рахунок збережено'
             );
             expect(mockRouterReplace).toHaveBeenCalledWith(
-                '/business/iva-X3kQ/account/acc-aB12cD34?completed-from=landing'
+                '/business/iva-X3kQ/account/acc-aB12cD34'
             );
             const s = useQrLandingDraftStore.getState();
             expect(s.formData).toEqual({});

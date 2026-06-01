@@ -6,7 +6,6 @@ import { type Invoice } from '@finly/types';
 import UiButton from '@/shared/ui/UiButton';
 import UiInput from '@/shared/ui/UiInput';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
-import UiSpinner from '@/shared/ui/UiSpinner';
 import UiSwitch from '@/shared/ui/UiSwitch';
 import {
     formatKopecksForInput,
@@ -42,7 +41,7 @@ interface Props {
 export default function AmountSection({ invoice, onSave }: Props) {
     return (
         <UiSectionCard title="Сума і блокування">
-            <div className="space-y-4">
+            <div className="mt-4 space-y-4">
                 <MoneyEditableField
                     label="Сума"
                     value={invoice.amount}
@@ -99,17 +98,17 @@ function AmountLockSwitch({
     return (
         <label
             htmlFor="invoice-amount-lock"
-            className={`border-border flex items-start justify-between gap-3 rounded-md border p-3 ${
+            className={`border-border flex items-start justify-between gap-3 rounded-lg border p-4 ${
                 invoice.amount === null || saving
                     ? 'cursor-not-allowed opacity-60'
                     : 'cursor-pointer'
             }`}
         >
             <div className="flex flex-1 flex-col gap-1">
-                <span className="text-foreground text-sm font-medium">
+                <span className="text-foreground text-lg font-medium">
                     Дозволити клієнту правити суму
                 </span>
-                <span className="text-muted-foreground text-xs">
+                <span className="text-muted-foreground text-base">
                     {invoice.amount === null
                         ? 'Заблокувати можна лише при заданій сумі'
                         : 'Якщо вимкнено — клієнт сплатить точно зазначену суму'}
@@ -198,10 +197,12 @@ function MoneyEditableField({
 
     return (
         <div className="space-y-2">
-            <p className="text-muted-foreground text-xs font-medium">{label}</p>
+            <p className="text-muted-foreground text-base font-medium">
+                {label}
+            </p>
             {!editing ? (
-                <div className="flex items-start justify-between gap-3">
-                    <div className="text-foreground min-w-0 flex-1 text-sm break-words">
+                <div className="flex items-center justify-between gap-3">
+                    <div className="text-foreground min-w-0 flex-1 text-lg break-words">
                         {formatKopecksAsHryvnia(value) ??
                             'Без суми (клієнт вводить у банку)'}
                     </div>
@@ -246,10 +247,11 @@ function MoneyEditableField({
                             // duplicate того save-guard-у (button disabled +
                             // save() no-op): button-disabled чітко комунікує
                             // стан користувачу, save-guard ловить race.
-                            disabled={saving || parseErr !== null}
-                            IconLeft={!saving ? <Check /> : undefined}
+                            disabled={parseErr !== null}
+                            loading={saving}
+                            IconLeft={<Check />}
                         >
-                            {saving ? <UiSpinner size="sm" /> : 'Зберегти'}
+                            Зберегти
                         </UiButton>
                     </div>
                 </div>

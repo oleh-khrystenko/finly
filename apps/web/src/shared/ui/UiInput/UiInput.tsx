@@ -1,7 +1,7 @@
 'use client';
 
 import { forwardRef, useId } from 'react';
-import { composeClasses } from '@/shared/lib';
+import { composeClasses, OUTLINED_FIELD_STYLES } from '@/shared/lib';
 import type { UiInputProps, UiInputSize, UiInputVariant } from './types';
 
 const iconSizeStyles: Record<UiInputSize, string> = {
@@ -17,19 +17,21 @@ const sizeStyles: Record<UiInputSize, string> = {
 };
 
 const variantStyles: Record<UiInputVariant, string> = {
-    outlined:
-        'bg-transparent text-foreground border border-border hover:border-muted-foreground focus-within:border-primary',
-    filled: 'bg-secondary text-foreground border border-transparent hover:bg-card focus-within:bg-card',
+    outlined: composeClasses(
+        'bg-transparent text-foreground',
+        OUTLINED_FIELD_STYLES.borderIdle
+    ),
+    filled: 'bg-secondary text-foreground border-transparent hover:bg-card focus-within:bg-card',
 };
 
-const errorStyles =
-    'border-destructive hover:border-destructive focus-within:border-destructive';
+const errorStyles = OUTLINED_FIELD_STYLES.borderError;
 
 const UiInput = forwardRef<HTMLInputElement, UiInputProps>((props, ref) => {
     const {
         variant = 'outlined',
         size = 'md',
         label,
+        description,
         error,
         IconLeft,
         IconRight,
@@ -42,6 +44,9 @@ const UiInput = forwardRef<HTMLInputElement, UiInputProps>((props, ref) => {
 
     const generatedId = useId();
     const inputId = externalId ?? generatedId;
+    const errorId = `${inputId}-error`;
+    const descriptionId = `${inputId}-description`;
+    const describedBy = error ? errorId : description ? descriptionId : undefined;
 
     const iconClass = composeClasses(
         'shrink-0 text-muted-foreground',
@@ -50,7 +55,7 @@ const UiInput = forwardRef<HTMLInputElement, UiInputProps>((props, ref) => {
 
     const wrapperClasses = composeClasses(
         'flex items-center gap-2',
-        'rounded-md transition-colors',
+        OUTLINED_FIELD_STYLES.shellBase,
         sizeStyles[size],
         variantStyles[variant],
         error && errorStyles,
@@ -87,6 +92,8 @@ const UiInput = forwardRef<HTMLInputElement, UiInputProps>((props, ref) => {
                     ref={ref}
                     disabled={disabled}
                     required={required}
+                    aria-invalid={error ? true : undefined}
+                    aria-describedby={describedBy}
                     className="placeholder:text-muted-foreground w-full bg-transparent outline-none disabled:cursor-not-allowed"
                 />
                 {IconRight && (
@@ -95,7 +102,20 @@ const UiInput = forwardRef<HTMLInputElement, UiInputProps>((props, ref) => {
                     </span>
                 )}
             </div>
-            {error && <p className="text-destructive mt-1 text-sm">{error}</p>}
+            {error ? (
+                <p id={errorId} className="text-destructive mt-1 text-sm">
+                    {error}
+                </p>
+            ) : (
+                description && (
+                    <p
+                        id={descriptionId}
+                        className="text-muted-foreground mt-1 text-sm"
+                    >
+                        {description}
+                    </p>
+                )
+            )}
         </div>
     );
 });

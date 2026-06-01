@@ -1,5 +1,7 @@
+import type { BusinessType } from './business-type';
+
 /**
- * Система оподаткування ФОП — sprint 3 рішення C1
+ * Система оподаткування — sprint 3 рішення C1
  * (`docs/sprints/03-cabinet-public/planning-questions.md`).
  *
  * **Чому окремі поля `taxationSystem` і `isVatPayer`** (а не комбінований
@@ -9,10 +11,16 @@
  * як refine з кодом `INVALID_VAT_FOR_TAXATION_SYSTEM` (повторюємо паттерн
  * sprint 1 `OWNERLESS_BUSINESS_REQUIRES_MANAGER`).
  *
- * **Скоуп MVP** — лише ФОП-варіанти. Юр-форми ТОВ/ВАТ матимуть свої правила
- * (загальна система може мати інші характеристики для юр.особи); розширення —
- * окрема ініціатива при додаванні `BusinessType ≠ 'fop'`. Migration не
- * потрібна, бо існуючі бізнеси заповнили лише ФОП-валідні значення.
+ * **Юр-обмеження за типом бізнесу** (ПКУ розд. XIV гл. 1):
+ *  - Групи 1 і 2 спрощеної системи — виключно для фізичних осіб-підприємців
+ *    (ФОП). Юр-особи (ТОВ) на них перебувати не можуть.
+ *  - Група 3 і загальна система — для обох (ФОП і ТОВ).
+ *
+ * Allowed-set per-type живе у `ALLOWED_TAXATION_SYSTEMS_BY_TYPE` нижче.
+ * Refine `TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE` у `BusinessSchema` /
+ * write-DTO `createTovVariant` блокує невалідні комбінації; service-layer
+ * `BusinessesService.update` повторює перевірку для partial-PATCH, де DTO
+ * не несе `type`.
  */
 
 export const TAXATION_SYSTEMS = [
@@ -23,6 +31,36 @@ export const TAXATION_SYSTEMS = [
 ] as const;
 
 export type TaxationSystem = (typeof TAXATION_SYSTEMS)[number];
+
+/**
+ * Допустимі системи оподаткування за типом бізнесу. Для не-taxation-типів
+ * (`individual`, `organization`) список порожній — поля `taxationSystem` /
+ * `isVatPayer` у них null (інваріант `TAXATION_FIELDS_MISMATCH_TYPE`).
+ *
+ * Single source of truth для:
+ *  - entity-Zod refine `TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE` (read-side);
+ *  - write-DTO refine на `createTovVariant` (cabinet write);
+ *  - service-layer cross-check у `BusinessesService.update` (PATCH, де DTO
+ *    не несе `type`);
+ *  - UI-filter SELECT-options у `BusinessCreateForm` / `TaxationSection`.
+ */
+export const ALLOWED_TAXATION_SYSTEMS_BY_TYPE: Record<
+    BusinessType,
+    readonly TaxationSystem[]
+> = {
+    individual: [],
+    fop: ['simplified-1', 'simplified-2', 'simplified-3', 'general'],
+    tov: ['simplified-3', 'general'],
+    organization: [],
+};
+
+export const isTaxationAllowedForType = (
+    type: BusinessType,
+    system: TaxationSystem
+): boolean =>
+    (
+        ALLOWED_TAXATION_SYSTEMS_BY_TYPE[type] as readonly TaxationSystem[]
+    ).includes(system);
 
 /**
  * Підмножина систем оподаткування, на яких ФОП legitimно може бути платником

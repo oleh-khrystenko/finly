@@ -11,6 +11,7 @@ import {
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { Response } from 'express';
 import {
+    buildQrDownloadFilename,
     NBU_HOST_LEGACY,
     NBU_HOST_PRIMARY,
     PublicAccountViewSchema,
@@ -23,6 +24,11 @@ import { SkipOnboarding } from '../../common/decorators/skip-onboarding.decorato
 import { ENV } from '../../config/env';
 import { BusinessesService } from '../businesses/businesses.service';
 import type { BusinessDocument } from '../businesses/schemas/business.schema';
+import {
+    applyQrDownloadDisposition,
+    isQrDownloadRequested,
+    resolveQrSizePxFromQuery,
+} from '../qr/qr-image-request';
 import { QrService } from '../qr/qr.service';
 import { AccountsService } from './accounts.service';
 import { buildPayloadInputFromAccount } from './payload-mapper';
@@ -73,7 +79,6 @@ export class PublicAccountsController {
                 type: business.type,
                 name: business.name,
                 slug: business.slug,
-                acceptedBanks: business.acceptedBanks,
                 seoIndexEnabled: business.seoIndexEnabled,
             },
             nbuLinks: {
@@ -105,14 +110,25 @@ export class PublicAccountsController {
     async getBusinessQr(
         @Param('slug') slug: string,
         @Param('accountSlug') accountSlug: string,
+        @Query('size') sizeParam: string | undefined,
+        @Query('download') downloadParam: string | undefined,
         @Res() res: Response
     ): Promise<void> {
+        const sizePx = resolveQrSizePxFromQuery(sizeParam);
         const { business, account } = await this.lookupOrThrow(
             slug,
             accountSlug
         );
         const url = `${ENV.PAY_PUBLIC_URL.replace(/\/$/, '')}/${business.slug}/${account.slug}`;
-        const png = await this.qrService.renderForUrl(url);
+        const png = await this.qrService.renderForUrl(url, { sizePx });
+        applyQrDownloadDisposition(
+            res,
+            isQrDownloadRequested(downloadParam),
+            buildQrDownloadFilename('page', {
+                businessSlug: business.slug,
+                accountSlug: account.slug,
+            })
+        );
         res.send(png);
     }
 
@@ -131,9 +147,12 @@ export class PublicAccountsController {
         @Param('slug') slug: string,
         @Param('accountSlug') accountSlug: string,
         @Query('host') hostParam: string | undefined,
+        @Query('size') sizeParam: string | undefined,
+        @Query('download') downloadParam: string | undefined,
         @Res() res: Response
     ): Promise<void> {
         const host = resolveNbuHost(hostParam);
+        const sizePx = resolveQrSizePxFromQuery(sizeParam);
         const { business, account } = await this.lookupOrThrow(
             slug,
             accountSlug
@@ -141,7 +160,18 @@ export class PublicAccountsController {
         const input = buildPayloadInputFromAccount(business, account);
         const png = await this.qrService.renderForNbuPayload(input, '003', {
             host,
+            sizePx,
         });
+        applyQrDownloadDisposition(
+            res,
+            isQrDownloadRequested(downloadParam),
+            buildQrDownloadFilename(
+                host === NBU_HOST_PRIMARY
+                    ? 'payment-primary'
+                    : 'payment-legacy',
+                { businessSlug: business.slug, accountSlug: account.slug }
+            )
+        );
         res.send(png);
     }
 
@@ -149,7 +179,12 @@ export class PublicAccountsController {
         slug: string,
         accountSlug: string
     ): Promise<{ business: BusinessDocument; account: AccountDocument }> {
-        const business = await this.businessesService.getBySlug(slug);
+        // Sprint 14 — historical business-slug fallback. SC порівнює
+        // `params.slug !== view.business.slug` (account-page line 87) і
+        // робить `permanentRedirect()` на canonical URL зі збереженням
+        // accountSlug (account slugs immutable).
+        const business =
+            await this.businessesService.getBySlugOrHistorical(slug);
         if (!business) {
             throw new NotFoundException({
                 code: RESPONSE_CODE.BUSINESS_NOT_FOUND,

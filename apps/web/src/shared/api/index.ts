@@ -1,4 +1,5 @@
 export { apiClient, getAccessToken, setAccessToken } from './client';
+export { extractApiErrorCode } from './extractApiErrorCode';
 export { getApiMessage } from './mapApiCode';
 export {
     checkEmail,

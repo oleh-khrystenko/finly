@@ -28,13 +28,13 @@ interface Props {
 export default function BasicSection({ account, onSave }: Props) {
     return (
         <UiSectionCard title="Основне">
-            <div className="space-y-4">
+            <div className="mt-4 space-y-6">
                 {account.bankCode !== null && (
                     <div>
-                        <p className="text-muted-foreground text-xs font-medium">
+                        <p className="text-muted-foreground text-base font-medium">
                             Банк
                         </p>
-                        <p className="text-foreground mt-1 text-sm">
+                        <p className="text-foreground mt-1.5 text-lg">
                             {BANK_LABEL[account.bankCode]}
                         </p>
                     </div>

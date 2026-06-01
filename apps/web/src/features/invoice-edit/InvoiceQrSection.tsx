@@ -1,29 +1,26 @@
 'use client';
 
-import { useState } from 'react';
-import { Download } from 'lucide-react';
-import { toast } from 'sonner';
-import { type Invoice } from '@finly/types';
-import UiButton from '@/shared/ui/UiButton';
-import UiQrImage from '@/shared/ui/UiQrImage';
+import { buildQrDownloadFilename, type Invoice } from '@finly/types';
+import UiQrCard from '@/shared/ui/UiQrCard';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
+import { getInvoiceStatus } from '@/entities/invoice';
 
 interface Props {
     invoice: Invoice;
     businessSlug: string;
-    /**
-     * Sprint 9 §SP-5 — account-slug у public-URL інвойсу (3-сегментний матрьошка).
-     */
+    /** Sprint 9 §SP-5 — account-slug у public-URL інвойсу (3-сегментний матрьошка). */
     accountSlug: string;
     apiBase?: string;
 }
 
 /**
- * Sprint 4 §4.6 + Sprint 9 §SP-5 — секція "QR-картинка" для інвойсу.
- * Показує public-URL QR (canonical 3-сегментний матрьошка-URL інвойсу).
+ * Sprint 14 §UI — QR-секція інвойсу. Дзеркалить public-вигляд: два НБУ-коди
+ * (тип-1, оплата в банку) + URL-код (тип-2, відкриває сторінку інвойсу).
  *
- * **Patern ідентичний Sprint 3** — `<img>` з public endpoint, кнопка
- * "Завантажити" через blob+anchor; toast-error на failure.
+ * **Прострочений інвойс** — НБУ-коди приховані: `qr/nbu.png` після `validUntil`
+ * повертає 410 Gone (server-side single source of truth), тож рендерити їх
+ * було б битим зображенням. Код «Відкрити сторінку» лишається — веде на
+ * публічну сторінку, яка сама показує банер «термін минув».
  */
 export default function InvoiceQrSection({
     invoice,
@@ -31,57 +28,64 @@ export default function InvoiceQrSection({
     accountSlug,
     apiBase = '/api',
 }: Props) {
-    const [downloading, setDownloading] = useState(false);
-    const url = `${apiBase}/businesses/public/${encodeURIComponent(
+    const base = `${apiBase}/businesses/public/${encodeURIComponent(
         businessSlug
-    )}/account/${encodeURIComponent(accountSlug)}/invoices/${encodeURIComponent(invoice.slug)}/qr/business.png`;
-
-    const handleDownload = async () => {
-        setDownloading(true);
-        try {
-            const res = await fetch(url);
-            if (!res.ok) throw new Error(String(res.status));
-            const blob = await res.blob();
-            const objectUrl = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = objectUrl;
-            a.download = `qr-invoice-${invoice.slug}.png`;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            URL.revokeObjectURL(objectUrl);
-        } catch {
-            toast.error('Не вдалося завантажити QR');
-        } finally {
-            setDownloading(false);
-        }
-    };
+    )}/account/${encodeURIComponent(accountSlug)}/invoices/${encodeURIComponent(invoice.slug)}/qr`;
+    const isActive = getInvoiceStatus(invoice.validUntil, new Date()) === 'active';
 
     return (
-        <UiSectionCard
-            title="QR-картинка"
-            headerRight={
-                <UiButton
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void handleDownload()}
-                    disabled={downloading}
-                    IconLeft={<Download />}
-                >
-                    Завантажити
-                </UiButton>
-            }
-        >
-            <div className="mt-3 flex justify-center">
-                <UiQrImage
-                    src={url}
-                    alt={`QR на сторінку оплати рахунку ${invoice.slug}`}
-                    className="border-border w-full max-w-[280px] rounded-md border bg-white p-3"
+        <UiSectionCard title="QR-коди">
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                {isActive && (
+                    <>
+                        <UiQrCard
+                            endpoint={`${base}/nbu.png`}
+                            params={{ host: 'primary' }}
+                            title="Оплата в банку"
+                            caption="Основна адреса (qr.bank.gov.ua)"
+                            alt="QR за стандартом НБУ — основна адреса"
+                            downloadFilename={buildQrDownloadFilename(
+                                'payment-primary',
+                                {
+                                    businessSlug,
+                                    accountSlug,
+                                    invoiceSlug: invoice.slug,
+                                }
+                            )}
+                        />
+                        <UiQrCard
+                            endpoint={`${base}/nbu.png`}
+                            params={{ host: 'legacy' }}
+                            title="Оплата в банку"
+                            caption="Альтернативна адреса (bank.gov.ua/qr)"
+                            alt="QR за стандартом НБУ — альтернативна адреса"
+                            downloadFilename={buildQrDownloadFilename(
+                                'payment-legacy',
+                                {
+                                    businessSlug,
+                                    accountSlug,
+                                    invoiceSlug: invoice.slug,
+                                }
+                            )}
+                        />
+                    </>
+                )}
+                <UiQrCard
+                    endpoint={`${base}/business.png`}
+                    title="Відкрити сторінку"
+                    caption="Веде на публічну сторінку інвойсу"
+                    alt="QR на публічну сторінку інвойсу"
+                    downloadFilename={buildQrDownloadFilename('page', {
+                        businessSlug,
+                        accountSlug,
+                        invoiceSlug: invoice.slug,
+                    })}
                 />
             </div>
-            <p className="text-muted-foreground mt-3 text-center text-xs">
-                Скан веде на публічну сторінку рахунку з реквізитами та сумою
+            <p className="text-muted-foreground mt-3 text-sm">
+                {isActive
+                    ? 'Коди «Оплата в банку» відкривають банк-додаток із заповненими сумою та призначенням. Код «Відкрити сторінку» веде на публічну сторінку інвойсу.'
+                    : 'Термін інвойсу минув — оплата в банку недоступна. Код «Відкрити сторінку» веде на публічну сторінку з поясненням для клієнта.'}
             </p>
         </UiSectionCard>
     );

@@ -33,7 +33,6 @@ describe('loadPublicAccountView', () => {
             type: 'fop',
             name: 'Іваненко',
             slug: 'IvanEnko',
-            acceptedBanks: ['privatbank'],
             seoIndexEnabled: false,
         },
         nbuLinks: {

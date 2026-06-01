@@ -400,12 +400,6 @@ function SigninContent() {
             <h1 className="text-foreground text-3xl font-bold">
                 {state === 'recovery' ? 'Акаунт деактивовано' : 'Вхід до Finly'}
             </h1>
-            {state === 'email' && (
-                <p className="text-muted-foreground mt-2">
-                    Запустіть свій SaaS швидше — auth, payments та i18n з
-                    коробки
-                </p>
-            )}
         </div>
     );
 
@@ -549,21 +543,11 @@ function SigninContent() {
                 type="submit"
                 variant="filled"
                 size="lg"
-                className="relative w-full justify-center"
+                className="w-full justify-center"
                 disabled={isPasswordBusy}
+                loading={passwordForm.formState.isSubmitting}
             >
-                <span
-                    className={
-                        passwordForm.formState.isSubmitting ? 'invisible' : ''
-                    }
-                >
-                    Увійти
-                </span>
-                {passwordForm.formState.isSubmitting && (
-                    <span className="absolute inset-0 flex items-center justify-center">
-                        <UiSpinner size="sm" />
-                    </span>
-                )}
+                Увійти
             </UiButton>
 
             {showMagicLinkSuggestion && (
@@ -595,8 +579,7 @@ function SigninContent() {
                     <span className="text-foreground font-semibold">
                         {email}
                     </span>
-                    . Перевірте папку «Вхідні» та натисніть на посилання для
-                    входу.
+                    . Перевірте папку «Вхідні».
                 </p>
             </div>
 
@@ -605,16 +588,13 @@ function SigninContent() {
                     variant="text"
                     size="sm"
                     onClick={handleResend}
-                    disabled={resendCountdown > 0 || resending}
+                    disabled={resendCountdown > 0}
+                    loading={resending}
                     className="text-primary text-sm font-medium hover:underline"
                 >
-                    {resending ? (
-                        <UiSpinner size="sm" />
-                    ) : resendCountdown > 0 ? (
-                        `Повторно через ${resendCountdown}с`
-                    ) : (
-                        'Надіслати повторно'
-                    )}
+                    {resendCountdown > 0
+                        ? `Повторно через ${resendCountdown}с`
+                        : 'Надіслати повторно'}
                 </UiButton>
 
                 <UiButton
@@ -633,18 +613,18 @@ function SigninContent() {
     const renderRecoveryState = () => (
         <div className="space-y-4">
             <p className="text-muted-foreground text-center">
-                Ваш акаунт було видалено {deletedAt ?? ''}. Він буде остаточно
-                видалено через {deletedDaysLeft} днів.
+                Ваш акаунт деактивовано {deletedAt ?? ''}. Остаточне видалення
+                через {deletedDaysLeft} днів.
             </p>
 
             <UiButton
                 variant="filled"
                 size="lg"
                 className="w-full justify-center"
-                disabled={submitting}
+                loading={submitting}
                 onClick={handleRestore}
             >
-                {submitting ? <UiSpinner size="sm" /> : 'Відновити акаунт'}
+                Відновити акаунт
             </UiButton>
 
             <UiButton

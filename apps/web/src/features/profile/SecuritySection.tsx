@@ -12,7 +12,6 @@ import { passwordSchema } from '@finly/types';
 import UiButton from '@/shared/ui/UiButton';
 import UiPasswordInput from '@/shared/ui/UiPasswordInput';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
-import UiSpinner from '@/shared/ui/UiSpinner';
 import { setPassword, getMe } from '@/shared/api';
 import { mapValidationCode } from '@/shared/lib';
 import { useAuthStore } from '@/entities/user';
@@ -164,15 +163,10 @@ const SecuritySection = ({ user, mode }: SecuritySectionProps) => {
                         type="submit"
                         variant="filled"
                         size="md"
-                        disabled={
-                            isSubmitting || (!isPasswordOptional && !password)
-                        }
+                        disabled={!isPasswordOptional && !password}
+                        loading={isSubmitting}
                     >
-                        {isSubmitting ? (
-                            <UiSpinner size="sm" />
-                        ) : (
-                            'Встановити пароль'
-                        )}
+                        Встановити пароль
                     </UiButton>
                 </form>
             )}

@@ -50,25 +50,30 @@ export function QrLandingBlock() {
         <section
             id="try-now"
             aria-labelledby="try-now-heading"
-            className="container mx-auto px-6 py-16"
+            className="bg-background"
         >
-            <div className="mb-10 max-w-2xl">
-                <h2
-                    id="try-now-heading"
-                    className="text-3xl font-semibold tracking-tight"
-                >
-                    Спробуйте прямо зараз
-                </h2>
-                <p className="text-muted-foreground mt-3 text-base">
-                    Введіть реквізити — система згенерує QR-код за стандартом
-                    НБУ, який відкривається в будь-якому банк-додатку України.
-                </p>
+            <div className="container mx-auto px-6 py-16 md:py-24">
+                <div className="mx-auto mb-10 max-w-2xl text-center md:mb-14">
+                    <h2
+                        id="try-now-heading"
+                        className="text-foreground text-3xl font-semibold tracking-tight sm:text-4xl"
+                    >
+                        Спробуйте прямо зараз
+                    </h2>
+                    <p className="text-muted-foreground mt-3 text-base sm:text-lg">
+                        Введіть реквізити — система згенерує QR-код за
+                        стандартом НБУ, який відкривається в будь-якому
+                        банк-додатку України.
+                    </p>
+                </div>
+                <div className="border-border bg-card mx-auto max-w-5xl rounded-3xl border p-6 shadow-sm md:p-10">
+                    {hasHydrated ? (
+                        <HydratedContent />
+                    ) : (
+                        <BlockSkeleton aria-label="Завантажуємо форму…" />
+                    )}
+                </div>
             </div>
-            {hasHydrated ? (
-                <HydratedContent />
-            ) : (
-                <BlockSkeleton aria-label="Завантажуємо форму…" />
-            )}
         </section>
     );
 }
@@ -107,9 +112,13 @@ function HydratedContent() {
     }, [form, setFormData, invalidateResult]);
 
     return (
-        <div className="grid gap-8 md:grid-cols-2 md:items-start">
-            <QrLandingForm form={form} />
-            <QrLandingResult form={form} />
+        <div className="divide-border grid divide-y md:grid-cols-2 md:divide-x md:divide-y-0">
+            <div className="pb-8 md:pr-8 md:pb-0 lg:pr-10">
+                <QrLandingForm form={form} />
+            </div>
+            <div className="pt-8 md:pt-0 md:pl-8 lg:pl-10">
+                <QrLandingResult form={form} />
+            </div>
         </div>
     );
 }
@@ -119,10 +128,14 @@ function BlockSkeleton(props: { 'aria-label'?: string }) {
         <div
             aria-label={props['aria-label']}
             aria-busy
-            className="grid gap-8 md:grid-cols-2 md:items-start"
+            className="divide-border grid divide-y md:grid-cols-2 md:divide-x md:divide-y-0"
         >
-            <div className="bg-muted/30 h-[480px] animate-pulse rounded-xl" />
-            <div className="bg-muted/30 h-[480px] animate-pulse rounded-xl" />
+            <div className="flex justify-center pb-8 md:pr-8 md:pb-0 lg:pr-10">
+                <div className="bg-muted/30 h-[520px] w-full max-w-md animate-pulse rounded-xl" />
+            </div>
+            <div className="flex justify-center pt-8 md:pt-0 md:pl-8 lg:pl-10">
+                <div className="bg-muted/30 h-[520px] w-full max-w-md animate-pulse rounded-xl" />
+            </div>
         </div>
     );
 }

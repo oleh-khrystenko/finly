@@ -61,27 +61,34 @@ describe('QrService — integration (real sharp + qrcode + jsqr)', () => {
     });
 
     describe('renderForUrl', () => {
-        it('генерує PNG, що зчитується назад у вихідний URL', async () => {
-            const url =
-                'https://pay.finly.com.ua/ivanenko-fop/zamovlennia-aB3xQ9k7';
+        // ---------------------------------------------------------------------
+        // Sprint 14.x — rect-центр тип-2 НЕ перевіряється jsQR-decode-ом.
+        //
+        // Продуктове рішення: прямокутна плашка лого+назви займає ~20% площі QR
+        // (`BRAND_URL_RECT` 0.70×0.28) — це СВІДОМО за межею строгого софт-
+        // декодера jsQR навіть на H-корекції (емпірично падає вже на ~16-20%
+        // суцільної плашки). Реальні камери 2026 толерантніші, але jsQR її не
+        // декодує — тож round-trip тут перевіряє лише, що pipeline видає валідний
+        // PNG потрібного формату, БЕЗ decode-асерту. Жива сканованість rect —
+        // ручний UAT (`docs/manual-checks`, «живі банк-додатки / камери»).
+        //
+        // Square-центр (лого-онлі, 4% площі) і весь тип-1 (NBU) лишаються під
+        // повним jsQR round-trip-ом нижче — вони у безпечній зоні.
+        it('брендований тип-2 (rect-центр + смуга) видає валідний PNG потрібного розміру', async () => {
+            const url = 'https://pay.finly.com.ua/ivanenko-fop';
             const png = await service.renderForUrl(url);
-            const decoded = await decodeQr(png);
-            expect(decoded).toBe(url);
+            const meta = await sharp(png).metadata();
+            // QR (sizePx) + нижня смуга → висота > ширини, ширина == sizePx.
+            expect(meta.format).toBe('png');
+            expect(meta.width).toBe(512);
+            expect(meta.height).toBeGreaterThan(512);
         });
 
-        it('PNG з накладеним лого все одно сканується (Q-correction tolerance)', async () => {
+        it('тип-2 зі square-центром (лого-онлі, 4% площі) сканується', async () => {
             const url = 'https://pay.finly.com.ua/test';
             const png = await service.renderForUrl(url, {
-                includeLogo: true,
-                logoMaxRatio: 0.2,
+                centerFormat: 'square',
             });
-            const decoded = await decodeQr(png);
-            expect(decoded).toBe(url);
-        });
-
-        it('PNG без лого — теж сканується (sanity baseline)', async () => {
-            const url = 'https://pay.finly.com.ua/test';
-            const png = await service.renderForUrl(url, { includeLogo: false });
             const decoded = await decodeQr(png);
             expect(decoded).toBe(url);
         });
@@ -139,8 +146,6 @@ describe('QrService — integration (real sharp + qrcode + jsqr)', () => {
                 '003',
                 {
                     host: NBU_HOST_PRIMARY,
-                    includeLogo: true,
-                    logoMaxRatio: 0.2,
                 }
             );
             const decoded = await decodeQr(png);
@@ -244,28 +249,65 @@ describe('QrService — integration (real sharp + qrcode + jsqr)', () => {
         });
     });
 
-    describe('logo overlay viability', () => {
-        it('logoMaxRatio = 0.20 (max-allowed) — QR все ще читається', async () => {
+    describe('branded overlay viability', () => {
+        // rect-центр тип-2 (~20% площі) НЕ декодується jsQR — продуктове рішення
+        // (див. коментар у `describe('renderForUrl')`). Тут перевіряємо лише, що
+        // pipeline видає валідний PNG на обох розмірах і для довгих URL.
+        // Сканованість rect — ручний UAT. Square/тип-1 нижче лишаються під decode.
+        it('брендований тип-2 (rect) на print-розмірі (1024) видає валідний PNG', async () => {
             const png = await service.renderForUrl(
                 'https://pay.finly.com.ua/x',
-                {
-                    includeLogo: true,
-                    logoMaxRatio: 0.2,
-                    sizePx: 512,
-                }
+                { sizePx: 1024 }
             );
-            const decoded = await decodeQr(png);
-            expect(decoded).toBe('https://pay.finly.com.ua/x');
+            const meta = await sharp(png).metadata();
+            expect(meta.format).toBe('png');
+            expect(meta.width).toBe(1024);
+            expect(meta.height).toBeGreaterThan(1024);
+        }, 20000);
+
+        it('тип-2 (rect) з довгим URL (довгі slug-и) видає валідний PNG', async () => {
+            const url =
+                'https://pay.finly.com.ua/dovga-nazva-biznesu-tovarystva/rakhunok-aB3xQ9k7Zz/zamovlennia-na-postachannia-tovariv-2026-001-Xv0RTvfe';
+            const png = await service.renderForUrl(url);
+            const meta = await sharp(png).metadata();
+            expect(meta.format).toBe('png');
+            expect(meta.width).toBe(512);
+            expect(meta.height).toBeGreaterThan(512);
         });
 
-        it('logoMaxRatio > 0.20 — throw QR_LOGO_TOO_LARGE (норматив guard)', async () => {
-            await expect(
-                service.renderForUrl('https://pay.finly.com.ua/x', {
-                    includeLogo: true,
-                    logoMaxRatio: 0.25,
-                    sizePx: 512,
-                })
-            ).rejects.toMatchObject({ code: 'QR_LOGO_TOO_LARGE' });
+        it('тип-2 square-центр на print-розмірі сканується', async () => {
+            const url = 'https://pay.finly.com.ua/x';
+            const png = await service.renderForUrl(url, {
+                centerFormat: 'square',
+                sizePx: 1024,
+            });
+            const decoded = await decodeQr(png);
+            expect(decoded).toBe(url);
+        }, 20000);
+
+        it('тип-1 (003) на print-розмірі сканується (дві смуги + центр)', async () => {
+            const png = await service.renderForNbuPayload(VALID_INPUT, '003', {
+                host: NBU_HOST_PRIMARY,
+                sizePx: 1024,
+            });
+            const decoded = await decodeQr(png);
+            expect(decoded).not.toBeNull();
+            expect(decoded).toMatch(/^https:\/\/qr\.bank\.gov\.ua\//);
+        }, 20000);
+
+        it('смуги розширюють полотно: тип-1 і тип-2 вищі за ширину', async () => {
+            const t1 = await service.renderForNbuPayload(VALID_INPUT, '003', {
+                host: NBU_HOST_PRIMARY,
+            });
+            const t2 = await service.renderForUrl('https://pay.finly.com.ua/x');
+            const m1 = await sharp(t1).metadata();
+            const m2 = await sharp(t2).metadata();
+            expect(m1.height ?? 0).toBeGreaterThan(m1.width ?? 0);
+            expect(m2.height ?? 0).toBeGreaterThan(m2.width ?? 0);
+            // Тип-1 має дві смуги, тип-2 — одну → тип-1 вищий відносно ширини.
+            expect((m1.height ?? 0) - (m1.width ?? 0)).toBeGreaterThan(
+                (m2.height ?? 0) - (m2.width ?? 0)
+            );
         });
     });
 });

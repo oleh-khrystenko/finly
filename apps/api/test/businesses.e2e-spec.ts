@@ -172,7 +172,6 @@ const VALID_CREATE_PAYLOAD = {
     taxationSystem: 'simplified-3',
     isVatPayer: false,
     paymentPurposeTemplate: 'Оплата за послуги',
-    acceptedBanks: ['privatbank', 'monobank'],
 };
 
 // ─── Test ───
@@ -407,18 +406,6 @@ describe('Businesses E2E', () => {
                 .expect(400);
         });
 
-        it('reject empty acceptedBanks (мінімум 1 — B6) — 400', async () => {
-            const user = await createUser();
-            await supertest(app.getHttpServer())
-                .post('/api/businesses/me')
-                .set('Authorization', bearerFor(user))
-                .send({
-                    ...VALID_CREATE_PAYLOAD,
-                    acceptedBanks: [],
-                })
-                .expect(400);
-        });
-
         it('без auth — 401', async () => {
             await supertest(app.getHttpServer())
                 .post('/api/businesses/me')
@@ -434,7 +421,6 @@ describe('Businesses E2E', () => {
             const baseFields = {
                 name: 'Іваненко',
                 paymentPurposeTemplate: 'Оплата за послуги',
-                acceptedBanks: ['privatbank'],
             };
 
             it('individual — без taxation, RNOKPP 10-digit → 201', async () => {
@@ -575,6 +561,46 @@ describe('Businesses E2E', () => {
                     })
                     .expect(400);
             });
+
+            // ПКУ розд. XIV гл. 1 — групи 1/2 єдиного податку доступні
+            // виключно ФОП. ТОВ дозволяється `simplified-3` або `general`.
+            it.each(['simplified-1', 'simplified-2'] as const)(
+                'reject tov + %s — 400 VALIDATION_ERROR',
+                async (taxationSystem) => {
+                    const user = await createUser();
+                    const res = await supertest(app.getHttpServer())
+                        .post('/api/businesses/me')
+                        .set('Authorization', bearerFor(user))
+                        .send({
+                            ...baseFields,
+                            type: 'tov',
+                            taxId: VALID_EDRPOU,
+                            taxationSystem,
+                            isVatPayer: false,
+                        })
+                        .expect(400);
+                    const body = res.body as { error: { code: string } };
+                    expect(body.error.code).toBe('VALIDATION_ERROR');
+                }
+            );
+
+            it.each(['simplified-1', 'simplified-2'] as const)(
+                'accept fop + %s (для ФОП дозволено усі 4 системи) — 201',
+                async (taxationSystem) => {
+                    const user = await createUser();
+                    await supertest(app.getHttpServer())
+                        .post('/api/businesses/me')
+                        .set('Authorization', bearerFor(user))
+                        .send({
+                            ...baseFields,
+                            type: 'fop',
+                            taxId: VALID_RNOKPP,
+                            taxationSystem,
+                            isVatPayer: false,
+                        })
+                        .expect(201);
+                }
+            );
         });
     });
 
@@ -767,28 +793,35 @@ describe('Businesses E2E', () => {
             expect(data.taxId).toBe(VALID_TAX_ID);
         });
 
-        it('reject спробу змінити slug через PATCH — 400 (slug-immutability via .strict())', async () => {
+        it('Sprint 14 — vanity-slug edit через PATCH (200): slug перейменовується, старий slugLower звільняється', async () => {
             const user = await createUser();
             const created = await supertest(app.getHttpServer())
                 .post('/api/businesses/me')
                 .set('Authorization', bearerFor(user))
                 .send(VALID_CREATE_PAYLOAD);
             const { slug } = (created.body as { data: { slug: string } }).data;
+            const newSlug = 'nova-vanity-adresa';
 
             const res = await supertest(app.getHttpServer())
                 .patch(`/api/businesses/me/${slug}`)
                 .set('Authorization', bearerFor(user))
-                .send({ slug: 'evil-vanity' })
-                .expect(400);
+                .send({ slug: newSlug })
+                .expect(200);
 
-            const body = res.body as { error: { code: string } };
-            expect(body.error.code).toBe('VALIDATION_ERROR');
+            const body = res.body as { data: { slug: string } };
+            expect(body.data.slug).toBe(newSlug);
 
-            // Перевіримо, що БД не змінилась
-            const stillThere = await businessModel.findOne({
+            // БД: документ тепер під новим slugLower, зі збереженим case.
+            const renamed = await businessModel.findOne({
+                slugLower: newSlug.toLowerCase(),
+            });
+            expect(renamed?.slug).toBe(newSlug);
+
+            // Старий slugLower більше не вказує на живий документ (звільнений).
+            const oldStillResolves = await businessModel.findOne({
                 slugLower: slug.toLowerCase(),
             });
-            expect(stillThere?.slug).toBe(slug);
+            expect(oldStillResolves).toBeNull();
         });
 
         it.each([
@@ -840,7 +873,6 @@ describe('Businesses E2E', () => {
                     name: 'Збір',
                     taxId: VALID_TAX_ID,
                     paymentPurposeTemplate: 'Збір',
-                    acceptedBanks: ['privatbank'],
                 })
                 .expect(201);
             const { slug } = (created.body as { data: { slug: string } }).data;
@@ -892,6 +924,39 @@ describe('Businesses E2E', () => {
             // бо UX-recovery різний — "оберіть систему" vs "приберіть поле".
             expect(body.error.code).toBe('TAXATION_REQUIRED_FOR_TYPE');
         });
+
+        it.each(['simplified-1', 'simplified-2'] as const)(
+            'PATCH ТОВ на %s — 400 TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE',
+            async (taxationSystem) => {
+                const user = await createUser();
+                // Створюємо ТОВ на дозволеній системі.
+                const created = await supertest(app.getHttpServer())
+                    .post('/api/businesses/me')
+                    .set('Authorization', bearerFor(user))
+                    .send({
+                        type: 'tov',
+                        name: 'ТОВ',
+                        taxId: '12345678',
+                        taxationSystem: 'general',
+                        isVatPayer: true,
+                        paymentPurposeTemplate: 'Оплата',
+                    });
+                const { slug } = (created.body as { data: { slug: string } })
+                    .data;
+
+                // Defense-in-depth: curl-bypass frontend-filter dropdown-а.
+                const res = await supertest(app.getHttpServer())
+                    .patch(`/api/businesses/me/${slug}`)
+                    .set('Authorization', bearerFor(user))
+                    .send({ taxationSystem })
+                    .expect(400);
+
+                const body = res.body as { error: { code: string } };
+                expect(body.error.code).toBe(
+                    'TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE'
+                );
+            }
+        );
 
         it('coupled cross-field VAT (PATCH тільки isVatPayer=true з existing simplified-1) — 400', async () => {
             const user = await createUser();
@@ -981,7 +1046,6 @@ describe('Businesses E2E', () => {
                 };
             };
             expect(Object.keys(body.data).sort()).toEqual([
-                'acceptedBanks',
                 'accounts',
                 'name',
                 'seoIndexEnabled',
@@ -1054,6 +1118,52 @@ describe('Businesses E2E', () => {
         });
     });
 
-    // Sprint 9: QR endpoints видалено з business-controller-а — переїхали на
-    // `PublicAccountsController` (`/businesses/public/:slug/account/:accountSlug/qr/...`).
+    // Sprint 9: NBU QR endpoints живуть на `PublicAccountsController`
+    // (`/businesses/public/:slug/account/:accountSlug/qr/...`).
+    //
+    // Sprint 14: на business-level повертається тип-2 QR (вітрина бізнесу).
+    // Тип-1 (NBU-payload) тут неможливий — IBAN живе на рахунку.
+    describe('GET /businesses/public/:slug/qr/business.png (Sprint 14)', () => {
+        async function seedBusinessSlug(): Promise<string> {
+            const user = await createUser();
+            const created = await supertest(app.getHttpServer())
+                .post('/api/businesses/me')
+                .set('Authorization', bearerFor(user))
+                .send(VALID_CREATE_PAYLOAD);
+            return (created.body as { data: { slug: string } }).data.slug;
+        }
+
+        it('повертає Content-Type image/png', async () => {
+            const slug = await seedBusinessSlug();
+            const res = await supertest(app.getHttpServer())
+                .get(`/api/businesses/public/${slug}/qr/business.png`)
+                .expect(200);
+            expect(res.headers['content-type']).toBe('image/png');
+        });
+
+        it('?size=<довільне> → 400 (whitelist)', async () => {
+            const slug = await seedBusinessSlug();
+            await supertest(app.getHttpServer())
+                .get(`/api/businesses/public/${slug}/qr/business.png?size=9999`)
+                .expect(400);
+        });
+
+        // size=screen (дефолт-розмір) — attachment-заголовок не залежить від
+        // розміру; print-рендер (важчий 1024px) покрито integration round-trip.
+        it('?download=1 → Content-Disposition attachment', async () => {
+            const slug = await seedBusinessSlug();
+            const res = await supertest(app.getHttpServer())
+                .get(
+                    `/api/businesses/public/${slug}/qr/business.png?download=1`
+                )
+                .expect(200);
+            expect(res.headers['content-disposition']).toContain('attachment');
+        });
+
+        it('404 на неіснуючому slug', async () => {
+            await supertest(app.getHttpServer())
+                .get('/api/businesses/public/missing-slug/qr/business.png')
+                .expect(404);
+        });
+    });
 });

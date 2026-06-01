@@ -18,7 +18,7 @@ const NOTIFICATIONS: Record<string, MessageDict> = {
     auth: {
         magic_link_sent: 'Посилання надіслано на вашу пошту',
         logged_out: 'Ви вийшли з акаунту',
-        account_deleted: 'Акаунт видалено',
+        account_deleted: 'Акаунт деактивовано',
         password_reset: 'Пароль успішно змінено',
     },
     users: {
@@ -102,6 +102,27 @@ const ERRORS: Record<string, MessageDict> = {
         // валідний код, але невідповідного формату для типу бізнесу.
         tax_id_format_mismatch_type:
             'Код одержувача не відповідає формату для цього типу платника',
+        // ПКУ розд. XIV гл. 1 — групи 1 і 2 єдиного податку доступні лише ФОП;
+        // ТОВ може бути на спрощеній-3 або загальній. Backend кидає на write-DTO
+        // refine (`createTovVariant`) і у service-layer для PATCH; frontend
+        // повідомляє користувача коротким inline-text-ом без перерахування
+        // дозволених систем (dropdown уже відфільтрований).
+        taxation_system_not_allowed_for_type:
+            'Ця система оподаткування недоступна для обраного типу бізнесу',
+        // Sprint 14 — vanity-slug edit. Користувач намагається встановити slug,
+        // що співпадає з зарезервованим route-namespace-ом (`qr`, `api`,
+        // `host-pay`, …).
+        slug_reserved:
+            'Це посилання зарезервоване системою. Оберіть інше',
+        // Sprint 14 — vanity-slug edit. Slug уже зайнятий іншим бізнесом
+        // (поточний slug або в історії перейменувань 90-денного вікна).
+        slug_taken: 'Це посилання вже зайняте. Оберіть інше',
+        // Placeholder-free копія `default`-throttler 429 (60/min/IP на cabinet).
+        // Generic `rate_limit_exceeded` має `{minutes}`-placeholder, а cabinet-
+        // callsite-и не мають джерела TTL для interpolate-у → literal `{minutes}`
+        // протік би у UI. Symmetric з `qr.rate_limit_exceeded` (LAND-7).
+        rate_limit_exceeded:
+            'Забагато запитів. Зачекайте хвилину і спробуйте ще раз',
     },
     // Sprint 9 §SP-1..§SP-3 — accounts UA-messages. ACCOUNT_HAS_INVOICES не тут:
     // backend pre-resolves повідомлення через pluralizeUa (accounts.service.ts
@@ -115,6 +136,8 @@ const ERRORS: Record<string, MessageDict> = {
         account_iban_duplicate: 'Цей IBAN вже доданий до бізнесу',
         account_create_failed:
             'Не вдалося створити рахунок. Спробуйте ще раз',
+        rate_limit_exceeded:
+            'Забагато запитів. Зачекайте хвилину і спробуйте ще раз',
     },
     invoices: {
         // Sprint 9 disambiguation — слово "рахунок" відведено під Account
@@ -131,6 +154,8 @@ const ERRORS: Record<string, MessageDict> = {
         // expired QR-image (e.g., cached link, scraping).
         invoice_expired: 'Термін інвойсу минув',
         invoice_valid_until_in_past: 'Термін дії не може бути у минулому',
+        rate_limit_exceeded:
+            'Забагато запитів. Зачекайте хвилину і спробуйте ще раз',
     },
     // Sprint 8 fix — overall payload-size overflow після build NBU-payload.
     // Поле reєструється для API-side error mapping (`getApiMessage(code,

@@ -12,11 +12,37 @@ export interface UiEditableFieldRenderArgs<TValue> {
     error?: string;
 }
 
-export interface UiEditableFieldProps<TValue> {
-    label: string;
+/**
+ * Read-mode-render args. `startEdit` дозволяє consumer-у поставити власний
+ * pencil-button у довільному місці контенту (за замовчуванням UiEditableField
+ * рендерить pencil як trailing-action; consumer може hide через
+ * `hideDefaultPencil` і рендерити вручну).
+ */
+export interface UiEditableFieldReadArgs<TValue> {
     value: TValue;
-    /** Renderer для read-only вигляду (повертає string або ReactNode). */
-    renderRead: (value: TValue) => ReactNode;
+    startEdit: () => void;
+}
+
+export interface UiEditableFieldProps<TValue> {
+    /**
+     * Лейбл-якір над значенням (read-view key-value). Опціональний: у картці
+     * з єдиним предметом, де заголовок картки вже описує поле (напр.
+     * «Публічна сторінка» → адреса), лейбл дублював би титул — тоді не
+     * передаємо, `<p>` не рендериться. Для accessibility edit-контрол має
+     * власний `aria-label`.
+     */
+    label?: string;
+    value: TValue;
+    /**
+     * Renderer для read-only вигляду. Другий аргумент — `{startEdit}`-callback
+     * для випадків, коли pencil-button рендериться як частина контенту (у парі
+     * з `hideDefaultPencil`). Existing consumers ігнорують другий аргумент —
+     * сигнатура backward-compatible.
+     */
+    renderRead: (
+        value: TValue,
+        ctx: UiEditableFieldReadArgs<TValue>
+    ) => ReactNode;
     /** Renderer редаговного контролу (input/select/textarea). */
     renderEdit: (args: UiEditableFieldRenderArgs<TValue>) => ReactNode;
     /**
@@ -27,4 +53,11 @@ export interface UiEditableFieldProps<TValue> {
     /** Optional client-side validation. Повертає error-message або null. */
     validate?: (next: TValue) => string | null;
     disabled?: boolean;
+    /**
+     * Якщо `true` — UiEditableField не рендерить default trailing-pencil.
+     * Consumer відповідає за виклик `ctx.startEdit` зі свого власного UI
+     * у `renderRead`. Сценарій: треба placement-у pencil у конкретному місці
+     * рядка (поруч з контентом), а не на трейлінг-позиції.
+     */
+    hideDefaultPencil?: boolean;
 }

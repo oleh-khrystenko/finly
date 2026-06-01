@@ -81,10 +81,19 @@ describe('getApiMessage', () => {
             );
         });
 
+        it('TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE — ПКУ розд. XIV гл. 1 (групи 1/2 заборонені для ТОВ)', () => {
+            expect(
+                getApiMessage('TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE', 'businesses')
+            ).toBe(
+                'Ця система оподаткування недоступна для обраного типу бізнесу'
+            );
+        });
+
         it.each([
             'TAXATION_NOT_APPLICABLE_FOR_TYPE',
             'TAXATION_REQUIRED_FOR_TYPE',
             'TAX_ID_FORMAT_MISMATCH_TYPE',
+            'TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE',
             'INVALID_LEGAL_TAX_ID',
         ])(
             'код %s НЕ повертає UNKNOWN_FALLBACK (raw-code-leak guard)',
@@ -147,5 +156,22 @@ describe('getApiMessage', () => {
             });
             expect(msg).toBe('Забагато запитів. Спробуйте через 5 хвилин');
         });
+    });
+
+    // Cabinet `default`-throttler 429 (60/min/IP). Сторінки businesses/
+    // accounts/invoices викликають getApiMessage(code, module) без vars —
+    // generic placeholder `{minutes}` протік би у UI як literal. Кожен
+    // cabinet-модуль має placeholder-free копію (symmetric з qr-module).
+    describe('cabinet rate_limit_exceeded (placeholder-free)', () => {
+        it.each(['businesses', 'accounts', 'invoices'])(
+            'RATE_LIMIT_EXCEEDED у "%s"-module — копія без literal {minutes}',
+            (module) => {
+                const msg = getApiMessage('RATE_LIMIT_EXCEEDED', module);
+                expect(msg).toBe(
+                    'Забагато запитів. Зачекайте хвилину і спробуйте ще раз'
+                );
+                expect(msg).not.toMatch(/\{minutes\}/);
+            }
+        );
     });
 });

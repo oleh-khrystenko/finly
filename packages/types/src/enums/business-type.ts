@@ -26,10 +26,10 @@ export type BusinessType = (typeof BUSINESS_TYPES)[number];
  * читає звідси, ніяких inline-літералів.
  */
 export const BUSINESS_TYPE_LABEL: Record<BusinessType, string> = {
-    individual: 'Я особисто',
+    individual: 'Фізособа',
     fop: 'ФОП',
     tov: 'ТОВ',
-    organization: 'ОСББ / фонд / громадська',
+    organization: 'Неприбуткова організація',
 };
 
 /**

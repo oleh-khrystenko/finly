@@ -16,6 +16,7 @@ import { Account } from '../accounts/schemas/account.schema';
 import { InvoiceSlugCounter } from '../invoices/schemas/invoice-slug-counter.schema';
 import { Invoice } from '../invoices/schemas/invoice.schema';
 import { BusinessesService } from './businesses.service';
+import { BusinessSlugHistory } from './schemas/business-slug-history.schema';
 import type { BusinessDocument } from './schemas/business.schema';
 import { Business } from './schemas/business.schema';
 import { SlugGeneratorService } from './slug-generator.service';
@@ -29,6 +30,15 @@ describe('BusinessesService', () => {
         findOneAndUpdate: jest.Mock;
         exists: jest.Mock;
         deleteOne: jest.Mock;
+    }>;
+    // Sprint 14 — BusinessSlugHistory model для slug-rename TX (insert old slug,
+    // anti-squatting check, revert-cleanup). Default — порожнє: existing
+    // it-блоки не торкають slug, новий PATCH-flow не активний.
+    let historyModel: jest.Mocked<{
+        create: jest.Mock;
+        deleteMany: jest.Mock;
+        exists: jest.Mock;
+        findOne: jest.Mock;
     }>;
     // Sprint 10 §SP-11 — pre-check / race-protection replay використовує
     // findOne з компаунд-фільтром. У existing-spec findOne уже мокається
@@ -50,7 +60,10 @@ describe('BusinessesService', () => {
         endSession: jest.Mock;
     }>;
     let connection: jest.Mocked<{ startSession: jest.Mock }>;
-    let slugGenerator: jest.Mocked<{ generateRandomSlug: jest.Mock }>;
+    let slugGenerator: jest.Mocked<{
+        generateRandomSlug: jest.Mock;
+        isReserved: jest.Mock;
+    }>;
 
     const userId = new Types.ObjectId();
 
@@ -61,7 +74,6 @@ describe('BusinessesService', () => {
         taxationSystem: 'simplified-3',
         isVatPayer: false,
         paymentPurposeTemplate: 'Оплата',
-        acceptedBanks: ['privatbank'],
     };
 
     beforeEach(async () => {
@@ -72,6 +84,18 @@ describe('BusinessesService', () => {
             findOneAndUpdate: jest.fn(),
             exists: jest.fn(),
             deleteOne: jest.fn(),
+        };
+        historyModel = {
+            create: jest.fn().mockResolvedValue([]),
+            deleteMany: jest.fn().mockReturnValue({
+                exec: jest.fn().mockResolvedValue({ deletedCount: 0 }),
+            }),
+            exists: jest.fn().mockResolvedValue(null),
+            findOne: jest.fn().mockReturnValue({
+                lean: jest.fn().mockReturnValue({
+                    exec: jest.fn().mockResolvedValue(null),
+                }),
+            }),
         };
         accountModel = {
             countDocuments: jest.fn().mockResolvedValue(0),
@@ -98,6 +122,11 @@ describe('BusinessesService', () => {
         };
         slugGenerator = {
             generateRandomSlug: jest.fn().mockResolvedValue('IvanEnko'),
+            // Sprint 14 — slug-rename reserved-check. Default — non-reserved;
+            // окремий it-блок для 'api' overrides через mockReturnValueOnce(true).
+            isReserved: jest.fn().mockImplementation((slugLower: string) => {
+                return ['api', 'qr', 'host-pay', 'auth'].includes(slugLower);
+            }),
         };
 
         const module = await Test.createTestingModule({
@@ -106,6 +135,10 @@ describe('BusinessesService', () => {
                 {
                     provide: getModelToken(Business.name),
                     useValue: businessModel,
+                },
+                {
+                    provide: getModelToken(BusinessSlugHistory.name),
+                    useValue: historyModel,
                 },
                 {
                     provide: getModelToken(Account.name),
@@ -615,6 +648,42 @@ describe('BusinessesService', () => {
                 });
             });
 
+            it.each(['simplified-1', 'simplified-2'] as const)(
+                'tov + PATCH %s → 400 TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE (ПКУ — заборонено для ТОВ)',
+                async (taxationSystem) => {
+                    mockExistingType('tov');
+                    await expect(
+                        service.update('IvanEnko', { taxationSystem })
+                    ).rejects.toMatchObject({
+                        response: {
+                            code: 'TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE',
+                        },
+                    });
+                    expect(businessModel.findOneAndUpdate).not.toHaveBeenCalled();
+                }
+            );
+
+            it.each(['simplified-3', 'general'] as const)(
+                'tov + PATCH %s → проходить cross-check (allowed-set)',
+                async (taxationSystem) => {
+                    mockExistingType('tov');
+                    mockUpdateReturn({ taxationSystem });
+                    await expect(
+                        service.update('IvanEnko', { taxationSystem })
+                    ).resolves.toBeDefined();
+                }
+            );
+
+            it('fop + PATCH simplified-1 → проходить cross-check (для ФОП усі 4 системи валідні)', async () => {
+                mockExistingType('fop');
+                mockUpdateReturn({ taxationSystem: 'simplified-1' });
+                await expect(
+                    service.update('IvanEnko', {
+                        taxationSystem: 'simplified-1',
+                    })
+                ).resolves.toBeDefined();
+            });
+
             it('individual + PATCH valid 10-digit RNOKPP → проходить cross-check', async () => {
                 mockExistingType('individual');
                 mockUpdateReturn({ name: 'X' });
@@ -667,6 +736,127 @@ describe('BusinessesService', () => {
                 await expect(
                     service.update('Missing', { isVatPayer: true })
                 ).rejects.toBeInstanceOf(NotFoundException);
+            });
+        });
+
+        describe('slug rename (Sprint 14)', () => {
+            const businessId = new Types.ObjectId();
+
+            // Mock chain для двох findOne-сайтів slug-rename:
+            //  1. pre-write `findCrossBusinessHistoryClash`:
+            //     findOne({slugLower:oldLower}, {_id:1}).lean().exec()
+            //  2. all-tx `runSlugRenameInsideTx.ownerLookup`:
+            //     findOne(...).session(s).lean().exec()
+            // Self-chaining mock підтримує обидва — кожен `.session()` /
+            // `.lean()` повертає сам chain, `.exec()` повертає Promise.
+            const mockBusinessFindOneChain = (found: boolean) => {
+                const chain: Record<string, jest.Mock> = {};
+                chain.session = jest.fn(() => chain);
+                chain.lean = jest.fn(() => chain);
+                chain.exec = jest
+                    .fn()
+                    .mockResolvedValue(found ? { _id: businessId } : null);
+                businessModel.findOne.mockReturnValue(chain);
+            };
+
+            beforeEach(() => {
+                // PATCH тільки slug — type-check preliminary findOne НЕ
+                // викликається, тож mockExistingType-mock з outer beforeEach
+                // не активується. Переоприділюємо findOne під slug-rename
+                // self-chaining mock (підтримує і pre-write, і TX-chain).
+                mockBusinessFindOneChain(true);
+            });
+
+            it('happy path: вставляє old slug у history + оновлює business з новим slug+slugLower', async () => {
+                businessModel.exists.mockResolvedValue(null);
+                mockUpdateReturn({ slug: 'new-vanity', slugLower: 'new-vanity' });
+
+                await service.update('OldSlug', {
+                    slug: 'new-vanity',
+                } as UpdateBusinessRequest);
+
+                expect(historyModel.create).toHaveBeenCalledTimes(1);
+                const createArg = historyModel.create.mock.calls[0]![0] as Array<{
+                    businessId: Types.ObjectId;
+                    slugLower: string;
+                }>;
+                expect(createArg[0]!.businessId).toEqual(businessId);
+                expect(createArg[0]!.slugLower).toBe('oldslug');
+
+                const setPayload = businessModel.findOneAndUpdate.mock.calls[0]![1] as {
+                    $set: { slug: string; slugLower: string };
+                };
+                expect(setPayload.$set.slug).toBe('new-vanity');
+                expect(setPayload.$set.slugLower).toBe('new-vanity');
+            });
+
+            it('revert (abc → xyz → abc): TX видаляє self-history-запис перед insert-ом нового', async () => {
+                businessModel.exists.mockResolvedValue(null);
+                mockUpdateReturn({ slug: 'abc', slugLower: 'abc' });
+
+                await service.update('XyzSlug', {
+                    slug: 'abc',
+                } as UpdateBusinessRequest);
+
+                expect(historyModel.deleteMany).toHaveBeenCalledTimes(1);
+                const deleteFilter = historyModel.deleteMany.mock.calls[0]![0] as {
+                    businessId: Types.ObjectId;
+                    slugLower: string;
+                };
+                expect(deleteFilter.businessId).toEqual(businessId);
+                expect(deleteFilter.slugLower).toBe('abc');
+            });
+
+            it('reserved slug → 400 SLUG_RESERVED (history.create НЕ викликається)', async () => {
+                await expect(
+                    service.update('OldSlug', {
+                        slug: 'api',
+                    } as UpdateBusinessRequest)
+                ).rejects.toMatchObject({
+                    response: { code: 'SLUG_RESERVED' },
+                });
+                expect(historyModel.create).not.toHaveBeenCalled();
+                expect(businessModel.findOneAndUpdate).not.toHaveBeenCalled();
+            });
+
+            it('business-clash (інший Business має цей slugLower) → 409 SLUG_TAKEN', async () => {
+                businessModel.exists.mockResolvedValue({ _id: new Types.ObjectId() });
+
+                await expect(
+                    service.update('OldSlug', {
+                        slug: 'taken',
+                    } as UpdateBusinessRequest)
+                ).rejects.toMatchObject({
+                    response: { code: 'SLUG_TAKEN' },
+                });
+                expect(historyModel.create).not.toHaveBeenCalled();
+            });
+
+            it('history-clash (recent rename іншого Business) → 409 SLUG_TAKEN', async () => {
+                businessModel.exists.mockResolvedValue(null);
+                historyModel.exists.mockResolvedValue({
+                    _id: new Types.ObjectId(),
+                });
+
+                await expect(
+                    service.update('OldSlug', {
+                        slug: 'historical',
+                    } as UpdateBusinessRequest)
+                ).rejects.toMatchObject({
+                    response: { code: 'SLUG_TAKEN' },
+                });
+            });
+
+            it('case-only rename (oldLower === newLower): history НЕ зачіпається, simple update', async () => {
+                mockUpdateReturn({ slug: 'OldSlug', slugLower: 'oldslug' });
+
+                await service.update('OldSlug', {
+                    slug: 'OLDSLUG',
+                } as UpdateBusinessRequest);
+
+                // newSlugLower === oldSlugLower → slugRenaming=false, TX-flow skip.
+                expect(historyModel.create).not.toHaveBeenCalled();
+                expect(historyModel.deleteMany).not.toHaveBeenCalled();
             });
         });
     });

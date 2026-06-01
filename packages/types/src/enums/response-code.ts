@@ -116,6 +116,32 @@ export const RESPONSE_CODE = {
      * — ФОП, потрібен 10-цифровий РНОКПП", не "введіть валідний код".
      */
     TAX_ID_FORMAT_MISMATCH_TYPE: 'TAX_ID_FORMAT_MISMATCH_TYPE',
+    /**
+     * Юр-обмеження ПКУ розд. XIV гл. 1: групи 1 і 2 єдиного податку доступні
+     * виключно ФОП. ТОВ (юр-особа) може бути на групі 3 (спрощена-3) або на
+     * загальній системі. Кидається з write-DTO refine (`createTovVariant`)
+     * для cabinet-create та з service-layer `BusinessesService.update` для
+     * PATCH, де DTO не несе `type` (поле immutable post-creation, §SP-8).
+     *
+     * Окремий код від `TAXATION_NOT_APPLICABLE_FOR_TYPE` (forward-direction
+     * "поле недоступне") і `INVALID_VAT_FOR_TAXATION_SYSTEM` (VAT-coupling),
+     * бо UX-recovery різний: тут користувач має обрати іншу систему зі
+     * скороченого списку, не прибрати поле і не змінити VAT.
+     */
+    TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE: 'TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE',
+    /**
+     * Sprint 14 — vanity-slug edit. PATCH `slug` потрапив у reserved-список
+     * (`qr`, `api`, `host-pay`, …) — slug не може ні створюватись, ні
+     * редагуватись на ці значення (конфлікт з route-namespace-ами апки).
+     */
+    SLUG_RESERVED: 'SLUG_RESERVED',
+    /**
+     * Sprint 14 — vanity-slug edit. PATCH `slug` зайнятий іншим бізнесом —
+     * або в `Business.slugLower` (поточний slug), або в `BusinessSlugHistory.
+     * slugLower` (rename-history, anti-squatting window). Recovery-path для UI:
+     * обрати інше значення.
+     */
+    SLUG_TAKEN: 'SLUG_TAKEN',
 
     // --- invoices error (Sprint 4 §4.2 §4.8) ---
     /** Invoice не знайдено в межах business-у. `InvoiceAccessGuard` / `InvoicesService.getBySlug`. UA: "Рахунок не знайдено". */
@@ -266,6 +292,9 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.TAXATION_NOT_APPLICABLE_FOR_TYPE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.TAXATION_REQUIRED_FOR_TYPE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.TAX_ID_FORMAT_MISMATCH_TYPE]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.SLUG_RESERVED]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.SLUG_TAKEN]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVOICE_NOT_FOUND]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVOICE_SLUG_GENERATION_FAILED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVOICE_AMOUNT_LOCKED_REQUIRES_AMOUNT]: RESPONSE_TYPE.ERROR,

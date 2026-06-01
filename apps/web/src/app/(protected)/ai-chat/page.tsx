@@ -382,18 +382,14 @@ export default function AiChatPage() {
                                 size="sm"
                                 className="shrink-0"
                                 disabled={
-                                    isStreaming ||
                                     !input.trim() ||
                                     input.length > AI_CHAT_MESSAGE_MAX_LENGTH
                                 }
+                                loading={isStreaming}
                                 onClick={handleSubmit}
                                 aria-label="Надіслати"
                             >
-                                {isStreaming ? (
-                                    <UiSpinner size="sm" />
-                                ) : (
-                                    <Send className="h-4 w-4" />
-                                )}
+                                <Send className="h-4 w-4" />
                             </UiButton>
                         </div>
                     }

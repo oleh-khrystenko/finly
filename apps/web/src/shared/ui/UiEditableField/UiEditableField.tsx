@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { Check, Pencil, X } from 'lucide-react';
 import UiButton from '@/shared/ui/UiButton';
-import UiSpinner from '@/shared/ui/UiSpinner';
 import { EditableFieldCancelledError } from './cancelled';
 import type { UiEditableFieldProps } from './types';
 
@@ -26,6 +25,7 @@ export default function UiEditableField<TValue>({
     onSave,
     validate,
     disabled,
+    hideDefaultPencil,
 }: UiEditableFieldProps<TValue>) {
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState<TValue>(value);
@@ -75,13 +75,17 @@ export default function UiEditableField<TValue>({
 
     return (
         <div className="space-y-2">
-            <p className="text-muted-foreground text-xs font-medium">{label}</p>
+            {label && (
+                <p className="text-muted-foreground text-base font-medium">
+                    {label}
+                </p>
+            )}
             {!editing ? (
-                <div className="flex items-start justify-between gap-3">
-                    <div className="text-foreground min-w-0 flex-1 text-sm break-words">
-                        {renderRead(value)}
+                <div className="flex items-center justify-between gap-3">
+                    <div className="text-foreground min-w-0 flex-1 text-lg break-words">
+                        {renderRead(value, { value, startEdit })}
                     </div>
-                    {!disabled && (
+                    {!disabled && !hideDefaultPencil && (
                         // `variant="icon"` (а не `icon-compact`) — UiEditableField
                         // використовується у бізнес-кабінеті та invoice settings,
                         // що рендеряться на mobile-flow. `icon` гарантує
@@ -91,7 +95,9 @@ export default function UiEditableField<TValue>({
                             variant="icon"
                             size="sm"
                             onClick={startEdit}
-                            aria-label={`Редагувати: ${label}`}
+                            aria-label={
+                                label ? `Редагувати: ${label}` : 'Редагувати'
+                            }
                             IconLeft={<Pencil />}
                         />
                     )}
@@ -115,10 +121,10 @@ export default function UiEditableField<TValue>({
                             variant="filled"
                             size="sm"
                             onClick={() => void save()}
-                            disabled={saving}
-                            IconLeft={!saving ? <Check /> : undefined}
+                            loading={saving}
+                            IconLeft={<Check />}
                         >
-                            {saving ? <UiSpinner size="sm" /> : 'Зберегти'}
+                            Зберегти
                         </UiButton>
                     </div>
                 </div>

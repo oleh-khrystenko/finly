@@ -80,7 +80,7 @@ const VALIDATION_MESSAGES: Record<string, string> = {
     INVALID_SLUG_TOO_SHORT: 'Посилання занадто коротке',
     INVALID_SLUG_TOO_LONG: 'Посилання занадто довге',
     INVALID_SLUG_FORMAT:
-        'Дозволені лише літери, цифри та дефіси (без пробілів і символів)',
+        'Дозволені лише латинські літери, цифри та дефіси (без пробілів, кирилиці й символів)',
 
     // --- Людська частина invoice-slug-у ---
     INVALID_HUMAN_SLUG_PART_LENGTH: 'Назва рахунку — від 1 до 60 символів',
@@ -105,6 +105,19 @@ const VALIDATION_MESSAGES: Record<string, string> = {
     // "Код одержувача"; видається з backend-у при mismatch (Crок 6).
     TAX_ID_FORMAT_MISMATCH_TYPE:
         'Код одержувача не відповідає формату для цього типу платника',
+    // Юр-обмеження ПКУ: для ТОВ доступні лише спрощена-3 і загальна; групи 1
+    // і 2 єдиного податку — виключно для ФОП. Inline-помилка під полем
+    // "Система оподаткування" у wizard-step і edit-section.
+    TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE:
+        'Ця система оподаткування недоступна для обраного типу бізнесу',
+
+    // --- Single-form /business/new (BusinessCreateForm) cross-field ---
+    // Коди емітяться superRefine-ом форми, не entity-Zod-схемами з
+    // `@finly/types`. Видимі лише у момент створення бізнесу, коли
+    // обраний тип fop|tov але користувач ще не торкнув taxation-блок.
+    INVALID_TYPE_REQUIRED: 'Оберіть тип одержувача',
+    TAXATION_REQUIRED_FOR_TYPE: 'Оберіть систему оподаткування',
+    INVALID_VAT_REQUIRED: 'Оберіть варіант ПДВ',
 };
 
 const FALLBACK = 'Перевірте правильність значення';

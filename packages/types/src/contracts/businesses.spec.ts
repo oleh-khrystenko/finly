@@ -13,7 +13,6 @@ const VALID_CREATE = {
     taxationSystem: 'simplified-3',
     isVatPayer: false,
     paymentPurposeTemplate: 'Оплата за послуги',
-    acceptedBanks: ['privatbank', 'monobank'],
 };
 
 describe('CreateBusinessSchema', () => {
@@ -28,7 +27,6 @@ describe('CreateBusinessSchema', () => {
         'taxationSystem',
         'isVatPayer',
         'paymentPurposeTemplate',
-        'acceptedBanks',
         'type',
     ])('rejects payload з відсутнім полем %s', (field) => {
         const { [field]: _omit, ...without } = VALID_CREATE as Record<
@@ -57,21 +55,6 @@ describe('CreateBusinessSchema', () => {
             iban: 'UA213223130000026007233566001',
         });
         expect(result.success).toBe(false);
-    });
-
-    it('rejects empty acceptedBanks (мінімум 1 — рішення B6)', () => {
-        const result = CreateBusinessSchema.safeParse({
-            ...VALID_CREATE,
-            acceptedBanks: [],
-        });
-        expect(result.success).toBe(false);
-        if (!result.success) {
-            expect(
-                result.error.issues.some(
-                    (i) => i.message === 'ACCEPTED_BANKS_REQUIRED'
-                )
-            ).toBe(true);
-        }
     });
 
     it.each(['simplified-1', 'simplified-2'] as const)(
@@ -131,7 +114,6 @@ describe('CreateBusinessSchema', () => {
         const baseFields = {
             name: 'Іваненко',
             paymentPurposeTemplate: 'Збір',
-            acceptedBanks: ['privatbank' as const],
         };
 
         it('accepts individual without taxation-fields, з 10-digit RNOKPP', () => {
@@ -244,6 +226,64 @@ describe('CreateBusinessSchema', () => {
             });
             expect(result.success).toBe(false);
         });
+
+        // ПКУ розд. XIV гл. 1 — групи 1/2 єдиного податку доступні виключно
+        // ФОП. ТОВ дозволяється лише `simplified-3` і `general`. Refine живе на
+        // `createTovVariant`; `createFopVariant` приймає усі 4 системи.
+        describe('taxation-system × type binding (ПКУ розд. XIV)', () => {
+            it.each(['simplified-1', 'simplified-2'] as const)(
+                'rejects tov + %s → TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE',
+                (taxationSystem) => {
+                    const result = CreateBusinessSchema.safeParse({
+                        ...baseFields,
+                        type: 'tov',
+                        taxId: VALID_EDRPOU,
+                        taxationSystem,
+                        isVatPayer: false,
+                    });
+                    expect(result.success).toBe(false);
+                    if (!result.success) {
+                        const issue = result.error.issues.find(
+                            (i) =>
+                                i.message ===
+                                'TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE'
+                        );
+                        expect(issue).toBeDefined();
+                        expect(issue?.path).toEqual(['taxationSystem']);
+                    }
+                }
+            );
+
+            it.each(['simplified-3', 'general'] as const)(
+                'accepts tov + %s (allowed-set)',
+                (taxationSystem) => {
+                    const result = CreateBusinessSchema.safeParse({
+                        ...baseFields,
+                        type: 'tov',
+                        taxId: VALID_EDRPOU,
+                        taxationSystem,
+                        isVatPayer: false,
+                    });
+                    expect(result.success).toBe(true);
+                }
+            );
+
+            it.each([
+                'simplified-1',
+                'simplified-2',
+                'simplified-3',
+                'general',
+            ] as const)('accepts fop + %s (усі 4 системи)', (taxationSystem) => {
+                const result = CreateBusinessSchema.safeParse({
+                    ...baseFields,
+                    type: 'fop',
+                    taxId: VALID_RNOKPP,
+                    taxationSystem,
+                    isVatPayer: false,
+                });
+                expect(result.success).toBe(true);
+            });
+        });
     });
 });
 
@@ -283,7 +323,6 @@ describe('Sprint 10 — CreateBusinessSchema.claimIdempotencyKey', () => {
                 name: 'Іваненко',
                 taxId: isLegal ? VALID_EDRPOU : VALID_RNOKPP,
                 paymentPurposeTemplate: 'Збір',
-                acceptedBanks: ['privatbank'],
                 claimIdempotencyKey: VALID_UUID,
                 ...(isTaxation
                     ? {
@@ -335,8 +374,12 @@ describe('UpdateBusinessSchema', () => {
         expect(result.success).toBe(true);
     });
 
+    it('accepts slug edit (vanity-slug rename, da4ec99)', () => {
+        const result = UpdateBusinessSchema.safeParse({ slug: 'novyj-slug' });
+        expect(result.success).toBe(true);
+    });
+
     it.each([
-        'slug',
         'slugLower',
         'type',
         'ownerId',
@@ -347,7 +390,7 @@ describe('UpdateBusinessSchema', () => {
         'invoiceSlugPresetDefault',
         'claimIdempotencyKey',
     ])(
-        'rejects невідомий ключ %s через .strict() (slug-mutation / Sprint 9 видалені ключі / Sprint 10 immutable claim-key)',
+        'rejects невідомий ключ %s через .strict() (Sprint 9 видалені ключі / Sprint 10 immutable claim-key)',
         (key) => {
             const result = UpdateBusinessSchema.safeParse({
                 [key]: 'whatever',
@@ -386,10 +429,6 @@ describe('UpdateBusinessSchema', () => {
         expect(result.success).toBe(true);
     });
 
-    it('rejects empty acceptedBanks при partial-update (мінімум 1 — B6)', () => {
-        const result = UpdateBusinessSchema.safeParse({ acceptedBanks: [] });
-        expect(result.success).toBe(false);
-    });
 });
 
 describe('PublicBusinessSchema (Sprint 9 — list-view замість single-account-view)', () => {
@@ -397,7 +436,6 @@ describe('PublicBusinessSchema (Sprint 9 — list-view замість single-acc
         type: 'fop',
         name: 'Іваненко',
         slug: 'IvanEnko',
-        acceptedBanks: ['privatbank'],
         seoIndexEnabled: true,
         accounts: [
             {
@@ -451,7 +489,7 @@ describe('PublicBusinessSchema (Sprint 9 — list-view замість single-acc
         expect(result.success).toBe(true);
     });
 
-    it('виносить рівно 6 ключів у parsed-output (whitelist інваріант)', () => {
+    it('виносить рівно 5 ключів у parsed-output (whitelist інваріант)', () => {
         // Гарантія, що у public JSON клієнт ніколи не побачить реквізити /
         // ownership / timestamps напряму. accounts-array — це той самий
         // leak-vector, що окремий PublicAccountListItemSchema whitelist
@@ -468,7 +506,6 @@ describe('PublicBusinessSchema (Sprint 9 — list-view замість single-acc
         expect(result.success).toBe(true);
         if (result.success) {
             expect(Object.keys(result.data).sort()).toEqual([
-                'acceptedBanks',
                 'accounts',
                 'name',
                 'seoIndexEnabled',

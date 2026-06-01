@@ -9,7 +9,8 @@ export type UiButtonVariant =
     | 'text'
     | 'destructive-text'
     | 'icon'
-    | 'icon-compact';
+    | 'icon-compact'
+    | 'link';
 export type UiButtonSize = 'sm' | 'md' | 'lg';
 
 /**
@@ -23,6 +24,14 @@ interface BaseProps {
     IconLeft?: ReactNode;
     IconRight?: ReactNode;
     disabled?: boolean;
+    /**
+     * Показує спінер по центру поверх контенту (children + icons лишаються
+     * у DOM, але `invisible` — ширина кнопки не стрибає). Авто-блокує клік
+     * (як `disabled`), але без `opacity-50`; cursor — `wait`. Розмір спінера
+     * мапиться з `size`. Призначення — уніфікувати "submit-state" / "navigating"
+     * на всьому сайті замість swap-у `children` руками у кожному callsite.
+     */
+    loading?: boolean;
 }
 
 /**

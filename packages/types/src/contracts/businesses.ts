@@ -1,7 +1,6 @@
 import { z } from 'zod';
 
 import {
-    bankCodeSchema,
     businessNameSchema,
     businessPaymentPurposeTemplateSchema,
     businessSlugSchema,
@@ -9,7 +8,10 @@ import {
     taxationSystemSchema,
     type Business,
 } from '../entities/business';
-import { isVatAllowedTaxationSystem } from '../enums/taxation-system';
+import {
+    isTaxationAllowedForType,
+    isVatAllowedTaxationSystem,
+} from '../enums/taxation-system';
 import {
     individualTaxIdZod,
     legalEntityTaxIdZod,
@@ -53,10 +55,6 @@ import { PublicAccountListItemSchema } from './accounts';
  * `VALIDATION_ERROR`. Frontend бачить inline-помилку через ту саму схему.
  */
 
-const acceptedBanksField = z.array(bankCodeSchema).min(1, {
-    message: 'ACCEPTED_BANKS_REQUIRED',
-});
-
 /**
  * Sprint 10 §SP-11 — UUID v4 anti-duplicate token для anon-claim-flow. Optional
  * у write-DTO: cabinet wizard НЕ передає це поле (відсутнє у payload-і →
@@ -91,6 +89,18 @@ const taxationVatRefineOptions = {
 };
 
 /**
+ * Type-binding refine: `taxationSystem ∈ ALLOWED_TAXATION_SYSTEMS_BY_TYPE[type]`.
+ * Активний у `createTovVariant` (групи 1/2 єдиного податку для ТОВ заборонені
+ * ПКУ розд. XIV гл. 1). У `createFopVariant` не потрібен — ФОП дозволяє всі
+ * 4 системи. Update-DTO `UpdateBusinessSchema` не несе `type`; та сама перевірка
+ * живе у `BusinessesService.update` (читає document-resident `type`).
+ */
+const taxationSystemAllowedRefineOptions = {
+    message: 'TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE',
+    path: ['taxationSystem'] as PropertyKey[],
+};
+
+/**
  * Sprint 7 §SP-3 + §SP-4 + Sprint 9 §SP-1 — `CreateBusinessSchema` як
  * `z.discriminatedUnion` по `type`. Кожен variant явно описує **тільки ті поля,
  * що мають юридичний сенс для цього типу**:
@@ -112,9 +122,6 @@ const taxationVatRefineOptions = {
  * compile-error на `z.discriminatedUnion(...)` literal-tuple. Conditional
  * refine на single-shape обманює type-checker і дозволяє skip-нути нову
  * branch.
- *
- * **`acceptedBanks` — мінімум 1** (рішення B6: дефолт усі 11 на UI, але
- * в контракті — не-пустий список; нульовий стан неможливий).
  */
 const createIndividualVariant = z
     .object({
@@ -122,7 +129,6 @@ const createIndividualVariant = z
         name: businessNameSchema,
         taxId: individualTaxIdZod,
         paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
-        acceptedBanks: acceptedBanksField,
         claimIdempotencyKey: claimIdempotencyKeyField,
     })
     .strict();
@@ -135,7 +141,6 @@ const createFopVariant = z
         taxationSystem: taxationSystemSchema,
         isVatPayer: z.boolean(),
         paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
-        acceptedBanks: acceptedBanksField,
         claimIdempotencyKey: claimIdempotencyKeyField,
     })
     .strict()
@@ -149,11 +154,14 @@ const createTovVariant = z
         taxationSystem: taxationSystemSchema,
         isVatPayer: z.boolean(),
         paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
-        acceptedBanks: acceptedBanksField,
         claimIdempotencyKey: claimIdempotencyKeyField,
     })
     .strict()
-    .refine(taxationVatCheck, taxationVatRefineOptions);
+    .refine(taxationVatCheck, taxationVatRefineOptions)
+    .refine(
+        (data) => isTaxationAllowedForType('tov', data.taxationSystem),
+        taxationSystemAllowedRefineOptions
+    );
 
 const createOrganizationVariant = z
     .object({
@@ -161,7 +169,6 @@ const createOrganizationVariant = z
         name: businessNameSchema,
         taxId: legalEntityTaxIdZod,
         paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
-        acceptedBanks: acceptedBanksField,
         claimIdempotencyKey: claimIdempotencyKeyField,
     })
     .strict();
@@ -185,9 +192,9 @@ export type CreateBusinessRequest = z.infer<typeof CreateBusinessSchema>;
  *  - `invoiceSlugPresetDefault` видалено — переїхав на Account-DTO
  *    (`UpdateAccountSchema`).
  *
- * **`.strict()` modifier** обов'язковий — невідомі ключі payload-а (`slug`,
- * `type`, `ownerId`, `managers`, `slugLower`, `requisites`, `invoiceSlugPreset-
- * Default`) повинні бути reject-ом, не silent-ignore.
+ * **`.strict()` modifier** обов'язковий — невідомі ключі payload-а (`type`,
+ * `ownerId`, `managers`, `slugLower`, `requisites`, `invoiceSlugPresetDefault`)
+ * повинні бути reject-ом, не silent-ignore.
  *
  * **Type-binding для `taxId` і `taxation-fields`** — на service-layer
  * (`BusinessesService.update` читає document-resident `type` з БД, валідує
@@ -210,6 +217,7 @@ export type CreateBusinessRequest = z.infer<typeof CreateBusinessSchema>;
 export const UpdateBusinessSchema = z
     .object({
         name: businessNameSchema,
+        slug: businessSlugSchema,
         taxId: payerTaxIdZod,
         /**
          * Sprint 7 §SP-3 — `nullable()` пропускає `null` через DTO-рівень,
@@ -231,7 +239,6 @@ export const UpdateBusinessSchema = z
         taxationSystem: taxationSystemSchema.nullable(),
         isVatPayer: z.boolean().nullable(),
         paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
-        acceptedBanks: acceptedBanksField,
         seoIndexEnabled: z.boolean(),
     })
     .partial()
@@ -296,10 +303,10 @@ export type BusinessWithCounts = Business & {
  *     `accounts.length === 0 → empty-state`; `=== 1 → 307-redirect на
  *     {accounts[0].slug}`; `>= 2 → render list-of-cards`.
  *
- * **Visible-поля:** `type`, `name`, `slug`, `acceptedBanks`, `seoIndexEnabled`,
- * `accounts`. Реквізити (IBAN, ІПН) **не** віддаються JSON-ом напряму — leak-
- * сурфейс лишається через NBU payload-link на per-account-view (той самий
- * vector як QR PNG; payload містить реквізити у Base64URL).
+ * **Visible-поля:** `type`, `name`, `slug`, `seoIndexEnabled`, `accounts`.
+ * Реквізити (IBAN, ІПН) **не** віддаються JSON-ом напряму — leak-сурфейс
+ * лишається через NBU payload-link на per-account-view (той самий vector як
+ * QR PNG; payload містить реквізити у Base64URL).
  *
  * `seoIndexEnabled` для рендеру `<meta name="robots">` у Server Component.
  *
@@ -311,7 +318,6 @@ export const PublicBusinessSchema = z.object({
     type: businessTypeSchema,
     name: businessNameSchema,
     slug: businessSlugSchema,
-    acceptedBanks: z.array(bankCodeSchema),
     seoIndexEnabled: z.boolean(),
     accounts: z.array(PublicAccountListItemSchema),
 });
