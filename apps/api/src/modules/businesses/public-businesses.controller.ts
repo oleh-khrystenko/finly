@@ -12,6 +12,7 @@ import { Model } from 'mongoose';
 import { Response } from 'express';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import {
+    buildQrDownloadFilename,
     PublicBusinessSchema,
     RESPONSE_CODE,
     type PublicBusinessView,
@@ -127,7 +128,7 @@ export class PublicBusinessesController {
         applyQrDownloadDisposition(
             res,
             isQrDownloadRequested(downloadParam),
-            `qr-${business.slug}.png`
+            buildQrDownloadFilename('page', business.slug)
         );
         res.send(png);
     }

@@ -12,6 +12,7 @@ import {
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { Response } from 'express';
 import {
+    buildQrDownloadFilename,
     NBU_HOST_LEGACY,
     NBU_HOST_PRIMARY,
     PublicInvoiceSchema,
@@ -152,7 +153,7 @@ export class PublicInvoicesController {
         applyQrDownloadDisposition(
             res,
             isQrDownloadRequested(downloadParam),
-            `qr-invoice-${invoice.slug}.png`
+            buildQrDownloadFilename('page', invoice.slug)
         );
         res.send(png);
     }
@@ -191,7 +192,12 @@ export class PublicInvoicesController {
         applyQrDownloadDisposition(
             res,
             isQrDownloadRequested(downloadParam),
-            `qr-nbu-${host === NBU_HOST_PRIMARY ? 'primary' : 'legacy'}-invoice-${invoice.slug}.png`
+            buildQrDownloadFilename(
+                host === NBU_HOST_PRIMARY
+                    ? 'payment-primary'
+                    : 'payment-legacy',
+                invoice.slug
+            )
         );
         res.send(png);
     }

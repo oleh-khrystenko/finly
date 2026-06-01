@@ -1,6 +1,6 @@
 'use client';
 
-import { type Invoice } from '@finly/types';
+import { buildQrDownloadFilename, type Invoice } from '@finly/types';
 import UiQrCard from '@/shared/ui/UiQrCard';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import { getInvoiceStatus } from '@/entities/invoice';
@@ -44,7 +44,10 @@ export default function InvoiceQrSection({
                             title="Оплата в банку"
                             caption="Основна адреса (qr.bank.gov.ua)"
                             alt="QR за стандартом НБУ — основна адреса"
-                            downloadFilename={`qr-oplata-${invoice.slug}.png`}
+                            downloadFilename={buildQrDownloadFilename(
+                                'payment-primary',
+                                invoice.slug
+                            )}
                         />
                         <UiQrCard
                             endpoint={`${base}/nbu.png`}
@@ -52,7 +55,10 @@ export default function InvoiceQrSection({
                             title="Оплата в банку"
                             caption="Альтернативна адреса (bank.gov.ua/qr)"
                             alt="QR за стандартом НБУ — альтернативна адреса"
-                            downloadFilename={`qr-oplata-alt-${invoice.slug}.png`}
+                            downloadFilename={buildQrDownloadFilename(
+                                'payment-legacy',
+                                invoice.slug
+                            )}
                         />
                     </>
                 )}
@@ -61,7 +67,10 @@ export default function InvoiceQrSection({
                     title="Відкрити сторінку"
                     caption="Веде на публічну сторінку інвойсу"
                     alt="QR на публічну сторінку інвойсу"
-                    downloadFilename={`qr-storinka-${invoice.slug}.png`}
+                    downloadFilename={buildQrDownloadFilename(
+                        'page',
+                        invoice.slug
+                    )}
                 />
             </div>
             <p className="text-muted-foreground mt-3 text-sm">

@@ -1,6 +1,6 @@
 'use client';
 
-import type { Account } from '@finly/types';
+import { buildQrDownloadFilename, type Account } from '@finly/types';
 import UiQrCard from '@/shared/ui/UiQrCard';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 
@@ -36,7 +36,10 @@ export default function QrSection({
                     title="Оплата в банку"
                     caption="Основна адреса (qr.bank.gov.ua)"
                     alt="QR за стандартом НБУ — основна адреса"
-                    downloadFilename={`qr-oplata-${account.slug}.png`}
+                    downloadFilename={buildQrDownloadFilename(
+                        'payment-primary',
+                        account.slug
+                    )}
                 />
                 <UiQrCard
                     endpoint={`${base}/nbu.png`}
@@ -44,14 +47,20 @@ export default function QrSection({
                     title="Оплата в банку"
                     caption="Альтернативна адреса (bank.gov.ua/qr)"
                     alt="QR за стандартом НБУ — альтернативна адреса"
-                    downloadFilename={`qr-oplata-alt-${account.slug}.png`}
+                    downloadFilename={buildQrDownloadFilename(
+                        'payment-legacy',
+                        account.slug
+                    )}
                 />
                 <UiQrCard
                     endpoint={`${base}/business.png`}
                     title="Відкрити сторінку"
                     caption="Веде на публічну сторінку рахунку"
                     alt="QR на публічну сторінку рахунку"
-                    downloadFilename={`qr-storinka-${account.slug}.png`}
+                    downloadFilename={buildQrDownloadFilename(
+                        'page',
+                        account.slug
+                    )}
                 />
             </div>
             <p className="text-muted-foreground mt-3 text-sm">

@@ -1,6 +1,6 @@
 'use client';
 
-import type { Business } from '@finly/types';
+import { buildQrDownloadFilename, type Business } from '@finly/types';
 import UiQrCard from '@/shared/ui/UiQrCard';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 
@@ -25,7 +25,10 @@ export default function QrSection({ business, apiBase = '/api' }: Props) {
                     title="Відкрити сторінку"
                     caption="Веде на публічну сторінку-вітрину бізнесу"
                     alt="QR на публічну сторінку бізнесу"
-                    downloadFilename={`qr-${business.slug}.png`}
+                    downloadFilename={buildQrDownloadFilename(
+                        'page',
+                        business.slug
+                    )}
                 />
             </div>
             <p className="text-muted-foreground mt-3 text-sm">

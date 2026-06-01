@@ -15,3 +15,4 @@ export * from './bank-version-map';
 export * from './url-prefix';
 export * from './datetime';
 export * from './sizes';
+export * from './download-filename';

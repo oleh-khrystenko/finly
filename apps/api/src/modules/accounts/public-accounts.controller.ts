@@ -11,6 +11,7 @@ import {
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { Response } from 'express';
 import {
+    buildQrDownloadFilename,
     NBU_HOST_LEGACY,
     NBU_HOST_PRIMARY,
     PublicAccountViewSchema,
@@ -123,7 +124,7 @@ export class PublicAccountsController {
         applyQrDownloadDisposition(
             res,
             isQrDownloadRequested(downloadParam),
-            `qr-${account.slug}.png`
+            buildQrDownloadFilename('page', account.slug)
         );
         res.send(png);
     }
@@ -161,7 +162,12 @@ export class PublicAccountsController {
         applyQrDownloadDisposition(
             res,
             isQrDownloadRequested(downloadParam),
-            `qr-nbu-${host === NBU_HOST_PRIMARY ? 'primary' : 'legacy'}-${account.slug}.png`
+            buildQrDownloadFilename(
+                host === NBU_HOST_PRIMARY
+                    ? 'payment-primary'
+                    : 'payment-legacy',
+                account.slug
+            )
         );
         res.send(png);
     }
