@@ -9,6 +9,7 @@ import { LandingFooter } from '@/widgets/landing-footer';
 import { LandingHero } from '@/widgets/landing-hero';
 import { LandingHowItWorks } from '@/widgets/landing-how-it-works';
 import { LandingNavSetup } from '@/widgets/landing-nav-setup';
+import { LandingPartner } from '@/widgets/landing-partner';
 import { LandingWhy } from '@/widgets/landing-why';
 import { Header } from '@/widgets/header';
 
@@ -36,6 +37,7 @@ export default function HomePage() {
                 <QrLandingBlock />
                 <LandingWhy />
                 <LandingBanks />
+                <LandingPartner />
                 <LandingClosingCta />
             </main>
             <LandingFooter />
