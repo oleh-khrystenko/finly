@@ -128,7 +128,7 @@ export class PublicBusinessesController {
         applyQrDownloadDisposition(
             res,
             isQrDownloadRequested(downloadParam),
-            buildQrDownloadFilename('page', business.slug)
+            buildQrDownloadFilename('page', { businessSlug: business.slug })
         );
         res.send(png);
     }

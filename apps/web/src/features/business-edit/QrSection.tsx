@@ -25,10 +25,9 @@ export default function QrSection({ business, apiBase = '/api' }: Props) {
                     title="Відкрити сторінку"
                     caption="Веде на публічну сторінку-вітрину бізнесу"
                     alt="QR на публічну сторінку бізнесу"
-                    downloadFilename={buildQrDownloadFilename(
-                        'page',
-                        business.slug
-                    )}
+                    downloadFilename={buildQrDownloadFilename('page', {
+                        businessSlug: business.slug,
+                    })}
                 />
             </div>
             <p className="text-muted-foreground mt-3 text-sm">

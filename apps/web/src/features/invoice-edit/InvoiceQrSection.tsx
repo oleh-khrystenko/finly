@@ -46,7 +46,11 @@ export default function InvoiceQrSection({
                             alt="QR за стандартом НБУ — основна адреса"
                             downloadFilename={buildQrDownloadFilename(
                                 'payment-primary',
-                                invoice.slug
+                                {
+                                    businessSlug,
+                                    accountSlug,
+                                    invoiceSlug: invoice.slug,
+                                }
                             )}
                         />
                         <UiQrCard
@@ -57,7 +61,11 @@ export default function InvoiceQrSection({
                             alt="QR за стандартом НБУ — альтернативна адреса"
                             downloadFilename={buildQrDownloadFilename(
                                 'payment-legacy',
-                                invoice.slug
+                                {
+                                    businessSlug,
+                                    accountSlug,
+                                    invoiceSlug: invoice.slug,
+                                }
                             )}
                         />
                     </>
@@ -67,10 +75,11 @@ export default function InvoiceQrSection({
                     title="Відкрити сторінку"
                     caption="Веде на публічну сторінку інвойсу"
                     alt="QR на публічну сторінку інвойсу"
-                    downloadFilename={buildQrDownloadFilename(
-                        'page',
-                        invoice.slug
-                    )}
+                    downloadFilename={buildQrDownloadFilename('page', {
+                        businessSlug,
+                        accountSlug,
+                        invoiceSlug: invoice.slug,
+                    })}
                 />
             </div>
             <p className="text-muted-foreground mt-3 text-sm">

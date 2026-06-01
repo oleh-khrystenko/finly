@@ -153,7 +153,11 @@ export class PublicInvoicesController {
         applyQrDownloadDisposition(
             res,
             isQrDownloadRequested(downloadParam),
-            buildQrDownloadFilename('page', invoice.slug)
+            buildQrDownloadFilename('page', {
+                businessSlug: business.slug,
+                accountSlug: account.slug,
+                invoiceSlug: invoice.slug,
+            })
         );
         res.send(png);
     }
@@ -196,7 +200,11 @@ export class PublicInvoicesController {
                 host === NBU_HOST_PRIMARY
                     ? 'payment-primary'
                     : 'payment-legacy',
-                invoice.slug
+                {
+                    businessSlug: business.slug,
+                    accountSlug: account.slug,
+                    invoiceSlug: invoice.slug,
+                }
             )
         );
         res.send(png);

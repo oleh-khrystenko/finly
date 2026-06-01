@@ -124,7 +124,10 @@ export class PublicAccountsController {
         applyQrDownloadDisposition(
             res,
             isQrDownloadRequested(downloadParam),
-            buildQrDownloadFilename('page', account.slug)
+            buildQrDownloadFilename('page', {
+                businessSlug: business.slug,
+                accountSlug: account.slug,
+            })
         );
         res.send(png);
     }
@@ -166,7 +169,7 @@ export class PublicAccountsController {
                 host === NBU_HOST_PRIMARY
                     ? 'payment-primary'
                     : 'payment-legacy',
-                account.slug
+                { businessSlug: business.slug, accountSlug: account.slug }
             )
         );
         res.send(png);

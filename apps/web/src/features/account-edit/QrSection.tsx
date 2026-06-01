@@ -38,7 +38,7 @@ export default function QrSection({
                     alt="QR за стандартом НБУ — основна адреса"
                     downloadFilename={buildQrDownloadFilename(
                         'payment-primary',
-                        account.slug
+                        { businessSlug, accountSlug: account.slug }
                     )}
                 />
                 <UiQrCard
@@ -49,7 +49,7 @@ export default function QrSection({
                     alt="QR за стандартом НБУ — альтернативна адреса"
                     downloadFilename={buildQrDownloadFilename(
                         'payment-legacy',
-                        account.slug
+                        { businessSlug, accountSlug: account.slug }
                     )}
                 />
                 <UiQrCard
@@ -57,10 +57,10 @@ export default function QrSection({
                     title="Відкрити сторінку"
                     caption="Веде на публічну сторінку рахунку"
                     alt="QR на публічну сторінку рахунку"
-                    downloadFilename={buildQrDownloadFilename(
-                        'page',
-                        account.slug
-                    )}
+                    downloadFilename={buildQrDownloadFilename('page', {
+                        businessSlug,
+                        accountSlug: account.slug,
+                    })}
                 />
             </div>
             <p className="text-muted-foreground mt-3 text-sm">
