@@ -374,8 +374,12 @@ describe('UpdateBusinessSchema', () => {
         expect(result.success).toBe(true);
     });
 
+    it('accepts slug edit (vanity-slug rename, da4ec99)', () => {
+        const result = UpdateBusinessSchema.safeParse({ slug: 'novyj-slug' });
+        expect(result.success).toBe(true);
+    });
+
     it.each([
-        'slug',
         'slugLower',
         'type',
         'ownerId',
@@ -386,7 +390,7 @@ describe('UpdateBusinessSchema', () => {
         'invoiceSlugPresetDefault',
         'claimIdempotencyKey',
     ])(
-        'rejects невідомий ключ %s через .strict() (slug-mutation / Sprint 9 видалені ключі / Sprint 10 immutable claim-key)',
+        'rejects невідомий ключ %s через .strict() (Sprint 9 видалені ключі / Sprint 10 immutable claim-key)',
         (key) => {
             const result = UpdateBusinessSchema.safeParse({
                 [key]: 'whatever',

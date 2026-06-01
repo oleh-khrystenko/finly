@@ -9,6 +9,10 @@ import {
     AccountSchema,
 } from '../accounts/schemas/account.schema';
 import {
+    BusinessSlugHistory,
+    BusinessSlugHistorySchema,
+} from '../businesses/schemas/business-slug-history.schema';
+import {
     Business,
     BusinessDocument,
     BusinessSchema,
@@ -76,6 +80,10 @@ describe('OrphanProfileCleanupService (Sprint 12 §12.1c, MongoMemoryReplSet)', 
                         schema: ExecutionTransactionSchema,
                     },
                     { name: Business.name, schema: BusinessSchema },
+                    {
+                        name: BusinessSlugHistory.name,
+                        schema: BusinessSlugHistorySchema,
+                    },
                     { name: Account.name, schema: AccountSchema },
                     { name: Invoice.name, schema: InvoiceSchema },
                     {
