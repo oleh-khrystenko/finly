@@ -3,7 +3,6 @@ export { default as EditableBusinessName } from './EditableBusinessName';
 export { default as RequisitesCard } from './RequisitesCard';
 export { hasTaxationFields } from './TaxationSection';
 export { default as PublicSection } from './PublicSection';
-export { default as QrSection } from './QrSection';
 export { default as DeleteBusinessConfirmDialog } from './DeleteBusinessConfirmDialog';
 export { useDeleteBusinessConfirmStore } from './deleteBusinessConfirmStore';
 export {

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Check, Copy, ExternalLink, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import {
+    buildQrDownloadFilename,
     businessSlugSchema,
     type Business,
     type UpdateBusinessRequest,
@@ -11,6 +12,7 @@ import {
 import UiButton from '@/shared/ui/UiButton';
 import UiEditableField from '@/shared/ui/UiEditableField';
 import UiPrefixInput from '@/shared/ui/UiPrefixInput';
+import UiQrCard from '@/shared/ui/UiQrCard';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSwitch from '@/shared/ui/UiSwitch';
 import { mapValidationCode } from '@/shared/lib';
@@ -19,6 +21,7 @@ interface Props {
     business: Business;
     /** Public payment-page origin (NEXT_PUBLIC_PAY_PUBLIC_URL чи аналог). */
     payPublicOrigin: string;
+    apiBase?: string;
     onSave: (patch: UpdateBusinessRequest) => Promise<void>;
 }
 
@@ -35,10 +38,16 @@ interface Props {
  *
  * Підписковий gate (free-tier — slug random, paid — vanity-edit) приходить
  * разом з білінгом окремим спринтом; зараз slug відкритий для всіх.
+ *
+ * QR-код тут — не окрема секція, а друге кодування тієї самої адреси
+ * (URL — для людини, QR — для камери телефона), тому живе в одній картці
+ * під дією-посиланнями. На бізнес-рівні можливий лише тип-2 (URL на вітрину):
+ * тип-1 (НБУ-payload) потребує IBAN, а IBAN живе на рахунку, не на бізнесі.
  */
 export default function PublicSection({
     business,
     payPublicOrigin,
+    apiBase = '/api',
     onSave,
 }: Props) {
     const [copied, setCopied] = useState(false);
@@ -48,6 +57,9 @@ export default function PublicSection({
         .replace(/^https?:\/\//, '')
         .replace(/\/$/, '')}/`;
     const publicUrl = `${payPublicOrigin.replace(/\/$/, '')}/${business.slug}`;
+    const qrEndpoint = `${apiBase}/businesses/public/${encodeURIComponent(
+        business.slug
+    )}/qr/business.png`;
 
     const handleCopy = async () => {
         try {
@@ -150,6 +162,22 @@ export default function PublicSection({
                         }}
                         onSave={(slug) => onSave({ slug })}
                     />
+                    <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-center">
+                        <div className="w-56 max-w-full shrink-0">
+                            <UiQrCard
+                                endpoint={qrEndpoint}
+                                alt="QR на публічну сторінку бізнесу"
+                                downloadFilename={buildQrDownloadFilename(
+                                    'page',
+                                    { businessSlug: business.slug }
+                                )}
+                            />
+                        </div>
+                        <p className="text-muted-foreground text-sm">
+                            Той самий лінк у вигляді коду. Надрукуйте на вивісці
+                            чи візитці — клієнт відсканує і відкриє сторінку.
+                        </p>
+                    </div>
                 </div>
                 <label
                     htmlFor="seo-toggle"

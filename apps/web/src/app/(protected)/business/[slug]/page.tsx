@@ -24,7 +24,6 @@ import {
     AccountsSection,
     EditableBusinessName,
     PublicSection,
-    QrSection,
     RequisitesCard,
     scheduleDeleteWithUndo,
     useDeleteBusinessConfirmStore,
@@ -171,7 +170,6 @@ export default function BusinessSlugPage() {
                     payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
                     onSave={handlePatch}
                 />
-                <QrSection business={business} />
                 <AccountsSection businessSlug={business.slug} />
                 <RequisitesCard business={business} onSave={handlePatch} />
 

@@ -65,16 +65,20 @@ const UiQrCard = ({
     return (
         <div className="border-border flex flex-col gap-3 rounded-lg border p-3">
             <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                    <p className="text-foreground text-sm font-medium">
-                        {title}
-                    </p>
-                    {caption && (
-                        <p className="text-muted-foreground mt-0.5 text-sm">
-                            {caption}
-                        </p>
-                    )}
-                </div>
+                {(title || caption) && (
+                    <div className="min-w-0">
+                        {title && (
+                            <p className="text-foreground text-sm font-medium">
+                                {title}
+                            </p>
+                        )}
+                        {caption && (
+                            <p className="text-muted-foreground mt-0.5 text-sm">
+                                {caption}
+                            </p>
+                        )}
+                    </div>
+                )}
                 <UiButton
                     type="button"
                     variant="outline"
@@ -82,8 +86,9 @@ const UiQrCard = ({
                     onClick={() => void handleDownload()}
                     disabled={downloading}
                     IconLeft={<Download />}
+                    className="ml-auto"
                 >
-                    Друк
+                    Завантажити
                 </UiButton>
             </div>
             <UiQrImage
