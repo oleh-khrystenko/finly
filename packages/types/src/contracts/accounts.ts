@@ -46,9 +46,9 @@ const ibanMaskSchema = z
 /**
  * `CreateAccountSchema` — payload з форми створення рахунку.
  *
- * **`name: optional`** — backend auto-generate `"{BANK_LABEL[bankCode]} •{last4}"`
- * якщо клієнт не передав (А4 auto-default-policy). UI у формі показує placeholder
- * "за замовчуванням буде підтягнуто з банку" і дозволяє опціональний override.
+ * **`name: optional`** — якщо клієнт не передав, backend зберігає `null`
+ * (display-лейбл деривується на льоту через `deriveAccountLabel`). UI у формі
+ * показує placeholder з тим, що буде підтягнуто, і дозволяє опціональний override.
  *
  * **`.strict()`** — невідомі ключі (`slug`, `bankCode`, `businessId`,
  * `invoiceSlugPresetDefault`, …) reject-аться ZodValidationPipe → 400
@@ -106,7 +106,7 @@ export type UpdateAccountRequest = z.infer<typeof UpdateAccountSchema>;
  */
 export const PublicAccountListItemSchema = z.object({
     slug: accountSlugSchema,
-    name: accountNameSchema,
+    name: accountNameSchema.nullable(),
     bankCode: bankCodeSchema.nullable(),
     ibanMask: ibanMaskSchema,
 });
@@ -129,7 +129,7 @@ export type PublicAccountListItem = z.infer<typeof PublicAccountListItemSchema>;
  */
 export const PublicAccountViewSchema = z.object({
     slug: accountSlugSchema,
-    name: accountNameSchema,
+    name: accountNameSchema.nullable(),
     bankCode: bankCodeSchema.nullable(),
     ibanMask: ibanMaskSchema,
     business: z.object({

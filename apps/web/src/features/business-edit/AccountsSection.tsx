@@ -6,6 +6,7 @@ import { AxiosError } from 'axios';
 import { toast } from 'sonner';
 import {
     BANK_LABEL,
+    deriveAccountLabel,
     type AccountWithCounts,
 } from '@finly/types';
 import { getApiMessage, listAccounts } from '@/shared/api';
@@ -116,7 +117,11 @@ export default function AccountsSection({ businessSlug }: Props) {
             scheduleAccountDeleteWithUndo({
                 businessSlug,
                 accountSlug: account.slug,
-                name: account.name,
+                name: deriveAccountLabel({
+                    name: account.name,
+                    bankCode: account.bankCode,
+                    ibanMask: `•${account.iban.slice(-4)}`,
+                }),
                 onScheduled: () => {
                     /* per-card delete — без redirect-у, list стає на місці */
                 },
@@ -187,7 +192,7 @@ interface CardProps {
 }
 
 function AccountCard({ account, businessSlug, onDelete }: CardProps) {
-    const last4 = account.iban.slice(-4);
+    const mask = `•${account.iban.slice(-4)}`;
     const href = `/business/${businessSlug}/account/${account.slug}`;
     const invoicesLabel = pluralizeUa(
         account.invoicesCount,
@@ -195,6 +200,14 @@ function AccountCard({ account, businessSlug, onDelete }: CardProps) {
         'інвойси',
         'інвойсів'
     );
+    // Назва-заголовок: користувацька name або, за її відсутності, банк-лейбл
+    // (а на нерозпізнаному банку — сама маска). Окремі bank-/mask-рядки нижче
+    // рендеряться лише коли не дублюють заголовок — це прибирає кострубату
+    // "monobank •4847 / monobank / •4847" розкладку для авто-назв.
+    const title =
+        account.name ??
+        (account.bankCode !== null ? BANK_LABEL[account.bankCode] : mask);
+    const showMask = title !== mask;
     // Pattern symmetric Sprint 4 `features/account-edit/InvoiceCard`: уся
     // картка — звичайний контейнер, navigation — окрема кнопка "Відкрити".
     // Власне `<a>` за межами `shared/ui/` заборонено (`docs/conventions/
@@ -203,16 +216,18 @@ function AccountCard({ account, businessSlug, onDelete }: CardProps) {
         <div className="border-border bg-card flex flex-col gap-3 rounded-lg border p-5">
             <div className="flex flex-1 flex-col gap-1">
                 <p className="text-foreground text-xl font-semibold tracking-tight">
-                    {account.name}
+                    {title}
                 </p>
-                {account.bankCode !== null && (
+                {account.name !== null && account.bankCode !== null && (
                     <p className="text-muted-foreground text-base">
                         {BANK_LABEL[account.bankCode]}
                     </p>
                 )}
-                <p className="text-muted-foreground font-mono text-base">
-                    •{last4}
-                </p>
+                {showMask && (
+                    <p className="text-muted-foreground font-mono text-base">
+                        {mask}
+                    </p>
+                )}
                 <p className="text-muted-foreground mt-1.5 text-base">
                     {invoicesLabel}
                 </p>

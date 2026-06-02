@@ -9,7 +9,7 @@ interface Props {
     /** Account-fields (з `PublicAccountViewSchema`-whitelist). */
     account: {
         slug: string;
-        name: string;
+        name: string | null;
         bankCode: BankCode | null;
         ibanMask: string;
     };
@@ -68,7 +68,11 @@ export default function PublicAccountView({
     const parenthetical = bankLabel
         ? `(${bankLabel} ${account.ibanMask})`
         : `(${account.ibanMask})`;
-    const heading = `Платіж на користь ${business.name} через ${account.name}`;
+    // Без власної назви рахунку опускаємо "через {назва}" — parenthetical нижче
+    // вже ідентифікує рахунок (банк + маска), тож дубль не потрібен.
+    const heading = account.name
+        ? `Платіж на користь ${business.name} через ${account.name}`
+        : `Платіж на користь ${business.name}`;
 
     const qrBase = `${apiBase}/businesses/public/${encodeURIComponent(business.slug)}/account/${encodeURIComponent(account.slug)}/qr`;
     const qrPrimary = `${qrBase}/nbu.png?host=primary`;

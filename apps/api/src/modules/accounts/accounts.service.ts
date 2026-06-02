@@ -8,7 +8,6 @@ import {
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Connection, Model, Types } from 'mongoose';
 import {
-    BANK_LABEL,
     RESPONSE_CODE,
     bankCodeFromIban,
     type AccountWithCounts,
@@ -31,8 +30,8 @@ import { Account, AccountDocument } from './schemas/account.schema';
  * Sprint 9 §9.1 — primary CRUD service для Account.
  *
  * **Create** — `bankCode` stored derived з `bankCodeFromIban(iban)` рівно
- * один раз (§SP-9). Auto-name `"{BANK_LABEL[bankCode]} •{last4}"` або
- * `"Банк •{last4}"` на null-bankCode, якщо клієнт не передав. На 11000 →
+ * один раз (§SP-9). `name` — `dto.name ?? null` (без матеріалізації авто-рядка;
+ * display-лейбл деривується на льоту через `deriveAccountLabel`). На 11000 →
  * розгалуження: collision на `(businessId, slug)` → `ACCOUNT_SLUG_GENERATION_FAILED`,
  * collision на `(businessId, iban)` → `ACCOUNT_IBAN_DUPLICATE`, інакше →
  * safety-net `ACCOUNT_CREATE_FAILED`.
@@ -93,11 +92,6 @@ export class AccountsService {
         dto: CreateAccountRequest
     ): Promise<AccountDocument> {
         const bankCode = bankCodeFromIban(dto.iban);
-        const last4 = dto.iban.slice(-4);
-        const defaultName =
-            bankCode === null
-                ? `Банк •${last4}`
-                : `${BANK_LABEL[bankCode]} •${last4}`;
         const slug = await this.slugGenerator.generateUnique(business._id);
         const session = await this.connection.startSession();
         try {
@@ -122,7 +116,7 @@ export class AccountsService {
                             businessId: business._id,
                             iban: dto.iban,
                             bankCode,
-                            name: dto.name ?? defaultName,
+                            name: dto.name ?? null,
                             slug,
                         },
                     ],

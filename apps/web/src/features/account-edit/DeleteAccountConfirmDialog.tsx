@@ -1,5 +1,6 @@
 'use client';
 
+import { deriveAccountLabel } from '@finly/types';
 import { useAutoCancelOnRouteChange } from '@/shared/lib';
 import { UiConfirmDialog } from '@/shared/ui/UiConfirmDialog';
 import { useDeleteAccountConfirmStore } from './deleteAccountConfirmStore';
@@ -40,7 +41,11 @@ export default function DeleteAccountConfirmDialog() {
             title="Видалити рахунок?"
             description={
                 account
-                    ? `«${account.name}» буде видалено. Клієнти, які мають збережене посилання, не зможуть оплатити.`
+                    ? `«${deriveAccountLabel({
+                          name: account.name,
+                          bankCode: account.bankCode,
+                          ibanMask: `•${account.iban.slice(-4)}`,
+                      })}» буде видалено. Клієнти, які мають збережене посилання, не зможуть оплатити.`
                     : ''
             }
             confirmLabel="Видалити"

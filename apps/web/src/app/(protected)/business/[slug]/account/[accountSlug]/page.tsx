@@ -7,6 +7,7 @@ import { AxiosError } from 'axios';
 import { toast } from 'sonner';
 import {
     BANK_LABEL,
+    deriveAccountLabel,
     type AccountWithCounts,
     type BusinessWithCounts,
     type UpdateAccountRequest,
@@ -198,9 +199,20 @@ export default function AccountCabinetPage() {
     const bankLabel =
         account.bankCode !== null ? BANK_LABEL[account.bankCode] : null;
     const last4 = account.iban.slice(-4);
-    const headingParenthetical = bankLabel
-        ? ` (${bankLabel} •${last4})`
-        : ` (•${last4})`;
+    // Без власної назви заголовком стає derived-лейбл ("monobank •4847"),
+    // а parenthetical-disambiguator опускаємо (інакше дубль). З назвою —
+    // назва + parenthetical (банк + маска) як завжди.
+    const headingTitle = deriveAccountLabel({
+        name: account.name,
+        bankCode: account.bankCode,
+        ibanMask: `•${last4}`,
+    });
+    const headingParenthetical =
+        account.name === null
+            ? ''
+            : bankLabel
+              ? ` (${bankLabel} •${last4})`
+              : ` (•${last4})`;
 
     const handleDelete = () => {
         // §SP-3 first-line-of-defense — frontend pre-check.
@@ -220,7 +232,11 @@ export default function AccountCabinetPage() {
             scheduleAccountDeleteWithUndo({
                 businessSlug: business.slug,
                 accountSlug: account.slug,
-                name: account.name,
+                name: deriveAccountLabel({
+                    name: account.name,
+                    bankCode: account.bankCode,
+                    ibanMask: `•${last4}`,
+                }),
                 onScheduled: () =>
                     router.replace(`/business/${business.slug}`),
                 onCancelled: () =>
@@ -246,7 +262,7 @@ export default function AccountCabinetPage() {
                 </UiButton>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                     <h1 className="text-foreground min-w-0 text-2xl font-bold tracking-tight md:text-3xl">
-                        {account.name}
+                        {headingTitle}
                         <span className="text-muted-foreground font-normal">
                             {headingParenthetical}
                         </span>

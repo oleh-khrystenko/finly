@@ -36,7 +36,7 @@ interface Props {
      */
     account: {
         slug: string;
-        name: string;
+        name: string | null;
         bankCode: BankCode | null;
         ibanMask: string;
     };
@@ -118,8 +118,9 @@ export default function InvoicePublicView({
                     {heading}
                 </h1>
                 <p className="text-muted-foreground text-sm break-words">
-                    {BUSINESS_TYPE_LABEL[business.type]} {business.name} через{' '}
-                    {account.name} {accountParenthetical}
+                    {BUSINESS_TYPE_LABEL[business.type]} {business.name}
+                    {account.name ? ` через ${account.name}` : ''}{' '}
+                    {accountParenthetical}
                 </p>
             </header>
 

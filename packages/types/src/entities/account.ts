@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { type BankCode, MVP_BANKS } from '../constants/banks';
+import { BANK_LABEL, type BankCode, MVP_BANKS } from '../constants/banks';
 import { slugPresetSchema } from '../enums/slug-preset';
 import { isWithinNbuCharset } from '../qr/charset';
 import { isWithinByteLimit } from '../qr/limits';
@@ -44,9 +44,13 @@ const NAME_CHAR_LIMIT = 60;
 const NAME_BYTE_LIMIT = 120;
 
 /**
- * Account display-name: 1-60 chars, NBU-charset, auto-default
- * `"{BANK_LABEL[bankCode]} •{ibanLast4}"` (наприклад, "ПриватБанк •2580")
- * матеріалізований при create, якщо клієнт не передав власне ім'я.
+ * Account display-name: 1-60 chars, NBU-charset. **Опціональний** —
+ * `null`, якщо ФОП не ввів власну назву. Раніше backend матеріалізував
+ * авто-рядок `"{BANK_LABEL} •{last4}"`, але він дублювався з bank-label/mask-
+ * рядками у картці. Тепер відсутність назви = `null`, а display-лейбл
+ * деривується на льоту через `deriveAccountLabel` (нижче). Сама `accountNameSchema`
+ * валідовує лише введене значення (1-60, NBU-charset) — nullable вішається у
+ * місцях використання (`AccountSchema.name`, public-view-схеми).
  *
  * **Чому 60 chars cap, не reuse `businessNameSchema` (140 chars):** Account.name
  * не пише у NBU payload (receiverName залишається `business.name`), а тільки
@@ -91,7 +95,7 @@ export const AccountSchema = z.object({
     id: objectIdSchema,
     businessId: objectIdSchema,
     iban: ibanZod,
-    name: accountNameSchema,
+    name: accountNameSchema.nullable(),
     slug: accountSlugSchema,
     /**
      * §SP-9 — stored derived value, не runtime-computed. Резолвиться через
@@ -120,3 +124,25 @@ export const AccountSchema = z.object({
 
 export type Account = z.infer<typeof AccountSchema>;
 export type AccountBankCode = BankCode;
+
+/**
+ * Display-лейбл рахунку. Якщо є користувацька `name` — повертаємо її; інакше
+ * деривуємо `"{BANK_LABEL} •{last4}"` (або `"Банк •{last4}"` на нерозпізнаному
+ * банку). Єдине джерело однорядкового лейбла для toast-ів, confirm-діалогу та
+ * placeholder-а edit-поля.
+ *
+ * Картки (cabinet + public-list) роблять власну дворядкову розкладку
+ * (title + mask) на основі `name === null`, тому хелпер їм не потрібен —
+ * він навмисно повертає рядок, а не структуру.
+ */
+export function deriveAccountLabel(params: {
+    name: string | null;
+    bankCode: BankCode | null;
+    /** `•{last4}` — server-derived маска IBAN. */
+    ibanMask: string;
+}): string {
+    if (params.name) return params.name;
+    return params.bankCode !== null
+        ? `${BANK_LABEL[params.bankCode]} ${params.ibanMask}`
+        : `Банк ${params.ibanMask}`;
+}

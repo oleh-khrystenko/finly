@@ -3,7 +3,9 @@
 import {
     BANK_LABEL,
     accountNameSchema,
+    deriveAccountLabel,
     type Account,
+    type UpdateAccountRequest,
 } from '@finly/types';
 import UiInput from '@/shared/ui/UiInput';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
@@ -12,7 +14,7 @@ import { mapValidationCode } from '@/shared/lib';
 
 interface Props {
     account: Account;
-    onSave: (patch: Partial<Pick<Account, 'name'>>) => Promise<void>;
+    onSave: (patch: UpdateAccountRequest) => Promise<void>;
 }
 
 /**
@@ -26,6 +28,13 @@ interface Props {
  * `IbanSection` як disambiguator.
  */
 export default function BasicSection({ account, onSave }: Props) {
+    // Лейбл за замовчуванням, коли власної назви немає (`name === null`):
+    // показуємо його у read-режимі приглушено, і як placeholder в edit-полі.
+    const derivedLabel = deriveAccountLabel({
+        name: account.name,
+        bankCode: account.bankCode,
+        ibanMask: `•${account.iban.slice(-4)}`,
+    });
     return (
         <UiSectionCard title="Основне">
             <div className="mt-4 space-y-6">
@@ -41,13 +50,25 @@ export default function BasicSection({ account, onSave }: Props) {
                 )}
                 <UiEditableField<string>
                     label="Назва"
-                    value={account.name}
-                    renderRead={(v) => v}
+                    value={account.name ?? ''}
+                    renderRead={(v) =>
+                        v ? (
+                            v
+                        ) : (
+                            <span className="text-muted-foreground">
+                                {derivedLabel}{' '}
+                                <span className="text-sm">
+                                    (за замовчуванням)
+                                </span>
+                            </span>
+                        )
+                    }
                     renderEdit={({ value, setValue, error }) => (
                         <UiInput
                             value={value}
                             onChange={(e) => setValue(e.target.value)}
                             error={error}
+                            placeholder={derivedLabel}
                             maxLength={60}
                         />
                     )}

@@ -22,7 +22,8 @@
         "test:e2e": "jest --config test/jest-e2e.json",
         "migration:slug-lower": "ts-node scripts/migrations/2026-05-03-businesses-slug-lower.ts",
         "migration:invoices-payee-snapshot": "ts-node scripts/migrations/2026-05-08-invoices-payee-snapshot.ts",
-        "migration:all": "pnpm migration:slug-lower && pnpm migration:invoices-payee-snapshot"
+        "migration:accounts-null-auto-name": "ts-node scripts/migrations/2026-06-02-accounts-null-auto-name.ts",
+        "migration:all": "pnpm migration:slug-lower && pnpm migration:invoices-payee-snapshot && pnpm migration:accounts-null-auto-name"
     },
     "dependencies": {
         "@anthropic-ai/sdk": "^0.80.0",

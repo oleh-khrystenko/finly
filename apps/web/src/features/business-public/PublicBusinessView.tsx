@@ -105,9 +105,15 @@ function AccountCard({
 }) {
     const href = `/${encodeURIComponent(businessSlug)}/${encodeURIComponent(account.slug)}`;
     // §SP-9 null-fallback rule — bank-label рендериться лише на non-null
-    // bankCode; ibanMask завжди показуємо як disambiguator.
-    const bankLabel =
-        account.bankCode !== null ? BANK_LABEL[account.bankCode] : null;
+    // bankCode; ibanMask завжди показуємо як disambiguator. Заголовок: власна
+    // name або банк-лейбл (на нерозпізнаному банку — сама маска). Окремі bank-/
+    // mask-рядки нижче — лише коли не дублюють заголовок (та сама розкладка, що
+    // cabinet AccountCard).
+    const mask = account.ibanMask;
+    const title =
+        account.name ??
+        (account.bankCode !== null ? BANK_LABEL[account.bankCode] : mask);
+    const showMask = title !== mask;
     // Pattern symmetric Sprint 9 §9.2 cabinet `features/business-edit/
     // AccountsSection > AccountCard`: card — звичайний `<div>`-контейнер,
     // navigation інкапсульована у `UiButton as="link"` всередині (повна
@@ -120,16 +126,18 @@ function AccountCard({
         <div className="border-border bg-card flex flex-col gap-4 rounded-lg border p-5">
             <div className="flex min-w-0 flex-col gap-1">
                 <span className="text-foreground truncate text-xl font-semibold tracking-tight">
-                    {account.name}
+                    {title}
                 </span>
-                {bankLabel !== null && (
+                {account.name !== null && account.bankCode !== null && (
                     <span className="text-muted-foreground truncate text-base">
-                        {bankLabel}
+                        {BANK_LABEL[account.bankCode]}
                     </span>
                 )}
-                <span className="text-muted-foreground font-mono text-base">
-                    {account.ibanMask}
-                </span>
+                {showMask && (
+                    <span className="text-muted-foreground font-mono text-base">
+                        {mask}
+                    </span>
+                )}
             </div>
             <UiButton
                 as="link"

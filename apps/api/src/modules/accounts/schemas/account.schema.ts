@@ -51,13 +51,14 @@ export class Account {
     bankCode!: BankCode | null;
 
     /**
-     * Display-name 1..60 chars. Auto-default `"{BANK_LABEL[bankCode]} •{last4}"`
-     * (або `"Банк •{last4}"` на null-bankCode) матеріалізується у service на
-     * create, якщо клієнт не передав. Format-валідація (length, byte, NBU-
-     * charset) — Zod write-DTO.
+     * Display-name 1..60 chars, **nullable**. `null` = ФОП не ввів власну назву;
+     * display-лейбл деривується на льоту (`deriveAccountLabel`) як
+     * `"{BANK_LABEL} •{last4}"`. Раніше service матеріалізував цей рядок у поле,
+     * але він дублювався з bank-label/mask-рядками картки (§Sprint-design-fix).
+     * Format-валідація введеного значення (length, byte, NBU-charset) — Zod write-DTO.
      */
-    @Prop({ required: true, trim: true })
-    name!: string;
+    @Prop({ type: String, trim: true, default: null })
+    name!: string | null;
 
     /**
      * §SP-10 — case-sensitive 8-char A-Za-z0-9 random tail. Compound-unique

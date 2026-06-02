@@ -264,7 +264,7 @@ describe('Accounts E2E (Sprint 9 §SP-1..§SP-3)', () => {
     }
 
     describe('POST /businesses/me/:slug/accounts', () => {
-        it('§SP-1 — створює account з auto-name "ПриватБанк •6001" з МФО', async () => {
+        it('§SP-1 — створює account без назви → name null (display деривується)', async () => {
             const user = await createUser();
             const businessSlug = await createBusinessFor(user);
 
@@ -278,21 +278,21 @@ describe('Accounts E2E (Sprint 9 §SP-1..§SP-3)', () => {
                 res.body as {
                     data: {
                         iban: string;
-                        bankCode: string;
-                        name: string;
+                        bankCode: string | null;
+                        name: string | null;
                         slug: string;
                     };
                 }
             ).data;
             expect(data.iban).toBe(VALID_IBAN);
-            // МФО 322313 — поза `BANK_MFO_MAP` (тестовий IBAN з random МФО) →
-            // bankCode null → auto-name "Банк •last4".
+            // МФО 322313 — поза `BANK_MFO_MAP` → bankCode null. Назву не
+            // передали → name null (не матеріалізуємо авто-рядок).
             expect(data.bankCode).toBeNull();
-            expect(data.name).toBe('Банк •6001');
+            expect(data.name).toBeNull();
             expect(data.slug).toMatch(/^[A-Za-z0-9]{8}$/);
         });
 
-        it('§SP-1 — auto-name для розпізнаного МФО (privatbank 305299)', async () => {
+        it('§SP-1 — розпізнає МФО у bankCode, name лишається null без override (privatbank 305299)', async () => {
             const user = await createUser();
             const businessSlug = await createBusinessFor(user);
             const ibanWithPrivatMfo = 'UA273052992990004149497786452';
@@ -304,10 +304,10 @@ describe('Accounts E2E (Sprint 9 §SP-1..§SP-3)', () => {
                 .expect(201);
 
             const data = (
-                res.body as { data: { bankCode: string; name: string } }
+                res.body as { data: { bankCode: string; name: string | null } }
             ).data;
             expect(data.bankCode).toBe('privatbank');
-            expect(data.name).toBe('ПриватБанк •6452');
+            expect(data.name).toBeNull();
         });
 
         it('§SP-1 — приймає кастомне name override', async () => {
