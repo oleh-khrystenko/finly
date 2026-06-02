@@ -13,11 +13,17 @@ export function LandingBanks() {
                     Працює з банк-додатками
                 </p>
 
-                <ul className="mx-auto flex max-w-5xl flex-wrap items-start justify-center gap-x-4 gap-y-6 sm:gap-x-8">
+                {/*
+                 * Grid з кратним 10 числом колонок → жодних осиротілих рядків:
+                 *   375px → 2 колонки (5×2), назва в один рядок;
+                 *   ≥640px → 5 колонок (2×5) — компактна trust-смуга.
+                 * `max-w-3xl` центрує блок на 1280, щоб 5 колонок не розповзались.
+                 */}
+                <ul className="mx-auto grid max-w-3xl grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-5 px-6">
                     {MVP_BANKS.map((code) => (
                         <li
                             key={code}
-                            className="group flex w-16 flex-col items-center gap-2 sm:w-20"
+                            className="group flex flex-col items-center gap-2"
                         >
                             <UiBankLogo
                                 bank={code}
