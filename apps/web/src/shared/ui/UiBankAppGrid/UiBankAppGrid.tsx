@@ -6,8 +6,8 @@ import {
     buildBankAppLink,
     type BankCode,
 } from '@finly/types';
-import { BANK_DISPLAY } from '@/shared/icons';
 import { composeClasses, detectClientPlatform } from '@/shared/lib';
+import UiBankLogo from '@/shared/ui/UiBankLogo';
 
 export interface UiBankAppGridProps {
     /**
@@ -67,7 +67,6 @@ export default function UiBankAppGrid({
             )}
         >
             {banks.map((bank) => {
-                const Icon = BANK_DISPLAY[bank];
                 const label = BANK_LABEL[bank];
                 return (
                     <button
@@ -77,9 +76,7 @@ export default function UiBankAppGrid({
                         aria-label={`Оплатити через ${label}`}
                         className="border-border bg-card text-foreground hover:border-foreground/30 hover:bg-muted/50 focus-visible:ring-ring flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-3 text-left transition-colors focus:outline-none focus-visible:ring-2"
                     >
-                        <span className="size-8 shrink-0">
-                            <Icon />
-                        </span>
+                        <UiBankLogo bank={bank} className="size-10" />
                         <span className="min-w-0 truncate text-sm leading-tight font-medium">
                             {label}
                         </span>
