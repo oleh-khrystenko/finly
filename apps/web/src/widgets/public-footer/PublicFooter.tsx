@@ -37,11 +37,11 @@ export function PublicFooter() {
                     {/* Growth CTA column (public-only) */}
                     <div>
                         <h3 className="text-foreground text-sm font-semibold tracking-wide">
-                            Маєте ФОП?
+                            Приймаєте платежі?
                         </h3>
                         <p className="text-muted-foreground mt-2 max-w-xs text-sm leading-relaxed">
-                            Прийом платежів без реєстрації — створіть свою
-                            сторінку за хвилину.
+                            Згенеруйте платіжний QR за стандартом НБУ. Спробуйте
+                            без реєстрації.
                         </p>
                         <UiButton
                             as="a"
