@@ -165,7 +165,7 @@ export default function AccountsSection({ businessSlug }: Props) {
                 !isErrorCurrent && <EmptyState createHref={createHref} />}
 
             {visibleItems !== null && visibleItems.length > 0 && (
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
                     {visibleItems.map((account) => (
                         <AccountCard
                             key={account.id}

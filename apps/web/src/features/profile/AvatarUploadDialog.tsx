@@ -112,7 +112,7 @@ export default function AvatarUploadDialog() {
 
     const processFile = async (file: File): Promise<void> => {
         if (file.size > AVATAR.MAX_FILE_SIZE) {
-            toast.error('Файл занадто великий. Максимальний розмір — 5 МБ');
+            toast.error('Файл занадто великий. Максимальний розмір 5 МБ');
             return;
         }
 

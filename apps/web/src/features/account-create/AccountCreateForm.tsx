@@ -10,6 +10,7 @@ import {
     CreateAccountSchema,
     accountNameSchema,
     ibanZod,
+    normalizeIban,
     type CreateAccountRequest,
 } from '@finly/types';
 import { z } from 'zod';
@@ -85,6 +86,10 @@ export default function AccountCreateForm({
     const { register, handleSubmit, formState } = form;
     const { errors, isValid } = formState;
 
+    // IBAN усюди показується групами по 4 з пробілами — нормалізуємо на вводі,
+    // щоб скопійоване `UA21 3223 …` не падало на pattern-валідації.
+    const ibanField = register('iban');
+
     const onSubmit = async (values: FormValues): Promise<void> => {
         const name = values.name?.trim();
         const dto: CreateAccountRequest = {
@@ -143,7 +148,11 @@ export default function AccountCreateForm({
                     placeholder="UA213223130000026007233566001"
                     description="IBAN неможливо буде змінити після створення. Якщо помилитеся — видаліть рахунок і створіть новий."
                     inputMode="text"
-                    {...register('iban')}
+                    {...ibanField}
+                    onChange={(e) => {
+                        e.target.value = normalizeIban(e.target.value);
+                        return ibanField.onChange(e);
+                    }}
                     error={getZodFieldError(errors.iban)}
                 />
 

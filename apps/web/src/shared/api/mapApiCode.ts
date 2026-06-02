@@ -97,7 +97,7 @@ const ERRORS: Record<string, MessageDict> = {
         // обов'язкове taxation-поле на fop / tov через null. UX: "оберіть
         // систему оподаткування" (recovery-path відрізняється від forward-direction).
         taxation_required_for_type:
-            'Оберіть систему оподаткування — вона обов’язкова для цього типу платника',
+            'Оберіть систему оподаткування: вона обов’язкова для цього типу платника',
         // Sprint 7 §7.5 — type-binding на PATCH `requisites.taxId`. Структурно
         // валідний код, але невідповідного формату для типу бізнесу.
         tax_id_format_mismatch_type:

@@ -39,7 +39,9 @@ describe('QrPreviewInputSchema', () => {
         expect(result.success).toBe(false);
         if (!result.success) {
             expect(
-                result.error.issues.some((i) => i.message === 'INVALID_IBAN')
+                result.error.issues.some(
+                    (i) => i.message === 'INVALID_IBAN_CHECKSUM'
+                )
             ).toBe(true);
         }
     });

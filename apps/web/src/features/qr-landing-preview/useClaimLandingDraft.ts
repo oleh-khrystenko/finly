@@ -94,7 +94,7 @@ export function useClaimLandingDraft(): void {
         if (!parsed.success) {
             setIntent('claim-failed-business');
             toast.error(
-                'Не вдалося відновити чернетку — створіть бізнес вручну'
+                'Не вдалося відновити чернетку. Створіть бізнес вручну'
             );
             return;
         }
