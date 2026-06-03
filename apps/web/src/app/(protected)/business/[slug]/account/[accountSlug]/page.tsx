@@ -30,6 +30,7 @@ import {
     IbanSection,
     InvoiceSettingsSection,
     InvoicesSection,
+    PublicSection,
     QrSection,
     scheduleAccountDeleteWithUndo,
     useDeleteAccountConfirmStore,
@@ -147,6 +148,14 @@ export default function AccountCabinetPage() {
                           }
                         : prev
                 );
+                // Sprint 15 — slug-rename змінює canonical URL; старий
+                // `/business/{biz}/account/{old}` стає stale. `replace` веде на
+                // новий slug без stale-запису в history (дзеркало business-page).
+                if (updated.slug !== captured.accountSlug) {
+                    router.replace(
+                        `/business/${captured.businessSlug}/account/${updated.slug}`
+                    );
+                }
                 toast.success('Зміни збережено');
             } catch (err: unknown) {
                 const msg = getApiMessage(extractErrorCode(err), 'accounts');
@@ -154,7 +163,7 @@ export default function AccountCabinetPage() {
                 throw new Error(msg);
             }
         },
-        []
+        [router]
     );
 
     const isDataCurrent =
@@ -295,6 +304,12 @@ export default function AccountCabinetPage() {
                         business.paymentPurposeTemplate
                     }
                     payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
+                />
+                <PublicSection
+                    account={account}
+                    businessSlug={business.slug}
+                    payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
+                    onSave={onSaveAccount}
                 />
                 <QrSection account={account} businessSlug={business.slug} />
                 <DangerSection onDelete={handleDelete} />

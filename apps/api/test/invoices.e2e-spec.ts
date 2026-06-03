@@ -603,6 +603,7 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                 businessId,
                 accountId,
                 slug: `tie-${i}-aaaaaaaa`,
+                slugLower: `tie-${i}-aaaaaaaa`,
                 amount: 100 + i,
                 amountLocked: false,
                 paymentPurpose: null,
@@ -687,7 +688,7 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             );
         });
 
-        it('case-sensitive slug lookup (SP-8)', async () => {
+        it('Sprint 15 — case-insensitive slug lookup (slugLower)', async () => {
             const user = await createUser();
             const { slug, accountSlug } = await createBusinessFor(user);
             const create = await supertest(app.getHttpServer())
@@ -708,13 +709,15 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             const invoiceSlug = (create.body as { data: { slug: string } }).data
                 .slug;
 
-            // Uppercase варіант → 404, бо case-sensitive
+            // Sprint 15 — slug тепер редаговуваний vanity; lookup
+            // case-insensitive на slugLower. Uppercase-варіант резолвиться у той
+            // самий інвойс (200), а не 404.
             await supertest(app.getHttpServer())
                 .get(
                     `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug.toUpperCase()}`
                 )
                 .set('Authorization', bearerFor(user))
-                .expect(404);
+                .expect(200);
         });
     });
 
@@ -848,7 +851,7 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             ).toBe('Оплата за послуги');
         });
 
-        it('reject спробу змінити slug через PATCH — 400 (slug-immutability via .strict())', async () => {
+        it('Sprint 15 — PATCH slug перейменовує інвойс (vanity) + старе посилання редіректить', async () => {
             const user = await createUser();
             const { slug, accountSlug } = await createBusinessFor(user);
             const create = await supertest(app.getHttpServer())
@@ -863,16 +866,38 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                     validUntil: null,
                     slugInput: { kind: 'random' },
                 });
-            const invoiceSlug = (create.body as { data: { slug: string } }).data
+            const oldSlug = (create.body as { data: { slug: string } }).data
                 .slug;
 
-            await supertest(app.getHttpServer())
+            const renamed = await supertest(app.getHttpServer())
                 .patch(
-                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${oldSlug}`
                 )
                 .set('Authorization', bearerFor(user))
-                .send({ slug: 'evil-vanity' })
-                .expect(400);
+                .send({ slug: 'oplata-sichen' })
+                .expect(200);
+            expect((renamed.body as { data: { slug: string } }).data.slug).toBe(
+                'oplata-sichen'
+            );
+
+            // Cabinet (strict) — старий slug більше не резолвиться.
+            await supertest(app.getHttpServer())
+                .get(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${oldSlug}`
+                )
+                .set('Authorization', bearerFor(user))
+                .expect(404);
+
+            // Public — старий slug резолвиться через history (canonical view
+            // повертає новий slug; SC робить redirect).
+            const publicOld = await supertest(app.getHttpServer())
+                .get(
+                    `/api/businesses/public/${slug}/account/${accountSlug}/invoices/${oldSlug}`
+                )
+                .expect(200);
+            expect(
+                (publicOld.body as { data: { slug: string } }).data.slug
+            ).toBe('oplata-sichen');
         });
 
         it.each(['slugPreset', 'businessId', 'createdAt', 'slugCounter'])(
@@ -1389,7 +1414,7 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                 expect(res.headers['cache-control']).toBe('no-store');
             });
 
-            it('case-insensitive lookup business / case-sensitive lookup invoice', async () => {
+            it('Sprint 15 — case-insensitive lookup на всіх сегментах (business + invoice)', async () => {
                 const user = await createUser();
                 const { slug: businessSlug, accountSlug } =
                     await createBusinessFor(user);
@@ -1421,11 +1446,13 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                     )
                     .expect(200);
 
+                // Sprint 15 — invoice-slug тепер case-insensitive (slugLower):
+                // uppercase-варіант резолвиться у той самий інвойс (200).
                 await supertest(app.getHttpServer())
                     .get(
                         `/api/businesses/public/${businessSlug}/account/${accountSlug}/invoices/${invoiceSlug.toUpperCase()}`
                     )
-                    .expect(404);
+                    .expect(200);
             });
 
             it('404 BUSINESS_NOT_FOUND для неіснуючого business', async () => {

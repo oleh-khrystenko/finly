@@ -1,5 +1,6 @@
 import {
     BadRequestException,
+    ConflictException,
     Injectable,
     InternalServerErrorException,
     Logger,
@@ -21,6 +22,10 @@ import {
 import type { BusinessDocument } from '../businesses/schemas/business.schema';
 import { InvoiceSlugGeneratorService } from './invoice-slug-generator.service';
 import { effectiveInvoicePurpose } from './purpose-resolver';
+import {
+    InvoiceSlugHistory,
+    InvoiceSlugHistoryDocument,
+} from './schemas/invoice-slug-history.schema';
 import { Invoice, InvoiceDocument } from './schemas/invoice.schema';
 
 export interface PaginationParams {
@@ -65,6 +70,8 @@ export class InvoicesService {
     constructor(
         @InjectModel(Invoice.name)
         private readonly invoiceModel: Model<InvoiceDocument>,
+        @InjectModel(InvoiceSlugHistory.name)
+        private readonly historyModel: Model<InvoiceSlugHistoryDocument>,
         @InjectModel(Account.name)
         private readonly accountModel: Model<AccountDocument>,
         @InjectConnection()
@@ -214,6 +221,7 @@ export class InvoicesService {
                             businessId: business._id,
                             accountId: account._id,
                             slug: slugInfo.slug,
+                            slugLower: slugInfo.slugLower,
                             amount: dto.amount,
                             amountLocked: dto.amountLocked,
                             paymentPurpose: dto.paymentPurpose,
@@ -297,16 +305,39 @@ export class InvoicesService {
     }
 
     /**
-     * Sprint 9 §SP-6 — compound-keyed lookup `(accountId, slug)` case-sensitive.
+     * Sprint 15 — case-insensitive lookup compound `(accountId, slugLower)`.
      * `null` якщо не знайдено — caller (`InvoiceAccessGuard`) обертає у 404.
+     * **Cabinet-only** strict (без history-fallback).
      */
     async getBySlug(
         accountId: Types.ObjectId,
         invoiceSlug: string
     ): Promise<InvoiceDocument | null> {
         return this.invoiceModel
-            .findOne({ accountId, slug: invoiceSlug })
+            .findOne({ accountId, slugLower: invoiceSlug.toLowerCase() })
             .exec();
+    }
+
+    /**
+     * Sprint 15 — public lookup з history-fallback (дзеркало Account). Старий
+     * invoice-slug у межах TTL резолвиться через `InvoiceSlugHistory` у поточний
+     * інвойс; SC робить `permanentRedirect()` на canonical URL.
+     */
+    async getBySlugOrHistorical(
+        accountId: Types.ObjectId,
+        invoiceSlug: string
+    ): Promise<InvoiceDocument | null> {
+        const slugLower = invoiceSlug.toLowerCase();
+        const invoice = await this.invoiceModel
+            .findOne({ accountId, slugLower })
+            .exec();
+        if (invoice) return invoice;
+        const historyEntry = await this.historyModel
+            .findOne({ accountId, slugLower })
+            .lean<{ invoiceId: Types.ObjectId }>()
+            .exec();
+        if (!historyEntry) return null;
+        return this.invoiceModel.findById(historyEntry.invoiceId).exec();
     }
 
     /**
@@ -344,16 +375,22 @@ export class InvoicesService {
     async update(
         business: BusinessDocument,
         account: AccountDocument,
-        invoiceSlug: string,
+        invoice: InvoiceDocument,
         dto: UpdateInvoiceRequest
     ): Promise<InvoiceDocument> {
         if (dto.validUntil !== undefined) {
             assertValidUntilNotInPast(dto.validUntil);
         }
         const accountId = account._id;
+        // Sprint 15 — slug-rename detection by lowercase різниця (case-only
+        // зміна оновлює лише display `slug`, history не потрібен).
+        const renaming =
+            dto.slug !== undefined &&
+            dto.slug.toLowerCase() !== invoice.slugLower;
+
         const filter: FilterQuery<InvoiceDocument> = {
             accountId,
-            slug: invoiceSlug,
+            slug: invoice.slug,
         };
         const hasCoupledFields =
             dto.amount !== undefined || dto.amountLocked !== undefined;
@@ -404,6 +441,23 @@ export class InvoicesService {
                 ],
             };
         }
+        // Sprint 15 — slug у setStage. Plain-string literal у aggregation `$set`
+        // (не починається з `$` → не field-path). Case-only зміна йде сюди ж
+        // (renaming=false); реальний rename — TX-гілка нижче.
+        if (dto.slug !== undefined) {
+            setStage.slug = dto.slug;
+            setStage.slugLower = dto.slug.toLowerCase();
+        }
+
+        if (renaming) {
+            return this.renameAndUpdate(
+                invoice,
+                filter,
+                setStage,
+                dto.slug!.toLowerCase(),
+                hasCoupledFields
+            );
+        }
 
         const updated =
             Object.keys(setStage).length > 0
@@ -413,14 +467,14 @@ export class InvoicesService {
                       })
                       .exec()
                 : await this.invoiceModel
-                      .findOne({ accountId, slug: invoiceSlug })
+                      .findOne({ accountId, slug: invoice.slug })
                       .exec();
         if (updated) return updated;
 
         if (hasCoupledFields) {
             const exists = await this.invoiceModel.exists({
                 accountId,
-                slug: invoiceSlug,
+                slug: invoice.slug,
             });
             if (exists) {
                 throw new BadRequestException({
@@ -437,23 +491,163 @@ export class InvoicesService {
     }
 
     /**
+     * Sprint 15 — slug-rename у TX (дзеркало `BusinessesService` /
+     * `AccountsService`). Resolve uniqueness `(accountId, slugLower)`, потім у
+     * транзакції: delete self-history (revert), insert старого slug у history,
+     * `$set` нового slug + решта setStage (включно з snapshot-mirror $cond).
+     * 11000 → `SLUG_TAKEN`.
+     */
+    private async renameAndUpdate(
+        invoice: InvoiceDocument,
+        filter: FilterQuery<InvoiceDocument>,
+        setStage: Record<string, unknown>,
+        newLower: string,
+        hasCoupledFields: boolean
+    ): Promise<InvoiceDocument> {
+        const accountId = invoice.accountId;
+        const businessId = invoice.businessId;
+        const oldLower = invoice.slugLower;
+
+        await this.assertSlugAvailable(accountId, invoice._id, newLower);
+
+        const session = await this.connection.startSession();
+        try {
+            let updated: InvoiceDocument | null = null;
+            await session.withTransaction(async () => {
+                await this.historyModel
+                    .deleteMany({ accountId, slugLower: newLower }, { session })
+                    .exec();
+                await this.historyModel.create(
+                    [
+                        {
+                            businessId,
+                            accountId,
+                            invoiceId: invoice._id,
+                            slugLower: oldLower,
+                        },
+                    ],
+                    { session }
+                );
+                updated = await this.invoiceModel
+                    .findOneAndUpdate(filter, [{ $set: setStage }], {
+                        new: true,
+                        session,
+                    })
+                    .exec();
+                if (!updated) {
+                    // Filter не пропустив update: або coupled-amount violation,
+                    // або concurrent delete. Throw abort-ить TX (history rollback).
+                    if (hasCoupledFields) {
+                        throw new BadRequestException({
+                            code: RESPONSE_CODE.INVOICE_AMOUNT_LOCKED_REQUIRES_AMOUNT,
+                            message:
+                                'Заблокувати редагування суми можна лише при заданій сумі',
+                        });
+                    }
+                    throw new NotFoundException({
+                        code: RESPONSE_CODE.INVOICE_NOT_FOUND,
+                        message: 'Invoice disappeared between guard and rename',
+                    });
+                }
+            });
+            return updated!;
+        } catch (err) {
+            if (isDuplicateKeyError(err)) {
+                throw new ConflictException({
+                    code: RESPONSE_CODE.SLUG_TAKEN,
+                    message: 'Invoice slug already taken in this account',
+                });
+            }
+            if (isTransactionsUnsupportedError(err)) {
+                this.logger.error(
+                    `Invoice slug rename failed: replica-set required. Invoice ${invoice._id.toString()}. Original: ${
+                        err instanceof Error ? err.message : String(err)
+                    }`
+                );
+                throw new InternalServerErrorException({
+                    code: RESPONSE_CODE.TRANSACTION_REQUIRES_REPLICA_SET,
+                    message:
+                        'Invoice slug rename requires Mongo replica-set; check MONGODB_URI',
+                });
+            }
+            throw err;
+        } finally {
+            await session.endSession();
+        }
+    }
+
+    private async assertSlugAvailable(
+        accountId: Types.ObjectId,
+        invoiceId: Types.ObjectId,
+        newLower: string
+    ): Promise<void> {
+        const [liveClash, historyClash] = await Promise.all([
+            this.invoiceModel.exists({
+                accountId,
+                slugLower: newLower,
+                _id: { $ne: invoiceId },
+            }),
+            this.historyModel.exists({
+                accountId,
+                slugLower: newLower,
+                invoiceId: { $ne: invoiceId },
+            }),
+        ]);
+        if (liveClash || historyClash) {
+            throw new ConflictException({
+                code: RESPONSE_CODE.SLUG_TAKEN,
+                message: 'Invoice slug already taken in this account',
+            });
+        }
+    }
+
+    /**
      * Hard-delete (Sprint 3 рішення C2 — той самий pattern для invoice). 5s
      * frontend-Undo живе на web-стороні як optimistic UI; цей method
      * виконується тільки якщо timer пройшов без cancel-у. Idempotent: повторне
      * delete не падає (race з паралельним delete-ом — тихо OK).
+     *
+     * **Sprint 15** — у тій самій TX чистимо rename-history інвойсу
+     * (`InvoiceSlugHistory.deleteMany({invoiceId})`): видалений інвойс віддає
+     * свої посилання одразу, без чекати TTL (дзеркало cascade-семантики).
      */
-    async delete(
-        accountId: Types.ObjectId,
-        invoiceSlug: string
-    ): Promise<void> {
-        const result = await this.invoiceModel
-            .deleteOne({ accountId, slug: invoiceSlug })
-            .exec();
-        if (result.deletedCount === 0) {
-            throw new NotFoundException({
-                code: RESPONSE_CODE.INVOICE_NOT_FOUND,
-                message: 'Invoice not found during delete',
+    async delete(invoice: InvoiceDocument): Promise<void> {
+        const invoiceId = invoice._id;
+        const session = await this.connection.startSession();
+        try {
+            let deletedCount = 0;
+            await session.withTransaction(async () => {
+                const result = await this.invoiceModel
+                    .deleteOne({ _id: invoiceId }, { session })
+                    .exec();
+                deletedCount = result.deletedCount;
+                await this.historyModel
+                    .deleteMany({ invoiceId }, { session })
+                    .exec();
             });
+            if (deletedCount === 0) {
+                throw new NotFoundException({
+                    code: RESPONSE_CODE.INVOICE_NOT_FOUND,
+                    message: 'Invoice not found during delete',
+                });
+            }
+            return;
+        } catch (err) {
+            if (isTransactionsUnsupportedError(err)) {
+                this.logger.error(
+                    `Invoice delete failed: replica-set required. Invoice ${invoiceId.toString()}. Original: ${
+                        err instanceof Error ? err.message : String(err)
+                    }`
+                );
+                throw new InternalServerErrorException({
+                    code: RESPONSE_CODE.TRANSACTION_REQUIRES_REPLICA_SET,
+                    message:
+                        'Invoice delete requires Mongo replica-set; check MONGODB_URI',
+                });
+            }
+            throw err;
+        } finally {
+            await session.endSession();
         }
     }
 }

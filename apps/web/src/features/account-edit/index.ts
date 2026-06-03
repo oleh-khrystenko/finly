@@ -1,4 +1,5 @@
 export { default as BasicSection } from './BasicSection';
+export { default as PublicSection } from './PublicSection';
 export { default as IbanSection } from './IbanSection';
 export { default as InvoiceSettingsSection } from './InvoiceSettingsSection';
 export { default as InvoicesSection } from './InvoicesSection';

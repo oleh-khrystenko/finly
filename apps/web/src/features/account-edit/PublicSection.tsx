@@ -4,9 +4,9 @@ import { useState } from 'react';
 import { Check, Copy, ExternalLink, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import {
-    invoiceSlugSchema,
-    type Invoice,
-    type UpdateInvoiceRequest,
+    accountSlugSchema,
+    type Account,
+    type UpdateAccountRequest,
 } from '@finly/types';
 import UiButton from '@/shared/ui/UiButton';
 import UiEditableField from '@/shared/ui/UiEditableField';
@@ -15,27 +15,25 @@ import UiSectionCard from '@/shared/ui/UiSectionCard';
 import { mapValidationCode } from '@/shared/lib';
 
 interface Props {
-    invoice: Invoice;
+    account: Account;
     businessSlug: string;
-    /** Sprint 9 §SP-5 — account-slug у public URL інвойсу (3-сегментна матрьошка). */
-    accountSlug: string;
     /** Public payment-page origin (NEXT_PUBLIC_PAY_PUBLIC_URL). */
     payPublicOrigin: string;
-    onSave: (patch: UpdateInvoiceRequest) => Promise<void>;
+    onSave: (patch: UpdateAccountRequest) => Promise<void>;
 }
 
 /**
- * Sprint 4 §4.6 + Sprint 9 §SP-5 + Sprint 15 — секція "Посилання на оплату".
+ * Sprint 15 — секція "Посилання на сторінку рахунку". Адреса публічної сторінки
+ * рахунку як редаговуване поле (дзеркало business PublicSection): host-prefix +
+ * businessSlug у muted-кольорі, account-slug у foreground, inline copy/open.
  *
- * Sprint 15 робить invoice-slug редаговуваним vanity-string (раніше readonly).
- * Адреса — 3-сегментна матрьошка `{biz}/{acc}/{inv}`; редагується лише останній
- * сегмент (host + biz + acc у muted-prefix). Старе посилання ще працюватиме
- * певний час і вестиме на нову адресу (history-redirect на backend).
+ * Edit-mode дозволяє ФОП дати рахунку зрозумілий slug (`mono-cafe`). Старе
+ * посилання ще працюватиме певний час і автоматично вестиме на нову адресу
+ * (history-redirect на backend), тому під полем — коротке пояснення.
  */
-export default function SlugSection({
-    invoice,
+export default function PublicSection({
+    account,
     businessSlug,
-    accountSlug,
     payPublicOrigin,
     onSave,
 }: Props) {
@@ -43,8 +41,8 @@ export default function SlugSection({
 
     const hostnamePrefix = `${payPublicOrigin
         .replace(/^https?:\/\//, '')
-        .replace(/\/$/, '')}/${businessSlug}/${accountSlug}/`;
-    const publicUrl = `${payPublicOrigin.replace(/\/$/, '')}/${businessSlug}/${accountSlug}/${invoice.slug}`;
+        .replace(/\/$/, '')}/${businessSlug}/`;
+    const publicUrl = `${payPublicOrigin.replace(/\/$/, '')}/${businessSlug}/${account.slug}`;
 
     const handleCopy = async () => {
         try {
@@ -57,10 +55,10 @@ export default function SlugSection({
     };
 
     return (
-        <UiSectionCard title="Посилання на оплату">
+        <UiSectionCard title="Посилання на сторінку рахунку">
             <div className="mt-4">
                 <UiEditableField<string>
-                    value={invoice.slug}
+                    value={account.slug}
                     hideDefaultPencil
                     renderRead={(_v, { startEdit }) => (
                         <div className="flex flex-col gap-3">
@@ -69,7 +67,7 @@ export default function SlugSection({
                                     {hostnamePrefix}
                                 </span>
                                 <span className="text-foreground">
-                                    {invoice.slug}
+                                    {account.slug}
                                 </span>
                             </span>
                             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
@@ -115,7 +113,7 @@ export default function SlugSection({
                                 value={value}
                                 onChange={(e) => setValue(e.target.value)}
                                 error={error}
-                                aria-label="Адреса інвойсу"
+                                aria-label="Адреса сторінки рахунку"
                                 autoFocus
                                 autoCapitalize="off"
                                 autoCorrect="off"
@@ -129,7 +127,7 @@ export default function SlugSection({
                         </div>
                     )}
                     validate={(v) => {
-                        const r = invoiceSlugSchema.safeParse(v);
+                        const r = accountSlugSchema.safeParse(v);
                         return r.success
                             ? null
                             : (mapValidationCode(r.error.issues[0]?.message) ??

@@ -91,7 +91,7 @@ export class InvoicesController {
         const updated = await this.invoicesService.update(
             business,
             account,
-            invoice.slug,
+            invoice,
             dto
         );
         return { data: updated };
@@ -101,10 +101,9 @@ export class InvoicesController {
     @UseGuards(InvoiceAccessGuard)
     @HttpCode(HttpStatus.OK)
     async delete(
-        @CurrentAccount() account: AccountDocument,
         @CurrentInvoice() invoice: InvoiceDocument
     ): Promise<{ data: null }> {
-        await this.invoicesService.delete(account._id, invoice.slug);
+        await this.invoicesService.delete(invoice);
         return { data: null };
     }
 }

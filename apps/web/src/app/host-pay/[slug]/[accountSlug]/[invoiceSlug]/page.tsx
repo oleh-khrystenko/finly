@@ -91,11 +91,19 @@ export default async function HostPayInvoicePage({ params }: Props) {
         notFound();
     }
 
-    // Canonical-redirect лише для business-slug (case-insensitive lookup).
-    // Account / invoice slug case-sensitive — backend повертає 404 на mismatch.
-    if (slug !== view.business.slug) {
+    // Sprint 15 — canonical-redirect на всіх трьох сегментах. business-slug
+    // (case-insensitive), account-slug і invoice-slug (редаговувані vanity з
+    // history-fallback на backend) можуть бути застарілими; будуємо повний
+    // canonical URL і робимо один permanent redirect, якщо хоч один сегмент
+    // відрізняється. Композиція history-fallback-ів лагодить і вкладені
+    // посилання після rename рахунку.
+    if (
+        slug !== view.business.slug ||
+        accountSlug !== view.account.slug ||
+        invoiceSlug !== view.slug
+    ) {
         permanentRedirect(
-            `/${view.business.slug}/${accountSlug}/${invoiceSlug}`
+            `/${view.business.slug}/${view.account.slug}/${view.slug}`
         );
     }
 

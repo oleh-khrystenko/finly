@@ -9,6 +9,7 @@ const baseInvoice: Invoice = {
     // Sprint 9 — invoice nested під account (compound-unique scope `(accountId, slug)`).
     accountId: '507f1f77bcf86cd799439055',
     slug: 'inv-001-aB3xQ9k7',
+    slugLower: 'inv-001-ab3xq9k7',
     amount: 150000,
     amountLocked: true,
     paymentPurpose: 'Оплата',

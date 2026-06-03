@@ -179,10 +179,11 @@ export class PublicAccountsController {
         slug: string,
         accountSlug: string
     ): Promise<{ business: BusinessDocument; account: AccountDocument }> {
-        // Sprint 14 — historical business-slug fallback. SC порівнює
-        // `params.slug !== view.business.slug` (account-page line 87) і
-        // робить `permanentRedirect()` на canonical URL зі збереженням
-        // accountSlug (account slugs immutable).
+        // Sprint 14/15 — historical-slug fallback на обох рівнях. SC порівнює
+        // `params.slug !== view.business.slug` і `params.accountSlug !==
+        // view.slug` (account-page) і робить один `permanentRedirect()` на
+        // повний canonical URL. Account-slug тепер редаговуваний (Sprint 15),
+        // тому теж має history-fallback.
         const business =
             await this.businessesService.getBySlugOrHistorical(slug);
         if (!business) {
@@ -191,7 +192,7 @@ export class PublicAccountsController {
                 message: 'Business not found',
             });
         }
-        const account = await this.accountsService.getBySlug(
+        const account = await this.accountsService.getBySlugOrHistorical(
             business._id,
             accountSlug
         );

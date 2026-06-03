@@ -148,6 +148,13 @@ export default function InvoiceCabinetPage() {
                         ? { ...prev, invoice: updated }
                         : prev
                 );
+                // Sprint 15 — slug-rename змінює canonical URL інвойсу; ведемо
+                // на новий slug без stale-запису в history (дзеркало business).
+                if (updated.slug !== captured.invoiceSlug) {
+                    router.replace(
+                        `/business/${captured.businessSlug}/account/${captured.accountSlug}/invoice/${updated.slug}`
+                    );
+                }
                 toast.success('Зміни збережено');
             } catch (err: unknown) {
                 const msg = getApiMessage(extractErrorCode(err), 'invoices');
@@ -155,7 +162,7 @@ export default function InvoiceCabinetPage() {
                 throw new Error(msg);
             }
         },
-        []
+        [router]
     );
 
     if (!isDataCurrent && !error) {
@@ -271,6 +278,7 @@ export default function InvoiceCabinetPage() {
                     businessSlug={business.slug}
                     accountSlug={accountSlug}
                     payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
+                    onSave={onSave}
                 />
                 <InvoiceQrSection
                     invoice={invoice}

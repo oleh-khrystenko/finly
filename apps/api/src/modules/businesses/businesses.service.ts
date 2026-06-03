@@ -7,7 +7,13 @@ import {
     Logger,
 } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { ClientSession, Connection, Model, Types, type FilterQuery } from 'mongoose';
+import {
+    ClientSession,
+    Connection,
+    Model,
+    Types,
+    type FilterQuery,
+} from 'mongoose';
 import {
     RESPONSE_CODE,
     VAT_ALLOWED_TAXATION_SYSTEMS,
@@ -21,6 +27,10 @@ import {
 
 import { isTransactionsUnsupportedError } from '../../common/mongoose/transactions-unsupported';
 import {
+    AccountSlugHistory,
+    type AccountSlugHistoryDocument,
+} from '../accounts/schemas/account-slug-history.schema';
+import {
     Account,
     type AccountDocument,
 } from '../accounts/schemas/account.schema';
@@ -28,6 +38,10 @@ import {
     InvoiceSlugCounter,
     type InvoiceSlugCounterDocument,
 } from '../invoices/schemas/invoice-slug-counter.schema';
+import {
+    InvoiceSlugHistory,
+    type InvoiceSlugHistoryDocument,
+} from '../invoices/schemas/invoice-slug-history.schema';
 import {
     Invoice,
     type InvoiceDocument,
@@ -80,8 +94,12 @@ export class BusinessesService {
         private readonly historyModel: Model<BusinessSlugHistoryDocument>,
         @InjectModel(Account.name)
         private readonly accountModel: Model<AccountDocument>,
+        @InjectModel(AccountSlugHistory.name)
+        private readonly accountHistoryModel: Model<AccountSlugHistoryDocument>,
         @InjectModel(Invoice.name)
         private readonly invoiceModel: Model<InvoiceDocument>,
+        @InjectModel(InvoiceSlugHistory.name)
+        private readonly invoiceHistoryModel: Model<InvoiceSlugHistoryDocument>,
         @InjectModel(InvoiceSlugCounter.name)
         private readonly counterModel: Model<InvoiceSlugCounterDocument>,
         @InjectConnection()
@@ -360,7 +378,7 @@ export class BusinessesService {
         let renameOwnerId: Types.ObjectId | null = null;
         if (slugRenaming) {
             renameOwnerId = await this.resolveSlugRenameContext(
-                newSlugLower!,
+                newSlugLower,
                 slugLower
             );
         }
@@ -482,7 +500,7 @@ export class BusinessesService {
                 setPayload,
                 renameOwnerId!,
                 slugLower,
-                newSlugLower!,
+                newSlugLower,
                 hasCoupledFields
             );
         }
@@ -571,7 +589,8 @@ export class BusinessesService {
         if (historyClash) {
             throw new ConflictException({
                 code: RESPONSE_CODE.SLUG_TAKEN,
-                message: 'Slug is reserved by recent rename of another business',
+                message:
+                    'Slug is reserved by recent rename of another business',
             });
         }
         return owner._id;
@@ -659,10 +678,9 @@ export class BusinessesService {
             .deleteMany({ businessId, slugLower: newLower }, { session })
             .exec();
 
-        await this.historyModel.create(
-            [{ businessId, slugLower: oldLower }],
-            { session }
-        );
+        await this.historyModel.create([{ businessId, slugLower: oldLower }], {
+            session,
+        });
 
         const updated = await this.businessModel
             .findOneAndUpdate(
@@ -761,6 +779,18 @@ export class BusinessesService {
                 await this.accountModel.deleteMany({ businessId }, { session });
                 await this.counterModel.deleteMany({ businessId }, { session });
                 await this.historyModel.deleteMany({ businessId }, { session });
+                // Sprint 15 — nested slug-history (account + invoice rename
+                // history) теж чистимо у тій самій TX. Без cleanup-у вони
+                // блокували б slug у anti-squatting + давали б orphan
+                // history-hit lookup-и на public hits після delete.
+                await this.accountHistoryModel.deleteMany(
+                    { businessId },
+                    { session }
+                );
+                await this.invoiceHistoryModel.deleteMany(
+                    { businessId },
+                    { session }
+                );
                 await this.businessModel.deleteOne(
                     { _id: businessId },
                     { session }

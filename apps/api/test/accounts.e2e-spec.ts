@@ -494,6 +494,61 @@ describe('Accounts E2E (Sprint 9 §SP-1..§SP-3)', () => {
                 ).data.invoiceSlugPresetDefault
             ).toBe('with-month');
         });
+
+        it('Sprint 15 — slug editable (vanity) + старе посилання редіректить через history', async () => {
+            const user = await createUser();
+            const { businessSlug, accountSlug } = await seedAccount(user);
+
+            const renamed = await supertest(app.getHttpServer())
+                .patch(
+                    `/api/businesses/me/${businessSlug}/accounts/${accountSlug}`
+                )
+                .set('Authorization', bearerFor(user))
+                .send({ slug: 'mono-cafe' })
+                .expect(200);
+            expect((renamed.body as { data: { slug: string } }).data.slug).toBe(
+                'mono-cafe'
+            );
+
+            // Cabinet (strict) — старий slug більше не резолвиться.
+            await supertest(app.getHttpServer())
+                .get(
+                    `/api/businesses/me/${businessSlug}/accounts/${accountSlug}`
+                )
+                .set('Authorization', bearerFor(user))
+                .expect(404);
+
+            // Public — старий slug резолвиться через history у canonical (новий).
+            const publicOld = await supertest(app.getHttpServer())
+                .get(
+                    `/api/businesses/public/${businessSlug}/account/${accountSlug}`
+                )
+                .expect(200);
+            expect(
+                (publicOld.body as { data: { slug: string } }).data.slug
+            ).toBe('mono-cafe');
+        });
+
+        it('Sprint 15 — slug-rename колізія у межах бізнесу → 409 SLUG_TAKEN', async () => {
+            const user = await createUser();
+            const { businessSlug, accountSlug } = await seedAccount(user);
+            // Другий рахунок під тим самим бізнесом.
+            const second = await supertest(app.getHttpServer())
+                .post(`/api/businesses/me/${businessSlug}/accounts`)
+                .set('Authorization', bearerFor(user))
+                .send({ iban: 'UA273052992990004149497786452' })
+                .expect(201);
+            const secondSlug = (second.body as { data: { slug: string } }).data
+                .slug;
+
+            await supertest(app.getHttpServer())
+                .patch(
+                    `/api/businesses/me/${businessSlug}/accounts/${secondSlug}`
+                )
+                .set('Authorization', bearerFor(user))
+                .send({ slug: accountSlug })
+                .expect(409);
+        });
     });
 
     describe('DELETE /businesses/me/:slug/accounts/:accountSlug (§SP-3)', () => {

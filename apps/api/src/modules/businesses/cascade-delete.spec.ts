@@ -4,6 +4,10 @@ import { Model, Types } from 'mongoose';
 
 import { createReplSetMongo } from '../../test-utils/mongo';
 import {
+    AccountSlugHistory,
+    AccountSlugHistorySchema,
+} from '../accounts/schemas/account-slug-history.schema';
+import {
     Account,
     AccountDocument,
     AccountSchema,
@@ -13,6 +17,10 @@ import {
     InvoiceSlugCounterDocument,
     InvoiceSlugCounterSchema,
 } from '../invoices/schemas/invoice-slug-counter.schema';
+import {
+    InvoiceSlugHistory,
+    InvoiceSlugHistorySchema,
+} from '../invoices/schemas/invoice-slug-history.schema';
 import {
     Invoice,
     InvoiceDocument,
@@ -63,10 +71,18 @@ describe('BusinessesService cascade-delete (Sprint 4 §SP-5, MongoMemoryReplSet)
                         schema: BusinessSlugHistorySchema,
                     },
                     { name: Account.name, schema: AccountSchema },
+                    {
+                        name: AccountSlugHistory.name,
+                        schema: AccountSlugHistorySchema,
+                    },
                     { name: Invoice.name, schema: InvoiceSchema },
                     {
                         name: InvoiceSlugCounter.name,
                         schema: InvoiceSlugCounterSchema,
+                    },
+                    {
+                        name: InvoiceSlugHistory.name,
+                        schema: InvoiceSlugHistorySchema,
                     },
                 ]),
             ],
@@ -126,13 +142,16 @@ describe('BusinessesService cascade-delete (Sprint 4 §SP-5, MongoMemoryReplSet)
                 bankCode: 'privatbank',
                 name: `Privat #${a}`,
                 slug: `accSlug${a}`,
+                slugLower: `accslug${a}`,
             });
             accounts.push(account);
             for (let i = 1; i <= invoicesPerAccount; i++) {
+                const invSlug = `inv-${String(i).padStart(3, '0')}-aB3xQ9k${a}${i}`;
                 await invoiceModel.create({
                     businessId: business._id,
                     accountId: account._id,
-                    slug: `inv-${String(i).padStart(3, '0')}-aB3xQ9k${a}${i}`,
+                    slug: invSlug,
+                    slugLower: invSlug.toLowerCase(),
                     slugPreset: 'simple',
                     slugCounterScope: 'simple',
                     slugCounter: i,
@@ -187,6 +206,7 @@ describe('BusinessesService cascade-delete (Sprint 4 §SP-5, MongoMemoryReplSet)
             businessId: otherBusinessId,
             accountId: otherAccountId,
             slug: 'other-aaaaaaaa',
+            slugLower: 'other-aaaaaaaa',
             slugPreset: null,
             slugCounterScope: null,
             slugCounter: null,
@@ -247,11 +267,13 @@ describe('BusinessesService cascade-delete (Sprint 4 §SP-5, MongoMemoryReplSet)
             bankCode: 'privatbank',
             name: 'Privat #other',
             slug: 'otherAcct',
+            slugLower: 'otheracct',
         });
         await invoiceModel.create({
             businessId: other._id,
             accountId: otherAccount._id,
             slug: 'sibling-aaaaaaaa',
+            slugLower: 'sibling-aaaaaaaa',
             slugPreset: null,
             slugCounterScope: null,
             slugCounter: null,

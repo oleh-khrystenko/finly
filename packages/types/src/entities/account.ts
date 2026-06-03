@@ -16,8 +16,9 @@ import { ibanZod } from '../validation/iban';
  * `Business` лишається з type/name/taxId/taxationSystem/isVatPayer.
  *
  * **Інваріанти, що Zod НЕ перевіряє** (свідомо, бо це write-side / DB-level):
- *  - Unique `(businessId, slug)` — Mongoose compound-unique index (§SP-10
- *    case-sensitive, без `slugLower`-поля за моделлю invoice-slug Sprint 4).
+ *  - Unique `(businessId, slugLower)` — Mongoose compound-unique index
+ *    (Sprint 15: case-insensitive uniqueness у межах бізнесу, дзеркало
+ *    business-slug Sprint 3). `slug` редаговуваний vanity-string post-creation.
  *  - Unique `(businessId, iban)` — Mongoose compound-unique index (§SP-2:
  *    anti-duplicate IBAN під одним бізнесом). Cross-business duplicates
  *    дозволені (ФОП і ТОВ ділять рахунок).
@@ -73,17 +74,37 @@ export const accountNameSchema = z
     .refine(isWithinNbuCharset, { message: 'INVALID_ACCOUNT_NAME_CHARSET' });
 
 /**
- * Account-slug: рівно 8 chars `[A-Za-z0-9]`, case-sensitive (§SP-10).
+ * Account-slug: vanity-string `[A-Za-z0-9]` + дефіси-роздільники, 3-63 chars
+ * (Sprint 15 — дзеркало `businessSlugSchema`).
  *
- * **Чому case-sensitive (модель invoice-slug Sprint 4 §SP-8, не business-slug
- * Sprint 3):** account-slug — system-generated random tail, ніколи не
- * вводиться вручну і не показується як vanity-target. 8-char A-Za-z0-9 простір
- * ~218 трлн комбінацій — астрономічно low шанс генерувати `abc12345` і
- * `Abc12345` обидва. Без `slugLower`-поля, без canonical-redirect.
+ * До Sprint 15 був рівно 8-char system-generated random tail (immutable). Тепер
+ * редаговуваний у кабінеті: ФОП дає рахунку зрозуміле посилання (`mono-cafe`).
+ * Create все ще авто-генерує 8-char tail (валідний у цій граматиці) — vanity-edit
+ * опціональний post-create. Uniqueness case-insensitive на `slugLower` у межах
+ * бізнесу; canonical-redirect зі старого slug через `AccountSlugHistory`.
+ *
+ * Reuse business-slug message-коди (`INVALID_SLUG_*`) — спільний UX-локалізатор.
  */
 export const accountSlugSchema = z
     .string()
-    .regex(/^[A-Za-z0-9]{8}$/, { message: 'INVALID_ACCOUNT_SLUG_FORMAT' });
+    .min(3, { message: 'INVALID_SLUG_TOO_SHORT' })
+    .max(63, { message: 'INVALID_SLUG_TOO_LONG' })
+    .regex(/^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/, {
+        message: 'INVALID_SLUG_FORMAT',
+    });
+
+/**
+ * Lowercase-нормалізована форма account-slug. Mongoose compound-unique-index
+ * `(businessId, slugLower)` живе на цьому полі — case-insensitive uniqueness у
+ * межах бізнесу. Public-lookup нормалізує URL-сегмент до lowercase.
+ */
+export const accountSlugLowerSchema = z
+    .string()
+    .min(3, { message: 'INVALID_SLUG_LOWER_TOO_SHORT' })
+    .max(63, { message: 'INVALID_SLUG_LOWER_TOO_LONG' })
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, {
+        message: 'INVALID_SLUG_LOWER_FORMAT',
+    });
 
 /**
  * Zod-схема `BankCode` — reuse з business-домена (`MVP_BANKS`). Stored у
@@ -97,6 +118,7 @@ export const AccountSchema = z.object({
     iban: ibanZod,
     name: accountNameSchema.nullable(),
     slug: accountSlugSchema,
+    slugLower: accountSlugLowerSchema,
     /**
      * §SP-9 — stored derived value, не runtime-computed. Резолвиться через
      * `bankCodeFromIban(iban)` рівно один раз під час `AccountsService.create`

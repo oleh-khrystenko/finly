@@ -70,10 +70,13 @@ export type CreateAccountRequest = z.infer<typeof CreateAccountSchema>;
 /**
  * `UpdateAccountSchema` — partial по edit-allowed підмножині.
  *
- * **Editable: `name`, `invoiceSlugPresetDefault`** — обидва обираються ФОП.
+ * **Editable: `name`, `slug`, `invoiceSlugPresetDefault`** — обираються ФОП.
+ * `slug` (Sprint 15) — редаговуваний vanity-string; backend детектить rename,
+ * пише старе значення в `AccountSlugHistory` (308-redirect + anti-squatting) і
+ * оновлює `slug + slugLower` атомарно. Колізія у межах бізнесу → `SLUG_TAKEN`.
  *
- * **Immutable: `iban`, `slug`, `businessId`, `bankCode`** — навмисно відсутні
- * у shape. `.strict()` reject-ить будь-яку спробу їх передати.
+ * **Immutable: `iban`, `businessId`, `bankCode`** — навмисно відсутні у shape.
+ * `.strict()` reject-ить будь-яку спробу їх передати.
  *
  * **Чому iban immutable (§SP-2):** dual-rationale — payeeSnapshot на існуючих
  * інвойсах frozen на момент create (Sprint 4 review fix), тому зміна iban
@@ -87,6 +90,7 @@ export type CreateAccountRequest = z.infer<typeof CreateAccountSchema>;
 export const UpdateAccountSchema = z
     .object({
         name: accountNameSchema,
+        slug: accountSlugSchema,
         invoiceSlugPresetDefault: slugPresetSchema.nullable(),
     })
     .partial()

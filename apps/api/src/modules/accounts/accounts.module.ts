@@ -17,6 +17,10 @@ import { AccountSlugGeneratorService } from './account-slug-generator.service';
 import { AccountsController } from './accounts.controller';
 import { AccountsService } from './accounts.service';
 import { PublicAccountsController } from './public-accounts.controller';
+import {
+    AccountSlugHistory,
+    AccountSlugHistorySchema,
+} from './schemas/account-slug-history.schema';
 import { Account, AccountSchema } from './schemas/account.schema';
 
 /**
@@ -52,6 +56,10 @@ import { Account, AccountSchema } from './schemas/account.schema';
     imports: [
         MongooseModule.forFeature([
             { name: Account.name, schema: AccountSchema },
+            {
+                name: AccountSlugHistory.name,
+                schema: AccountSlugHistorySchema,
+            },
             { name: Business.name, schema: BusinessSchema },
             { name: Invoice.name, schema: InvoiceSchema },
             { name: InvoiceSlugCounter.name, schema: InvoiceSlugCounterSchema },

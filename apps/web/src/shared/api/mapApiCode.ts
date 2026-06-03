@@ -136,6 +136,9 @@ const ERRORS: Record<string, MessageDict> = {
         account_iban_duplicate: 'Цей IBAN вже доданий до бізнесу',
         account_create_failed:
             'Не вдалося створити рахунок. Спробуйте ще раз',
+        // Sprint 15 — vanity-slug edit рахунку: посилання зайняте іншим
+        // рахунком цього бізнесу (поточний slug або історія перейменувань).
+        slug_taken: 'Це посилання вже зайняте. Оберіть інше',
         rate_limit_exceeded:
             'Забагато запитів. Зачекайте хвилину і спробуйте ще раз',
     },
@@ -154,6 +157,9 @@ const ERRORS: Record<string, MessageDict> = {
         // expired QR-image (e.g., cached link, scraping).
         invoice_expired: 'Термін інвойсу минув',
         invoice_valid_until_in_past: 'Термін дії не може бути у минулому',
+        // Sprint 15 — vanity-slug edit інвойсу: посилання зайняте іншим
+        // інвойсом цього рахунку (поточний slug або історія перейменувань).
+        slug_taken: 'Це посилання вже зайняте. Оберіть інше',
         rate_limit_exceeded:
             'Забагато запитів. Зачекайте хвилину і спробуйте ще раз',
     },

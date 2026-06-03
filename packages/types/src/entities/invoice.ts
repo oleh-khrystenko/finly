@@ -51,21 +51,38 @@ import { businessNameSchema } from './business';
 const PURPOSE_LIMIT = effectiveLimit('purpose');
 
 /**
- * Slug інвойсу: `{людська-частина}-{8-char-tail}` АБО просто `{8-char-tail}`.
- * Хвіст — alphanum **case-sensitive** (62 символи на позицію, ~218T комбінацій).
- * Людська частина — lowercase kebab-case (як у бізнесі).
+ * Slug інвойсу: vanity-string `[A-Za-z0-9]` + дефіси-роздільники, 3-128 chars
+ * (Sprint 15 — дзеркало `businessSlugSchema`, ширша межа під довгі
+ * preset-generated slug-и `2026-06-001-{tail}`).
  *
- * Унікальність — у межах одного `accountId` (Sprint 9 §SP-6 — compound index
- * `(accountId, slug)`), не глобально і не per-business. Two account-и одного
- * business-у дозволено мати інвойс з однаковим slug-string-ом (per-account
- * counter-namespace; Privat має inv-001..N, Mono — теж inv-001..M).
+ * До Sprint 15 був `{людська-частина}-{8-char-tail}` immutable. Create все ще
+ * генерує цю форму (валідна у новій граматиці); Sprint 15 робить slug
+ * редаговуваним у кабінеті як vanity-string. Уникальність case-insensitive на
+ * `slugLower` у межах `accountId` (Sprint 9 §SP-6 namespace), canonical-redirect
+ * зі старого slug через `InvoiceSlugHistory`. Два account-и одного бізнесу
+ * дозволено мати інвойс з однаковим slug-string-ом (per-account namespace).
+ *
+ * Reuse business-slug message-коди (`INVALID_SLUG_*`) — спільний UX-локалізатор.
  */
 export const invoiceSlugSchema = z
     .string()
-    .min(8, { message: 'INVALID_SLUG_TOO_SHORT' })
+    .min(3, { message: 'INVALID_SLUG_TOO_SHORT' })
     .max(128, { message: 'INVALID_SLUG_TOO_LONG' })
-    .regex(/^(?:[a-z0-9]+(?:-[a-z0-9]+)*-)?[A-Za-z0-9]{8}$/, {
+    .regex(/^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/, {
         message: 'INVALID_SLUG_FORMAT',
+    });
+
+/**
+ * Lowercase-нормалізована форма invoice-slug. Mongoose compound-unique-index
+ * `(accountId, slugLower)` живе на цьому полі — case-insensitive uniqueness у
+ * межах рахунку. Public-lookup нормалізує URL-сегмент до lowercase.
+ */
+export const invoiceSlugLowerSchema = z
+    .string()
+    .min(3, { message: 'INVALID_SLUG_LOWER_TOO_SHORT' })
+    .max(128, { message: 'INVALID_SLUG_LOWER_TOO_LONG' })
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, {
+        message: 'INVALID_SLUG_LOWER_FORMAT',
     });
 
 /**
@@ -155,6 +172,7 @@ export const InvoiceSchema = z
         businessId: objectIdSchema,
         accountId: objectIdSchema,
         slug: invoiceSlugSchema,
+        slugLower: invoiceSlugLowerSchema,
         amount: z.number().int().nonnegative().nullable(),
         amountLocked: z.boolean(),
         paymentPurpose: invoicePaymentPurposeSchema.nullable(),
