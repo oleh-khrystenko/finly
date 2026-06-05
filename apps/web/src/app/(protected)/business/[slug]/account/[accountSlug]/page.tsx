@@ -21,6 +21,7 @@ import {
 import { ENV } from '@/shared/config/env';
 import { pluralizeUa } from '@/shared/lib';
 import UiButton from '@/shared/ui/UiButton';
+import UiBreadcrumb from '@/shared/ui/UiBreadcrumb';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
@@ -265,16 +266,13 @@ export default function AccountCabinetPage() {
     return (
         <UiPageContainer className="space-y-6 py-8 md:py-12">
             <div className="flex flex-col gap-4">
-                <UiButton
-                    as="link"
-                    href={`/business/${business.slug}#accounts`}
-                    variant="text"
-                    size="sm"
-                    IconLeft={<ArrowLeft />}
-                    className="self-start px-0"
-                >
-                    Назад до бізнесу
-                </UiButton>
+                <UiBreadcrumb
+                    items={[
+                        { label: 'Усі бізнеси', href: '/business' },
+                        { label: 'Бізнес', href: `/business/${business.slug}` },
+                        { label: 'Реквізити' },
+                    ]}
+                />
                 <EditableAccountName
                     account={account}
                     onSave={(name) => onSaveAccount({ name })}

@@ -18,6 +18,7 @@ import {
 import type { BusinessWithCounts } from '@finly/types';
 import { ENV } from '@/shared/config/env';
 import UiButton from '@/shared/ui/UiButton';
+import UiBreadcrumb from '@/shared/ui/UiBreadcrumb';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
@@ -159,18 +160,14 @@ export default function BusinessSlugPage() {
 
     return (
         <UiPageContainer className="space-y-6 py-8 md:py-12">
-            {/* Top toolbar: back-link + identity heading. */}
+            {/* Top toolbar: breadcrumb + identity heading. */}
             <div className="flex flex-col gap-4">
-                <UiButton
-                    as="link"
-                    href="/business"
-                    variant="text"
-                    size="sm"
-                    IconLeft={<ArrowLeft />}
-                    className="self-start px-0"
-                >
-                    Назад до списку
-                </UiButton>
+                <UiBreadcrumb
+                    items={[
+                        { label: 'Усі бізнеси', href: '/business' },
+                        { label: 'Бізнес' },
+                    ]}
+                />
                 <div className="flex min-w-0 flex-col gap-1">
                     <p className="text-muted-foreground text-xl font-semibold tracking-wide uppercase">
                         {typeLabel}

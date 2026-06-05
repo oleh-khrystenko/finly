@@ -43,6 +43,7 @@ Ui-компоненти інкапсулюють:
 | `UiModal`          | Centered modal / bottom sheet dialogs                                    | controlled (open/onOpenChange); mobile bottom sheet, desktop centered; hideOverlay, hideCloseButton; Radix Dialog                                              |
 | `UiHeaderShell`    | Структурна обгортка header-зони (`<header>` + container h-16)            | -- ; className override                                                                                                                                        |
 | `UiEditableField`  | Inline-edit per field (read mode → "олівець" → edit mode з ✓/✗ кнопками) | Generic над `TValue`; renderer-props (`renderRead`/`renderEdit`); async `onSave`; optional `validate`; `disabled`                                              |
+| `UiBreadcrumb`     | Контекстні хлібні крихти (`<nav>`/`<ol>`) для вкладених сторінок          | -- ; предки — `UiLink` (variant=muted), поточний — `aria-current="page"`; per-segment truncate, `ChevronRight`-роздільник                                       |
 
 ## Rules
 

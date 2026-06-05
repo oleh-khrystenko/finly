@@ -19,6 +19,7 @@ import {
 } from '@/shared/api';
 import { ENV } from '@/shared/config/env';
 import UiButton from '@/shared/ui/UiButton';
+import UiBreadcrumb from '@/shared/ui/UiBreadcrumb';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
@@ -254,16 +255,17 @@ export default function InvoiceCabinetPage() {
     return (
         <UiPageContainer className="space-y-6 py-8 md:py-12">
             <div className="flex flex-col gap-4">
-                <UiButton
-                    as="link"
-                    href={`/business/${business.slug}/account/${accountSlug}#invoices`}
-                    variant="text"
-                    size="sm"
-                    IconLeft={<ArrowLeft />}
-                    className="self-start px-0"
-                >
-                    Назад до реквізитів
-                </UiButton>
+                <UiBreadcrumb
+                    items={[
+                        { label: 'Усі бізнеси', href: '/business' },
+                        { label: 'Бізнес', href: `/business/${business.slug}` },
+                        {
+                            label: 'Реквізити',
+                            href: `/business/${business.slug}/account/${accountSlug}`,
+                        },
+                        { label: 'Рахунок' },
+                    ]}
+                />
                 <div className="flex flex-wrap items-start justify-between gap-3">
                     <h1 className="text-foreground min-w-0 text-2xl font-bold tracking-tight md:text-3xl">
                         Рахунок{' '}
