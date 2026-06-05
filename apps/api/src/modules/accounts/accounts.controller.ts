@@ -97,8 +97,8 @@ export class AccountsController {
     @HttpCode(HttpStatus.OK)
     async delete(
         @CurrentAccount() account: AccountDocument
-    ): Promise<{ data: null }> {
-        await this.accountsService.delete(account);
-        return { data: null };
+    ): Promise<{ data: { affectedInvoices: number } }> {
+        const result = await this.accountsService.delete(account);
+        return { data: result };
     }
 }

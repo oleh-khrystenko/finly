@@ -19,7 +19,6 @@ import {
     updateAccount,
 } from '@/shared/api';
 import { ENV } from '@/shared/config/env';
-import { pluralizeUa } from '@/shared/lib';
 import UiButton from '@/shared/ui/UiButton';
 import UiBreadcrumb from '@/shared/ui/UiBreadcrumb';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
@@ -45,14 +44,12 @@ import {
  *  2. QrSection (рівно 2 NBU QR — primary + legacy — + URL-код)
  *  3. InvoicesSection (список інвойсів + gear-меню нумерації у хедері)
  *  4. RequisitesSection (банк-label + IBAN readonly + copy; об'єднана)
- *  5. DangerSection (видалення з two-line-of-defense pre-check)
+ *  5. DangerSection (cascade-видалення з confirm-dialog)
  *
- * **Delete-flow** (§SP-3 two-line-of-defense):
- *  - `invoicesCount > 0` (pre-check з вже-fetched `AccountWithCounts`) →
- *    `toast.error(ACCOUNT_HAS_INVOICES)` без 5s-timer і без actual delete.
- *  - `=== 0` → `<DeleteAccountConfirmDialog>` → confirm → `schedule...WithUndo`
- *    з optimistic redirect на `/business/{slug}` (де AccountsSection
- *    автоматично ховає картку через `pendingAccountDeletesStore`).
+ * **Delete-flow:** `<DeleteAccountConfirmDialog>` → confirm → `schedule...WithUndo`
+ * з optimistic redirect на `/business/{slug}` (де AccountsSection автоматично
+ * ховає картку через `pendingAccountDeletesStore`). Коли у реквізитах є рахунки,
+ * dialog вимагає ввести їхню кількість (cascade-gate).
  *
  * **State-discriminator (review fix)** — `data: { paramBiz, paramAcc, business,
  * account } | null` — race-protection при швидкому переході між кабінетами
@@ -231,20 +228,7 @@ export default function AccountCabinetPage() {
     const last4 = account.iban.slice(-4);
 
     const handleDelete = () => {
-        // §SP-3 first-line-of-defense — frontend pre-check.
-        if (account.invoicesCount > 0) {
-            const phrase = pluralizeUa(
-                account.invoicesCount,
-                'виставлений рахунок',
-                'виставлені рахунки',
-                'виставлених рахунків'
-            );
-            toast.error(
-                `Ці реквізити мають ${phrase}. Спочатку видаліть їх або весь бізнес`
-            );
-            return;
-        }
-        openDeleteConfirm(account, () => {
+        openDeleteConfirm(account, account.invoicesCount, () => {
             scheduleAccountDeleteWithUndo({
                 businessSlug: business.slug,
                 accountSlug: account.slug,

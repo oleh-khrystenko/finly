@@ -3,19 +3,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowRight, CreditCard, Plus, Trash2 } from 'lucide-react';
 import { AxiosError } from 'axios';
-import { toast } from 'sonner';
 import {
     BANK_LABEL,
     deriveAccountLabel,
     type AccountWithCounts,
 } from '@finly/types';
 import { getApiMessage, listAccounts } from '@/shared/api';
-import { pluralizeUa } from '@/shared/lib';
 import UiButton from '@/shared/ui/UiButton';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
 import {
+    makeAccountKey,
     scheduleAccountDeleteWithUndo,
+    useDeleteAccountConfirmStore,
     usePendingAccountDeletesStore,
 } from '@/features/account-edit';
 
@@ -51,9 +51,9 @@ function extractMessage(err: unknown): string {
  * "Невідомий банк". IBAN-mask `•{last4}` лишається як disambiguator.
  *
  * **Per-card delete:**
- *  - Pre-check `invoicesCount > 0` (§SP-3 two-line-of-defense) →
- *    `toast.error(ACCOUNT_HAS_INVOICES)` без 5s-timer і без actual delete-call-у.
- *  - `=== 0` → `scheduleAccountDeleteWithUndo(...)` (5s undo + actual DELETE).
+ *  - `openDeleteConfirm(...)` → `<DeleteAccountConfirmDialog>` (cascade-gate,
+ *    якщо у реквізитах є рахунки) → confirm → `scheduleAccountDeleteWithUndo(...)`
+ *    (5s undo + actual cascade-DELETE).
  *  - **Без redirect-у** (на відміну від DangerSection account-page, що redirect-ить
  *    з per-account-page) — list уже на тій самій сторінці. `pendingAccountDeletesStore`
  *    синхронно ховає картку.
@@ -65,6 +65,7 @@ export default function AccountsSection({ businessSlug }: Props) {
     const [data, setData] = useState<SectionData | null>(null);
     const [error, setError] = useState<SectionError | null>(null);
     const pendingDeleteKeys = usePendingAccountDeletesStore((s) => s.keys);
+    const openDeleteConfirm = useDeleteAccountConfirmStore((s) => s.open);
 
     useEffect(() => {
         let cancelled = false;
@@ -92,45 +93,31 @@ export default function AccountsSection({ businessSlug }: Props) {
     const visibleItems = useMemo(() => {
         if (!isCurrent || !data) return null;
         return data.items.filter(
-            (a) => !pendingDeleteKeys.has(`${businessSlug}/${a.slug}`)
+            (a) => !pendingDeleteKeys.has(makeAccountKey(businessSlug, a.slug))
         );
     }, [isCurrent, data, pendingDeleteKeys, businessSlug]);
 
     const handleDelete = useCallback(
         (account: AccountWithCounts) => {
-            if (account.invoicesCount > 0) {
-                // Pre-resolved UA-plural через shared helper — той самий
-                // patern, що backend `accounts.service.ts` (pluralizeUa
-                // у `apps/api/src/common/intl/`). Consistency повідомлення
-                // між frontend pre-check і backend race-fail-message.
-                const phrase = pluralizeUa(
-                    account.invoicesCount,
-                    'виставлений рахунок',
-                    'виставлені рахунки',
-                    'виставлених рахунків'
-                );
-                toast.error(
-                    `Ці реквізити мають ${phrase}. Спочатку видаліть їх або весь бізнес`
-                );
-                return;
-            }
-            scheduleAccountDeleteWithUndo({
-                businessSlug,
-                accountSlug: account.slug,
-                name: deriveAccountLabel({
-                    name: account.name,
-                    bankCode: account.bankCode,
-                    ibanMask: `•${account.iban.slice(-4)}`,
-                }),
-                onScheduled: () => {
-                    /* per-card delete — без redirect-у, list стає на місці */
-                },
-                onCancelled: () => {
-                    /* картка автоматично повертається через store-remove */
-                },
+            openDeleteConfirm(account, account.invoicesCount, () => {
+                scheduleAccountDeleteWithUndo({
+                    businessSlug,
+                    accountSlug: account.slug,
+                    name: deriveAccountLabel({
+                        name: account.name,
+                        bankCode: account.bankCode,
+                        ibanMask: `•${account.iban.slice(-4)}`,
+                    }),
+                    onScheduled: () => {
+                        /* per-card delete — без redirect-у, list стає на місці */
+                    },
+                    onCancelled: () => {
+                        /* картка автоматично повертається через store-remove */
+                    },
+                });
             });
         },
-        [businessSlug]
+        [businessSlug, openDeleteConfirm]
     );
 
     const createHref = `/business/${businessSlug}/account/new`;

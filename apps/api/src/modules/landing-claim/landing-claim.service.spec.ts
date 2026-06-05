@@ -175,7 +175,7 @@ describe('LandingClaimService.attemptLandingClaim (Sprint 10 §10.1)', () => {
             });
             accountsService.create.mockRejectedValue(
                 new ConflictException({
-                    code: RESPONSE_CODE.ACCOUNT_HAS_INVOICES,
+                    code: RESPONSE_CODE.SLUG_TAKEN,
                     message: 'unrelated conflict',
                 })
             );

@@ -189,14 +189,6 @@ export const RESPONSE_CODE = {
     // --- accounts error (Sprint 9 §SP-1..§SP-3) ---
     /** Account не знайдено в межах business-у. `AccountAccessGuard` / `AccountsService.getBySlug`. UA: "Рахунок не знайдено". */
     ACCOUNT_NOT_FOUND: 'ACCOUNT_NOT_FOUND',
-    /**
-     * Sprint 9 §SP-3 — Account-delete pre-check: `Invoice.countDocuments({accountId}) > 0`.
-     * 409 з UA-template, що містить `{invoicesPhrase}`-плейсхолдер; caller
-     * (backend exception + frontend toast.error) pre-resolves через
-     * `pluralizeUa(count, 'виставлений інвойс', 'виставлені інвойси', 'виставлених інвойсів')`.
-     * UA-шаблон: "Цей рахунок має {invoicesPhrase}. Спочатку видаліть їх або весь бізнес".
-     */
-    ACCOUNT_HAS_INVOICES: 'ACCOUNT_HAS_INVOICES',
     /** `AccountAccessGuard` ownership-check fail (account.businessId ≠ request.business._id). UA: "Доступ до рахунку заборонено". */
     ACCOUNT_ACCESS_DENIED: 'ACCOUNT_ACCESS_DENIED',
     /**
@@ -304,7 +296,6 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.INVOICE_VALID_UNTIL_IN_PAST]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.TRANSACTION_REQUIRES_REPLICA_SET]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.ACCOUNT_NOT_FOUND]: RESPONSE_TYPE.ERROR,
-    [RESPONSE_CODE.ACCOUNT_HAS_INVOICES]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.ACCOUNT_ACCESS_DENIED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.ACCOUNT_SLUG_GENERATION_FAILED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.ACCOUNT_IBAN_DUPLICATE]: RESPONSE_TYPE.ERROR,

@@ -15,13 +15,13 @@ import {
     type UpdateAccountRequest,
 } from '@finly/types';
 
-import { pluralizeUa } from '../../common/intl/pluralize-ua';
 import { isTransactionsUnsupportedError } from '../../common/mongoose/transactions-unsupported';
 import {
     Business,
     type BusinessDocument,
 } from '../businesses/schemas/business.schema';
 import { InvoiceSlugCounter } from '../invoices/schemas/invoice-slug-counter.schema';
+import { InvoiceSlugHistory } from '../invoices/schemas/invoice-slug-history.schema';
 import { Invoice } from '../invoices/schemas/invoice.schema';
 import { AccountSlugGeneratorService } from './account-slug-generator.service';
 import {
@@ -40,15 +40,12 @@ import { Account, AccountDocument } from './schemas/account.schema';
  * collision на `(businessId, iban)` → `ACCOUNT_IBAN_DUPLICATE`, інакше →
  * safety-net `ACCOUNT_CREATE_FAILED`.
  *
- * **Delete** (§SP-3 race-protection) — атомарно у `session.withTransaction`:
- *  - `Invoice.countDocuments({accountId}, { session })` → `> 0 → 409
- *    ACCOUNT_HAS_INVOICES` (abort tx; повідомлення pre-resolved через
- *    `pluralizeUa`).
- *  - інакше: `Account.deleteOne` + `InvoiceSlugCounter.deleteMany({accountId})`.
- *
- * Race з concurrent `InvoicesService.create` (touch-account у власній tx,
- * symmetric до Sprint 4 touch-business pattern) серіалізується Mongo write-
- * write conflict-detection-ом.
+ * **Delete** — cascade hard-delete atomic-or-nothing у `session.withTransaction`
+ * (дзеркало `BusinessesService.delete`): рахунок видаляється разом з усім
+ * invoice-піддерев'ям (`Invoice` + `InvoiceSlugHistory` + `InvoiceSlugCounter`)
+ * і власною `AccountSlugHistory`. Race з concurrent `InvoicesService.create`
+ * (touch-account у власній tx, symmetric до Sprint 4 touch-business pattern)
+ * серіалізується Mongo write-write conflict-detection-ом.
  */
 @Injectable()
 export class AccountsService {
@@ -65,6 +62,10 @@ export class AccountsService {
         private readonly invoiceModel: Model<{ accountId: Types.ObjectId }>,
         @InjectModel(InvoiceSlugCounter.name)
         private readonly counterModel: Model<{ accountId: Types.ObjectId }>,
+        @InjectModel(InvoiceSlugHistory.name)
+        private readonly invoiceHistoryModel: Model<{
+            accountId: Types.ObjectId;
+        }>,
         @InjectConnection()
         private readonly connection: Connection,
         private readonly slugGenerator: AccountSlugGeneratorService
@@ -463,45 +464,48 @@ export class AccountsService {
     }
 
     /**
-     * §SP-3 — атомарно у `session.withTransaction`:
-     *  1. `Invoice.countDocuments({accountId}, { session })` → > 0 throw
-     *     409 `ACCOUNT_HAS_INVOICES` (abort tx);
-     *  2. `Account.deleteOne` + `InvoiceSlugCounter.deleteMany({accountId})`.
+     * Cascade hard-delete рахунку **atomic-or-nothing через `withTransaction`**
+     * (дзеркало `BusinessesService.delete`, рівнем нижче). Видаляє увесь
+     * invoice-піддерев'я рахунку разом з ним:
+     *  1. `Invoice.deleteMany({accountId})`;
+     *  2. `InvoiceSlugHistory.deleteMany({accountId})` — без cleanup-у history-
+     *     entries блокували б slug у anti-squatting до TTL і давали б orphan
+     *     history-hit lookup-и на public hits після delete;
+     *  3. `InvoiceSlugCounter.deleteMany({accountId})` — counter-namespace;
+     *  4. `AccountSlugHistory.deleteMany({accountId})` — власна rename-history;
+     *  5. `Account.deleteOne`.
      *
-     * Concurrent `InvoicesService.create` (touch-account у власній tx,
-     * symmetric Sprint 4 touch-business) → Mongo write-write conflict
-     * serialize-ить два TX: або create-touch виграє і delete-tx retry-неться
-     * (увидить count=1 і кине 409), або delete-tx виграє і create-tx
-     * matchedCount=0 → 404.
+     * **Race з concurrent `InvoicesService.create`.** Create тримає власну tx і
+     * touch-ає account-документ (write-intent); цей delete завершується
+     * `accountModel.deleteOne({_id})` на тому самому документі → Mongo write-
+     * write conflict серіалізує два TX: або create виграє і delete-tx
+     * retry-неться (deleteMany побачить новий рахунок і видалить його теж), або
+     * delete виграє і create на retry бачить matchedCount=0 → 404. Orphan-state
+     * неможливий.
      *
-     * Replica-set requirement — без змін від Sprint 4. На standalone Mongo
-     * → 500 `TRANSACTION_REQUIRES_REPLICA_SET`.
+     * **Pre-count поза транзакцією** — `affectedInvoices` у response
+     * інформативний (toast). Stale by ~tick на concurrent-create-у не порушує
+     * atomic-or-nothing (symmetric `BusinessesService.delete`).
+     *
+     * Replica-set requirement: на standalone Mongo → 500
+     * `TRANSACTION_REQUIRES_REPLICA_SET`, жодного delete не виконано.
      */
-    async delete(account: AccountDocument): Promise<void> {
+    async delete(
+        account: AccountDocument
+    ): Promise<{ affectedInvoices: number }> {
         const accountId = account._id;
+        const affectedInvoices = await this.invoiceModel.countDocuments({
+            accountId,
+        });
         const session = await this.connection.startSession();
         try {
             await session.withTransaction(async () => {
-                const count = await this.invoiceModel.countDocuments(
+                await this.invoiceModel.deleteMany({ accountId }, { session });
+                await this.invoiceHistoryModel.deleteMany(
                     { accountId },
                     { session }
                 );
-                if (count > 0) {
-                    const invoicesPhrase = pluralizeUa(
-                        count,
-                        'виставлений рахунок',
-                        'виставлені рахунки',
-                        'виставлених рахунків'
-                    );
-                    throw new ConflictException({
-                        code: RESPONSE_CODE.ACCOUNT_HAS_INVOICES,
-                        message: `Ці реквізити мають ${invoicesPhrase}. Спочатку видаліть їх або весь бізнес`,
-                    });
-                }
                 await this.counterModel.deleteMany({ accountId }, { session });
-                // Sprint 15 — деактивований рахунок віддає посилання одразу:
-                // власні rename-history-entries чистяться у тій самій TX
-                // (без cleanup-у вони блокували б slug у anti-squatting до TTL).
                 await this.historyModel.deleteMany({ accountId }, { session });
                 await this.accountModel.deleteOne(
                     { _id: accountId },
@@ -525,6 +529,7 @@ export class AccountsService {
         } finally {
             await session.endSession();
         }
+        return { affectedInvoices };
     }
 }
 

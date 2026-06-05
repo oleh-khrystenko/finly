@@ -577,29 +577,34 @@ describe('Accounts E2E (Sprint 9 §SP-1..§SP-3)', () => {
             return { businessSlug, accountSlug };
         }
 
-        it('§SP-3 — account з 1 інвойсом → 409 ACCOUNT_HAS_INVOICES', async () => {
+        it('account з 1 інвойсом → 200, cascade видаляє рахунок і його інвойси', async () => {
             const user = await createUser();
             const { businessSlug, accountSlug } =
                 await seedAccountAndInvoice(user);
+            const accountBefore = await accountModel.findOne({
+                slug: accountSlug,
+            });
 
             const res = await supertest(app.getHttpServer())
                 .delete(
                     `/api/businesses/me/${businessSlug}/accounts/${accountSlug}`
                 )
                 .set('Authorization', bearerFor(user))
-                .expect(409);
-            expect((res.body as { error: { code: string } }).error.code).toBe(
-                'ACCOUNT_HAS_INVOICES'
-            );
-            // Account і інвойс — недоторкані (atomic-or-nothing).
+                .expect(200);
+            expect(
+                (res.body as { data: { affectedInvoices: number } }).data
+                    .affectedInvoices
+            ).toBe(1);
+
+            // Account і його інвойси — повністю видалені (atomic-or-nothing).
             const accountStill = await accountModel.findOne({
                 slug: accountSlug,
             });
-            expect(accountStill).not.toBeNull();
+            expect(accountStill).toBeNull();
             const invoicesStill = await invoiceModel.countDocuments({
-                accountId: accountStill!._id,
+                accountId: accountBefore!._id,
             });
-            expect(invoicesStill).toBe(1);
+            expect(invoicesStill).toBe(0);
         });
 
         it('account без інвойсів → 200, документ видалено', async () => {

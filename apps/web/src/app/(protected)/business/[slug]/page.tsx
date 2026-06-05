@@ -127,17 +127,21 @@ export default function BusinessSlugPage() {
         if (!business) return;
         const slug = business.slug;
         const name = business.name;
-        // Sprint 4 §SP-5 + Sprint 9: cascade видаляє Account + Invoice +
-        // InvoiceSlugCounter. `invoicesCount` — total за бізнес (всі рахунки),
-        // показуємо у confirm-dialog як cascade-warning.
-        openDeleteConfirm(business, business.invoicesCount, () => {
-            scheduleDeleteWithUndo({
-                slug,
-                name,
-                onScheduled: () => router.replace('/business'),
-                onCancelled: () => router.replace(`/business/${slug}`),
-            });
-        });
+        // Cascade видаляє Account + Invoice + counters/history. Обидва
+        // лічильники (total за бізнес) йдуть у confirm-dialog як cascade-gate.
+        openDeleteConfirm(
+            business,
+            business.accountsCount,
+            business.invoicesCount,
+            () => {
+                scheduleDeleteWithUndo({
+                    slug,
+                    name,
+                    onScheduled: () => router.replace('/business'),
+                    onCancelled: () => router.replace(`/business/${slug}`),
+                });
+            }
+        );
     }, [business, openDeleteConfirm, router]);
 
     if (business === null && !error) {

@@ -10,6 +10,10 @@ import {
     InvoiceSlugCounter,
     InvoiceSlugCounterSchema,
 } from '../invoices/schemas/invoice-slug-counter.schema';
+import {
+    InvoiceSlugHistory,
+    InvoiceSlugHistorySchema,
+} from '../invoices/schemas/invoice-slug-history.schema';
 import { Invoice, InvoiceSchema } from '../invoices/schemas/invoice.schema';
 import { QrModule } from '../qr/qr.module';
 import { AccountAccessGuard } from './account-access.guard';
@@ -32,15 +36,13 @@ import { Account, AccountSchema } from './schemas/account.schema';
  * AccountsModule (cabinet-counter-aggregation працює через direct
  * `@InjectModel`-у businesses-controller-і).
  *
- * **MongooseModule.forFeature([Account, Business, Invoice, InvoiceSlugCounter])**
- * — чотири моделі разом:
+ * **MongooseModule.forFeature** — моделі, потрібні для own-CRUD і cascade-delete:
  *  - `Account` — own CRUD.
  *  - `Business` — `AccountsService.create` робить touch-business у власній tx
  *    (orphan-prevention vs cascade-delete-business, §SP-1).
- *  - `Invoice` — `AccountsService.delete` робить `countDocuments({accountId})`
- *    у §SP-3 cascade-delete.
- *  - `InvoiceSlugCounter` — `AccountsService.delete` робить `deleteMany({
- *    accountId})` у тій самій tx.
+ *  - `Invoice` + `InvoiceSlugCounter` + `InvoiceSlugHistory` —
+ *    `AccountsService.delete` cascade-видаляє увесь invoice-піддерев'я рахунку
+ *    (`deleteMany({accountId})`) разом з власною `AccountSlugHistory` у одній tx.
  *
  * `BusinessesService` доступний через `imports: [BusinessesModule]` —
  * `PublicAccountsController` використовує `BusinessesService.getBySlug` для
@@ -63,6 +65,10 @@ import { Account, AccountSchema } from './schemas/account.schema';
             { name: Business.name, schema: BusinessSchema },
             { name: Invoice.name, schema: InvoiceSchema },
             { name: InvoiceSlugCounter.name, schema: InvoiceSlugCounterSchema },
+            {
+                name: InvoiceSlugHistory.name,
+                schema: InvoiceSlugHistorySchema,
+            },
         ]),
         BusinessesModule,
         QrModule,

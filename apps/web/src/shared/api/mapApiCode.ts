@@ -124,10 +124,7 @@ const ERRORS: Record<string, MessageDict> = {
         rate_limit_exceeded:
             'Забагато запитів. Зачекайте хвилину і спробуйте ще раз',
     },
-    // Sprint 9 §SP-1..§SP-3 — accounts UA-messages. ACCOUNT_HAS_INVOICES не тут:
-    // backend pre-resolves повідомлення через pluralizeUa (accounts.service.ts
-    // ConflictException.message) — frontend toast.error читає поле message
-    // напряму, mapApiCode-намір не потрібен.
+    // Sprint 9 §SP-1..§SP-3 — accounts UA-messages.
     accounts: {
         account_not_found: 'Реквізити не знайдено',
         account_access_denied: 'У вас немає доступу до цих реквізитів',

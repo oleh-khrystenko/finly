@@ -47,12 +47,7 @@ interface Args {
  *   - Timer fire success → key **ЗАЛИШАЄТЬСЯ** у store до browser-unload (той
  *     самий інваріант, що Sprint 3/4 stores).
  *   - Timer fire failure → `remove(...)` повертає account у UI + toast.error
- *     з mapped code. Особливо важливо для `ACCOUNT_HAS_INVOICES` (409) —
- *     race: за час 5s ФОП встиг створити інвойс через інший таб, backend
- *     reject-не delete. UA-message приходить pre-resolved через
- *     `pluralizeUa`-payload backend-у (`accounts.service.ts:331`); `mapApiCode`
- *     для `ACCOUNT_HAS_INVOICES` свідомо без template, бо message-string
- *     приходить ready-to-display.
+ *     з mapped code (network, generic 500, replica-set).
  */
 export function scheduleAccountDeleteWithUndo({
     businessSlug,
@@ -70,19 +65,15 @@ export function scheduleAccountDeleteWithUndo({
             usePendingAccountDeletesStore
                 .getState()
                 .remove(businessSlug, accountSlug);
-            // ACCOUNT_HAS_INVOICES повертає pre-resolved UA-message у
-            // `err.response.data.error.message`. Fallback на mapApiCode для
-            // інших codes (network, generic 500).
-            const data = err instanceof AxiosError ? err.response?.data : null;
-            const errPayload = (
-                data as { error?: { code?: string; message?: string } } | null
-            )?.error;
-            const code = errPayload?.code ?? 'unknown';
-            const msg =
-                code === 'ACCOUNT_HAS_INVOICES' && errPayload?.message
-                    ? errPayload.message
-                    : getApiMessage(code, 'accounts');
-            toast.error(msg);
+            const code =
+                err instanceof AxiosError
+                    ? ((
+                          err.response?.data as
+                              | { error?: { code?: string } }
+                              | undefined
+                      )?.error?.code ?? 'unknown')
+                    : 'unknown';
+            toast.error(getApiMessage(code, 'accounts'));
         });
     }, ACCOUNT_UNDO_TIMEOUT_MS);
 

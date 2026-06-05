@@ -157,9 +157,8 @@ export type PublicAccountView = z.infer<typeof PublicAccountViewSchema>;
  * `invoicesCount` — derived counter (real-time `Invoice.countDocuments({accountId})`
  * per-request). Не stored field — drift-immune by design.
  *
- * Frontend конусм: `DangerSection` account-page + per-card AccountsSection
- * pre-check на `> 0 → toast.error(ACCOUNT_HAS_INVOICES)` без network-call-у
- * (§SP-3 two-line-of-defense; race-protection — backend `withTransaction`).
+ * Frontend конусм: delete-confirm gate — коли `> 0`, dialog вимагає ввести цю
+ * цифру для підтвердження cascade-видалення вкладених рахунків.
  */
 export const AccountWithCountsSchema = AccountSchema.extend({
     invoicesCount: z.number().int().nonnegative(),
