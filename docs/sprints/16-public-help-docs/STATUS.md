@@ -13,9 +13,12 @@
 
 ## Залишилось
 
-1. **Копірайтинг статей.** Зараз чорновий scaffold. Канонічний контент: `packages/types/src/help/articles.ts` (і описи категорій у `categories.ts`). Це **єдине джерело правди**: правка там оновлює і сторінку, і базу знань AI. Після правок обовʼязково `pnpm --filter @finly/types build`, щоб бекенд підхопив. Запускати скіл `copywriter`.
-2. **SEO sitemap.** Додати `apps/web/src/app/sitemap.ts` для `/help` і `/help/<slug>` (за бажанням `robots.ts`). Slug-и брати з `getAllArticleSlugs()` у `@finly/types`. Робити ПІСЛЯ копірайтингу (якщо він переназве slug-и).
-3. **Прод-env (операційне, не код).** Додати на сервер: `HELP_CHAT_MAX_TOKENS`, `HELP_CHAT_IP_LIMIT`, `HELP_CHAT_DAILY_BUDGET` (див. `.env.example`). Без них API падає на fail-fast.
+1. **Прод-env (операційне, не код).** Додати на сервер: `HELP_CHAT_MAX_TOKENS`, `HELP_CHAT_IP_LIMIT`, `HELP_CHAT_DAILY_BUDGET` (див. `.env.example`). Без них API падає на fail-fast.
+
+## Зроблено (продовження)
+
+- **Копірайтинг статей.** Усі 9 статей у `packages/types/src/help/articles.ts` переписано і звірено з кодом як джерелом правди (типи бізнесу, формати taxId, реальні підписи кнопок «Створити бізнес»/«Додати рахунок»/«Виставити інвойс», семантика перемикача суми, 4 формати нумерації з реальним slug `inv-001-{код}`, маска IBAN, grace-період 30 днів). Рішення власника: білінг згадано загально без цін; кабінетний AI-чат і «виконання» у публічній довідці не описуються; термін «рахунок клієнту» збережено з містком до реального «інвойс». Пройдено `code-review`. `@finly/types` зібрано.
+- **SEO sitemap + robots.** `apps/web/src/app/sitemap.ts` (landing, `/help`, усі статті через `getAllArticleSlugs()`, `/privacy`, `/terms`) і `apps/web/src/app/robots.ts` (allow public, disallow `/auth/` і приватні cabinet-сегменти, sitemap-посилання). Метатеги/canonical вже були в `a3866fb`.
 
 ## Інваріанти, які не можна порушувати
 
