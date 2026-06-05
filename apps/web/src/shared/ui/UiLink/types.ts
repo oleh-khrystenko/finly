@@ -5,7 +5,8 @@ export type UiLinkVariant =
     | 'primary'
     | 'primary-underline'
     | 'muted'
-    | 'subtle';
+    | 'subtle'
+    | 'unstyled';
 
 interface BaseProps {
     children?: ReactNode;

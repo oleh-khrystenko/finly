@@ -42,6 +42,52 @@ html {
     }
 }
 
+.prose-help {
+    & h2 {
+        @apply mt-10 text-xl font-semibold tracking-tight text-foreground;
+    }
+
+    & h3 {
+        @apply mt-8 text-base font-semibold text-foreground;
+    }
+
+    & p {
+        @apply my-4 leading-relaxed;
+    }
+
+    & a {
+        @apply text-primary underline underline-offset-4 hover:text-primary/80;
+    }
+
+    & ul {
+        @apply my-4 list-disc space-y-2 pl-6;
+    }
+
+    & ol {
+        @apply my-4 list-decimal space-y-2 pl-6;
+    }
+
+    & li {
+        @apply leading-relaxed;
+    }
+
+    & strong {
+        @apply font-semibold text-foreground;
+    }
+
+    & blockquote {
+        @apply my-4 border-l-2 border-border pl-4 text-muted-foreground;
+    }
+
+    & code {
+        @apply rounded bg-muted px-1.5 py-0.5 text-sm;
+    }
+
+    & hr {
+        @apply my-8 border-border;
+    }
+}
+
 .prose-chat {
     & h3 {
         @apply text-sm font-semibold mt-3 mb-1.5;
