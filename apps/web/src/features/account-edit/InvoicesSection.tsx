@@ -195,16 +195,23 @@ export default function InvoicesSection({
 
     const createInvoiceHref = `/business/${businessSlug}/account/${accountSlug}/invoice/new`;
 
+    // Той самий елемент рендериться у двох позиціях через responsive show/hide:
+    // desktop — у хедері поряд з CTA; mobile — окремим рядком під шапкою (у
+    // тісному 360px-хедері він не вміщається поряд із заголовком і CTA).
+    const numberingMenu = (
+        <InvoiceNumberingMenu
+            value={invoiceSlugPresetDefault}
+            onSave={onSavePreset}
+        />
+    );
+
     return (
         <UiSectionCard
             id="invoices"
             title="Інвойси"
             headerRight={
                 <div className="flex items-center gap-2">
-                    <InvoiceNumberingMenu
-                        value={invoiceSlugPresetDefault}
-                        onSave={onSavePreset}
-                    />
+                    <div className="hidden sm:block">{numberingMenu}</div>
                     {visibleItems !== null && visibleItems.length > 0 && (
                         <UiButton
                             as="link"
@@ -222,6 +229,10 @@ export default function InvoicesSection({
                 </div>
             }
         >
+            <div className="mt-4 flex justify-end sm:hidden">
+                {numberingMenu}
+            </div>
+
             {visibleItems === null && !isErrorCurrent && (
                 <div className="flex justify-center py-8">
                     <UiSpinner size="md" />

@@ -37,6 +37,8 @@ const UiDropdownMenu = forwardRef<HTMLDivElement, UiDropdownMenuProps>(
             align = 'end',
             size = 'md',
             className,
+            itemClassName,
+            badgeClassName,
         } = props;
 
         return (
@@ -75,7 +77,8 @@ const UiDropdownMenu = forwardRef<HTMLDivElement, UiDropdownMenuProps>(
                                             'data-[focus]:bg-accent',
                                             isActive && 'bg-accent',
                                             itemSizeStyles[size],
-                                            iconSizeStyles[size]
+                                            iconSizeStyles[size],
+                                            itemClassName
                                         )}
                                     >
                                         {item.icon && (
@@ -85,7 +88,12 @@ const UiDropdownMenu = forwardRef<HTMLDivElement, UiDropdownMenuProps>(
                                             {item.label}
                                         </span>
                                         {item.badge != null && (
-                                            <span className="bg-muted text-muted-foreground ml-auto rounded-full px-2.5 py-1 text-sm leading-none whitespace-nowrap">
+                                            <span
+                                                className={composeClasses(
+                                                    'bg-muted text-muted-foreground ml-auto rounded-full px-2.5 py-1 text-xs leading-none whitespace-nowrap',
+                                                    badgeClassName
+                                                )}
+                                            >
                                                 {item.badge}
                                             </span>
                                         )}
