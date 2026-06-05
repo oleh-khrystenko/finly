@@ -132,6 +132,16 @@ export class BusinessesController {
         return { data: updated };
     }
 
+    @Post(':slug/reset-slug')
+    @UseGuards(BusinessAccessGuard)
+    @HttpCode(HttpStatus.OK)
+    async resetSlug(
+        @CurrentBusiness() business: BusinessDocument
+    ): Promise<{ data: BusinessDocument }> {
+        const updated = await this.businessesService.resetSlug(business);
+        return { data: updated };
+    }
+
     @Delete(':slug')
     @UseGuards(BusinessAccessGuard)
     @HttpCode(HttpStatus.OK)

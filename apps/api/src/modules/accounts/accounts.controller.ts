@@ -82,6 +82,16 @@ export class AccountsController {
         return { data: updated };
     }
 
+    @Post(':accountSlug/reset-slug')
+    @UseGuards(AccountAccessGuard)
+    @HttpCode(HttpStatus.OK)
+    async resetSlug(
+        @CurrentAccount() account: AccountDocument
+    ): Promise<{ data: AccountDocument }> {
+        const updated = await this.accountsService.resetSlug(account);
+        return { data: updated };
+    }
+
     @Delete(':accountSlug')
     @UseGuards(AccountAccessGuard)
     @HttpCode(HttpStatus.OK)

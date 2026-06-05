@@ -11,6 +11,7 @@ import { Connection, Model, Types, type FilterQuery } from 'mongoose';
 import {
     RESPONSE_CODE,
     type CreateInvoiceRequest,
+    type SlugPreset,
     type UpdateInvoiceRequest,
 } from '@finly/types';
 
@@ -598,6 +599,146 @@ export class InvoicesService {
                 code: RESPONSE_CODE.SLUG_TAKEN,
                 message: 'Invoice slug already taken in this account',
             });
+        }
+    }
+
+    /**
+     * Скидання slug-у інвойсу "за форматом нумерації рахунку" (дзеркало
+     * `create` retry-loop). На відміну від business/account (random → новий
+     * random), invoice перегенеровується за `account.invoiceSlugPresetDefault`
+     * (fallback `'simple'`) — тобто як новий інвойс за замовчуванням. Counter
+     * monotonic: новий slug отримує **наступний** номер scope-у, оригінальний
+     * номер не відтворюється (counter permanently consumed).
+     *
+     * Той самий counter-race захист, що `create`: generate+update у TX; на
+     * 11000 — fresh session retry (counter-collision або bootstrap-race).
+     */
+    async resetSlug(
+        business: BusinessDocument,
+        account: AccountDocument,
+        invoice: InvoiceDocument
+    ): Promise<InvoiceDocument> {
+        const preset: SlugPreset = account.invoiceSlugPresetDefault ?? 'simple';
+        let lastError: unknown;
+        for (
+            let attempt = 1;
+            attempt <= InvoicesService.CREATE_MAX_RETRIES;
+            attempt++
+        ) {
+            try {
+                return await this.resetSlugOneAttempt(
+                    business,
+                    account,
+                    invoice,
+                    preset
+                );
+            } catch (err) {
+                if (isDuplicateKeyError(err)) {
+                    lastError = err;
+                    this.logger.warn(
+                        `Invoice slug reset attempt ${attempt}/${InvoicesService.CREATE_MAX_RETRIES} hit duplicate-key; retrying with fresh session for invoice ${invoice._id.toString()}`
+                    );
+                    continue;
+                }
+                throw err;
+            }
+        }
+        this.logger.error(
+            `Failed to reset invoice slug for invoice ${invoice._id.toString()} after ${InvoicesService.CREATE_MAX_RETRIES} retries; last error: ${
+                lastError instanceof Error
+                    ? lastError.message
+                    : String(lastError)
+            }`
+        );
+        throw new InternalServerErrorException({
+            code: RESPONSE_CODE.INVOICE_SLUG_GENERATION_FAILED,
+            message:
+                'Failed to reset invoice slug after retries due to slug collision',
+        });
+    }
+
+    private async resetSlugOneAttempt(
+        business: BusinessDocument,
+        account: AccountDocument,
+        invoice: InvoiceDocument,
+        preset: SlugPreset
+    ): Promise<InvoiceDocument> {
+        const accountId = account._id;
+        const businessId = business._id;
+        const oldLower = invoice.slugLower;
+        const session = await this.connection.startSession();
+        try {
+            let updated: InvoiceDocument | null = null;
+            await session.withTransaction(async () => {
+                // Counter allocation живе у цій самій TX — abort (race/11000)
+                // rollback-ить counter разом з rename (без counter-leak).
+                const slugInfo = await this.slugGenerator.generateInvoiceSlug(
+                    {
+                        businessId,
+                        accountId,
+                        slugInput: { kind: 'preset', preset },
+                        paymentPurpose: invoice.paymentPurpose,
+                        businessPaymentPurposeTemplate:
+                            business.paymentPurposeTemplate,
+                    },
+                    session
+                );
+                await this.historyModel
+                    .deleteMany(
+                        { accountId, slugLower: slugInfo.slugLower },
+                        { session }
+                    )
+                    .exec();
+                await this.historyModel.create(
+                    [
+                        {
+                            businessId,
+                            accountId,
+                            invoiceId: invoice._id,
+                            slugLower: oldLower,
+                        },
+                    ],
+                    { session }
+                );
+                updated = await this.invoiceModel
+                    .findOneAndUpdate(
+                        { _id: invoice._id },
+                        {
+                            $set: {
+                                slug: slugInfo.slug,
+                                slugLower: slugInfo.slugLower,
+                                slugPreset: slugInfo.slugPreset,
+                                slugCounterScope: slugInfo.slugCounterScope,
+                                slugCounter: slugInfo.slugCounter,
+                            },
+                        },
+                        { new: true, runValidators: true, session }
+                    )
+                    .exec();
+                if (!updated) {
+                    throw new NotFoundException({
+                        code: RESPONSE_CODE.INVOICE_NOT_FOUND,
+                        message: 'Invoice disappeared during slug reset',
+                    });
+                }
+            });
+            return updated!;
+        } catch (err) {
+            if (isTransactionsUnsupportedError(err)) {
+                this.logger.error(
+                    `Invoice slug reset failed: replica-set required. Invoice ${invoice._id.toString()}. Original: ${
+                        err instanceof Error ? err.message : String(err)
+                    }`
+                );
+                throw new InternalServerErrorException({
+                    code: RESPONSE_CODE.TRANSACTION_REQUIRES_REPLICA_SET,
+                    message:
+                        'Invoice slug reset requires Mongo replica-set; check MONGODB_URI',
+                });
+            }
+            throw err;
+        } finally {
+            await session.endSession();
         }
     }
 

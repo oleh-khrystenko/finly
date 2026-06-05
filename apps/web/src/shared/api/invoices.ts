@@ -95,6 +95,17 @@ export async function updateInvoice(
     return InvoiceSchema.parse(data.data);
 }
 
+export async function resetInvoiceSlug(
+    businessSlug: string,
+    accountSlug: string,
+    invoiceSlug: string
+): Promise<Invoice> {
+    const { data } = await apiClient.post<{ data: unknown }>(
+        `${invoicesBase(businessSlug, accountSlug)}/${encodeURIComponent(invoiceSlug)}/reset-slug`
+    );
+    return InvoiceSchema.parse(data.data);
+}
+
 export async function deleteInvoice(
     businessSlug: string,
     accountSlug: string,

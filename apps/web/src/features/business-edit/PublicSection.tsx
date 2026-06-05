@@ -1,7 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { Check, Copy, Download, ExternalLink, Pencil } from 'lucide-react';
+import {
+    Check,
+    Copy,
+    Download,
+    ExternalLink,
+    Pencil,
+    RefreshCw,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import {
     buildQrDownloadFilename,
@@ -17,6 +24,7 @@ import UiQrImage from '@/shared/ui/UiQrImage';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSwitch from '@/shared/ui/UiSwitch';
 import { mapValidationCode } from '@/shared/lib';
+import { useResetBusinessSlugConfirmStore } from './resetBusinessSlugConfirmStore';
 
 interface Props {
     business: Business;
@@ -24,6 +32,8 @@ interface Props {
     payPublicOrigin: string;
     apiBase?: string;
     onSave: (patch: UpdateBusinessRequest) => Promise<void>;
+    /** Скидання slug-у на свіже випадкове посилання (через confirm-dialog). */
+    onResetSlug: () => Promise<void>;
 }
 
 /**
@@ -50,9 +60,11 @@ export default function PublicSection({
     payPublicOrigin,
     apiBase = '/api',
     onSave,
+    onResetSlug,
 }: Props) {
     const [copied, setCopied] = useState(false);
     const [seoSaving, setSeoSaving] = useState(false);
+    const openResetConfirm = useResetBusinessSlugConfirmStore((s) => s.open);
 
     const hostnamePrefix = `${payPublicOrigin
         .replace(/^https?:\/\//, '')
@@ -140,6 +152,20 @@ export default function PublicSection({
                                         className="w-full sm:w-auto"
                                     >
                                         Редагувати
+                                    </UiButton>
+                                    <UiButton
+                                        type="button"
+                                        variant="outline"
+                                        size="md"
+                                        onClick={() =>
+                                            openResetConfirm(() => {
+                                                void onResetSlug();
+                                            })
+                                        }
+                                        IconLeft={<RefreshCw />}
+                                        className="w-full sm:w-auto"
+                                    >
+                                        Згенерувати нове посилання
                                     </UiButton>
                                 </div>
                             </div>

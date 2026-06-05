@@ -707,6 +707,20 @@ export class BusinessesService {
     }
 
     /**
+     * Скидання slug-у на свіже випадкове посилання. Початковий random-slug
+     * ніде не зберігається (одноразовий generation-artifact), тому "скидання" =
+     * генерація **нового** random-slug-у + проганяння через звичайний rename-flow
+     * (`update`), що пише старий slug у `BusinessSlugHistory` (308-redirect grace)
+     * і атомарно оновлює `slug + slugLower`. Reserved- + collision-check уже
+     * зроблені генератором; повторні у `update` — cheap defense-in-depth, не
+     * дублювання логіки.
+     */
+    async resetSlug(business: BusinessDocument): Promise<BusinessDocument> {
+        const newSlug = await this.slugGenerator.generateRandomSlug();
+        return this.update(business.slug, { slug: newSlug });
+    }
+
+    /**
      * Sprint 3 рішення C2 + Sprint 4 SP-5: hard-delete з cascade-видаленням
      * усіх інвойсів бізнесу **atomic-or-nothing через `withTransaction`**.
      *

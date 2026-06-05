@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Check, Copy, ExternalLink, Pencil } from 'lucide-react';
+import { Check, Copy, ExternalLink, Pencil, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import {
     invoiceSlugSchema,
@@ -13,6 +13,7 @@ import UiEditableField from '@/shared/ui/UiEditableField';
 import UiPrefixInput from '@/shared/ui/UiPrefixInput';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import { mapValidationCode } from '@/shared/lib';
+import { useResetInvoiceSlugConfirmStore } from './resetInvoiceSlugConfirmStore';
 
 interface Props {
     invoice: Invoice;
@@ -22,6 +23,8 @@ interface Props {
     /** Public payment-page origin (NEXT_PUBLIC_PAY_PUBLIC_URL). */
     payPublicOrigin: string;
     onSave: (patch: UpdateInvoiceRequest) => Promise<void>;
+    /** Скидання slug-у на нове посилання за форматом нумерації (confirm-dialog). */
+    onResetSlug: () => Promise<void>;
 }
 
 /**
@@ -38,8 +41,10 @@ export default function SlugSection({
     accountSlug,
     payPublicOrigin,
     onSave,
+    onResetSlug,
 }: Props) {
     const [copied, setCopied] = useState(false);
+    const openResetConfirm = useResetInvoiceSlugConfirmStore((s) => s.open);
 
     const hostnamePrefix = `${payPublicOrigin
         .replace(/^https?:\/\//, '')
@@ -104,6 +109,20 @@ export default function SlugSection({
                                     className="w-full sm:w-auto"
                                 >
                                     Редагувати
+                                </UiButton>
+                                <UiButton
+                                    type="button"
+                                    variant="outline"
+                                    size="md"
+                                    onClick={() =>
+                                        openResetConfirm(() => {
+                                            void onResetSlug();
+                                        })
+                                    }
+                                    IconLeft={<RefreshCw />}
+                                    className="w-full sm:w-auto"
+                                >
+                                    Згенерувати нове посилання
                                 </UiButton>
                             </div>
                         </div>

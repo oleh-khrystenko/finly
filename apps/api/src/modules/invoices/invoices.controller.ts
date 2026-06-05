@@ -97,6 +97,22 @@ export class InvoicesController {
         return { data: updated };
     }
 
+    @Post(':invoiceSlug/reset-slug')
+    @UseGuards(InvoiceAccessGuard)
+    @HttpCode(HttpStatus.OK)
+    async resetSlug(
+        @CurrentBusiness() business: BusinessDocument,
+        @CurrentAccount() account: AccountDocument,
+        @CurrentInvoice() invoice: InvoiceDocument
+    ): Promise<{ data: InvoiceDocument }> {
+        const updated = await this.invoicesService.resetSlug(
+            business,
+            account,
+            invoice
+        );
+        return { data: updated };
+    }
+
     @Delete(':invoiceSlug')
     @UseGuards(InvoiceAccessGuard)
     @HttpCode(HttpStatus.OK)

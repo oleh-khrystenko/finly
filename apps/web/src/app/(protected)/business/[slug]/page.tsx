@@ -12,6 +12,7 @@ import {
     extractApiErrorCode,
     getApiMessage,
     getBusinessBySlug,
+    resetBusinessSlug,
     updateBusiness,
 } from '@/shared/api';
 import type { BusinessWithCounts } from '@finly/types';
@@ -104,6 +105,23 @@ export default function BusinessSlugPage() {
         [business, router]
     );
 
+    const handleResetSlug = useCallback(async () => {
+        if (!business) return;
+        const currentSlug = business.slug;
+        try {
+            const updated = await resetBusinessSlug(currentSlug);
+            setBusiness({
+                ...updated,
+                accountsCount: business.accountsCount,
+                invoicesCount: business.invoicesCount,
+            });
+            router.replace(`/business/${updated.slug}`);
+            toast.success('Згенеровано нове посилання');
+        } catch (err) {
+            toast.error(getApiMessage(extractApiErrorCode(err), 'businesses'));
+        }
+    }, [business, router]);
+
     const handleDelete = useCallback(() => {
         if (!business) return;
         const slug = business.slug;
@@ -169,6 +187,7 @@ export default function BusinessSlugPage() {
                     business={business}
                     payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
                     onSave={handlePatch}
+                    onResetSlug={handleResetSlug}
                 />
                 <AccountsSection businessSlug={business.slug} />
                 <RequisitesCard business={business} onSave={handlePatch} />

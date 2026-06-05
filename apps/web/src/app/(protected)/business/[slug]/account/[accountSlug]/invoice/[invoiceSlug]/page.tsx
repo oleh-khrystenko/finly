@@ -14,6 +14,7 @@ import {
     getApiMessage,
     getBusinessBySlug,
     getInvoiceBySlug,
+    resetInvoiceSlug,
     updateInvoice,
 } from '@/shared/api';
 import { ENV } from '@/shared/config/env';
@@ -204,6 +205,32 @@ export default function InvoiceCabinetPage() {
             invoiceSlug: invoice.slug,
         });
 
+    const handleResetSlug = async () => {
+        const businessSlug = business.slug;
+        const invoiceSlug = invoice.slug;
+        try {
+            const updated = await resetInvoiceSlug(
+                businessSlug,
+                accountSlug,
+                invoiceSlug
+            );
+            setData((prev) =>
+                prev &&
+                prev.business.slug === businessSlug &&
+                prev.paramAcc === accountSlug &&
+                prev.invoice.slug === invoiceSlug
+                    ? { ...prev, invoice: updated }
+                    : prev
+            );
+            router.replace(
+                `/business/${businessSlug}/account/${accountSlug}/invoice/${updated.slug}`
+            );
+            toast.success('Згенеровано нове посилання');
+        } catch (err) {
+            toast.error(getApiMessage(extractErrorCode(err), 'invoices'));
+        }
+    };
+
     const handleDelete = () => {
         const businessSlug = business.slug;
         const invoiceSlug = invoice.slug;
@@ -279,6 +306,7 @@ export default function InvoiceCabinetPage() {
                     accountSlug={accountSlug}
                     payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
                     onSave={onSave}
+                    onResetSlug={handleResetSlug}
                 />
                 <InvoiceQrSection
                     invoice={invoice}

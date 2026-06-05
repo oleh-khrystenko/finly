@@ -58,6 +58,16 @@ export async function updateAccount(
     return data.data;
 }
 
+export async function resetAccountSlug(
+    businessSlug: string,
+    accountSlug: string
+): Promise<Account> {
+    const { data } = await apiClient.post<{ data: Account }>(
+        `/businesses/me/${encodeURIComponent(businessSlug)}/accounts/${encodeURIComponent(accountSlug)}/reset-slug`
+    );
+    return data.data;
+}
+
 export async function deleteAccount(
     businessSlug: string,
     accountSlug: string

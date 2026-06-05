@@ -105,7 +105,7 @@ export default function InvoiceSettingsSection({ account, onSave }: Props) {
                 renderEdit={renderEdit}
                 onSave={handleSave}
             />
-            <p className="text-muted-foreground mt-3 text-xs">
+            <p className="text-muted-foreground mt-3 text-sm">
                 Цей варіант буде обраний за замовчуванням, коли ви натискатимете
                 «Виставити інвойс» з цього рахунку.
             </p>

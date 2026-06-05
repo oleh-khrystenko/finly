@@ -2,11 +2,10 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, ExternalLink } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { AxiosError } from 'axios';
 import { toast } from 'sonner';
 import {
-    BANK_LABEL,
     deriveAccountLabel,
     type AccountWithCounts,
     type BusinessWithCounts,
@@ -16,6 +15,7 @@ import {
     getAccountBySlug,
     getApiMessage,
     getBusinessBySlug,
+    resetAccountSlug,
     updateAccount,
 } from '@/shared/api';
 import { ENV } from '@/shared/config/env';
@@ -25,13 +25,13 @@ import UiPageContainer from '@/shared/ui/UiPageContainer';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
 import {
-    BasicSection,
     DangerSection,
-    IbanSection,
+    EditableAccountName,
     InvoiceSettingsSection,
     InvoicesSection,
     PublicSection,
     QrSection,
+    RequisitesSection,
     scheduleAccountDeleteWithUndo,
     useDeleteAccountConfirmStore,
 } from '@/features/account-edit';
@@ -40,13 +40,12 @@ import {
  * Sprint 9 §9.2 §6 — кабінет рахунку
  * `/business/{slug}/account/{accountSlug}`.
  *
- * **6 секцій:**
- *  1. BasicSection (name inline-edit; bank label readonly)
- *  2. IbanSection (readonly + copy)
- *  3. InvoiceSettingsSection (preset-default dropdown)
- *  4. InvoicesSection (paginated list інвойсів цього account-у)
- *  5. QrSection (рівно 2 NBU QR — primary + legacy)
- *  6. DangerSection (видалення з two-line-of-defense pre-check)
+ * **Секції:**
+ *  1. RequisitesSection (банк-label + IBAN readonly + copy; об'єднана)
+ *  2. InvoiceSettingsSection (preset-default dropdown)
+ *  3. InvoicesSection (paginated list інвойсів цього account-у)
+ *  4. QrSection (рівно 2 NBU QR — primary + legacy)
+ *  5. DangerSection (видалення з two-line-of-defense pre-check)
  *
  * **Delete-flow** (§SP-3 two-line-of-defense):
  *  - `invoicesCount > 0` (pre-check з вже-fetched `AccountWithCounts`) →
@@ -204,24 +203,32 @@ export default function AccountCabinetPage() {
             accountSlug: account.slug,
         });
 
-    const publicUrl = `${ENV.NEXT_PUBLIC_PAY_PUBLIC_URL.replace(/\/$/, '')}/${business.slug}/${account.slug}`;
-    const bankLabel =
-        account.bankCode !== null ? BANK_LABEL[account.bankCode] : null;
+    const handleResetSlug = async () => {
+        const businessSlug = business.slug;
+        const accountSlug = account.slug;
+        try {
+            const updated = await resetAccountSlug(businessSlug, accountSlug);
+            setData((prev) =>
+                prev &&
+                prev.business.slug === businessSlug &&
+                prev.account.slug === accountSlug
+                    ? {
+                          ...prev,
+                          account: {
+                              ...updated,
+                              invoicesCount: prev.account.invoicesCount,
+                          },
+                      }
+                    : prev
+            );
+            router.replace(`/business/${businessSlug}/account/${updated.slug}`);
+            toast.success('Згенеровано нове посилання');
+        } catch (err) {
+            toast.error(getApiMessage(extractErrorCode(err), 'accounts'));
+        }
+    };
+
     const last4 = account.iban.slice(-4);
-    // Без власної назви заголовком стає derived-лейбл ("monobank •4847"),
-    // а parenthetical-disambiguator опускаємо (інакше дубль). З назвою —
-    // назва + parenthetical (банк + маска) як завжди.
-    const headingTitle = deriveAccountLabel({
-        name: account.name,
-        bankCode: account.bankCode,
-        ibanMask: `•${last4}`,
-    });
-    const headingParenthetical =
-        account.name === null
-            ? ''
-            : bankLabel
-              ? ` (${bankLabel} •${last4})`
-              : ` (•${last4})`;
 
     const handleDelete = () => {
         // §SP-3 first-line-of-defense — frontend pre-check.
@@ -269,30 +276,14 @@ export default function AccountCabinetPage() {
                 >
                     Назад до бізнесу
                 </UiButton>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                    <h1 className="text-foreground min-w-0 text-2xl font-bold tracking-tight md:text-3xl">
-                        {headingTitle}
-                        <span className="text-muted-foreground font-normal">
-                            {headingParenthetical}
-                        </span>
-                    </h1>
-                    <UiButton
-                        as="a"
-                        href={publicUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        variant="outline"
-                        size="sm"
-                        IconRight={<ExternalLink />}
-                    >
-                        Відкрити в новій вкладці
-                    </UiButton>
-                </div>
+                <EditableAccountName
+                    account={account}
+                    onSave={(name) => onSaveAccount({ name })}
+                />
             </div>
 
             <div className="space-y-4">
-                <BasicSection account={account} onSave={onSaveAccount} />
-                <IbanSection account={account} />
+                <RequisitesSection account={account} />
                 <InvoiceSettingsSection
                     account={account}
                     onSave={onSaveAccount}
@@ -310,6 +301,7 @@ export default function AccountCabinetPage() {
                     businessSlug={business.slug}
                     payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
                     onSave={onSaveAccount}
+                    onResetSlug={handleResetSlug}
                 />
                 <QrSection account={account} businessSlug={business.slug} />
                 <DangerSection onDelete={handleDelete} />

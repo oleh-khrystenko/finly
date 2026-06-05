@@ -68,14 +68,14 @@ export default function InvoiceCard({
     };
 
     return (
-        <div className="border-border bg-card flex flex-col gap-3 rounded-lg border p-4">
+        <div className="border-border bg-card flex flex-col gap-3 rounded-lg border p-5">
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                    <p className="text-foreground text-base font-semibold">
+                    <p className="text-foreground text-xl font-semibold tracking-tight">
                         {formattedAmount ?? 'Без суми (клієнт вводить)'}
                     </p>
                     <p
-                        className="text-muted-foreground mt-1 truncate font-mono text-xs"
+                        className="text-muted-foreground mt-1 truncate font-mono text-base"
                         title={invoice.slug}
                     >
                         {invoice.slug}
@@ -86,7 +86,7 @@ export default function InvoiceCard({
 
             <p
                 className={composeClasses(
-                    'line-clamp-2 text-sm',
+                    'line-clamp-2 text-base',
                     isRuntimeInherited
                         ? 'text-muted-foreground/70 italic'
                         : 'text-muted-foreground'

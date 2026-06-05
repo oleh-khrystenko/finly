@@ -62,6 +62,13 @@ export async function updateBusiness(
     return data.data;
 }
 
+export async function resetBusinessSlug(slug: string): Promise<Business> {
+    const { data } = await apiClient.post<{ data: Business }>(
+        `/businesses/me/${encodeURIComponent(slug)}/reset-slug`
+    );
+    return data.data;
+}
+
 export async function deleteBusiness(slug: string): Promise<CascadeDeleteResult> {
     const { data } = await apiClient.delete<{ data: CascadeDeleteResult }>(
         `/businesses/me/${encodeURIComponent(slug)}`

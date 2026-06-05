@@ -423,6 +423,20 @@ export class AccountsService {
         });
     }
 
+    /**
+     * Скидання slug-у рахунку на свіжий випадковий (дзеркало
+     * `BusinessesService.resetSlug`). Початковий random-tail не зберігається —
+     * "скидання" генерує новий унікальний slug у межах бізнесу і проганяє через
+     * `update`, що заходить у rename-TX (history + anti-squatting). Reserved-
+     * check рахунку не потрібен (вкладений сегмент, §account-slug-generator).
+     */
+    async resetSlug(account: AccountDocument): Promise<AccountDocument> {
+        const newSlug = await this.slugGenerator.generateUnique(
+            account.businessId
+        );
+        return this.update(account, { slug: newSlug });
+    }
+
     private async assertSlugAvailable(
         businessId: Types.ObjectId,
         accountId: Types.ObjectId,

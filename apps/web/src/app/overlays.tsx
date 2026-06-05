@@ -26,6 +26,15 @@ const DeleteInvoiceConfirmDialog = dynamic(
 const DeleteAccountConfirmDialog = dynamic(
     () => import('@/features/account-edit/DeleteAccountConfirmDialog')
 );
+const ResetBusinessSlugConfirmDialog = dynamic(
+    () => import('@/features/business-edit/ResetBusinessSlugConfirmDialog')
+);
+const ResetAccountSlugConfirmDialog = dynamic(
+    () => import('@/features/account-edit/ResetAccountSlugConfirmDialog')
+);
+const ResetInvoiceSlugConfirmDialog = dynamic(
+    () => import('@/features/invoice-edit/ResetInvoiceSlugConfirmDialog')
+);
 const SlugPresetWarningDialog = dynamic(
     () => import('@/entities/invoice/SlugPresetWarningDialog')
 );
@@ -44,6 +53,9 @@ export function Overlays() {
             <DeleteBusinessConfirmDialog />
             <DeleteInvoiceConfirmDialog />
             <DeleteAccountConfirmDialog />
+            <ResetBusinessSlugConfirmDialog />
+            <ResetAccountSlugConfirmDialog />
+            <ResetInvoiceSlugConfirmDialog />
             <SlugPresetWarningDialog />
             <MobileMenuSheet />
         </>

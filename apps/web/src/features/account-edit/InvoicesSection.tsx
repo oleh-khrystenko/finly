@@ -211,7 +211,7 @@ export default function InvoicesSection({
             )}
 
             {isErrorCurrent && (
-                <p className="text-destructive py-4 text-sm">
+                <p className="text-destructive py-4 text-base">
                     {error?.message}
                 </p>
             )}
@@ -259,15 +259,15 @@ export default function InvoicesSection({
 
 function EmptyState({ createHref }: { createHref: string }) {
     return (
-        <div className="flex flex-col items-center gap-4 py-8 text-center">
-            <div className="bg-muted text-muted-foreground flex size-12 items-center justify-center rounded-full">
-                <FileText className="size-6" />
+        <div className="flex flex-col items-center gap-4 py-10 text-center">
+            <div className="bg-muted text-muted-foreground flex size-14 items-center justify-center rounded-full">
+                <FileText className="size-7" />
             </div>
-            <div className="space-y-1">
-                <p className="text-foreground text-sm font-medium">
+            <div className="space-y-1.5">
+                <p className="text-foreground text-lg font-semibold">
                     Поки немає виставлених інвойсів
                 </p>
-                <p className="text-muted-foreground max-w-sm text-xs">
+                <p className="text-muted-foreground max-w-sm text-base">
                     Натисніть «Виставити інвойс» — клієнт отримає посилання з
                     сумою і призначенням, готове для оплати.
                 </p>
@@ -276,7 +276,7 @@ function EmptyState({ createHref }: { createHref: string }) {
                 as="link"
                 href={createHref}
                 variant="filled"
-                size="sm"
+                size="md"
                 IconLeft={<Plus />}
             >
                 Виставити інвойс
