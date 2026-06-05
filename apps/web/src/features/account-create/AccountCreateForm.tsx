@@ -110,12 +110,12 @@ export default function AccountCreateForm({
             const created = await createAccount(businessSlug, parsed.data);
             if (landingRecovery) {
                 useQrLandingDraftStore.getState().clearAll();
-                toast.success('Бізнес і рахунок збережено');
+                toast.success('Бізнес і реквізити збережено');
                 router.replace(
                     `/business/${businessSlug}/account/${created.slug}`
                 );
             } else {
-                toast.success('Рахунок створено');
+                toast.success('Реквізити створено');
                 router.replace(
                     `/business/${businessSlug}/account/${created.slug}`
                 );
@@ -146,7 +146,7 @@ export default function AccountCreateForm({
                 <UiInput
                     label="IBAN"
                     placeholder="UA213223130000026007233566001"
-                    description="IBAN неможливо буде змінити після створення. Якщо помилитеся — видаліть рахунок і створіть новий."
+                    description="IBAN неможливо буде змінити після створення. Якщо помилитеся — видаліть реквізити і створіть нові."
                     inputMode="text"
                     {...ibanField}
                     onChange={(e) => {
@@ -182,7 +182,7 @@ export default function AccountCreateForm({
                     size="md"
                     disabled={submitting || !isValid}
                 >
-                    {submitting ? 'Створюю...' : 'Створити рахунок'}
+                    {submitting ? 'Створюю...' : 'Створити реквізити'}
                 </UiButton>
             </div>
         </form>

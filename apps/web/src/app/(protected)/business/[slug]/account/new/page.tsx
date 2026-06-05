@@ -134,7 +134,7 @@ function NewAccountContent() {
 
     return (
         <UiPageContainer className="space-y-6 py-8 md:py-12">
-            <UiPageHeading>Додати рахунок</UiPageHeading>
+            <UiPageHeading>Додати реквізити</UiPageHeading>
             <AccountCreateForm
                 businessSlug={business.slug}
                 prefillIban={prefillIban}

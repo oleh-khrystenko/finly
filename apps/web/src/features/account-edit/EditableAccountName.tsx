@@ -93,7 +93,7 @@ export default function EditableAccountName({ account, onSave }: Props) {
                     autoFocus
                     placeholder={derivedLabel}
                     maxLength={60}
-                    aria-label="Назва рахунку"
+                    aria-label="Назва реквізитів"
                 />
                 <div className="flex justify-end gap-2">
                     <UiButton

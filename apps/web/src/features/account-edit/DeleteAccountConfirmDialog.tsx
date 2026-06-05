@@ -38,7 +38,7 @@ export default function DeleteAccountConfirmDialog() {
                 onConfirm?.();
                 close();
             }}
-            title="Видалити рахунок?"
+            title="Видалити реквізити?"
             description={
                 account
                     ? `«${deriveAccountLabel({

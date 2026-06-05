@@ -262,11 +262,11 @@ export default function InvoiceCabinetPage() {
                     IconLeft={<ArrowLeft />}
                     className="self-start px-0"
                 >
-                    Назад до рахунку
+                    Назад до реквізитів
                 </UiButton>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                     <h1 className="text-foreground min-w-0 text-2xl font-bold tracking-tight md:text-3xl">
-                        Інвойс{' '}
+                        Рахунок{' '}
                         <span className="font-mono break-all">
                             №{invoice.slug}
                         </span>
@@ -327,7 +327,7 @@ export default function InvoiceCabinetPage() {
                             onClick={handleDelete}
                             IconLeft={<Trash2 />}
                         >
-                            Видалити інвойс
+                            Видалити рахунок
                         </UiButton>
                     </div>
                 </UiSectionCard>
@@ -339,9 +339,9 @@ export default function InvoiceCabinetPage() {
 function ErrorPage({ code }: { code: string }) {
     const message =
         code === 'INVOICE_NOT_FOUND' || code === 'NOT_FOUND'
-            ? 'Інвойс не знайдено'
+            ? 'Рахунок не знайдено'
             : code === 'ACCOUNT_NOT_FOUND'
-              ? 'Рахунок не знайдено'
+              ? 'Реквізити не знайдено'
               : code === 'BUSINESS_NOT_FOUND'
                 ? 'Бізнес не знайдено'
                 : code === 'BUSINESS_ACCESS_DENIED'
@@ -352,7 +352,7 @@ function ErrorPage({ code }: { code: string }) {
         <UiPageContainer className="space-y-6 py-12">
             <UiSectionCard title={message}>
                 <p className="text-muted-foreground mt-2 text-sm">
-                    Поверніться до бізнесу і оберіть інший рахунок.
+                    Поверніться до бізнесу і оберіть інші реквізити.
                 </p>
                 <div className="mt-4">
                     <UiButton

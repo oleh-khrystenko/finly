@@ -433,7 +433,7 @@ export default function CreateInvoiceForm({ business, account }: Props) {
                 account.slug,
                 payload
             );
-            toast.success('Інвойс створено');
+            toast.success('Рахунок створено');
             router.replace(
                 `/business/${business.slug}/account/${account.slug}/invoice/${created.slug}`
             );
@@ -609,7 +609,7 @@ export default function CreateInvoiceForm({ business, account }: Props) {
             </UiSectionCard>
 
             {/* Slug-input — flat 6-option dropdown */}
-            <UiSectionCard title="Як назвати інвойс">
+            <UiSectionCard title="Як назвати рахунок">
                 <div className="space-y-3">
                     <UiSelect
                         options={SLUG_OPTIONS}
@@ -699,7 +699,7 @@ export default function CreateInvoiceForm({ business, account }: Props) {
                         submitting || formState.isSubmitting || purposeOverflow
                     }
                 >
-                    {submitting ? 'Створюю...' : 'Створити інвойс'}
+                    {submitting ? 'Створюю...' : 'Створити рахунок'}
                 </UiButton>
             </div>
         </form>

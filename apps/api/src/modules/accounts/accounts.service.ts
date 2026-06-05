@@ -489,13 +489,13 @@ export class AccountsService {
                 if (count > 0) {
                     const invoicesPhrase = pluralizeUa(
                         count,
-                        'виставлений інвойс',
-                        'виставлені інвойси',
-                        'виставлених інвойсів'
+                        'виставлений рахунок',
+                        'виставлені рахунки',
+                        'виставлених рахунків'
                     );
                     throw new ConflictException({
                         code: RESPONSE_CODE.ACCOUNT_HAS_INVOICES,
-                        message: `Цей рахунок має ${invoicesPhrase}. Спочатку видаліть їх або весь бізнес`,
+                        message: `Ці реквізити мають ${invoicesPhrase}. Спочатку видаліть їх або весь бізнес`,
                     });
                 }
                 await this.counterModel.deleteMany({ accountId }, { session });

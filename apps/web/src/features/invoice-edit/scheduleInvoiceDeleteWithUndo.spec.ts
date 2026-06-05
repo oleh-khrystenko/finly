@@ -92,7 +92,7 @@ describe('scheduleInvoiceDeleteWithUndo', () => {
             onCancelled: jest.fn(),
         });
         expect(mockToast).toHaveBeenCalledWith(
-            `Інвойс «${INV}» буде видалено`,
+            `Рахунок «${INV}» буде видалено`,
             expect.objectContaining({
                 duration: INVOICE_UNDO_TIMEOUT_MS,
                 action: expect.objectContaining({ label: 'Скасувати' }),

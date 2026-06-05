@@ -44,7 +44,7 @@ export default function RequisitesSection({ account }: Props) {
     };
 
     return (
-        <UiSectionCard title="Реквізити">
+        <UiSectionCard title="Банківські дані">
             <dl className="mt-6 space-y-5">
                 {bankLabel && (
                     <div>
@@ -80,7 +80,7 @@ export default function RequisitesSection({ account }: Props) {
             </dl>
 
             <p className="text-muted-foreground mt-4 text-sm">
-                IBAN не можна змінити після створення рахунку.
+                IBAN не можна змінити після створення реквізитів.
             </p>
         </UiSectionCard>
     );

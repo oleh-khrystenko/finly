@@ -105,12 +105,12 @@ export default function AccountsSection({ businessSlug }: Props) {
                 // між frontend pre-check і backend race-fail-message.
                 const phrase = pluralizeUa(
                     account.invoicesCount,
-                    'виставлений інвойс',
-                    'виставлені інвойси',
-                    'виставлених інвойсів'
+                    'виставлений рахунок',
+                    'виставлені рахунки',
+                    'виставлених рахунків'
                 );
                 toast.error(
-                    `Цей рахунок має ${phrase}. Спочатку видаліть їх або весь бізнес`
+                    `Ці реквізити мають ${phrase}. Спочатку видаліть їх або весь бізнес`
                 );
                 return;
             }
@@ -138,7 +138,7 @@ export default function AccountsSection({ businessSlug }: Props) {
     return (
         <UiSectionCard
             id="accounts"
-            title="Рахунки"
+            title="Реквізити"
             headerRight={
                 visibleItems !== null && visibleItems.length > 0 ? (
                     <UiButton
@@ -148,7 +148,7 @@ export default function AccountsSection({ businessSlug }: Props) {
                         size="md"
                         IconLeft={<Plus />}
                     >
-                        Додати рахунок
+                        Додати реквізити
                     </UiButton>
                 ) : undefined
             }
@@ -194,12 +194,7 @@ interface CardProps {
 function AccountCard({ account, businessSlug, onDelete }: CardProps) {
     const mask = `•${account.iban.slice(-4)}`;
     const href = `/business/${businessSlug}/account/${account.slug}`;
-    const invoicesLabel = pluralizeUa(
-        account.invoicesCount,
-        'інвойс',
-        'інвойси',
-        'інвойсів'
-    );
+    const invoicesLabel = `Рахунки: ${account.invoicesCount} шт`;
     // Назва-заголовок: користувацька name або, за її відсутності, банк-лейбл
     // (а на нерозпізнаному банку — сама маска). Окремі bank-/mask-рядки нижче
     // рендеряться лише коли не дублюють заголовок — це прибирає кострубату
@@ -266,11 +261,11 @@ function EmptyState({ createHref }: { createHref: string }) {
             </div>
             <div className="space-y-1.5">
                 <p className="text-foreground text-lg font-semibold">
-                    Поки немає жодного рахунку
+                    Поки немає жодних реквізитів
                 </p>
                 <p className="text-muted-foreground max-w-sm text-base">
-                    Додайте перший банківський рахунок — клієнт зможе оплатити
-                    через QR-код або посилання.
+                    Додайте перші реквізити — клієнт зможе оплатити через QR-код
+                    або посилання.
                 </p>
             </div>
             <UiButton
@@ -280,7 +275,7 @@ function EmptyState({ createHref }: { createHref: string }) {
                 size="md"
                 IconLeft={<Plus />}
             >
-                Додати рахунок
+                Додати реквізити
             </UiButton>
         </div>
     );

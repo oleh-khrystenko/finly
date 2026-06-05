@@ -9,8 +9,8 @@ export const HELP_CATEGORIES: readonly HelpCategory[] = [
     },
     {
         id: 'accounts',
-        title: 'Банківські рахунки',
-        description: 'Як додати рахунок і навіщо їх може бути кілька.',
+        title: 'Реквізити',
+        description: 'Як додати реквізити і навіщо їх може бути кілька.',
     },
     {
         id: 'invoices',

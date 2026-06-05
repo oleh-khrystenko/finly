@@ -64,7 +64,7 @@ export function scheduleInvoiceDeleteWithUndo({
         );
     }, INVOICE_UNDO_TIMEOUT_MS);
 
-    const toastId = toast(`Інвойс «${invoiceSlug}» буде видалено`, {
+    const toastId = toast(`Рахунок «${invoiceSlug}» буде видалено`, {
         duration: INVOICE_UNDO_TIMEOUT_MS,
         action: {
             label: 'Скасувати',

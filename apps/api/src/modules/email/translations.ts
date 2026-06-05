@@ -12,10 +12,6 @@ function pluralBusinesses(count: number): string {
     return PLURAL_RULES_UK.select(count) === 'few' ? 'бізнеси' : 'бізнесів';
 }
 
-function pluralAccounts(count: number): string {
-    return PLURAL_RULES_UK.select(count) === 'few' ? 'рахунки' : 'рахунків';
-}
-
 function pluralDays(count: number): string {
     const form = PLURAL_RULES_UK.select(count);
     if (form === 'one') return 'день';
@@ -34,11 +30,11 @@ export const EMAIL_TEXT = {
             multiSubject: 'Завершіть налаштування акаунту Finly',
             cta: 'Заповнити профіль',
             singleBody(businessName: string, deletionDays: number): string {
-                return `Доброго дня. Ви створили бізнес «${businessName}» через Finly, але ще не дозаповнили профіль (імʼя і прізвище). Завершіть налаштування у кабінеті, щоб зберегти рахунок і виставляти інвойси клієнтам. Без заповненого профілю рахунок буде автоматично видалено через ${deletionDays} ${pluralDays(deletionDays)} від створення бізнесу.`;
+                return `Доброго дня. Ви створили бізнес «${businessName}» через Finly, але ще не дозаповнили профіль (імʼя і прізвище). Завершіть налаштування у кабінеті, щоб зберегти реквізити і виставляти рахунки клієнтам. Без заповненого профілю реквізити буде автоматично видалено через ${deletionDays} ${pluralDays(deletionDays)} від створення бізнесу.`;
             },
             multiBody(businessNames: string[], deletionDays: number): string {
                 const count = businessNames.length;
-                return `Доброго дня. Ви створили ${count} ${pluralBusinesses(count)} через Finly: ${formatBusinessList(businessNames)}, але ще не дозаповнили профіль. Завершіть налаштування у кабінеті, щоб зберегти ${pluralAccounts(count)}. Без заповненого профілю ${pluralAccounts(count)} буде автоматично видалено через ${deletionDays} ${pluralDays(deletionDays)} від створення першого бізнесу.`;
+                return `Доброго дня. Ви створили ${count} ${pluralBusinesses(count)} через Finly: ${formatBusinessList(businessNames)}, але ще не дозаповнили профіль. Завершіть налаштування у кабінеті, щоб зберегти реквізити. Без заповненого профілю реквізити буде автоматично видалено через ${deletionDays} ${pluralDays(deletionDays)} від створення першого бізнесу.`;
             },
         },
         finalWarning: {

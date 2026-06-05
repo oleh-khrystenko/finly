@@ -135,7 +135,7 @@ describe('CreateInvoiceForm — slugInput happy paths', () => {
 
     async function clickSubmit(): Promise<void> {
         const submitBtn = screen.getByRole('button', {
-            name: /Створити інвойс/,
+            name: /Створити рахунок/,
         });
         await act(async () => {
             fireEvent.click(submitBtn);
@@ -258,7 +258,7 @@ describe('CreateInvoiceForm — humanPart live-validation', () => {
             await act(async () => {
                 fireEvent.click(
                     screen.getByRole('button', {
-                        name: /Створити інвойс/,
+                        name: /Створити рахунок/,
                     })
                 );
             });
@@ -276,7 +276,7 @@ describe('CreateInvoiceForm — humanPart live-validation', () => {
         await act(async () => {
             fireEvent.click(
                 screen.getByRole('button', {
-                    name: /Створити інвойс/,
+                    name: /Створити рахунок/,
                 })
             );
         });
@@ -420,7 +420,7 @@ describe('CreateInvoiceForm — required-fields validation', () => {
         await act(async () => {
             fireEvent.click(
                 screen.getByRole('button', {
-                    name: /Створити інвойс/,
+                    name: /Створити рахунок/,
                 })
             );
         });
@@ -438,7 +438,7 @@ describe('CreateInvoiceForm — required-fields validation', () => {
             });
         });
         const submitBtn = screen.getByRole('button', {
-            name: /Створити інвойс/,
+            name: /Створити рахунок/,
         });
         expect(submitBtn).toBeDisabled();
     });

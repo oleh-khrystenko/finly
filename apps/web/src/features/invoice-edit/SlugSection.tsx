@@ -134,7 +134,7 @@ export default function SlugSection({
                                 value={value}
                                 onChange={(e) => setValue(e.target.value)}
                                 error={error}
-                                aria-label="Адреса інвойсу"
+                                aria-label="Адреса рахунку"
                                 autoFocus
                                 autoCapitalize="off"
                                 autoCorrect="off"

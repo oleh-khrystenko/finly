@@ -18,7 +18,6 @@ import { getApiMessage, listBusinesses } from '@/shared/api';
 import { ENV } from '@/shared/config/env';
 import { useAuthStore } from '@/entities/user';
 import { usePendingDeletesStore } from '@/features/business-edit/pendingDeletesStore';
-import { pluralizeUa } from '@/shared/lib';
 import UiButton from '@/shared/ui/UiButton';
 import UiLink from '@/shared/ui/UiLink';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
@@ -251,22 +250,12 @@ function BusinessCard({
                 <div className="flex flex-wrap gap-x-3 gap-y-1">
                     <p className="text-muted-foreground inline-flex items-center gap-1 text-xs">
                         <CreditCard className="size-3.5" aria-hidden />
-                        {pluralizeUa(
-                            accountsCount,
-                            'рахунок',
-                            'рахунки',
-                            'рахунків'
-                        )}
+                        Реквізити: {accountsCount} шт
                     </p>
                     {invoicesCount > 0 && (
                         <p className="text-muted-foreground inline-flex items-center gap-1 text-xs">
                             <FileText className="size-3.5" aria-hidden />
-                            {pluralizeUa(
-                                invoicesCount,
-                                'інвойс',
-                                'інвойси',
-                                'інвойсів'
-                            )}
+                            Рахунки: {invoicesCount} шт
                         </p>
                     )}
                 </div>

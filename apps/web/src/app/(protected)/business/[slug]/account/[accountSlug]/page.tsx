@@ -234,12 +234,12 @@ export default function AccountCabinetPage() {
         if (account.invoicesCount > 0) {
             const phrase = pluralizeUa(
                 account.invoicesCount,
-                'виставлений інвойс',
-                'виставлені інвойси',
-                'виставлених інвойсів'
+                'виставлений рахунок',
+                'виставлені рахунки',
+                'виставлених рахунків'
             );
             toast.error(
-                `Цей рахунок має ${phrase}. Спочатку видаліть їх або весь бізнес`
+                `Ці реквізити мають ${phrase}. Спочатку видаліть їх або весь бізнес`
             );
             return;
         }
@@ -312,9 +312,9 @@ export default function AccountCabinetPage() {
 function ErrorPage({ code }: { code: string }) {
     const message =
         code === 'ACCOUNT_NOT_FOUND' || code === 'NOT_FOUND'
-            ? 'Рахунок не знайдено'
+            ? 'Реквізити не знайдено'
             : code === 'ACCOUNT_ACCESS_DENIED'
-              ? 'У вас немає доступу до цього рахунку'
+              ? 'У вас немає доступу до цих реквізитів'
               : code === 'BUSINESS_NOT_FOUND'
                 ? 'Бізнес не знайдено'
                 : code === 'BUSINESS_ACCESS_DENIED'
@@ -325,7 +325,7 @@ function ErrorPage({ code }: { code: string }) {
         <UiPageContainer className="space-y-6 py-12">
             <UiSectionCard title={message}>
                 <p className="text-muted-foreground mt-2 text-sm">
-                    Поверніться до бізнесу і оберіть інший рахунок.
+                    Поверніться до бізнесу і оберіть інші реквізити.
                 </p>
                 <div className="mt-4">
                     <UiButton

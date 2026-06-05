@@ -60,7 +60,7 @@ export default function PublicSection({
     };
 
     return (
-        <UiSectionCard title="Посилання на сторінку рахунку">
+        <UiSectionCard title="Посилання на сторінку реквізитів">
             <div className="mt-4">
                 <UiEditableField<string>
                     value={account.slug}
@@ -132,7 +132,7 @@ export default function PublicSection({
                                 value={value}
                                 onChange={(e) => setValue(e.target.value)}
                                 error={error}
-                                aria-label="Адреса сторінки рахунку"
+                                aria-label="Адреса сторінки реквізитів"
                                 autoFocus
                                 autoCapitalize="off"
                                 autoCorrect="off"

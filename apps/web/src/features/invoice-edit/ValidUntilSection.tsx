@@ -39,7 +39,7 @@ export default function ValidUntilSection({ invoice, onSave }: Props) {
             }
         >
             <UiEditableField<Date | null>
-                label="До якої дати інвойс дійсний"
+                label="До якої дати рахунок дійсний"
                 value={invoice.validUntil}
                 renderRead={(v) =>
                     v === null

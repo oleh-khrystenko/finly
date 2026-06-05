@@ -129,13 +129,13 @@ const ERRORS: Record<string, MessageDict> = {
     // ConflictException.message) — frontend toast.error читає поле message
     // напряму, mapApiCode-намір не потрібен.
     accounts: {
-        account_not_found: 'Рахунок не знайдено',
-        account_access_denied: 'У вас немає доступу до цього рахунку',
+        account_not_found: 'Реквізити не знайдено',
+        account_access_denied: 'У вас немає доступу до цих реквізитів',
         account_slug_generation_failed:
-            'Не вдалося згенерувати рахунок. Спробуйте ще раз',
+            'Не вдалося згенерувати реквізити. Спробуйте ще раз',
         account_iban_duplicate: 'Цей IBAN вже доданий до бізнесу',
         account_create_failed:
-            'Не вдалося створити рахунок. Спробуйте ще раз',
+            'Не вдалося створити реквізити. Спробуйте ще раз',
         // Sprint 15 — vanity-slug edit рахунку: посилання зайняте іншим
         // рахунком цього бізнесу (поточний slug або історія перейменувань).
         slug_taken: 'Це посилання вже зайняте. Оберіть інше',
@@ -143,9 +143,9 @@ const ERRORS: Record<string, MessageDict> = {
             'Забагато запитів. Зачекайте хвилину і спробуйте ще раз',
     },
     invoices: {
-        // Sprint 9 disambiguation — слово "рахунок" відведено під Account
-        // (банківський рахунок). Invoice-домен везде — "інвойс".
-        invoice_not_found: 'Інвойс не знайдено',
+        // У UI "рахунок" — це виставлений документ (Invoice). Банківський
+        // рахунок (Account) у UI називається "реквізити".
+        invoice_not_found: 'Рахунок не знайдено',
         invoice_slug_generation_failed:
             'Не вдалося згенерувати посилання. Спробуйте ще раз',
         invoice_amount_locked_requires_amount:
@@ -155,7 +155,7 @@ const ERRORS: Record<string, MessageDict> = {
         // тож банер "Термін інвойсу минув" рендериться без переходу на цей
         // toast — код використовується тільки якщо клієнт прямо запитає
         // expired QR-image (e.g., cached link, scraping).
-        invoice_expired: 'Термін інвойсу минув',
+        invoice_expired: 'Термін рахунку минув',
         invoice_valid_until_in_past: 'Термін дії не може бути у минулому',
         // Sprint 15 — vanity-slug edit інвойсу: посилання зайняте іншим
         // інвойсом цього рахунку (поточний slug або історія перейменувань).

@@ -208,7 +208,7 @@ export default function InvoicesSection({
     return (
         <UiSectionCard
             id="invoices"
-            title="Інвойси"
+            title="Рахунки"
             headerRight={
                 <div className="flex items-center gap-2">
                     <div className="hidden sm:block">{numberingMenu}</div>
@@ -218,11 +218,11 @@ export default function InvoicesSection({
                             href={createInvoiceHref}
                             variant="filled"
                             size="md"
-                            aria-label="Виставити інвойс"
+                            aria-label="Виставити рахунок"
                             IconLeft={<Plus />}
                         >
                             <span className="hidden sm:inline">
-                                Виставити інвойс
+                                Виставити рахунок
                             </span>
                         </UiButton>
                     )}
@@ -294,10 +294,10 @@ function EmptyState({ createHref }: { createHref: string }) {
             </div>
             <div className="space-y-1.5">
                 <p className="text-foreground text-lg font-semibold">
-                    Поки немає виставлених інвойсів
+                    Поки немає виставлених рахунків
                 </p>
                 <p className="text-muted-foreground max-w-sm text-base">
-                    Натисніть «Виставити інвойс» — клієнт отримає посилання з
+                    Натисніть «Виставити рахунок» — клієнт отримає посилання з
                     сумою і призначенням, готове для оплати.
                 </p>
             </div>
@@ -308,7 +308,7 @@ function EmptyState({ createHref }: { createHref: string }) {
                 size="md"
                 IconLeft={<Plus />}
             >
-                Виставити інвойс
+                Виставити рахунок
             </UiButton>
         </div>
     );

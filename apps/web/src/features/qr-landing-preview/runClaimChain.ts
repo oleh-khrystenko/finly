@@ -81,7 +81,7 @@ export async function runClaimChain(
         // одразу після нібито повного `clearAll`.
         ctx.onSuccessFormReset?.();
         ctx.clearAll();
-        toast.success('Бізнес і рахунок збережено');
+        toast.success('Бізнес і реквізити збережено');
         ctx.router.replace(
             `/business/${businessSlug}/account/${account.slug}`
         );

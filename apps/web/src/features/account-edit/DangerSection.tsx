@@ -22,8 +22,8 @@ export default function DangerSection({ onDelete }: Props) {
                 посилання, не зможуть оплатити.
             </p>
             <p className="text-muted-foreground mt-2 text-base">
-                Якщо рахунок має виставлені інвойси — спочатку видаліть їх або
-                видаліть весь бізнес.
+                Якщо у реквізитах є виставлені рахунки — спочатку видаліть їх
+                або видаліть весь бізнес.
             </p>
             <div className="mt-4">
                 <UiButton
@@ -33,7 +33,7 @@ export default function DangerSection({ onDelete }: Props) {
                     onClick={onDelete}
                     IconLeft={<Trash2 />}
                 >
-                    Видалити рахунок
+                    Видалити реквізити
                 </UiButton>
             </div>
         </UiSectionCard>
