@@ -106,6 +106,13 @@ export const ENV = {
     AI_CHAT_MAX_TOKENS: parseInt(getEnvVar('AI_CHAT_MAX_TOKENS'), 10),
     AI_CHAT_IP_LIMIT: parseInt(getEnvVar('AI_CHAT_IP_LIMIT'), 10),
 
+    // Public help assistant (Sprint 16) — anon, no executions. Own short
+    // max-tokens (concise answers), own per-IP 24h limit and a global daily
+    // budget circuit-breaker, all separate from the cabinet AI chat above.
+    HELP_CHAT_MAX_TOKENS: parseInt(getEnvVar('HELP_CHAT_MAX_TOKENS'), 10),
+    HELP_CHAT_IP_LIMIT: parseInt(getEnvVar('HELP_CHAT_IP_LIMIT'), 10),
+    HELP_CHAT_DAILY_BUDGET: parseInt(getEnvVar('HELP_CHAT_DAILY_BUDGET'), 10),
+
     // Cloudflare R2 — media storage (presigned uploads, Google avatar re-upload).
     // R2_PUBLIC_URL hostname MUST match NEXT_PUBLIC_STORAGE_HOSTNAME on the web
     // side — otherwise next/image rejects uploaded photos at runtime.

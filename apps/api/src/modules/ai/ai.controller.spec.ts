@@ -5,6 +5,7 @@ import { EventEmitter } from 'events';
 import { AiController } from './ai.controller';
 import { AiService } from './ai.service';
 import { AiRateLimitGuard } from './guards/ai-rate-limit.guard';
+import { HelpChatRateLimitGuard } from './guards/help-chat-rate-limit.guard';
 import type { ReservationTicket } from '../users/interfaces/reservation';
 
 const mockTicket: ReservationTicket = {
@@ -65,6 +66,8 @@ describe('AiController', () => {
             providers: [{ provide: AiService, useValue: mockAiService }],
         })
             .overrideGuard(AiRateLimitGuard)
+            .useValue({ canActivate: () => true })
+            .overrideGuard(HelpChatRateLimitGuard)
             .useValue({ canActivate: () => true })
             .compile();
 

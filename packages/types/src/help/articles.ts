@@ -1,9 +1,9 @@
-import type { HelpArticle } from '../types';
+import type { HelpArticle } from './types';
 
 /**
- * Реєстр статей довідки (scaffold). Тіло — markdown, єдине джерело правди для
- * сторінки і для бази знань AI (Sprint 16). Фінальну копію готує копірайтер;
- * структура і slug-и стабільні.
+ * Help articles (scaffold copy). Body is markdown, the single source of truth
+ * for both the rendered page and the AI knowledge base (Sprint 16). Final copy
+ * is the copywriter's job; slugs are stable once published.
  */
 export const HELP_ARTICLES: readonly HelpArticle[] = [
     {

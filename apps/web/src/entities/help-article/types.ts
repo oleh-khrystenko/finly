@@ -1,32 +1,12 @@
 import type { LucideIcon } from 'lucide-react';
+import type { HelpCategory as HelpCategoryData } from '@finly/types';
+
+export type { HelpArticle } from '@finly/types';
 
 /**
- * Категорія довідки. Групує статті у help-center і дає секцію на індексі
- * та блок у сайдбарі.
+ * Web view of a category: canonical data from `@finly/types` plus the lucide
+ * icon (presentation concern that does not belong in the shared content).
  */
-export interface HelpCategory {
-    id: string;
-    title: string;
-    description: string;
+export interface HelpCategory extends HelpCategoryData {
     icon: LucideIcon;
-}
-
-/**
- * Стаття довідки. `body` — markdown-рядок (єдине джерело правди: ця ж стаття
- * рендериться на сторінці і згодовується AI як база знань, Sprint 16).
- *
- * `slug` стабільний з моменту публікації: зміна ламає зовнішні посилання,
- * надруковані матеріали і SEO.
- */
-export interface HelpArticle {
-    slug: string;
-    title: string;
-    /** Короткий опис: SEO-meta + текст картки на індексі. */
-    description: string;
-    categoryId: HelpCategory['id'];
-    /** Порядок усередині категорії. */
-    order: number;
-    body: string;
-    /** Явні суміжні статті; якщо порожньо, fallback на сусідів категорії. */
-    related?: string[];
 }

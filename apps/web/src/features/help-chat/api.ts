@@ -1,4 +1,4 @@
-import type { AiChatSSEEvent } from '@finly/types';
+import type { HelpChatSSEEvent, HelpChatHistoryMessage } from '@finly/types';
 
 import { ENV } from '@/shared/config';
 
@@ -30,10 +30,7 @@ export class HelpChatError extends Error {
     }
 }
 
-export interface HelpChatHistoryItem {
-    role: 'user' | 'assistant';
-    content: string;
-}
+export type HelpChatHistoryItem = HelpChatHistoryMessage;
 
 async function parseErrorCode(response: Response): Promise<string> {
     try {
@@ -46,7 +43,7 @@ async function parseErrorCode(response: Response): Promise<string> {
 
 async function readSSEStream(
     response: Response,
-    onEvent: (event: AiChatSSEEvent) => void
+    onEvent: (event: HelpChatSSEEvent) => void
 ): Promise<void> {
     const reader = response.body?.getReader();
     if (!reader) return;
@@ -72,7 +69,7 @@ async function readSSEStream(
                 if (!json) continue;
 
                 try {
-                    onEvent(JSON.parse(json) as AiChatSSEEvent);
+                    onEvent(JSON.parse(json) as HelpChatSSEEvent);
                 } catch {
                     // ignore malformed events
                 }
@@ -92,7 +89,7 @@ async function readSSEStream(
 export async function streamHelpChat(
     message: string,
     history: HelpChatHistoryItem[],
-    onEvent: (event: AiChatSSEEvent) => void,
+    onEvent: (event: HelpChatSSEEvent) => void,
     signal?: AbortSignal
 ): Promise<void> {
     const response = await fetch(
