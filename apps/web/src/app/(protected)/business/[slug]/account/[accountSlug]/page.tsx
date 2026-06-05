@@ -27,7 +27,6 @@ import UiSpinner from '@/shared/ui/UiSpinner';
 import {
     DangerSection,
     EditableAccountName,
-    InvoiceSettingsSection,
     InvoicesSection,
     PublicSection,
     QrSection,
@@ -40,11 +39,11 @@ import {
  * Sprint 9 §9.2 §6 — кабінет рахунку
  * `/business/{slug}/account/{accountSlug}`.
  *
- * **Секції:**
- *  1. RequisitesSection (банк-label + IBAN readonly + copy; об'єднана)
- *  2. InvoiceSettingsSection (preset-default dropdown)
- *  3. InvoicesSection (paginated list інвойсів цього account-у)
- *  4. QrSection (рівно 2 NBU QR — primary + legacy)
+ * **Секції** (порядок: share-артефакти → робочий контент → довідка → danger):
+ *  1. PublicSection (посилання на публічну сторінку рахунку + slug-edit)
+ *  2. QrSection (рівно 2 NBU QR — primary + legacy — + URL-код)
+ *  3. InvoicesSection (список інвойсів + gear-меню нумерації у хедері)
+ *  4. RequisitesSection (банк-label + IBAN readonly + copy; об'єднана)
  *  5. DangerSection (видалення з two-line-of-defense pre-check)
  *
  * **Delete-flow** (§SP-3 two-line-of-defense):
@@ -283,19 +282,6 @@ export default function AccountCabinetPage() {
             </div>
 
             <div className="space-y-4">
-                <RequisitesSection account={account} />
-                <InvoiceSettingsSection
-                    account={account}
-                    onSave={onSaveAccount}
-                />
-                <InvoicesSection
-                    businessSlug={business.slug}
-                    accountSlug={account.slug}
-                    businessPaymentPurposeTemplate={
-                        business.paymentPurposeTemplate
-                    }
-                    payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
-                />
                 <PublicSection
                     account={account}
                     businessSlug={business.slug}
@@ -304,6 +290,19 @@ export default function AccountCabinetPage() {
                     onResetSlug={handleResetSlug}
                 />
                 <QrSection account={account} businessSlug={business.slug} />
+                <InvoicesSection
+                    businessSlug={business.slug}
+                    accountSlug={account.slug}
+                    businessPaymentPurposeTemplate={
+                        business.paymentPurposeTemplate
+                    }
+                    payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
+                    invoiceSlugPresetDefault={account.invoiceSlugPresetDefault}
+                    onSavePreset={(preset) =>
+                        onSaveAccount({ invoiceSlugPresetDefault: preset })
+                    }
+                />
+                <RequisitesSection account={account} />
                 <DangerSection onDelete={handleDelete} />
             </div>
         </UiPageContainer>

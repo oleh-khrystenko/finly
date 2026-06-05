@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FileText, Plus } from 'lucide-react';
 import { AxiosError } from 'axios';
-import { type Invoice } from '@finly/types';
+import { type Invoice, type SlugPreset } from '@finly/types';
 import { getApiMessage, listInvoices } from '@/shared/api';
 import UiButton from '@/shared/ui/UiButton';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
 import { usePendingInvoiceDeletesStore } from '@/features/invoice-edit';
 import InvoiceCard from './InvoiceCard';
+import InvoiceNumberingMenu from './InvoiceNumberingMenu';
 
 interface Props {
     businessSlug: string;
@@ -21,6 +22,12 @@ interface Props {
     businessPaymentPurposeTemplate: string;
     /** Public-payment-page origin для побудови copy-link URL. */
     payPublicOrigin: string;
+    /**
+     * Sprint 15 §UI — формат нумерації нових інвойсів цього рахунку, керований
+     * gear-меню у хедері (демоут зі старої окремої "Налаштування інвойсів").
+     */
+    invoiceSlugPresetDefault: SlugPreset | null;
+    onSavePreset: (preset: SlugPreset | null) => Promise<void>;
 }
 
 const PAGE_SIZE = 10;
@@ -76,6 +83,8 @@ export default function InvoicesSection({
     accountSlug,
     businessPaymentPurposeTemplate,
     payPublicOrigin,
+    invoiceSlugPresetDefault,
+    onSavePreset,
 }: Props) {
     const [data, setData] = useState<SectionData | null>(null);
     const [error, setError] = useState<SectionError | null>(null);
@@ -191,17 +200,26 @@ export default function InvoicesSection({
             id="invoices"
             title="Інвойси"
             headerRight={
-                visibleItems !== null && visibleItems.length > 0 ? (
-                    <UiButton
-                        as="link"
-                        href={createInvoiceHref}
-                        variant="filled"
-                        size="sm"
-                        IconLeft={<Plus />}
-                    >
-                        Виставити інвойс
-                    </UiButton>
-                ) : undefined
+                <div className="flex items-center gap-2">
+                    <InvoiceNumberingMenu
+                        value={invoiceSlugPresetDefault}
+                        onSave={onSavePreset}
+                    />
+                    {visibleItems !== null && visibleItems.length > 0 && (
+                        <UiButton
+                            as="link"
+                            href={createInvoiceHref}
+                            variant="filled"
+                            size="md"
+                            aria-label="Виставити інвойс"
+                            IconLeft={<Plus />}
+                        >
+                            <span className="hidden sm:inline">
+                                Виставити інвойс
+                            </span>
+                        </UiButton>
+                    )}
+                </div>
             }
         >
             {visibleItems === null && !isErrorCurrent && (
@@ -223,7 +241,7 @@ export default function InvoicesSection({
                 )}
 
             {visibleItems !== null && visibleItems.length > 0 && (
-                <div className="space-y-3">
+                <div className="mt-4 space-y-3">
                     <div className="grid gap-3 sm:grid-cols-2">
                         {visibleItems.map((inv) => (
                             <InvoiceCard
@@ -243,7 +261,7 @@ export default function InvoicesSection({
                             <UiButton
                                 type="button"
                                 variant="outline"
-                                size="sm"
+                                size="md"
                                 onClick={() => void loadMore()}
                                 loading={loadingMore}
                             >

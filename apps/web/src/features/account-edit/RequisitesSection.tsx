@@ -68,7 +68,7 @@ export default function RequisitesSection({ account }: Props) {
                         <UiButton
                             type="button"
                             variant="outline"
-                            size="sm"
+                            size="md"
                             onClick={() => void handleCopy()}
                             IconLeft={copied ? <Check /> : <Copy />}
                             className="shrink-0"
