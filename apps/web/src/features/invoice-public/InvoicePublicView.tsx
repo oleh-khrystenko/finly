@@ -6,9 +6,7 @@ import {
     type BankCode,
     type BusinessType,
 } from '@finly/types';
-import UiBankAppGrid from '@/shared/ui/UiBankAppGrid';
-import UiButton from '@/shared/ui/UiButton';
-import UiQrImage from '@/shared/ui/UiQrImage';
+import UiPaymentOptions from '@/shared/ui/UiPaymentOptions';
 import { formatKopecksAsHryvnia } from '@/entities/invoice';
 
 interface Props {
@@ -67,8 +65,8 @@ const DATE_LOCALE = 'uk-UA';
  * ({BANK_LABEL[bankCode]} {ibanMask})"`. Null-fallback rule (§SP-9):
  *  - `bankCode === null` → BANK_LABEL-prefix drop-ається, `ibanMask` лишається.
  *
- * **Layout** — 2 NBU CTAs + 2 QR. 11-bank-grid свідомо прибраний до Sprint 5
- * розблокування per-bank deep-links (review fix Sprint 4).
+ * **Layout** — `UiPaymentOptions` (сітка банків + disclosure-сховані app-link
+ * та QR), спільний composite з `account-public`.
  *
  * **Expired-banner sanity-block** — якщо API повернув `nbuLinks: null`
  * (server-side expiry block), заміщуємо payment-flow попередженням
@@ -103,10 +101,9 @@ export default function InvoicePublicView({
     const qrBase = `${apiBase}/businesses/public/${encodeURIComponent(business.slug)}/account/${encodeURIComponent(account.slug)}/invoices/${encodeURIComponent(invoiceSlug)}/qr`;
     const qrPrimary = `${qrBase}/nbu.png?host=primary`;
     const qrLegacy = `${qrBase}/nbu.png?host=legacy`;
-    const qrPage = `${qrBase}/business.png`;
 
     return (
-        <div className="mx-auto max-w-xl space-y-6 px-4 py-8">
+        <div className="mx-auto max-w-md space-y-6 px-4 py-8">
             <header className="space-y-2 text-center">
                 {/*
                  * `break-words` — захист від довгого user-controlled тексту
@@ -168,111 +165,12 @@ export default function InvoicePublicView({
                     </p>
                 </div>
             ) : (
-                <PaymentSection
+                <UiPaymentOptions
                     nbuLinks={nbuLinks}
                     qrPrimary={qrPrimary}
                     qrLegacy={qrLegacy}
-                    qrPage={qrPage}
                 />
             )}
-        </div>
-    );
-}
-
-function PaymentSection({
-    nbuLinks,
-    qrPrimary,
-    qrLegacy,
-    qrPage,
-}: {
-    nbuLinks: { primary: string; legacy: string };
-    qrPrimary: string;
-    qrLegacy: string;
-    qrPage: string;
-}) {
-    return (
-        <div className="space-y-6">
-            <div className="space-y-3">
-                <h2 className="text-foreground text-center text-base font-semibold">
-                    Оберіть банк, з якого бажаєте оплатити
-                </h2>
-                {/* Sprint 5 — активна per-bank сітка (див. PublicAccountView). */}
-                <UiBankAppGrid
-                    nbuLegacyLink={nbuLinks.legacy}
-                    nbuFallbackLink={nbuLinks.primary}
-                />
-            </div>
-
-            <div className="space-y-3">
-                <h2 className="text-foreground text-center text-base font-semibold">
-                    Або відкрити в іншому банку
-                </h2>
-                {/* 2 active CTAs — зовнішні платіжні `bank://`-схеми, тож
-                    native <a> через UiButton as="a" (Next <Link> підставив би
-                    client-side router, який не знає про non-http протоколи). */}
-                <UiButton
-                    as="a"
-                    href={nbuLinks.primary}
-                    rel="external"
-                    variant="filled"
-                    size="md"
-                    className="w-full"
-                >
-                    Відкрити в банку
-                </UiButton>
-                <UiButton
-                    as="a"
-                    href={nbuLinks.legacy}
-                    rel="external"
-                    variant="outline"
-                    size="md"
-                    className="w-full"
-                >
-                    Запасний варіант
-                </UiButton>
-                <p className="text-muted-foreground text-center text-xs">
-                    Якщо ваш банк не відкрився — спробуйте запасний варіант
-                </p>
-            </div>
-
-            <div className="space-y-3">
-                <h2 className="text-foreground text-center text-base font-semibold">
-                    Сканувати для оплати в банку
-                </h2>
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                    <figure className="space-y-2 text-center">
-                        <UiQrImage
-                            src={qrPrimary}
-                            alt="QR на основну адресу"
-                            className="border-border mx-auto w-full max-w-[240px] rounded-md border bg-white"
-                        />
-                        <figcaption className="text-muted-foreground text-sm">
-                            Основна адреса
-                        </figcaption>
-                    </figure>
-                    <figure className="space-y-2 text-center">
-                        <UiQrImage
-                            src={qrLegacy}
-                            alt="QR на запасну адресу"
-                            className="border-border mx-auto w-full max-w-[240px] rounded-md border bg-white"
-                        />
-                        <figcaption className="text-muted-foreground text-sm">
-                            Запасний варіант — якщо перший не відкрився
-                        </figcaption>
-                    </figure>
-                </div>
-            </div>
-
-            <figure className="space-y-2 text-center">
-                <UiQrImage
-                    src={qrPage}
-                    alt="QR на цю сторінку"
-                    className="border-border mx-auto w-full max-w-[240px] rounded-md border bg-white"
-                />
-                <figcaption className="text-muted-foreground text-sm">
-                    Відкрити цю сторінку — для вивіски чи поширення
-                </figcaption>
-            </figure>
         </div>
     );
 }

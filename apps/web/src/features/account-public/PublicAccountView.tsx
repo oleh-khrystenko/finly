@@ -1,9 +1,7 @@
 'use client';
 
 import { BANK_LABEL, type BankCode, type BusinessType } from '@finly/types';
-import UiBankAppGrid from '@/shared/ui/UiBankAppGrid';
-import UiButton from '@/shared/ui/UiButton';
-import UiQrImage from '@/shared/ui/UiQrImage';
+import UiPaymentOptions from '@/shared/ui/UiPaymentOptions';
 
 interface Props {
     /** Account-fields (з `PublicAccountViewSchema`-whitelist). */
@@ -36,12 +34,10 @@ interface Props {
  *
  * Це Sprint 3 `PublicBusinessView` payment-view, переміщений на per-account
  * рівень: IBAN тепер живе на Account, тому payment-vector (NBU payload, QR)
- * генерується для триплета `(business, account)`. UI-шейп ідентичний Sprint 3
- * baseline-у:
+ * генерується для триплета `(business, account)`:
  *   - heading зі звертанням + parenthetical disambiguator (§SP-9).
- *   - 11-bank-grid (inactive, до Sprint 5 per-bank deep-links).
- *   - 2 active NBU CTAs (primary + legacy app-link).
- *   - 2 QR-картинки (host=primary | host=legacy).
+ *   - `UiPaymentOptions` — сітка банків + disclosure-сховані app-link і QR
+ *     (спільний composite з `invoice-public`).
  *
  * **Heading-formula (§SP-9):**
  *  - `bankCode !== null` → `"Платіж на користь {business.name} через {account.name}
@@ -77,10 +73,9 @@ export default function PublicAccountView({
     const qrBase = `${apiBase}/businesses/public/${encodeURIComponent(business.slug)}/account/${encodeURIComponent(account.slug)}/qr`;
     const qrPrimary = `${qrBase}/nbu.png?host=primary`;
     const qrLegacy = `${qrBase}/nbu.png?host=legacy`;
-    const qrPage = `${qrBase}/business.png`;
 
     return (
-        <div className="mx-auto max-w-xl space-y-8 px-4 py-8">
+        <div className="mx-auto max-w-md space-y-8 px-4 py-8">
             <header className="space-y-2 text-center">
                 <h1 className="text-foreground text-2xl font-bold tracking-tight break-words md:text-3xl">
                     {heading}
@@ -90,91 +85,11 @@ export default function PublicAccountView({
                 </p>
             </header>
 
-            <div className="space-y-3">
-                <h2 className="text-foreground text-center text-base font-semibold">
-                    Оберіть банк, з якого бажаєте оплатити
-                </h2>
-                {/*
-                 * Sprint 5 — активна per-bank сітка. Тап → відкриває конкретний
-                 * банк-додаток (iOS приватна схема / Android intent://) з
-                 * заповненими реквізитами; fallback на загальний НБУ-link нижче.
-                 * Деталі — `shared/ui/UiBankAppGrid` + `buildBankAppLink`.
-                 */}
-                <UiBankAppGrid
-                    nbuLegacyLink={nbuLinks.legacy}
-                    nbuFallbackLink={nbuLinks.primary}
-                />
-            </div>
-
-            <div className="space-y-3">
-                {/* 2 active NBU CTAs — зовнішні платіжні `bank://`-схеми,
-                    тож UiButton як native <a> (Next <Link> підставив би
-                    client-side router, що не знає про non-http протоколи).
-                    Symmetric до `InvoicePublicView` payment-section
-                    (ui-primitives.md §1 — UiButton as="a" замість raw <a>). */}
-                <UiButton
-                    as="a"
-                    href={nbuLinks.primary}
-                    rel="external"
-                    variant="filled"
-                    size="md"
-                    className="w-full"
-                >
-                    Інший банк
-                </UiButton>
-                <UiButton
-                    as="a"
-                    href={nbuLinks.legacy}
-                    rel="external"
-                    variant="outline"
-                    size="md"
-                    className="w-full"
-                >
-                    Інший банк (запасний варіант)
-                </UiButton>
-                <p className="text-muted-foreground text-center text-xs">
-                    Якщо ваш банк не відкрився — спробуйте запасний варіант
-                </p>
-            </div>
-
-            <div className="space-y-3">
-                <h2 className="text-foreground text-center text-base font-semibold">
-                    Сканувати для оплати в банку
-                </h2>
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                    <figure className="space-y-2 text-center">
-                        <UiQrImage
-                            src={qrPrimary}
-                            alt="QR на основну адресу"
-                            className="border-border mx-auto w-full max-w-[240px] rounded-md border bg-white"
-                        />
-                        <figcaption className="text-muted-foreground text-sm">
-                            Основна адреса
-                        </figcaption>
-                    </figure>
-                    <figure className="space-y-2 text-center">
-                        <UiQrImage
-                            src={qrLegacy}
-                            alt="QR на запасну адресу"
-                            className="border-border mx-auto w-full max-w-[240px] rounded-md border bg-white"
-                        />
-                        <figcaption className="text-muted-foreground text-sm">
-                            Запасний варіант — якщо перший не відкрився
-                        </figcaption>
-                    </figure>
-                </div>
-            </div>
-
-            <figure className="space-y-2 text-center">
-                <UiQrImage
-                    src={qrPage}
-                    alt="QR на цю сторінку"
-                    className="border-border mx-auto w-full max-w-[240px] rounded-md border bg-white"
-                />
-                <figcaption className="text-muted-foreground text-sm">
-                    Відкрити цю сторінку — для вивіски чи поширення
-                </figcaption>
-            </figure>
+            <UiPaymentOptions
+                nbuLinks={nbuLinks}
+                qrPrimary={qrPrimary}
+                qrLegacy={qrLegacy}
+            />
         </div>
     );
 }

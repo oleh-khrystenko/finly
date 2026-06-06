@@ -101,12 +101,19 @@ describe('PublicAccountView (Sprint 9 §SP-4 + §SP-9)', () => {
         });
     });
 
-    describe('CTA NBU links + QR images', () => {
-        it('2 active CTAs з nbuLinks (primary + legacy)', () => {
+    describe('CTA NBU links + QR images (під disclosure)', () => {
+        it('app-link CTAs (primary + legacy) доступні через disclosure «Мого банку немає у списку»', () => {
             render(<PublicAccountView {...baseProps} />);
-            const primary = screen.getByRole('link', { name: 'Інший банк' });
+            fireEvent.click(
+                screen.getByRole('button', {
+                    name: /Мого банку немає у списку/,
+                })
+            );
+            const primary = screen.getByRole('link', {
+                name: 'Відкрити банк-додаток',
+            });
             const legacy = screen.getByRole('link', {
-                name: 'Інший банк (запасний варіант)',
+                name: 'Інший спосіб, якщо не відкрилось',
             });
             expect(primary).toHaveAttribute(
                 'href',
@@ -120,10 +127,22 @@ describe('PublicAccountView (Sprint 9 §SP-4 + §SP-9)', () => {
 
         it('QR images мають URL з business + account slug + host=primary|legacy', () => {
             render(<PublicAccountView {...baseProps} />);
-            const primaryQr = screen.getByAltText('QR на основну адресу');
-            const legacyQr = screen.getByAltText('QR на запасну адресу');
+            fireEvent.click(
+                screen.getByRole('button', {
+                    name: /Показати QR для іншого пристрою/,
+                })
+            );
+            const primaryQr = screen.getByAltText('QR для оплати в банку');
             expect(primaryQr.getAttribute('src')).toMatch(
                 /\/IvanEnko\/account\/aBc12345\/qr\/nbu\.png\?host=primary$/
+            );
+            fireEvent.click(
+                screen.getByRole('button', {
+                    name: /Запасний код, якщо не зчитався/,
+                })
+            );
+            const legacyQr = screen.getByAltText(
+                'Запасний QR для оплати в банку'
             );
             expect(legacyQr.getAttribute('src')).toMatch(
                 /\/IvanEnko\/account\/aBc12345\/qr\/nbu\.png\?host=legacy$/
