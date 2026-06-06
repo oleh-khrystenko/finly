@@ -59,6 +59,14 @@ export const ENV = {
     STRIPE_SECRET_KEY: getEnvVar('STRIPE_SECRET_KEY'),
     STRIPE_WEBHOOK_SECRET: getEnvVar('STRIPE_WEBHOOK_SECRET'),
 
+    // WayForPay (Sprint 17) — merchant-реквізити білінгу. `merchantDomainName`
+    // має збігатись з доменом, зареєстрованим у кабінеті WayForPay, інакше
+    // підпис Purchase/CREATE_INVOICE відхиляється. Sandbox: test_merch_n1 /
+    // flk3409refn54t54t*FNJRET.
+    WAYFORPAY_MERCHANT_ACCOUNT: getEnvVar('WAYFORPAY_MERCHANT_ACCOUNT'),
+    WAYFORPAY_MERCHANT_SECRET_KEY: getEnvVar('WAYFORPAY_MERCHANT_SECRET_KEY'),
+    WAYFORPAY_MERCHANT_DOMAIN: getEnvVar('WAYFORPAY_MERCHANT_DOMAIN'),
+
     PAYMENTS_SUBSCRIPTION_ENABLED: subscriptionEnabled,
     PAYMENTS_ONE_OFF_ENABLED: oneOffEnabled,
 

@@ -240,42 +240,47 @@ export const UserBillingSchema = z.object({
 export type UserBilling = z.infer<typeof UserBillingSchema>;
 
 /**
- * Нормалізована подія білінгу, яку провайдер віддає сервісу після розбору
- * вебхука WayForPay. Reshape під WayForPay (orderReference замість Stripe
- * subscription-id, recToken/cardMask захоплення) — Блок 2.
+ * Нормалізована подія транзакції WayForPay, яку провайдер віддає сервісу після
+ * розбору і верифікації підпису вебхука. Провайдер НЕ класифікує семантику
+ * білінгу (підписка vs пакет vs proration) — це робить сервіс, декодуючи
+ * `orderReference` і звіряючи з `billing.orderReference`. Сюди потрапляють лише
+ * факти транзакції.
+ *
+ * `amount`/`refundAmount` — копійки-integer (конвертовані з WayForPay decimal
+ * payload-mapper-ом). `recToken` — secret-токен картки, захоплений при
+ * створенні підписки; сервіс зберігає, у frontend не віддає.
  */
+export const WAYFORPAY_TRANSACTION_STATUS = {
+    APPROVED: 'Approved',
+    DECLINED: 'Declined',
+    REFUNDED: 'Refunded',
+    VOIDED: 'Voided',
+    IN_PROCESSING: 'InProcessing',
+    PENDING: 'Pending',
+    EXPIRED: 'Expired',
+} as const;
+
+export type WayforpayTransactionStatus =
+    (typeof WAYFORPAY_TRANSACTION_STATUS)[keyof typeof WAYFORPAY_TRANSACTION_STATUS];
+
 export const BillingWebhookEventSchema = z.object({
-    type: z.enum([
-        BILLING_EVENT_TYPE.CHECKOUT_COMPLETED,
-        BILLING_EVENT_TYPE.SUBSCRIPTION_UPDATED,
-        BILLING_EVENT_TYPE.SUBSCRIPTION_DELETED,
-        BILLING_EVENT_TYPE.ONE_OFF_PAYMENT_COMPLETED,
-    ]),
+    /**
+     * Ключ дедуплікації. `txn:${transactionId}` — унікальний per-transaction id
+     * WayForPay (рекурентні списання мають той самий orderReference, але різні
+     * transactionId). Fallback `${orderReference}:${transactionStatus}:${processingDate}`
+     * лише для рідких колбеків без transactionId.
+     */
     providerEventId: z.string(),
+    orderReference: z.string(),
     occurredAt: z.coerce.date(),
-    userId: z.string(),
-    // --- Subscription fields (присутні тільки для subscription events) ---
-    subscriptionStatus: z
-        .enum([
-            SUBSCRIPTION_STATUS.ACTIVE,
-            SUBSCRIPTION_STATUS.TRIALING,
-            SUBSCRIPTION_STATUS.PAST_DUE,
-            SUBSCRIPTION_STATUS.CANCELED,
-            SUBSCRIPTION_STATUS.INCOMPLETE,
-            SUBSCRIPTION_STATUS.UNPAID,
-            SUBSCRIPTION_STATUS.UNKNOWN,
-        ])
-        .nullable()
-        .optional(),
-    currentPeriodStart: z.coerce.date().nullable().optional(),
-    currentPeriodEnd: z.coerce.date().nullable().optional(),
-    cancelAtPeriodEnd: z.boolean().optional(),
-    previousPriceId: z.string().nullable().optional(),
-    scheduledPlanCode: z.string().nullable().optional(),
-    scheduledChangeDate: z.coerce.date().nullable().optional(),
-    // --- One-off fields (присутні тільки для ONE_OFF_PAYMENT_COMPLETED) ---
-    executionsAmount: z.number().int().positive().optional(),
-    packCode: z.string().optional(),
+    /** Raw lifecycle WayForPay: Approved / Declined / Refunded / ... */
+    transactionStatus: z.string(),
+    amount: z.number().int(), // копійки
+    currency: z.string(),
+    transactionId: z.string().nullable(),
+    cardMask: z.string().nullable(),
+    recToken: z.string().nullable(),
+    reasonCode: z.number().nullable(),
     raw: z.record(z.string(), z.unknown()),
 });
 

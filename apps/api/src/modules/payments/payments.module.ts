@@ -5,7 +5,7 @@ import { PaymentsService } from './payments.service';
 import { PaymentsCleanupService } from './payments-cleanup.service';
 import { CatalogService } from './catalog.service';
 import { paymentProviderProvider } from './providers/payment-provider.provider';
-import { StripeService } from './providers/stripe.service';
+import { WayForPayService } from './providers/wayforpay/wayforpay.service';
 import {
     ProcessedWebhookEvent,
     ProcessedWebhookEventSchema,
@@ -43,7 +43,7 @@ import { UsersModule } from '../users/users.module';
         PaymentsService,
         PaymentsCleanupService,
         CatalogService,
-        StripeService,
+        WayForPayService,
         paymentProviderProvider,
     ],
     exports: [PaymentsService, CatalogService],
