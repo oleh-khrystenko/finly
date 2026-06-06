@@ -14,6 +14,10 @@ import {
     OrphanedProviderCustomer,
     OrphanedProviderCustomerSchema,
 } from './schemas/orphaned-provider-customer.schema';
+import {
+    PaymentRecord,
+    PaymentRecordSchema,
+} from './schemas/payment-record.schema';
 import { UsersModule } from '../users/users.module';
 
 @Module({
@@ -26,6 +30,10 @@ import { UsersModule } from '../users/users.module';
             {
                 name: OrphanedProviderCustomer.name,
                 schema: OrphanedProviderCustomerSchema,
+            },
+            {
+                name: PaymentRecord.name,
+                schema: PaymentRecordSchema,
             },
         ]),
         UsersModule,
