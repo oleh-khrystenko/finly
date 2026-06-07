@@ -1,35 +1,22 @@
 'use client';
 
 import { type ReactNode, useEffect, useState } from 'react';
-import {
-    ArrowRight,
-    Briefcase,
-    CreditCard,
-    ExternalLink,
-    FileText,
-    Plus,
-} from 'lucide-react';
+import { Briefcase, Plus } from 'lucide-react';
 import { AxiosError } from 'axios';
 import {
     BUSINESS_TYPE_LABEL,
     type BusinessWithCounts,
 } from '@finly/types';
 import { getApiMessage, listBusinesses } from '@/shared/api';
-import { ENV } from '@/shared/config/env';
+import { taxIdFieldConfig } from '@/entities/business';
 import { useAuthStore } from '@/entities/user';
 import { usePendingDeletesStore } from '@/features/business-edit/pendingDeletesStore';
 import UiButton from '@/shared/ui/UiButton';
-import UiLink from '@/shared/ui/UiLink';
+import UiNavCard from '@/shared/ui/UiNavCard';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
 import UiPageHeading from '@/shared/ui/UiPageHeading';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
-
-// `PAY_ORIGIN` — повний `https://pay.finly.com.ua` для href справжнього посилання.
-// `PAY_HOST` — той самий host без схеми для display ("чистий" вигляд). Обчислюємо
-// один раз на module-load (ENV frozen).
-const PAY_ORIGIN = ENV.NEXT_PUBLIC_PAY_PUBLIC_URL.replace(/\/$/, '');
-const PAY_HOST = PAY_ORIGIN.replace(/^https?:\/\//, '');
 
 function extractApiErrorCode(err: unknown): string {
     if (!(err instanceof AxiosError)) return 'unknown';
@@ -99,7 +86,7 @@ export default function BusinessListPage() {
     const isEmpty = visibleItems.length === 0;
 
     return (
-        <UiPageContainer className="space-y-8 py-12 md:py-16">
+        <UiPageContainer className="space-y-6 py-10 md:py-14">
             <div className="flex flex-wrap items-start justify-between gap-4">
                 <UiPageHeading>Отримувачі</UiPageHeading>
                 {!isEmpty && (
@@ -181,7 +168,7 @@ function BusinessGrid({
     isBookkeeper: boolean;
 }) {
     return (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2">
             {items.map((business) => (
                 <BusinessCard
                     key={business.id}
@@ -202,76 +189,58 @@ function BusinessCard({
 }) {
     const typeLabel = BUSINESS_TYPE_LABEL[business.type];
     const { accountsCount, invoicesCount } = business;
-    const publicHref = `${PAY_ORIGIN}/${business.slug}`;
-    // Sprint 9 §Risk #7 mitigation — два counter-и (рахунки + інвойси усього)
-    // на business-картці, щоб ФОП з 1 рахунком розумів обсяг без drill-down-у
-    // у per-account-page.
+    // Type-aware податковий код: «РНОКПП» для individual/fop, «ЄДРПОУ» для
+    // tov/organization — той самий single-source label, що у формі створення
+    // та cabinet-edit (`taxIdFieldConfig`), щоб копія не дрейфувала.
+    const taxIdLabel = taxIdFieldConfig(business.type).label;
+    // Sprint 9 §Risk #7 mitigation — два counter-и (реквізити + рахунки усього)
+    // на business-картці, щоб ФОП розумів обсяг без drill-down-у у per-account-page.
     return (
-        <article className="border-border bg-card hover:border-foreground/15 flex flex-col gap-3 rounded-xl border p-5 transition-colors md:p-6">
-            <div className="flex items-center justify-between gap-2">
-                <p className="text-muted-foreground truncate text-xs font-medium">
-                    {typeLabel}
-                </p>
-                {isBookkeeper && (
-                    <span className="bg-muted text-muted-foreground shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium">
-                        Клієнтський
-                    </span>
-                )}
-            </div>
-
-            <h2
-                className="text-foreground line-clamp-2 text-base leading-snug font-semibold break-words"
-                title={business.name}
-            >
-                {business.name}
-            </h2>
-
-            <UiLink
-                href={publicHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                variant="muted"
-                aria-label={`Відкрити публічну сторінку ${business.name} у новій вкладці`}
-                className="group inline-flex min-w-0 items-center gap-1.5 text-xs"
-            >
-                <span className="truncate">
-                    {PAY_HOST}/
-                    <span className="text-foreground font-mono">
-                        {business.slug}
-                    </span>
-                </span>
-                <ExternalLink
-                    aria-hidden
-                    className="size-3.5 shrink-0 opacity-60 transition-opacity group-hover:opacity-100"
-                />
-            </UiLink>
-
-            <div className="mt-auto flex flex-col gap-3 pt-2">
-                <div className="flex flex-wrap gap-x-3 gap-y-1">
-                    <p className="text-muted-foreground inline-flex items-center gap-1 text-xs">
-                        <CreditCard className="size-3.5" aria-hidden />
-                        Реквізити: {accountsCount} шт
+        <UiNavCard
+            href={`/business/${business.slug}${accountsCount > 0 ? '#accounts' : ''}`}
+            ariaLabel={`Відкрити отримувача ${business.name}`}
+            eyebrow={typeLabel}
+            badge={isBookkeeper ? <CardBadge>Клієнтський</CardBadge> : undefined}
+            title={business.name}
+            titleAttr={business.name}
+            meta={
+                <>
+                    <p>
+                        {taxIdLabel}:{' '}
+                        <span className="text-foreground font-mono">
+                            {business.taxId}
+                        </span>
                     </p>
-                    {invoicesCount > 0 && (
-                        <p className="text-muted-foreground inline-flex items-center gap-1 text-xs">
-                            <FileText className="size-3.5" aria-hidden />
-                            Рахунки: {invoicesCount} шт
-                        </p>
-                    )}
-                </div>
-                <UiButton
-                    as="link"
-                    href={`/business/${business.slug}${
-                        accountsCount > 0 ? '#accounts' : ''
-                    }`}
-                    variant="outline"
-                    size="sm"
-                    IconRight={<ArrowRight />}
-                    className="w-full justify-center"
-                >
-                    Відкрити
-                </UiButton>
-            </div>
-        </article>
+                    <p>
+                        Реквізити:{' '}
+                        <CountValue count={accountsCount} />
+                    </p>
+                    <p>
+                        Рахунки: <CountValue count={invoicesCount} />
+                    </p>
+                </>
+            }
+        />
+    );
+}
+
+/**
+ * Значення лічильника: біле (`text-foreground`) коли є що показати, сіре
+ * (успадковане muted) на нулі — порожнє не підсвічуємо.
+ */
+function CountValue({ count }: { count: number }) {
+    return (
+        <span className={count > 0 ? 'text-foreground' : undefined}>
+            {count} шт
+        </span>
+    );
+}
+
+/** Нейтральний pill-бейдж для top-right слота навігаційної картки. */
+function CardBadge({ children }: { children: ReactNode }) {
+    return (
+        <span className="bg-muted text-muted-foreground shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium">
+            {children}
+        </span>
     );
 }

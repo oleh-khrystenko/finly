@@ -163,7 +163,7 @@ export default function BusinessSlugPage() {
     const typeLabel = BUSINESS_TYPE_LABEL[business.type];
 
     return (
-        <UiPageContainer className="space-y-6 py-8 md:py-12">
+        <UiPageContainer className="space-y-6 py-10 md:py-14">
             {/* Top toolbar: breadcrumb + identity heading. */}
             <div className="flex flex-col gap-4">
                 <UiBreadcrumb
@@ -183,37 +183,34 @@ export default function BusinessSlugPage() {
                 </div>
             </div>
 
-            <div className="space-y-4">
-                <PublicSection
-                    business={business}
-                    payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
-                    onSave={handlePatch}
-                    onResetSlug={handleResetSlug}
-                />
-                <AccountsSection businessSlug={business.slug} />
-                <RequisitesCard business={business} onSave={handlePatch} />
+            <PublicSection
+                business={business}
+                payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
+                onSave={handlePatch}
+                onResetSlug={handleResetSlug}
+            />
+            <AccountsSection businessSlug={business.slug} />
+            <RequisitesCard business={business} onSave={handlePatch} />
 
-                {/* Danger zone */}
-                <UiSectionCard title="Небезпечна зона" variant="destructive">
-                    <p className="text-muted-foreground mt-2 text-base">
-                        Видалення повне і незворотне. Усі реквізити і
-                        виставлені рахунки цього отримувача будуть видалені.
-                        Клієнти, які мають збережене посилання, не зможуть
-                        оплатити.
-                    </p>
-                    <div className="mt-4">
-                        <UiButton
-                            type="button"
-                            variant="destructive-outline"
-                            size="md"
-                            onClick={handleDelete}
-                            IconLeft={<Trash2 />}
-                        >
-                            Видалити отримувача
-                        </UiButton>
-                    </div>
-                </UiSectionCard>
-            </div>
+            {/* Danger zone */}
+            <UiSectionCard title="Небезпечна зона" variant="destructive">
+                <p className="text-muted-foreground mt-2 text-base">
+                    Видалення повне і незворотне. Усі реквізити і виставлені
+                    рахунки цього отримувача будуть видалені. Клієнти, які мають
+                    збережене посилання, не зможуть оплатити.
+                </p>
+                <div className="mt-4">
+                    <UiButton
+                        type="button"
+                        variant="destructive-outline"
+                        size="md"
+                        onClick={handleDelete}
+                        IconLeft={<Trash2 />}
+                    >
+                        Видалити отримувача
+                    </UiButton>
+                </div>
+            </UiSectionCard>
         </UiPageContainer>
     );
 }

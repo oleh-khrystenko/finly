@@ -1,3 +1,5 @@
+import { INTL_LOCALE } from './intl';
+
 /**
  * Sprint 4 SP-7 — UTC-instant, що в Europe/Kyiv tz відображається як
  * 23:59:59.000 заданого дня.
@@ -99,4 +101,21 @@ export function kyivEndOfDayInstant(yyyymmdd: string): Date {
         utcMs += diff;
     }
     return new Date(utcMs);
+}
+
+const KYIV_DATE_DISPLAY_FORMATTER = new Intl.DateTimeFormat(INTL_LOCALE, {
+    timeZone: 'Europe/Kyiv',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+});
+
+/**
+ * Форматує `Date` як `DD.MM.YYYY` у Europe/Kyiv. `validUntil` має київську
+ * семантику (end-of-day Kyiv instant) — форматування у локальній tz браузера
+ * показало б сусідній день користувачу поза Києвом. Single source для display
+ * київської дати (на відміну від `kyivEndOfDayInstant`, що парсить для backend).
+ */
+export function formatKyivDate(date: Date): string {
+    return KYIV_DATE_DISPLAY_FORMATTER.format(date);
 }

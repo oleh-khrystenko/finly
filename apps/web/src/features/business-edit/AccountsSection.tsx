@@ -1,21 +1,16 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowRight, CreditCard, Plus, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { CreditCard, Plus } from 'lucide-react';
 import { AxiosError } from 'axios';
-import {
-    BANK_LABEL,
-    deriveAccountLabel,
-    type AccountWithCounts,
-} from '@finly/types';
+import { BANK_LABEL, type AccountWithCounts } from '@finly/types';
 import { getApiMessage, listAccounts } from '@/shared/api';
 import UiButton from '@/shared/ui/UiButton';
+import UiNavCard from '@/shared/ui/UiNavCard';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
 import {
     makeAccountKey,
-    scheduleAccountDeleteWithUndo,
-    useDeleteAccountConfirmStore,
     usePendingAccountDeletesStore,
 } from '@/features/account-edit';
 
@@ -43,29 +38,23 @@ function extractMessage(err: unknown): string {
 }
 
 /**
- * Sprint 9 §9.2 — секція "Рахунки" на business-cabinet-page. Cards-list з
- * name + bank label + IBAN-mask + per-card "Видалити" + CTA "Додати рахунок".
+ * Sprint 9 §9.2 — секція "Реквізити" на business-cabinet-page. Cards-list з
+ * name + bank label + IBAN-mask + CTA "Додати реквізити". Картка — навігаційна
+ * (`UiNavCard`): єдина дія "Відкрити". Видалення живе на власній сторінці
+ * реквізитів (`DangerSection`), не на картці у списку.
  *
  * **Null-bankCode UI-rule (§SP-9 4-точок invariant):** bank-label-row
  * рендериться **лише** для `bankCode !== null` — не fallback на текст
  * "Невідомий банк". IBAN-mask `•{last4}` лишається як disambiguator.
  *
- * **Per-card delete:**
- *  - `openDeleteConfirm(...)` → `<DeleteAccountConfirmDialog>` (cascade-gate,
- *    якщо у реквізитах є рахунки) → confirm → `scheduleAccountDeleteWithUndo(...)`
- *    (5s undo + actual cascade-DELETE).
- *  - **Без redirect-у** (на відміну від DangerSection account-page, що redirect-ить
- *    з per-account-page) — list уже на тій самій сторінці. `pendingAccountDeletesStore`
- *    синхронно ховає картку.
- *
  * **Optimistic-removal filter:** `usePendingAccountDeletesStore.keys.has(...)` —
- * filter-ить items, що у 5s-undo-вікні. На cancel картка повертається.
+ * filter-ить items, що у 5s-undo-вікні. Account-page після delete redirect-ить
+ * сюди; картка лишається схованою до кінця undo-вікна (або повертається на cancel).
  */
 export default function AccountsSection({ businessSlug }: Props) {
     const [data, setData] = useState<SectionData | null>(null);
     const [error, setError] = useState<SectionError | null>(null);
     const pendingDeleteKeys = usePendingAccountDeletesStore((s) => s.keys);
-    const openDeleteConfirm = useDeleteAccountConfirmStore((s) => s.open);
 
     useEffect(() => {
         let cancelled = false;
@@ -96,29 +85,6 @@ export default function AccountsSection({ businessSlug }: Props) {
             (a) => !pendingDeleteKeys.has(makeAccountKey(businessSlug, a.slug))
         );
     }, [isCurrent, data, pendingDeleteKeys, businessSlug]);
-
-    const handleDelete = useCallback(
-        (account: AccountWithCounts) => {
-            openDeleteConfirm(account, account.invoicesCount, () => {
-                scheduleAccountDeleteWithUndo({
-                    businessSlug,
-                    accountSlug: account.slug,
-                    name: deriveAccountLabel({
-                        name: account.name,
-                        bankCode: account.bankCode,
-                        ibanMask: `•${account.iban.slice(-4)}`,
-                    }),
-                    onScheduled: () => {
-                        /* per-card delete — без redirect-у, list стає на місці */
-                    },
-                    onCancelled: () => {
-                        /* картка автоматично повертається через store-remove */
-                    },
-                });
-            });
-        },
-        [businessSlug, openDeleteConfirm]
-    );
 
     const createHref = `/business/${businessSlug}/account/new`;
 
@@ -157,13 +123,12 @@ export default function AccountsSection({ businessSlug }: Props) {
                 !isErrorCurrent && <EmptyState createHref={createHref} />}
 
             {visibleItems !== null && visibleItems.length > 0 && (
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
                     {visibleItems.map((account) => (
                         <AccountCard
                             key={account.id}
                             account={account}
                             businessSlug={businessSlug}
-                            onDelete={() => handleDelete(account)}
                         />
                     ))}
                 </div>
@@ -175,68 +140,52 @@ export default function AccountsSection({ businessSlug }: Props) {
 interface CardProps {
     account: AccountWithCounts;
     businessSlug: string;
-    onDelete: () => void;
 }
 
-function AccountCard({ account, businessSlug, onDelete }: CardProps) {
+function AccountCard({ account, businessSlug }: CardProps) {
+    const name = account.name;
     const mask = `•${account.iban.slice(-4)}`;
     const href = `/business/${businessSlug}/account/${account.slug}`;
-    const invoicesLabel = `Рахунки: ${account.invoicesCount} шт`;
-    // Назва-заголовок: користувацька name або, за її відсутності, банк-лейбл
-    // (а на нерозпізнаному банку — сама маска). Окремі bank-/mask-рядки нижче
-    // рендеряться лише коли не дублюють заголовок — це прибирає кострубату
-    // "monobank •4847 / monobank / •4847" розкладку для авто-назв.
-    const title =
-        account.name ??
-        (account.bankCode !== null ? BANK_LABEL[account.bankCode] : mask);
-    const showMask = title !== mask;
-    // Pattern symmetric Sprint 4 `features/account-edit/InvoiceCard`: уся
-    // картка — звичайний контейнер, navigation — окрема кнопка "Відкрити".
-    // Власне `<a>` за межами `shared/ui/` заборонено (`docs/conventions/
-    // ui-primitives.md` Rule 1) — wrap-варіант через UiButton.
+    const bankLabel =
+        account.bankCode !== null ? BANK_LABEL[account.bankCode] : null;
+    // «банк •останні4» — банк-лейбл + маска одним рядком (маска mono як цифрова
+    // частина). На нерозпізнаному IBAN банку немає — лишається сама маска.
+    const bankAndMask = (
+        <>
+            {bankLabel ? `${bankLabel} ` : null}
+            <span className="font-mono">{mask}</span>
+        </>
+    );
+    const bankAndMaskText = bankLabel ? `${bankLabel} ${mask}` : mask;
+    // Title — власна назва; за її відсутності піднімаємо «банк •останні4» у
+    // заголовок, а вторинний рядок не дублюємо.
+    const title = name !== null ? name : bankAndMask;
+    const titleText = name !== null ? name : bankAndMaskText;
     return (
-        <div className="border-border bg-card flex flex-col gap-3 rounded-lg border p-5">
-            <div className="flex flex-1 flex-col gap-1">
-                <p className="text-foreground text-xl font-semibold tracking-tight">
-                    {title}
-                </p>
-                {account.name !== null && account.bankCode !== null && (
-                    <p className="text-muted-foreground text-base">
-                        {BANK_LABEL[account.bankCode]}
+        <UiNavCard
+            href={href}
+            surface="muted"
+            ariaLabel={`Відкрити реквізити ${titleText}`}
+            title={title}
+            titleAttr={titleText}
+            meta={
+                <>
+                    {name !== null && <p>{bankAndMask}</p>}
+                    <p>
+                        Рахунки:{' '}
+                        <span
+                            className={
+                                account.invoicesCount > 0
+                                    ? 'text-foreground'
+                                    : undefined
+                            }
+                        >
+                            {account.invoicesCount} шт
+                        </span>
                     </p>
-                )}
-                {showMask && (
-                    <p className="text-muted-foreground font-mono text-base">
-                        {mask}
-                    </p>
-                )}
-                <p className="text-muted-foreground mt-1.5 text-base">
-                    {invoicesLabel}
-                </p>
-            </div>
-            <div className="flex items-center gap-2 pt-1">
-                <UiButton
-                    type="button"
-                    variant="destructive-outline"
-                    size="sm"
-                    onClick={onDelete}
-                    IconLeft={<Trash2 />}
-                    className="flex-1 justify-center"
-                >
-                    Видалити
-                </UiButton>
-                <UiButton
-                    as="link"
-                    href={href}
-                    variant="filled"
-                    size="sm"
-                    IconRight={<ArrowRight />}
-                    className="flex-1 justify-center"
-                >
-                    Відкрити
-                </UiButton>
-            </div>
-        </div>
+                </>
+            }
+        />
     );
 }
 

@@ -242,7 +242,7 @@ export default function AccountCabinetPage() {
     };
 
     return (
-        <UiPageContainer className="space-y-6 py-8 md:py-12">
+        <UiPageContainer className="space-y-6 py-10 md:py-14">
             <div className="flex flex-col gap-4">
                 <UiBreadcrumb
                     items={[
@@ -257,25 +257,20 @@ export default function AccountCabinetPage() {
                 />
             </div>
 
-            <div className="space-y-4">
-                <PublicSection
-                    account={account}
-                    businessSlug={business.slug}
-                    payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
-                    onSave={onSaveAccount}
-                    onResetSlug={handleResetSlug}
-                />
-                <InvoicesSection
-                    businessSlug={business.slug}
-                    accountSlug={account.slug}
-                    businessPaymentPurposeTemplate={
-                        business.paymentPurposeTemplate
-                    }
-                    payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
-                />
-                <RequisitesSection account={account} />
-                <DangerSection onDelete={handleDelete} />
-            </div>
+            <PublicSection
+                account={account}
+                businessSlug={business.slug}
+                payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
+                onSave={onSaveAccount}
+                onResetSlug={handleResetSlug}
+            />
+            <InvoicesSection
+                businessSlug={business.slug}
+                accountSlug={account.slug}
+                businessPaymentPurposeTemplate={business.paymentPurposeTemplate}
+            />
+            <RequisitesSection account={account} />
+            <DangerSection onDelete={handleDelete} />
         </UiPageContainer>
     );
 }

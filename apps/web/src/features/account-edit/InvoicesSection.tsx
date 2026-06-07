@@ -19,8 +19,6 @@ interface Props {
      * `InvoiceCard` для inheritance fallback (`paymentPurpose ?? template`).
      */
     businessPaymentPurposeTemplate: string;
-    /** Public-payment-page origin для побудови copy-link URL. */
-    payPublicOrigin: string;
 }
 
 const PAGE_SIZE = 10;
@@ -75,7 +73,6 @@ export default function InvoicesSection({
     businessSlug,
     accountSlug,
     businessPaymentPurposeTemplate,
-    payPublicOrigin,
 }: Props) {
     const [data, setData] = useState<SectionData | null>(null);
     const [error, setError] = useState<SectionError | null>(null);
@@ -227,7 +224,7 @@ export default function InvoicesSection({
 
             {visibleItems !== null && visibleItems.length > 0 && (
                 <div className="mt-4 space-y-3">
-                    <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="grid gap-4 sm:grid-cols-2">
                         {visibleItems.map((inv) => (
                             <InvoiceCard
                                 key={inv.id}
@@ -237,7 +234,6 @@ export default function InvoicesSection({
                                 businessPaymentPurposeTemplate={
                                     businessPaymentPurposeTemplate
                                 }
-                                payPublicOrigin={payPublicOrigin}
                             />
                         ))}
                     </div>
