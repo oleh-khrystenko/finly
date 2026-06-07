@@ -40,6 +40,16 @@ const ERRORS: Record<string, MessageDict> = {
         already_subscribed: 'У вас вже є активна підписка.',
         subscription_required: 'Для доступу потрібна активна підписка.',
         no_billing_account: 'Платіжний акаунт не знайдено. Оформіть підписку.',
+        no_active_subscription: 'Активної підписки немає.',
+        same_plan: 'Ви вже на цьому плані.',
+        invalid_plan: 'Невідомий план. Оновіть сторінку і спробуйте знову.',
+        proration_payment_failed:
+            'Не вдалося провести доплату за апгрейд. План не змінено, кошти не списано.',
+        refund_failed:
+            'Не вдалося оформити повернення. Спробуйте пізніше або зверніться в підтримку.',
+        subscription_operation_failed:
+            'Не вдалося виконати операцію з підпискою. Спробуйте пізніше.',
+        payment_type_disabled: 'Цей тип оплати наразі недоступний.',
     },
     users: {
         insufficient_executions:

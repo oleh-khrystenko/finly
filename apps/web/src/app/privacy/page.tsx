@@ -95,9 +95,9 @@ export default function PrivacyPage() {
                         <strong className="text-foreground">
                             Дані про оплату підписки:
                         </strong>{' '}
-                        обробляються нашим платіжним партнером Stripe; ми
-                        зберігаємо лише ідентифікатори клієнта/підписки, не
-                        реквізити карток.
+                        обробляються нашим платіжним партнером WayForPay; ми
+                        зберігаємо лише ідентифікатор підписки і токен картки для
+                        списань, не повні реквізити карток.
                     </p>
                 </Section>
 
@@ -162,7 +162,9 @@ export default function PrivacyPage() {
                             публічного імені на момент входу);
                         </li>
                         <li>
-                            <strong className="text-foreground">Stripe</strong>{' '}
+                            <strong className="text-foreground">
+                                WayForPay
+                            </strong>{' '}
                             — обробка платежів за підписку Finly;
                         </li>
                         <li>
@@ -217,7 +219,7 @@ export default function PrivacyPage() {
                     <p>
                         Дані, які ми зобовʼязані зберігати за вимогами
                         законодавства (наприклад, фіскальні платіжні документи
-                        Stripe), зберігаються протягом строків, встановлених
+                        WayForPay), зберігаються протягом строків, встановлених
                         відповідними нормативними актами.
                     </p>
                 </Section>

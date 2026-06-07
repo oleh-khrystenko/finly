@@ -22,7 +22,10 @@ export {
 export {
     createSubscriptionCheckout,
     createOneOffCheckout,
-    createPortalSession,
+    cancelSubscription,
+    changePlan,
+    updateCard,
+    listPayments,
 } from './payments';
 export { spendExecutions, getExecutionTransactions } from './executions';
 export {

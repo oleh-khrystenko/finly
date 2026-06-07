@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Check, ExternalLink } from 'lucide-react';
+import { Check } from 'lucide-react';
 import Image from 'next/image';
 import {
     PAYMENTS_SUBSCRIPTION_ENABLED,
@@ -12,13 +12,12 @@ import {
     getCatalog,
     createSubscriptionCheckout,
     createOneOffCheckout,
-    createPortalSession,
 } from '@/shared/api/payments';
 import { useAuthStore } from '@/entities/user';
-import { formatLocalDate, INTL_LOCALE } from '@/shared/lib';
 import {
     useBillingResetDialogStore,
-    SubscriptionStatus,
+    ManageSubscription,
+    DemoBanner,
 } from '@/features/billing';
 import { formatPrice, type PaymentsCatalog } from '@finly/types';
 import UiButton from '@/shared/ui/UiButton';
@@ -26,7 +25,6 @@ import UiLink from '@/shared/ui/UiLink';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
 import UiPageHeading from '@/shared/ui/UiPageHeading';
 import UiSpinner from '@/shared/ui/UiSpinner';
-import { DemoBanner } from '@/features/billing';
 
 interface PlanCopy {
     name: string;
@@ -134,21 +132,6 @@ export default function BillingPage() {
         }
     };
 
-    const handlePortal = async () => {
-        setLoadingAction('portal');
-        try {
-            const { portalUrl } = await createPortalSession();
-            window.location.assign(portalUrl);
-        } catch {
-            toast.error('Не вдалося відкрити портал керування');
-            setLoadingAction(null);
-        }
-    };
-
-    const activePlan = catalog?.subscriptionPlans.find(
-        (p) => p.code === billing?.planCode
-    );
-
     return (
         <UiPageContainer className="space-y-10 py-12">
             {/* ── Demo Banner ── */}
@@ -159,14 +142,9 @@ export default function BillingPage() {
                 <UiPageHeading>Білінг</UiPageHeading>
                 <p className="text-muted-foreground mt-2">
                     Керуйте підпискою та виконаннями. Усі платежі безпечно
-                    обробляються через Stripe.
+                    обробляються через WayForPay.
                 </p>
             </div>
-
-            {/* ── Subscription Summary (Sprint 3 §3.5: перенесено з dashboard) ── */}
-            {PAYMENTS_SUBSCRIPTION_ENABLED && (
-                <SubscriptionStatus catalog={catalog} />
-            )}
 
             {/* ── Catalog Loading ── */}
             {catalogLoading && (
@@ -175,14 +153,22 @@ export default function BillingPage() {
                 </div>
             )}
 
-            {/* ── Subscription Section ── */}
-            {PAYMENTS_SUBSCRIPTION_ENABLED && !catalogLoading && catalog && (
-                <section>
-                    <h2 className="text-foreground mb-6 text-2xl font-bold">
-                        {hasActive ? 'Ваша підписка' : 'Оберіть план'}
-                    </h2>
+            {/* ── Active Subscription Management ── */}
+            {PAYMENTS_SUBSCRIPTION_ENABLED &&
+                !catalogLoading &&
+                catalog &&
+                hasActive && <ManageSubscription catalog={catalog} />}
 
-                    {!hasActive ? (
+            {/* ── Subscription Plans (no active subscription) ── */}
+            {PAYMENTS_SUBSCRIPTION_ENABLED &&
+                !catalogLoading &&
+                catalog &&
+                !hasActive && (
+                    <section>
+                        <h2 className="text-foreground mb-6 text-2xl font-bold">
+                            Оберіть план
+                        </h2>
+
                         <div
                             className={`grid gap-6 ${catalog.subscriptionPlans.length === 1 ? '' : 'sm:grid-cols-2'}`}
                         >
@@ -276,103 +262,8 @@ export default function BillingPage() {
                                 );
                             })}
                         </div>
-                    ) : (
-                        <div className="border-border bg-card flex flex-col gap-4 rounded-lg border p-4 sm:flex-row sm:items-center sm:gap-5 md:p-5">
-                            {billing?.planCode && (
-                                <div className="relative aspect-square w-14 shrink-0 overflow-hidden rounded-md sm:w-20">
-                                    <Image
-                                        src={`/images/plans/${billing.planCode}-light.svg`}
-                                        alt={planName(billing.planCode)}
-                                        fill
-                                        className="block object-cover dark:hidden"
-                                    />
-                                    <Image
-                                        src={`/images/plans/${billing.planCode}-dark.svg`}
-                                        alt={planName(billing.planCode)}
-                                        fill
-                                        className="hidden object-cover dark:block"
-                                    />
-                                </div>
-                            )}
-
-                            <div className="min-w-0 flex-1">
-                                <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                                    <p className="text-foreground text-base font-semibold">
-                                        План{' '}
-                                        {billing?.planCode
-                                            ? planName(billing.planCode)
-                                            : ''}
-                                    </p>
-                                    <span className="bg-success/15 text-success rounded-full px-2.5 py-0.5 text-xs font-medium">
-                                        {billing?.cancelAtPeriodEnd
-                                            ? `Активна до ${formatLocalDate(billing?.currentPeriodEnd ?? null)}`
-                                            : 'Активна'}
-                                    </span>
-                                </div>
-
-                                <p className="text-muted-foreground mt-1 text-sm">
-                                    {billing?.cancelAtPeriodEnd
-                                        ? 'Підписку буде скасовано після завершення поточного періоду.'
-                                        : billing?.currentPeriodEnd
-                                          ? `Наступне списання ${formatLocalDate(billing.currentPeriodEnd)}`
-                                          : null}
-                                </p>
-                                {!billing?.cancelAtPeriodEnd && activePlan && (
-                                    <p className="text-muted-foreground mt-0.5 text-sm">
-                                        {activePlan.executions.toLocaleString(
-                                            INTL_LOCALE
-                                        )}{' '}
-                                        виконань за період
-                                    </p>
-                                )}
-                                {billing?.scheduledPlanCode && (
-                                    <p className="text-muted-foreground mt-0.5 text-sm">
-                                        Перехід на{' '}
-                                        <span className="font-bold">
-                                            {planName(
-                                                billing.scheduledPlanCode
-                                            )}
-                                        </span>{' '}
-                                        з{' '}
-                                        {formatLocalDate(
-                                            billing.scheduledChangeDate ?? null
-                                        )}
-                                    </p>
-                                )}
-                            </div>
-
-                            <UiButton
-                                variant="outline"
-                                size="sm"
-                                IconRight={
-                                    loadingAction !== 'portal' ? (
-                                        <ExternalLink />
-                                    ) : undefined
-                                }
-                                className="relative w-full justify-center sm:w-auto sm:shrink-0"
-                                onClick={handlePortal}
-                                disabled={loadingAction === 'portal'}
-                            >
-                                <span
-                                    className={
-                                        loadingAction === 'portal'
-                                            ? 'invisible'
-                                            : ''
-                                    }
-                                >
-                                    Керувати підпискою
-                                </span>
-                                {loadingAction === 'portal' && (
-                                    <UiSpinner
-                                        size="sm"
-                                        className="absolute inset-0 m-auto"
-                                    />
-                                )}
-                            </UiButton>
-                        </div>
-                    )}
-                </section>
-            )}
+                    </section>
+                )}
 
             {/* ── Executions Section ── */}
             {PAYMENTS_ONE_OFF_ENABLED && !catalogLoading && catalog && (
@@ -505,8 +396,8 @@ export default function BillingPage() {
                                 Скинути білінг
                             </h2>
                             <p className="text-muted-foreground mt-1 text-sm">
-                                Видаляє підписки, виконання та історію платежів
-                                у Stripe і в базі.
+                                Видаляє підписку, виконання та історію платежів
+                                у WayForPay і в базі.
                             </p>
                         </div>
                         <UiButton
