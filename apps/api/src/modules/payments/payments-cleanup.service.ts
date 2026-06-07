@@ -54,6 +54,7 @@ export class PaymentsCleanupService {
     async runDailyCleanup(): Promise<void> {
         await this.retryFailedRemovals();
         await this.expireCanceledSubscriptions();
+        await this.expirePastDueSubscriptions();
         await this.expireAbandonedRebinds();
     }
 
@@ -130,6 +131,47 @@ export class PaymentsCleanupService {
         if (result.modifiedCount > 0) {
             this.logger.log(
                 `Expired ${result.modifiedCount} canceled-at-period-end subscriptions`
+            );
+        }
+    }
+
+    /**
+     * Підписка у `PAST_DUE` (останнє списання відхилено) тримає доступ до межі
+     * періоду, поки WayForPay перебирає провайдерські ретраї. Якщо межа минула,
+     * а статусу так і не повернули в `ACTIVE` (успішний ретрай надіслав би
+     * Approved-вебхук, що сам флипнув би доступ і продовжив період), знімаємо
+     * доступ самі. Симетрично `expireCanceledSubscriptions`: WayForPay не шле
+     * термінальний вебхук, коли рекурент просто перестає поновлюватись, тож без
+     * цього sweep `hasActiveSubscription` лишився б true назавжди без оплати.
+     *
+     * Рекурент НЕ знімаємо (`REMOVE`): живі ретраї лишаємо WayForPay — пізній
+     * успішний ретрай надішле Approved і відновить підписку (`occurredAt` новіший
+     * за `lastProviderEventAt`, тож out-of-order guard пропустить його).
+     *
+     * Чистимо `rebindPendingAt`: re-bind, верифікація якого впала (declined на
+     * новому `orderReference` → `PAST_DUE`, прапорець лишається), потрапляє сюди
+     * раніше за `expireAbandonedRebinds`. Без скидання прапорець завис би
+     * назавжди, а пізніший успішний Approved пішов би у re-bind-гілку і не
+     * повернув би `hasActiveSubscription` у true.
+     */
+    private async expirePastDueSubscriptions(): Promise<void> {
+        const result = await this.userModel.updateMany(
+            {
+                'billing.hasActiveSubscription': true,
+                'billing.subscriptionStatus': SUBSCRIPTION_STATUS.PAST_DUE,
+                'billing.currentPeriodEnd': { $lt: new Date() },
+            },
+            {
+                $set: {
+                    'billing.hasActiveSubscription': false,
+                    'billing.subscriptionStatus': SUBSCRIPTION_STATUS.UNPAID,
+                    'billing.rebindPendingAt': null,
+                },
+            }
+        );
+        if (result.modifiedCount > 0) {
+            this.logger.log(
+                `Expired ${result.modifiedCount} past-due subscriptions`
             );
         }
     }
