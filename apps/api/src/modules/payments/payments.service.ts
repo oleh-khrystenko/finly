@@ -56,6 +56,7 @@ import {
     buildPackOrderReference,
     buildSubscriptionOrderReference,
     parseOrderReference,
+    type ParsedOrderReference,
 } from './order-reference';
 
 const WEBHOOK_MONGO_TIMEOUT_MS = 10_000;
@@ -633,9 +634,33 @@ export class PaymentsService {
             return null;
         }
 
+        const parsed = parseOrderReference(event.orderReference);
+        if (!parsed) {
+            // Валідний підпис, але orderReference не наш (напр. prorate-Charge,
+            // що обробляється синхронно): ack, щоб WayForPay не слав повтори.
+            this.logger.debug(
+                `Unrecognized orderReference ${event.orderReference}, acked without routing`
+            );
+            return acceptResponse;
+        }
+
         try {
-            await this.routeTransaction(event);
+            // Серіалізуємо обробку вебхука тим самим per-user локом, що й
+            // user-мутації. Без цього renewal-колбек, що приземлився під час
+            // changePlan/cancel, конкурував би з їх (негардованим) записом
+            // billing і міг затерти план/період.
+            await this.withBillingLock(parsed.userId, () =>
+                this.routeTransaction(event, parsed)
+            );
         } catch (error) {
+            if (isBillingLockBusy(error)) {
+                // Користувач саме виконує білінг-мутацію. НЕ повертаємо accept —
+                // WayForPay передоставить подію, обробимо після звільнення локу.
+                this.logger.debug(
+                    `Webhook ${event.providerEventId} deferred: billing lock busy for user ${parsed.userId}`
+                );
+                return null;
+            }
             this.logger.error(
                 `Failed to process webhook ${event.providerEventId}`,
                 error instanceof Error ? error.stack : String(error)
@@ -650,15 +675,10 @@ export class PaymentsService {
         return acceptResponse;
     }
 
-    private async routeTransaction(event: BillingWebhookEvent): Promise<void> {
-        const parsed = parseOrderReference(event.orderReference);
-        if (!parsed) {
-            this.logger.debug(
-                `Unrecognized orderReference ${event.orderReference}, ignored`
-            );
-            return;
-        }
-
+    private async routeTransaction(
+        event: BillingWebhookEvent,
+        parsed: ParsedOrderReference
+    ): Promise<void> {
         const userId = parsed.userId;
         const insert = await this.insertWebhookEvent(event, userId);
         if (insert !== 'new') {
@@ -924,14 +944,6 @@ export class PaymentsService {
     }
 
     private async markRefunded(event: BillingWebhookEvent): Promise<void> {
-        // Рефандимо лише APPROVED-списання: інакше findOneAndUpdate мітив би
-        // найновіший запис будь-якого статусу (DECLINED / вже REFUNDED). Кілька
-        // рекурентних списань ділять orderReference, тож звужуємо до того, що
-        // збігається сумою; інакше — найсвіжіше підтверджене списання.
-        const base = {
-            orderReference: event.orderReference,
-            status: PAYMENT_RECORD_STATUS.APPROVED,
-        };
         const update = {
             $set: {
                 status: PAYMENT_RECORD_STATUS.REFUNDED,
@@ -940,18 +952,37 @@ export class PaymentsService {
         };
         const options = { sort: { createdAt: -1 as const } };
 
-        const byAmount = await this.paymentRecordModel.findOneAndUpdate(
-            { ...base, amount: event.amount },
-            update,
-            options
-        );
-        if (!byAmount) {
-            await this.paymentRecordModel.findOneAndUpdate(
-                base,
+        // 1) Точний збіг за transactionId оригінального списання. Покриває і
+        //    ідемпотентність (cancel-with-refund уже відмітив цей запис
+        //    синхронно — повторний колбек лише перезапише ті самі значення), і
+        //    зовнішній refund конкретної транзакції.
+        if (event.transactionId) {
+            const byTxn = await this.paymentRecordModel.findOneAndUpdate(
+                {
+                    orderReference: event.orderReference,
+                    providerTransactionId: event.transactionId,
+                },
                 update,
                 options
             );
+            if (byTxn) return;
         }
+
+        // 2) Fallback — APPROVED-списання з ТОЧНО такою ж сумою (повний refund
+        //    без впізнаваного transactionId). Свідомо НЕ мітимо «найновіше
+        //    APPROVED будь-якої суми»: партіальний refund (cancel-with-refund)
+        //    інакше зіпсував би інше валідне списання, бо його сума не збігається
+        //    з жодним повним списанням під цим orderReference, а сам refund уже
+        //    відмічено синхронно.
+        await this.paymentRecordModel.findOneAndUpdate(
+            {
+                orderReference: event.orderReference,
+                status: PAYMENT_RECORD_STATUS.APPROVED,
+                amount: event.amount,
+            },
+            update,
+            options
+        );
     }
 
     // ── Idempotency primitives ───────────────────────────────────────────
@@ -1256,6 +1287,15 @@ function isDuplicateKeyError(error: unknown): boolean {
         error instanceof Error &&
         'code' in error &&
         (error as { code: number }).code === 11000
+    );
+}
+
+/** Лок-контенція з `withBillingLock` (не помилка обробки — підстава для retry). */
+function isBillingLockBusy(error: unknown): boolean {
+    return (
+        error instanceof ConflictException &&
+        (error.getResponse() as { code?: string })?.code ===
+            RESPONSE_CODE.BILLING_OPERATION_IN_PROGRESS
     );
 }
 

@@ -18,7 +18,10 @@ import {
     type BillingWebhookEvent,
 } from '@finly/types';
 
-import { createStandaloneMongo, type InMemoryMongo } from '../../test-utils/mongo';
+import {
+    createStandaloneMongo,
+    type InMemoryMongo,
+} from '../../test-utils/mongo';
 import { PaymentsService } from './payments.service';
 import { PAYMENT_PROVIDER } from './interfaces/payment-provider.interface';
 import { REDIS_CLIENT } from '../../common/modules/redis.module';
@@ -225,9 +228,7 @@ describe('PaymentsService (MongoMemoryServer)', () => {
         const ref = buildPackOrderReference(user._id.toString(), 'max');
         const pack = findExecutionPack('max')!;
 
-        await feed(
-            approvedEvent(ref, { amount: pack.priceAmount })
-        );
+        await feed(approvedEvent(ref, { amount: pack.priceAmount }));
 
         const updated = await userModel.findById(user._id).lean();
         expect(updated!.executions.balance).toBe(pack.executions);
@@ -471,7 +472,9 @@ describe('PaymentsService (MongoMemoryServer)', () => {
 
         // REMOVE впав, але скасування завершилось і REMOVE поставлено у чергу
         // повторів — інакше WayForPay списував би далі.
-        const queued = await failedRemovalModel.findOne({ orderReference: ref });
+        const queued = await failedRemovalModel.findOne({
+            orderReference: ref,
+        });
         expect(queued).not.toBeNull();
         const updated = await userModel.findById(user._id).lean();
         expect(updated!.billing!.hasActiveSubscription).toBe(false);
@@ -553,6 +556,101 @@ describe('PaymentsService (MongoMemoryServer)', () => {
             status: PAYMENT_RECORD_STATUS.REFUNDED,
         });
         expect(refunded).not.toBeNull();
+    });
+
+    // ── Refund webhook (markRefunded) ────────────────────────────────────
+
+    it('refund-webhook не псує стороннє APPROVED-списання (партіальний refund)', async () => {
+        const user = await createUser();
+        const ref = buildSubscriptionOrderReference(user._id.toString());
+
+        // Старе валідне списання, що НЕ повертається.
+        await paymentRecordModel.create({
+            userId: user._id,
+            orderReference: ref,
+            type: PAYMENT_RECORD_TYPE.SUBSCRIPTION,
+            amount: 14900,
+            currency: 'UAH',
+            status: PAYMENT_RECORD_STATUS.APPROVED,
+            providerTransactionId: 'tx_old',
+            cardMask: '44****1111',
+            refundAmount: null,
+        });
+        // Поточне списання, вже відмічене REFUNDED синхронно (як у cancel-with-
+        // refund) на партіальну суму.
+        await paymentRecordModel.create({
+            userId: user._id,
+            orderReference: ref,
+            type: PAYMENT_RECORD_TYPE.SUBSCRIPTION,
+            amount: 14900,
+            currency: 'UAH',
+            status: PAYMENT_RECORD_STATUS.REFUNDED,
+            providerTransactionId: 'tx_new',
+            cardMask: '44****1111',
+            refundAmount: 7000,
+        });
+
+        // Редундантний refund-вебхук: партіальна сума + txn, що не збігається з
+        // жодним записом. Старий fallback зіпсував би tx_old.
+        await feed(
+            approvedEvent(ref, {
+                transactionStatus: WAYFORPAY_TRANSACTION_STATUS.REFUNDED,
+                amount: 7000,
+                transactionId: 'tx_refund',
+            })
+        );
+
+        const stillApproved = await paymentRecordModel.findOne({
+            providerTransactionId: 'tx_old',
+        });
+        expect(stillApproved!.status).toBe(PAYMENT_RECORD_STATUS.APPROVED);
+    });
+
+    it('refund-webhook мітить саме списання за transactionId', async () => {
+        const user = await createUser();
+        const ref = buildSubscriptionOrderReference(user._id.toString());
+        await paymentRecordModel.create({
+            userId: user._id,
+            orderReference: ref,
+            type: PAYMENT_RECORD_TYPE.SUBSCRIPTION,
+            amount: 14900,
+            currency: 'UAH',
+            status: PAYMENT_RECORD_STATUS.APPROVED,
+            providerTransactionId: 'tx_match',
+            cardMask: '44****1111',
+            refundAmount: null,
+        });
+
+        await feed(
+            approvedEvent(ref, {
+                transactionStatus: WAYFORPAY_TRANSACTION_STATUS.REFUNDED,
+                amount: 14900,
+                transactionId: 'tx_match',
+            })
+        );
+
+        const record = await paymentRecordModel.findOne({
+            providerTransactionId: 'tx_match',
+        });
+        expect(record!.status).toBe(PAYMENT_RECORD_STATUS.REFUNDED);
+        expect(record!.refundAmount).toBe(14900);
+    });
+
+    it('вебхук відкладається (без accept), якщо per-user лок зайнятий', async () => {
+        const user = await createUser();
+        const ref = buildPackOrderReference(user._id.toString(), 'basic');
+        const pack = findExecutionPack('basic')!;
+        redisMock.set.mockResolvedValueOnce(null); // лок зайнятий user-мутацією
+
+        const accept = await feed(
+            approvedEvent(ref, { amount: pack.priceAmount })
+        );
+
+        // Немає accept → WayForPay передоставить подію пізніше.
+        expect(accept).toBeNull();
+        // Подія не оброблена: executions не нараховано.
+        const updated = await userModel.findById(user._id).lean();
+        expect(updated!.executions.balance).toBe(0);
     });
 
     it('cancel у кінці періоду: cancelAtPeriodEnd=true, доступ лишається', async () => {
