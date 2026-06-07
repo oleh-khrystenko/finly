@@ -18,10 +18,7 @@ import {
     type BillingWebhookEvent,
 } from '@finly/types';
 
-import {
-    createStandaloneMongo,
-    type InMemoryMongo,
-} from '../../test-utils/mongo';
+import { createReplSetMongo, type InMemoryMongo } from '../../test-utils/mongo';
 import { PaymentsService } from './payments.service';
 import { PAYMENT_PROVIDER } from './interfaces/payment-provider.interface';
 import { REDIS_CLIENT } from '../../common/modules/redis.module';
@@ -78,7 +75,7 @@ function makeProviderMock(): ProviderMock {
     };
 }
 
-describe('PaymentsService (MongoMemoryServer)', () => {
+describe('PaymentsService (MongoMemoryReplSet)', () => {
     let mongo: InMemoryMongo;
     let moduleRef: TestingModule;
     let service: PaymentsService;
@@ -90,7 +87,7 @@ describe('PaymentsService (MongoMemoryServer)', () => {
     let redisMock: { set: jest.Mock; eval: jest.Mock };
 
     beforeAll(async () => {
-        mongo = await createStandaloneMongo();
+        mongo = await createReplSetMongo();
         provider = makeProviderMock();
         redisMock = {
             set: jest.fn().mockResolvedValue('OK'),

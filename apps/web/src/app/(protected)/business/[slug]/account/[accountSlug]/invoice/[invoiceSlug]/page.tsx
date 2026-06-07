@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, ExternalLink, Trash2 } from 'lucide-react';
+import { ArrowLeft, Trash2 } from 'lucide-react';
 import { AxiosError } from 'axios';
 import { toast } from 'sonner';
 import {
@@ -32,7 +32,6 @@ import {
     scheduleInvoiceDeleteWithUndo,
     useDeleteInvoiceConfirmStore,
 } from '@/features/invoice-edit';
-import { formatKopecksAsHryvnia } from '@/entities/invoice';
 
 /**
  * Sprint 4 §4.6 + Sprint 9 §SP-5 — кабінет інвойсу
@@ -44,8 +43,7 @@ import { formatKopecksAsHryvnia } from '@/entities/invoice';
  * **Preview-toggle тимчасово відсутній**: `features/invoice-public/
  * InvoicePublicView` оновлюється у Sprint 9.3 (вимагає nested `account`-shape
  * у `PublicInvoiceView` view-type). До завершення 9.3 cabinet працює без
- * preview-mode — `"Відкрити в новій вкладці"` лишається як єдиний шлях
- * подивитися як побачить клієнт.
+ * preview-mode.
  */
 
 interface LoadedData {
@@ -199,8 +197,6 @@ export default function InvoiceCabinetPage() {
     }
 
     const { business, account, paramAcc: accountSlug, invoice } = data;
-    const formattedAmount = formatKopecksAsHryvnia(invoice.amount);
-    const publicUrl = `${ENV.NEXT_PUBLIC_PAY_PUBLIC_URL.replace(/\/$/, '')}/${business.slug}/${accountSlug}/${invoice.slug}`;
 
     const onSave = (patch: UpdateInvoiceRequest) =>
         handlePatch(patch, {
@@ -270,42 +266,12 @@ export default function InvoiceCabinetPage() {
                         { label: 'Рахунок' },
                     ]}
                 />
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                    <h1 className="text-foreground min-w-0 text-2xl font-bold tracking-tight md:text-3xl">
-                        Рахунок{' '}
-                        <span className="font-mono break-all">
-                            №{invoice.slug}
-                        </span>
-                        {formattedAmount && (
-                            <>
-                                {' '}
-                                <span className="text-muted-foreground">
-                                    ·
-                                </span>{' '}
-                                {formattedAmount}
-                            </>
-                        )}
-                    </h1>
-                    <UiButton
-                        as="a"
-                        href={publicUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        variant="outline"
-                        size="sm"
-                        IconRight={<ExternalLink />}
-                    >
-                        Відкрити в новій вкладці
-                    </UiButton>
-                </div>
+                <h1 className="text-foreground min-w-0 font-mono text-3xl font-bold tracking-tight break-all md:text-4xl">
+                    {invoice.slug}
+                </h1>
             </div>
 
             <div className="space-y-4">
-                <PaymentDetailsCard
-                    invoice={invoice}
-                    business={business}
-                    onSave={onSave}
-                />
                 <SlugSection
                     invoice={invoice}
                     businessSlug={business.slug}
@@ -314,6 +280,11 @@ export default function InvoiceCabinetPage() {
                     defaultMode={account.invoiceSlugPresetDefault}
                     onSave={onSave}
                     onResetSlug={handleResetSlug}
+                />
+                <PaymentDetailsCard
+                    invoice={invoice}
+                    business={business}
+                    onSave={onSave}
                 />
 
                 <UiSectionCard title="Небезпечна зона" variant="destructive">

@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { Connection, Model, Types } from 'mongoose';
+import { ClientSession, Connection, Model, Types } from 'mongoose';
 
 import {
     EXECUTION_TRANSACTION_TYPE,
@@ -113,22 +113,26 @@ export class UsersService {
     async addExecutions(
         userId: string,
         amount: number,
-        action: string
+        action: string,
+        session?: ClientSession
     ): Promise<number> {
         const user = await this.userModel.findByIdAndUpdate(
             userId,
             { $inc: { 'executions.balance': amount } },
-            { new: true }
+            { new: true, session }
         );
         const balanceAfter = user?.executions.balance ?? 0;
 
-        await this.recordTransaction({
-            userId,
-            type: EXECUTION_TRANSACTION_TYPE.CREDIT,
-            action,
-            amount,
-            balanceAfter,
-        });
+        await this.recordTransaction(
+            {
+                userId,
+                type: EXECUTION_TRANSACTION_TYPE.CREDIT,
+                action,
+                amount,
+                balanceAfter,
+            },
+            session
+        );
 
         return balanceAfter;
     }
@@ -160,20 +164,29 @@ export class UsersService {
         return { balanceAfter, transaction };
     }
 
-    async recordTransaction(data: {
-        userId: string;
-        type: string;
-        action: string;
-        amount: number;
-        balanceAfter: number;
-    }): Promise<ExecutionTransactionDocument> {
-        return this.executionTransactionModel.create({
-            userId: new Types.ObjectId(data.userId),
-            type: data.type,
-            action: data.action,
-            amount: data.amount,
-            balanceAfter: data.balanceAfter,
-        });
+    async recordTransaction(
+        data: {
+            userId: string;
+            type: string;
+            action: string;
+            amount: number;
+            balanceAfter: number;
+        },
+        session?: ClientSession
+    ): Promise<ExecutionTransactionDocument> {
+        const [transaction] = await this.executionTransactionModel.create(
+            [
+                {
+                    userId: new Types.ObjectId(data.userId),
+                    type: data.type,
+                    action: data.action,
+                    amount: data.amount,
+                    balanceAfter: data.balanceAfter,
+                },
+            ],
+            { session }
+        );
+        return transaction;
     }
 
     async getRecentTransactions(

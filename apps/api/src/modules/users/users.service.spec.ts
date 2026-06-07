@@ -274,7 +274,7 @@ describe('UsersService', () => {
                     executions: { balance: 10, freeReportUsed: false },
                 })
             );
-            mockTransactionModel.create.mockResolvedValue({});
+            mockTransactionModel.create.mockResolvedValue([{}]);
 
             const result = await service.addExecutions(
                 '507f1f77bcf86cd799439011',
@@ -288,19 +288,22 @@ describe('UsersService', () => {
                 { new: true }
             );
             expect(mockTransactionModel.create).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    type: 'credit',
-                    action: 'pack_purchase',
-                    amount: 10,
-                    balanceAfter: 10,
-                })
+                [
+                    expect.objectContaining({
+                        type: 'credit',
+                        action: 'pack_purchase',
+                        amount: 10,
+                        balanceAfter: 10,
+                    }),
+                ],
+                { session: undefined }
             );
             expect(result).toBe(10);
         });
 
         it('should return 0 when user not found', async () => {
             mockModel.findByIdAndUpdate.mockResolvedValue(null);
-            mockTransactionModel.create.mockResolvedValue({});
+            mockTransactionModel.create.mockResolvedValue([{}]);
 
             const result = await service.addExecutions(
                 '507f1f77bcf86cd799439012',

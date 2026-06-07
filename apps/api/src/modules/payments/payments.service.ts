@@ -5,8 +5,8 @@ import {
     Injectable,
     Logger,
 } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { ClientSession, Connection, Model, Types } from 'mongoose';
 import { randomBytes } from 'crypto';
 import Redis from 'ioredis';
 import {
@@ -107,6 +107,9 @@ export class PaymentsService {
 
         @Inject(REDIS_CLIENT)
         private readonly redis: Redis,
+
+        @InjectConnection()
+        private readonly connection: Connection,
 
         private readonly usersService: UsersService
     ) {}
@@ -690,27 +693,56 @@ export class PaymentsService {
             return;
         }
 
+        // Усі side-effects події + перехід webhook-події pending→applied — в
+        // одній транзакції. Flip статусу = атомарний commit-маркер: грант,
+        // billing-update і payment-record комітяться РАЗОМ зі статусом 'applied'
+        // або не комітяться зовсім. Частковий збій (напр. addExecutions кинув
+        // після billing-update) відкочує все, лишає подію 'pending', і catch її
+        // видаляє → передоставка WayForPay переобробляє з нуля. Без транзакції
+        // out-of-order CAS на lastProviderEventAt заблокував би повторний грант,
+        // і оплачені executions губились би назавжди.
+        const session = await this.connection.startSession();
         try {
-            if (parsed.kind === ORDER_KIND.PACK) {
-                await this.applyPackTransaction(event, parsed.packCode, userId);
-            } else {
-                await this.applySubscriptionTransaction(event, userId);
-            }
+            await session.withTransaction(async () => {
+                if (parsed.kind === ORDER_KIND.PACK) {
+                    await this.applyPackTransaction(
+                        event,
+                        parsed.packCode,
+                        userId,
+                        session
+                    );
+                } else {
+                    await this.applySubscriptionTransaction(
+                        event,
+                        userId,
+                        session
+                    );
+                }
+                await this.webhookEventModel.updateOne(
+                    {
+                        provider: PROVIDER,
+                        providerEventId: event.providerEventId,
+                    },
+                    { $set: { status: 'applied' } },
+                    { session }
+                );
+            });
         } catch (error) {
             await this.rollbackPendingWebhookEvent(event.providerEventId);
             throw error;
+        } finally {
+            await session.endSession();
         }
-
-        await this.markWebhookEventApplied(event.providerEventId);
     }
 
     private async applyPackTransaction(
         event: BillingWebhookEvent,
         packCode: string,
-        userId: string
+        userId: string,
+        session: ClientSession
     ): Promise<void> {
         if (event.transactionStatus === WAYFORPAY_TRANSACTION_STATUS.REFUNDED) {
-            await this.markRefunded(event);
+            await this.markRefunded(event, session);
             return;
         }
         // Проміжний колбек (InProcessing/Pending) не пишемо у історію — інакше
@@ -721,16 +753,19 @@ export class PaymentsService {
             return;
         }
         if (event.transactionStatus !== WAYFORPAY_TRANSACTION_STATUS.APPROVED) {
-            await this.recordPayment({
-                userId,
-                orderReference: event.orderReference,
-                type: PAYMENT_RECORD_TYPE.PACK,
-                amount: event.amount,
-                currency: event.currency,
-                status: PAYMENT_RECORD_STATUS.DECLINED,
-                providerTransactionId: event.transactionId,
-                cardMask: event.cardMask,
-            });
+            await this.recordPayment(
+                {
+                    userId,
+                    orderReference: event.orderReference,
+                    type: PAYMENT_RECORD_TYPE.PACK,
+                    amount: event.amount,
+                    currency: event.currency,
+                    status: PAYMENT_RECORD_STATUS.DECLINED,
+                    providerTransactionId: event.transactionId,
+                    cardMask: event.cardMask,
+                },
+                session
+            );
             return;
         }
 
@@ -740,32 +775,29 @@ export class PaymentsService {
             return;
         }
 
-        // Грант executions неідемпотентний ($inc). Гейтимо атомарним переходом
-        // webhook-події pending→applied: якщо часткова обробка вже флипнула подію
-        // у applied (а наступний крок упав і WayForPay передоставив), не
-        // нараховуємо вдруге. rollbackPendingWebhookEvent чистить лише pending,
-        // тож після claim повторна доставка побачить applied і не переобробить.
-        // Дзеркалить CAS-гард підписки на lastProviderEventAt.
-        const claimed = await this.claimPendingWebhookEvent(
-            event.providerEventId
-        );
-        if (!claimed) return;
-
+        // Грант executions неідемпотентний ($inc), але комітиться в одній
+        // транзакції з flip-ом події pending→applied (`routeTransaction`).
+        // Дубль-доставка ловиться unique-індексом на (provider, providerEventId)
+        // у `insertWebhookEvent` ще до транзакції, тож повторний грант неможливий.
         await this.usersService.addExecutions(
             userId,
             pack.executions,
-            EXECUTION_ACTION.PACK_PURCHASE
+            EXECUTION_ACTION.PACK_PURCHASE,
+            session
         );
-        await this.recordPayment({
-            userId,
-            orderReference: event.orderReference,
-            type: PAYMENT_RECORD_TYPE.PACK,
-            amount: event.amount,
-            currency: event.currency,
-            status: PAYMENT_RECORD_STATUS.APPROVED,
-            providerTransactionId: event.transactionId,
-            cardMask: event.cardMask,
-        });
+        await this.recordPayment(
+            {
+                userId,
+                orderReference: event.orderReference,
+                type: PAYMENT_RECORD_TYPE.PACK,
+                amount: event.amount,
+                currency: event.currency,
+                status: PAYMENT_RECORD_STATUS.APPROVED,
+                providerTransactionId: event.transactionId,
+                cardMask: event.cardMask,
+            },
+            session
+        );
         this.logger.log(
             `Pack ${packCode}: +${pack.executions} executions for user ${userId}`
         );
@@ -773,10 +805,11 @@ export class PaymentsService {
 
     private async applySubscriptionTransaction(
         event: BillingWebhookEvent,
-        userId: string
+        userId: string,
+        session: ClientSession
     ): Promise<void> {
         if (event.transactionStatus === WAYFORPAY_TRANSACTION_STATUS.REFUNDED) {
-            await this.markRefunded(event);
+            await this.markRefunded(event, session);
             return;
         }
         // Проміжний колбек (InProcessing/Pending): не чіпаємо стан і не пишемо
@@ -790,7 +823,10 @@ export class PaymentsService {
             return;
         }
 
-        const user = await this.userModel.findById(userId).lean();
+        const user = await this.userModel
+            .findById(userId)
+            .session(session)
+            .lean();
         const billing = user?.billing;
         if (!billing || billing.orderReference !== event.orderReference) {
             this.logger.debug(
@@ -803,21 +839,30 @@ export class PaymentsService {
             event.transactionStatus !== WAYFORPAY_TRANSACTION_STATUS.APPROVED;
 
         if (declined) {
-            const updated = await this.applyBillingUpdate(userId, event, {
-                'billing.subscriptionStatus': SUBSCRIPTION_STATUS.PAST_DUE,
-                'billing.providerSubscriptionStatus': event.transactionStatus,
-            });
+            const updated = await this.applyBillingUpdate(
+                userId,
+                event,
+                {
+                    'billing.subscriptionStatus': SUBSCRIPTION_STATUS.PAST_DUE,
+                    'billing.providerSubscriptionStatus':
+                        event.transactionStatus,
+                },
+                session
+            );
             if (updated) {
-                await this.recordPayment({
-                    userId,
-                    orderReference: event.orderReference,
-                    type: PAYMENT_RECORD_TYPE.SUBSCRIPTION,
-                    amount: event.amount,
-                    currency: event.currency,
-                    status: PAYMENT_RECORD_STATUS.DECLINED,
-                    providerTransactionId: event.transactionId,
-                    cardMask: event.cardMask,
-                });
+                await this.recordPayment(
+                    {
+                        userId,
+                        orderReference: event.orderReference,
+                        type: PAYMENT_RECORD_TYPE.SUBSCRIPTION,
+                        amount: event.amount,
+                        currency: event.currency,
+                        status: PAYMENT_RECORD_STATUS.DECLINED,
+                        providerTransactionId: event.transactionId,
+                        cardMask: event.cardMask,
+                    },
+                    session
+                );
             }
             return;
         }
@@ -835,7 +880,7 @@ export class PaymentsService {
             };
             if (event.recToken) rebindSet['billing.recToken'] = event.recToken;
             if (event.cardMask) rebindSet['billing.cardMask'] = event.cardMask;
-            await this.applyBillingUpdate(userId, event, rebindSet);
+            await this.applyBillingUpdate(userId, event, rebindSet, session);
             return;
         }
 
@@ -876,7 +921,12 @@ export class PaymentsService {
         if (event.recToken) set['billing.recToken'] = event.recToken;
         if (event.cardMask) set['billing.cardMask'] = event.cardMask;
 
-        const updated = await this.applyBillingUpdate(userId, event, set);
+        const updated = await this.applyBillingUpdate(
+            userId,
+            event,
+            set,
+            session
+        );
         if (!updated) {
             return;
         }
@@ -885,19 +935,23 @@ export class PaymentsService {
             await this.usersService.addExecutions(
                 userId,
                 plan.executions,
-                EXECUTION_ACTION.SUBSCRIPTION_ACTIVATION
+                EXECUTION_ACTION.SUBSCRIPTION_ACTIVATION,
+                session
             );
         }
-        await this.recordPayment({
-            userId,
-            orderReference: event.orderReference,
-            type: PAYMENT_RECORD_TYPE.SUBSCRIPTION,
-            amount: event.amount,
-            currency: event.currency,
-            status: PAYMENT_RECORD_STATUS.APPROVED,
-            providerTransactionId: event.transactionId,
-            cardMask: event.cardMask,
-        });
+        await this.recordPayment(
+            {
+                userId,
+                orderReference: event.orderReference,
+                type: PAYMENT_RECORD_TYPE.SUBSCRIPTION,
+                amount: event.amount,
+                currency: event.currency,
+                status: PAYMENT_RECORD_STATUS.APPROVED,
+                providerTransactionId: event.transactionId,
+                cardMask: event.cardMask,
+            },
+            session
+        );
         this.logger.log(
             `Subscription ${wasBinding ? 'trial-binding' : 'charge'} for user ${userId} ` +
                 `(plan ${effectivePlanCode}, event ${event.providerEventId})`
@@ -912,7 +966,8 @@ export class PaymentsService {
     private async applyBillingUpdate(
         userId: string,
         event: BillingWebhookEvent,
-        set: Record<string, unknown>
+        set: Record<string, unknown>,
+        session: ClientSession
     ): Promise<boolean> {
         const updated = await this.userModel.findOneAndUpdate(
             {
@@ -933,7 +988,7 @@ export class PaymentsService {
                     'billing.lastProviderEventAt': event.occurredAt,
                 },
             },
-            { new: true, maxTimeMS: WEBHOOK_MONGO_TIMEOUT_MS }
+            { new: true, session, maxTimeMS: WEBHOOK_MONGO_TIMEOUT_MS }
         );
         if (!updated) {
             this.logger.debug(
@@ -943,14 +998,17 @@ export class PaymentsService {
         return updated != null;
     }
 
-    private async markRefunded(event: BillingWebhookEvent): Promise<void> {
+    private async markRefunded(
+        event: BillingWebhookEvent,
+        session: ClientSession
+    ): Promise<void> {
         const update = {
             $set: {
                 status: PAYMENT_RECORD_STATUS.REFUNDED,
                 refundAmount: event.amount,
             },
         };
-        const options = { sort: { createdAt: -1 as const } };
+        const options = { sort: { createdAt: -1 as const }, session };
 
         // 1) Точний збіг за transactionId оригінального списання. Покриває і
         //    ідемпотентність (cancel-with-refund уже відмітив цей запис
@@ -1026,39 +1084,6 @@ export class PaymentsService {
         }
     }
 
-    /**
-     * Атомарний перехід webhook-події pending→applied. Повертає true, якщо саме
-     * цей виклик зробив перехід — гард проти подвійного нарахування для
-     * неідемпотентних ефектів (pack-grant) при rollback+redelivery.
-     */
-    private async claimPendingWebhookEvent(
-        providerEventId: string
-    ): Promise<boolean> {
-        const res = await this.webhookEventModel.updateOne(
-            { provider: PROVIDER, providerEventId, status: 'pending' },
-            { $set: { status: 'applied' } },
-            { maxTimeMS: WEBHOOK_MONGO_TIMEOUT_MS }
-        );
-        return res.modifiedCount === 1;
-    }
-
-    private async markWebhookEventApplied(
-        providerEventId: string
-    ): Promise<void> {
-        try {
-            await this.webhookEventModel.updateOne(
-                { provider: PROVIDER, providerEventId },
-                { $set: { status: 'applied' } },
-                { maxTimeMS: WEBHOOK_MONGO_TIMEOUT_MS }
-            );
-        } catch (error) {
-            this.logger.error(
-                `Failed to mark webhook event ${providerEventId} applied (already processed)`,
-                error instanceof Error ? error.stack : String(error)
-            );
-        }
-    }
-
     private async rollbackPendingWebhookEvent(
         providerEventId: string
     ): Promise<void> {
@@ -1092,27 +1117,35 @@ export class PaymentsService {
         return { user, billing: user.billing };
     }
 
-    private async recordPayment(data: {
-        userId: string;
-        orderReference: string;
-        type: PaymentRecordType;
-        amount: number;
-        currency: string;
-        status: (typeof PAYMENT_RECORD_STATUS)[keyof typeof PAYMENT_RECORD_STATUS];
-        providerTransactionId: string | null;
-        cardMask: string | null;
-    }): Promise<void> {
-        await this.paymentRecordModel.create({
-            userId: new Types.ObjectId(data.userId),
-            orderReference: data.orderReference,
-            type: data.type,
-            amount: data.amount,
-            currency: data.currency,
-            status: data.status,
-            providerTransactionId: data.providerTransactionId,
-            cardMask: data.cardMask,
-            refundAmount: null,
-        });
+    private async recordPayment(
+        data: {
+            userId: string;
+            orderReference: string;
+            type: PaymentRecordType;
+            amount: number;
+            currency: string;
+            status: (typeof PAYMENT_RECORD_STATUS)[keyof typeof PAYMENT_RECORD_STATUS];
+            providerTransactionId: string | null;
+            cardMask: string | null;
+        },
+        session?: ClientSession
+    ): Promise<void> {
+        await this.paymentRecordModel.create(
+            [
+                {
+                    userId: new Types.ObjectId(data.userId),
+                    orderReference: data.orderReference,
+                    type: data.type,
+                    amount: data.amount,
+                    currency: data.currency,
+                    status: data.status,
+                    providerTransactionId: data.providerTransactionId,
+                    cardMask: data.cardMask,
+                    refundAmount: null,
+                },
+            ],
+            { session }
+        );
     }
 
     /**
