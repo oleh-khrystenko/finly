@@ -6,36 +6,64 @@ import {
     Logger,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import {
-    BILLING_EVENT_TYPE,
+    BILLING_CURRENCY,
     EXECUTION_ACTION,
     EXECUTION_TRANSACTION_TYPE,
+    PAYMENT_RECORD_STATUS,
+    PAYMENT_RECORD_TYPE,
     PAYMENT_TYPE,
     RESPONSE_CODE,
     SUBSCRIPTION_STATUS,
+    SUBSCRIPTION_TRIAL_MONTHS,
+    WAYFORPAY_TRANSACTION_STATUS,
+    findExecutionPack,
+    findSubscriptionPlan,
+    type BillingInterval,
     type BillingWebhookEvent,
+    type CancelSubscription,
+    type ChangePlan,
     type CreateCheckoutSession,
+    type PaymentRecordType,
 } from '@finly/types';
 import { ENV } from '../../config/env';
 import {
-    PAYMENT_PROVIDER,
     IPaymentProvider,
+    PAYMENT_PROVIDER,
+    type SubscriptionChange,
 } from './interfaces/payment-provider.interface';
-import { CatalogService } from './catalog.service';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import {
     ProcessedWebhookEvent,
     ProcessedWebhookEventDocument,
 } from './schemas/processed-webhook-event.schema';
 import {
-    OrphanedProviderCustomer,
-    OrphanedProviderCustomerDocument,
-} from './schemas/orphaned-provider-customer.schema';
+    FailedRecurringRemoval,
+    FailedRecurringRemovalDocument,
+} from './schemas/failed-recurring-removal.schema';
+import {
+    PaymentRecord,
+    PaymentRecordDocument,
+    PaymentRecordLean,
+} from './schemas/payment-record.schema';
 import { UsersService } from '../users/users.service';
+import {
+    ORDER_KIND,
+    buildPackOrderReference,
+    buildSubscriptionOrderReference,
+    parseOrderReference,
+} from './order-reference';
 
-/** Max time for any single MongoDB operation in the webhook path (ms). */
 const WEBHOOK_MONGO_TIMEOUT_MS = 10_000;
+const PROVIDER = 'wayforpay';
+
+// Нефінальні статуси транзакції: проміжний колбек, після якого WayForPay
+// надішле фінальний статус окремою подією (providerEventId містить статус).
+const NON_TERMINAL_TRANSACTION_STATUSES: readonly string[] = [
+    WAYFORPAY_TRANSACTION_STATUS.IN_PROCESSING,
+    WAYFORPAY_TRANSACTION_STATUS.PENDING,
+];
 
 @Injectable()
 export class PaymentsService {
@@ -51,13 +79,16 @@ export class PaymentsService {
         @InjectModel(ProcessedWebhookEvent.name)
         private readonly webhookEventModel: Model<ProcessedWebhookEventDocument>,
 
-        @InjectModel(OrphanedProviderCustomer.name)
-        private readonly orphanModel: Model<OrphanedProviderCustomerDocument>,
+        @InjectModel(FailedRecurringRemoval.name)
+        private readonly failedRemovalModel: Model<FailedRecurringRemovalDocument>,
 
-        private readonly usersService: UsersService,
+        @InjectModel(PaymentRecord.name)
+        private readonly paymentRecordModel: Model<PaymentRecordDocument>,
 
-        private readonly catalogService: CatalogService
+        private readonly usersService: UsersService
     ) {}
+
+    // ── Checkout ─────────────────────────────────────────────────────────
 
     async createCheckoutSession(
         userId: string,
@@ -65,38 +96,30 @@ export class PaymentsService {
     ): Promise<{ checkoutUrl: string }> {
         const { paymentType, planCode, packCode, returnPath } = dto;
 
-        // Feature flag check
         if (
             paymentType === PAYMENT_TYPE.SUBSCRIPTION &&
             !ENV.PAYMENTS_SUBSCRIPTION_ENABLED
         ) {
-            throw new BadRequestException({
-                code: RESPONSE_CODE.PAYMENT_TYPE_DISABLED,
-                message: 'Subscription payments are disabled',
-            });
+            throw this.disabled();
         }
         if (
             paymentType === PAYMENT_TYPE.ONE_OFF &&
             !ENV.PAYMENTS_ONE_OFF_ENABLED
         ) {
-            throw new BadRequestException({
-                code: RESPONSE_CODE.PAYMENT_TYPE_DISABLED,
-                message: 'One-off payments are disabled',
-            });
+            throw this.disabled();
         }
 
         const user = await this.userModel.findById(userId).lean();
         if (!user) {
-            throw new BadRequestException('User not found');
+            throw new BadRequestException({
+                code: RESPONSE_CODE.NOT_FOUND,
+                message: 'User not found',
+            });
         }
 
-        const returnQuery = returnPath
-            ? `?returnPath=${encodeURIComponent(returnPath)}`
-            : '';
-        const successUrl = `${ENV.WEB_URL}/billing/success${returnQuery}`;
-        const cancelUrl = `${ENV.WEB_URL}/billing/cancel${returnQuery}`;
+        const serviceUrl = this.serviceUrl();
+        const returnUrl = this.returnUrl(returnPath);
 
-        // Subscription-specific validation
         if (paymentType === PAYMENT_TYPE.SUBSCRIPTION) {
             if (user.billing?.hasActiveSubscription) {
                 throw new ConflictException({
@@ -104,80 +127,360 @@ export class PaymentsService {
                     message: 'Already subscribed',
                 });
             }
-            const planEntry = await this.catalogService.getSubscriptionPlan(
-                planCode!
-            );
-            if (!planEntry) {
-                throw new BadRequestException('Invalid planCode');
+            const plan = findSubscriptionPlan(planCode ?? '');
+            if (!plan) {
+                throw new BadRequestException({
+                    code: RESPONSE_CODE.INVALID_PLAN,
+                    message: 'Invalid planCode',
+                });
             }
-            const result = await this.paymentProvider.createCheckoutSession({
-                userId,
-                userEmail: user.email,
-                providerCustomerId:
-                    user.billing?.providerCustomerId ?? undefined,
-                paymentType,
-                planCode: planCode!,
-                priceId: planEntry.priceId,
-                executions: planEntry.executions,
-                successUrl,
-                cancelUrl,
+
+            const orderReference = buildSubscriptionOrderReference(userId);
+            const trialEnd = addMonths(new Date(), SUBSCRIPTION_TRIAL_MONTHS);
+
+            // Optimistically persist INCOMPLETE billing: access не дається
+            // (hasActiveSubscription=false) поки перший колбек WayForPay не
+            // підтвердить привʼязку картки. trialEnd зберігаємо як межу періоду.
+            await this.userModel.findByIdAndUpdate(userId, {
+                $set: {
+                    billing: this.freshBilling({
+                        orderReference,
+                        planCode: plan.code,
+                        currency: plan.currency,
+                        subscriptionStatus: SUBSCRIPTION_STATUS.INCOMPLETE,
+                        currentPeriodEnd: trialEnd,
+                    }),
+                },
             });
+
+            const result =
+                await this.paymentProvider.createSubscriptionCheckout({
+                    userId,
+                    userEmail: user.email,
+                    orderReference,
+                    planName: this.planLabel(plan.code),
+                    amount: plan.priceAmount,
+                    currency: plan.currency,
+                    interval: plan.interval,
+                    firstChargeDate: trialEnd,
+                    serviceUrl,
+                    returnUrl,
+                });
             return { checkoutUrl: result.checkoutUrl };
         }
 
-        // One-off payment
-        const pack = packCode
-            ? await this.catalogService.getExecutionPack(packCode)
-            : undefined;
+        const pack = findExecutionPack(packCode ?? '');
         if (!pack) {
-            throw new BadRequestException('Invalid packCode');
+            throw new BadRequestException({
+                code: RESPONSE_CODE.INVALID_PLAN,
+                message: 'Invalid packCode',
+            });
         }
-        const result = await this.paymentProvider.createCheckoutSession({
+        const orderReference = buildPackOrderReference(userId, pack.code);
+        const result = await this.paymentProvider.createOneOffCheckout({
             userId,
             userEmail: user.email,
-            providerCustomerId: user.billing?.providerCustomerId ?? undefined,
-            paymentType,
-            planCode: packCode!,
-            priceId: pack.priceId,
-            executions: pack.executions,
-            successUrl,
-            cancelUrl,
+            orderReference,
+            packName: this.packLabel(pack.code),
+            amount: pack.priceAmount,
+            currency: pack.currency,
+            serviceUrl,
+            returnUrl,
         });
         return { checkoutUrl: result.checkoutUrl };
     }
 
-    async createPortalSession(userId: string): Promise<{ portalUrl: string }> {
-        const user = await this.userModel.findById(userId).lean();
-        if (!user) {
-            throw new BadRequestException('User not found');
+    // ── Subscription management ──────────────────────────────────────────
+
+    async cancelSubscription(
+        userId: string,
+        dto: CancelSubscription
+    ): Promise<{ refundedAmount: number | null }> {
+        const { billing } = await this.requireActiveSubscription(userId);
+        const orderReference = billing.orderReference!;
+
+        if (!dto.withRefund) {
+            // Кінець періоду: не поновлювати після межі, доступ лишається.
+            await this.changeRecurringOrThrow(orderReference, {
+                endDate: billing.currentPeriodEnd ?? undefined,
+            });
+            await this.userModel.findByIdAndUpdate(userId, {
+                $set: {
+                    'billing.cancelAtPeriodEnd': true,
+                    'billing.scheduledPlanCode': null,
+                    'billing.scheduledChangeDate': null,
+                },
+            });
+            return { refundedAmount: null };
         }
 
-        if (!user.billing?.providerCustomerId) {
+        // З поверненням за невикористаний період.
+        const lastCharge = await this.paymentRecordModel
+            .findOne({
+                userId: new Types.ObjectId(userId),
+                type: PAYMENT_RECORD_TYPE.SUBSCRIPTION,
+                status: PAYMENT_RECORD_STATUS.APPROVED,
+            })
+            .sort({ createdAt: -1 })
+            .lean();
+
+        const interval = this.planInterval(billing.planCode);
+        const refundAmount = lastCharge
+            ? Math.round(
+                  lastCharge.amount *
+                      remainingRatio(billing.currentPeriodEnd, interval)
+              )
+            : 0;
+
+        if (lastCharge && refundAmount > 0) {
+            const result = await this.paymentProvider.refund({
+                orderReference,
+                amount: refundAmount,
+                currency: billing.currency ?? BILLING_CURRENCY,
+                comment:
+                    'Скасування підписки з поверненням за невикористаний період',
+            });
+            if (!result.success) {
+                throw new BadRequestException({
+                    code: RESPONSE_CODE.REFUND_FAILED,
+                    message: 'Refund failed',
+                });
+            }
+            await this.paymentRecordModel.updateOne(
+                { _id: lastCharge._id },
+                {
+                    $set: {
+                        status: PAYMENT_RECORD_STATUS.REFUNDED,
+                        refundAmount,
+                    },
+                }
+            );
+        }
+
+        await this.removeRecurringWithRetry(orderReference, 'cancel_refund');
+
+        await this.userModel.findByIdAndUpdate(userId, {
+            $set: {
+                'billing.subscriptionStatus': SUBSCRIPTION_STATUS.CANCELED,
+                'billing.hasActiveSubscription': false,
+                'billing.cancelAtPeriodEnd': false,
+                'billing.scheduledPlanCode': null,
+                'billing.scheduledChangeDate': null,
+            },
+        });
+
+        return { refundedAmount: refundAmount > 0 ? refundAmount : null };
+    }
+
+    async changePlan(
+        userId: string,
+        dto: ChangePlan
+    ): Promise<{ scheduled: boolean }> {
+        const { billing } = await this.requireActiveSubscription(userId);
+        const orderReference = billing.orderReference!;
+
+        const current = findSubscriptionPlan(billing.planCode ?? '');
+        const target = findSubscriptionPlan(dto.planCode);
+        if (!target) {
             throw new BadRequestException({
-                code: RESPONSE_CODE.NO_BILLING_ACCOUNT,
-                message: 'No billing account',
+                code: RESPONSE_CODE.INVALID_PLAN,
+                message: 'Invalid planCode',
+            });
+        }
+        if (current && current.code === target.code) {
+            throw new BadRequestException({
+                code: RESPONSE_CODE.SAME_PLAN,
+                message: 'Already on this plan',
             });
         }
 
-        const returnUrl = `${ENV.WEB_URL}/billing`;
-        const result = await this.paymentProvider.createPortalSession(
-            user.billing.providerCustomerId,
-            returnUrl
+        const currentPrice = current?.priceAmount ?? 0;
+        const isUpgrade = target.priceAmount > currentPrice;
+
+        if (!isUpgrade) {
+            // Downgrade — з наступного періоду. CHANGE знижує суму рекурента
+            // на наступний цикл; план і executions перемикаються на межі
+            // (renewal-webhook застосує scheduled-перехід).
+            await this.changeRecurringOrThrow(orderReference, {
+                amount: target.priceAmount,
+                currency: target.currency,
+                interval: target.interval,
+            });
+            await this.userModel.findByIdAndUpdate(userId, {
+                $set: {
+                    'billing.scheduledPlanCode': target.code,
+                    'billing.scheduledChangeDate': billing.currentPeriodEnd,
+                },
+            });
+            return { scheduled: true };
+        }
+
+        // Upgrade — одразу. Спершу тиха proration-доплата за збереженим токеном;
+        // ТІЛЬКИ після підтвердженої оплати піднімаємо рекурент і нараховуємо
+        // executions. Без токена silent-доплата неможлива.
+        if (!billing.recToken) {
+            throw new BadRequestException({
+                code: RESPONSE_CODE.PRORATION_PAYMENT_FAILED,
+                message: 'No saved card token for proration',
+            });
+        }
+
+        const ratio = remainingRatio(
+            billing.currentPeriodEnd,
+            this.planInterval(billing.planCode)
+        );
+        const prorationAmount = Math.round(
+            (target.priceAmount - currentPrice) * ratio
         );
 
-        return { portalUrl: result.portalUrl };
+        let prorationRef: string | null = null;
+        if (prorationAmount > 0) {
+            prorationRef = `fin-prorate-${userId}-${Date.now().toString(36)}`;
+            const charge = await this.paymentProvider.chargeByToken({
+                orderReference: prorationRef,
+                recToken: billing.recToken,
+                amount: prorationAmount,
+                currency: target.currency,
+                description: `Доплата за апгрейд плану ${this.planLabel(target.code)}`,
+            });
+            if (!charge.success) {
+                throw new BadRequestException({
+                    code: RESPONSE_CODE.PRORATION_PAYMENT_FAILED,
+                    message: 'Proration charge declined',
+                });
+            }
+            await this.recordPayment({
+                userId,
+                orderReference: prorationRef,
+                type: PAYMENT_RECORD_TYPE.PRORATION,
+                amount: prorationAmount,
+                currency: target.currency,
+                status: PAYMENT_RECORD_STATUS.APPROVED,
+                providerTransactionId: charge.transactionId,
+                cardMask: charge.cardMask ?? billing.cardMask,
+            });
+        }
+
+        // Якщо proration уже списано, а підняти рекурент не вдалось — повертаємо
+        // доплату, інакше користувач заплатив за апгрейд, якого не отримав
+        // (план/рекурент лишаються старими). Тільки після успішного CHANGE
+        // піднімаємо план і нараховуємо executions.
+        try {
+            await this.changeRecurringOrThrow(orderReference, {
+                amount: target.priceAmount,
+                currency: target.currency,
+                interval: target.interval,
+            });
+        } catch (error) {
+            if (prorationRef && prorationAmount > 0) {
+                await this.refundProration(
+                    prorationRef,
+                    prorationAmount,
+                    target.currency
+                );
+            }
+            throw error;
+        }
+
+        const executionsDelta = Math.round(
+            ((target.executions ?? 0) - (current?.executions ?? 0)) * ratio
+        );
+
+        const update: Record<string, unknown> = {
+            'billing.planCode': target.code,
+            'billing.scheduledPlanCode': null,
+            'billing.scheduledChangeDate': null,
+        };
+        await this.userModel.findByIdAndUpdate(userId, { $set: update });
+
+        if (executionsDelta > 0) {
+            await this.usersService.addExecutions(
+                userId,
+                executionsDelta,
+                EXECUTION_ACTION.PLAN_CHANGE
+            );
+        }
+
+        return { scheduled: false };
     }
+
+    async updateCard(
+        userId: string,
+        returnPath?: string
+    ): Promise<{ checkoutUrl: string }> {
+        const { user, billing } = await this.requireActiveSubscription(userId);
+        const oldOrderReference = billing.orderReference!;
+
+        const plan = findSubscriptionPlan(billing.planCode ?? '');
+        if (!plan) {
+            throw new BadRequestException({
+                code: RESPONSE_CODE.INVALID_PLAN,
+                message: 'Subscription plan no longer exists',
+            });
+        }
+
+        // Re-bind = cancel old + create new зі збереженням плану і дати
+        // наступного списання (без негайної повторної оплати поточного періоду).
+        await this.removeRecurringWithRetry(oldOrderReference, 'card_rebind');
+
+        const newOrderReference = buildSubscriptionOrderReference(userId);
+        const result = await this.paymentProvider.createSubscriptionCheckout({
+            userId,
+            userEmail: user.email,
+            orderReference: newOrderReference,
+            planName: this.planLabel(plan.code),
+            amount: plan.priceAmount,
+            currency: plan.currency,
+            interval: plan.interval,
+            firstChargeDate: billing.currentPeriodEnd ?? undefined,
+            serviceUrl: this.serviceUrl(),
+            returnUrl: this.returnUrl(returnPath),
+        });
+
+        await this.userModel.findByIdAndUpdate(userId, {
+            $set: {
+                'billing.orderReference': newOrderReference,
+                'billing.recToken': null,
+                'billing.cardMask': null,
+                // Стара рекурента знята, нова ще не підтверджена. Прапорець дає
+                // cleanup-cron експайрити доступ, якщо користувач кине re-bind
+                // і період мине (інакше hasActiveSubscription лишився б true
+                // назавжди без жодного списання). Чистить перший approved-вебхук
+                // на новому orderReference.
+                'billing.rebindPendingAt': new Date(),
+            },
+        });
+
+        return { checkoutUrl: result.checkoutUrl };
+    }
+
+    // ── Payment history ──────────────────────────────────────────────────
+
+    async listPayments(
+        userId: string,
+        limit: number
+    ): Promise<PaymentRecordLean[]> {
+        return this.paymentRecordModel
+            .find({ userId: new Types.ObjectId(userId) })
+            .sort({ createdAt: -1 })
+            .limit(limit)
+            .lean();
+    }
+
+    // ── Reset (REMOVE recurring + clear local) ───────────────────────────
 
     async resetBilling(userId: string): Promise<void> {
         const user = await this.userModel.findById(userId).lean();
         if (!user) {
-            throw new BadRequestException('User not found');
+            throw new BadRequestException({
+                code: RESPONSE_CODE.NOT_FOUND,
+                message: 'User not found',
+            });
         }
 
-        const providerCustomerId = user.billing?.providerCustomerId;
+        const orderReference = user.billing?.orderReference;
         const previousBalance = user.executions.balance;
 
-        // 1. Record reset transaction before clearing (if user had balance)
         if (previousBalance > 0) {
             await this.usersService.recordTransaction({
                 userId,
@@ -188,9 +491,6 @@ export class PaymentsService {
             });
         }
 
-        // 2. Reset DB — this prevents in-flight webhooks from
-        //    re-creating billing (they'll hit billing=null and the
-        //    out-of-order guard will skip them as orphan events).
         await this.userModel.findByIdAndUpdate(userId, {
             $set: {
                 billing: null,
@@ -198,144 +498,293 @@ export class PaymentsService {
             },
         });
         await this.webhookEventModel.deleteMany({ userId });
+        await this.paymentRecordModel.deleteMany({
+            userId: new Types.ObjectId(userId),
+        });
         await this.usersService.clearTransactions(userId);
 
-        // 3. Clean up Stripe — on failure, persist for retry by cron.
-        if (providerCustomerId) {
-            try {
-                await this.paymentProvider.deleteCustomerData(
-                    providerCustomerId
-                );
-            } catch (error) {
-                this.logger.error(
-                    `Failed to delete Stripe customer ${providerCustomerId} during reset, queued for retry`,
-                    error instanceof Error ? error.stack : String(error)
-                );
-                await this.enqueueOrphanedCustomer(
-                    'stripe',
-                    providerCustomerId,
-                    'billing_reset'
-                );
-            }
+        if (orderReference && user.billing?.hasActiveSubscription) {
+            await this.removeRecurringWithRetry(
+                orderReference,
+                'billing_reset'
+            );
         }
 
         this.logger.log(`Billing reset for user ${userId}`);
     }
 
+    // ── Webhook ──────────────────────────────────────────────────────────
+
     async handleWebhook(
-        provider: string,
-        rawBody: Buffer,
-        signatureHeader: string
-    ): Promise<void> {
-        // 1. Parse and verify webhook payload
-        const event = await this.paymentProvider.handleWebhookPayload(
-            rawBody,
-            signatureHeader
-        );
+        rawBody: Buffer
+    ): Promise<Record<string, unknown> | null> {
+        const { event, acceptResponse } =
+            await this.paymentProvider.parseWebhook(rawBody);
         if (!event) {
-            return;
+            return null;
         }
 
-        // 2. Resolve userId
-        const userId = await this.resolveUserId(event);
-        if (!userId) {
-            this.logger.warn(
-                `Cannot resolve userId for webhook event ${event.providerEventId}`
-            );
-            return;
-        }
-
-        // 3. Two-phase idempotency: insert as 'pending', mark 'applied' after success
-        const insertResult = await this.insertWebhookEvent(
-            provider,
-            event,
-            userId
-        );
-        if (insertResult === 'applied') {
-            return;
-        }
-
-        // 4. Process event — rollback idempotency record on failure
         try {
-            await this.processWebhookEvent(event, userId);
+            await this.routeTransaction(event);
         } catch (error) {
-            await this.rollbackPendingWebhookEvent(
-                provider,
-                event.providerEventId
+            this.logger.error(
+                `Failed to process webhook ${event.providerEventId}`,
+                error instanceof Error ? error.stack : String(error)
             );
+            // НЕ повертаємо accept: pending-запис уже відкочено
+            // (`routeTransaction` rollback), тож повторна доставка WayForPay
+            // переобробить подію з нуля. Якби ми тут віддали accept, провайдер
+            // не переслав би — і реальне списання лишилось би незарахованим.
+            return null;
+        }
+
+        return acceptResponse;
+    }
+
+    private async routeTransaction(event: BillingWebhookEvent): Promise<void> {
+        const parsed = parseOrderReference(event.orderReference);
+        if (!parsed) {
+            this.logger.debug(
+                `Unrecognized orderReference ${event.orderReference}, ignored`
+            );
+            return;
+        }
+
+        const userId = parsed.userId;
+        const insert = await this.insertWebhookEvent(event, userId);
+        if (insert !== 'new') {
+            // 'applied' (already processed) або 'pending' (інша доставка цієї ж
+            // події вже в обробці, або crash-orphan, який добиває cron-sweep).
+            // НЕ переобробляємо: pack-ефект (`addExecutions`) не ідемпотентний,
+            // тож повторний прогін під час конкурентної доставки задвоїв би
+            // нарахування.
+            return;
+        }
+
+        try {
+            if (parsed.kind === ORDER_KIND.PACK) {
+                await this.applyPackTransaction(event, parsed.packCode, userId);
+            } else {
+                await this.applySubscriptionTransaction(event, userId);
+            }
+        } catch (error) {
+            await this.rollbackPendingWebhookEvent(event.providerEventId);
             throw error;
         }
 
-        // 5. Mark as applied — non-fatal on failure (event was already processed;
-        //    returning 200 prevents Stripe from retrying and double-counting).
-        try {
-            await this.markWebhookEventApplied(provider, event.providerEventId);
-        } catch (error) {
-            this.logger.error(
-                `Failed to mark webhook event ${event.providerEventId} as applied ` +
-                    `(event was processed successfully)`,
-                error instanceof Error ? error.stack : String(error)
-            );
-        }
+        await this.markWebhookEventApplied(event.providerEventId);
     }
 
-    private async processWebhookEvent(
+    private async applyPackTransaction(
+        event: BillingWebhookEvent,
+        packCode: string,
+        userId: string
+    ): Promise<void> {
+        if (event.transactionStatus === WAYFORPAY_TRANSACTION_STATUS.REFUNDED) {
+            await this.markRefunded(event);
+            return;
+        }
+        // Проміжний колбек (InProcessing/Pending) не пишемо у історію — інакше
+        // лишився б фальшивий рядок «Відхилено» поряд із фінальним «Сплачено».
+        if (
+            NON_TERMINAL_TRANSACTION_STATUSES.includes(event.transactionStatus)
+        ) {
+            return;
+        }
+        if (event.transactionStatus !== WAYFORPAY_TRANSACTION_STATUS.APPROVED) {
+            await this.recordPayment({
+                userId,
+                orderReference: event.orderReference,
+                type: PAYMENT_RECORD_TYPE.PACK,
+                amount: event.amount,
+                currency: event.currency,
+                status: PAYMENT_RECORD_STATUS.DECLINED,
+                providerTransactionId: event.transactionId,
+                cardMask: event.cardMask,
+            });
+            return;
+        }
+
+        const pack = findExecutionPack(packCode);
+        if (!pack) {
+            this.logger.warn(`Unknown packCode ${packCode} in webhook`);
+            return;
+        }
+
+        // Грант executions неідемпотентний ($inc). Гейтимо атомарним переходом
+        // webhook-події pending→applied: якщо часткова обробка вже флипнула подію
+        // у applied (а наступний крок упав і WayForPay передоставив), не
+        // нараховуємо вдруге. rollbackPendingWebhookEvent чистить лише pending,
+        // тож після claim повторна доставка побачить applied і не переобробить.
+        // Дзеркалить CAS-гард підписки на lastProviderEventAt.
+        const claimed = await this.claimPendingWebhookEvent(
+            event.providerEventId
+        );
+        if (!claimed) return;
+
+        await this.usersService.addExecutions(
+            userId,
+            pack.executions,
+            EXECUTION_ACTION.PACK_PURCHASE
+        );
+        await this.recordPayment({
+            userId,
+            orderReference: event.orderReference,
+            type: PAYMENT_RECORD_TYPE.PACK,
+            amount: event.amount,
+            currency: event.currency,
+            status: PAYMENT_RECORD_STATUS.APPROVED,
+            providerTransactionId: event.transactionId,
+            cardMask: event.cardMask,
+        });
+        this.logger.log(
+            `Pack ${packCode}: +${pack.executions} executions for user ${userId}`
+        );
+    }
+
+    private async applySubscriptionTransaction(
         event: BillingWebhookEvent,
         userId: string
     ): Promise<void> {
-        if (event.type === BILLING_EVENT_TYPE.ONE_OFF_PAYMENT_COMPLETED) {
-            // One-off: independent events, no ordering concern
-            const user = await this.userModel
-                .findById(userId)
-                .maxTimeMS(WEBHOOK_MONGO_TIMEOUT_MS)
-                .lean();
-            if (!user) {
-                this.logger.warn(
-                    `User ${userId} not found for webhook event ${event.providerEventId}`
-                );
-                return;
-            }
-            await this.applyOneOffPayment(userId, event);
-        } else {
-            // Subscription: billing + execution adjustment in one atomic query
-            const applied = await this.processSubscriptionEvent(event, userId);
-            if (!applied) return;
+        if (event.transactionStatus === WAYFORPAY_TRANSACTION_STATUS.REFUNDED) {
+            await this.markRefunded(event);
+            return;
+        }
+        // Проміжний колбек (InProcessing/Pending): не чіпаємо стан і не пишемо
+        // платіж — фінальний статус прийде окремою подією. Без цього InProcessing
+        // флипнув би підписку у PAST_DUE і зламав trial-класифікацію наступного
+        // Approved (wasBinding більше не INCOMPLETE → привʼязка хибно стала б
+        // renewal-списанням).
+        if (
+            NON_TERMINAL_TRANSACTION_STATUSES.includes(event.transactionStatus)
+        ) {
+            return;
         }
 
+        const user = await this.userModel.findById(userId).lean();
+        const billing = user?.billing;
+        if (!billing || billing.orderReference !== event.orderReference) {
+            this.logger.debug(
+                `Subscription webhook for stale orderReference ${event.orderReference}, ignored`
+            );
+            return;
+        }
+
+        const declined =
+            event.transactionStatus !== WAYFORPAY_TRANSACTION_STATUS.APPROVED;
+
+        if (declined) {
+            const updated = await this.applyBillingUpdate(userId, event, {
+                'billing.subscriptionStatus': SUBSCRIPTION_STATUS.PAST_DUE,
+                'billing.providerSubscriptionStatus': event.transactionStatus,
+            });
+            if (updated) {
+                await this.recordPayment({
+                    userId,
+                    orderReference: event.orderReference,
+                    type: PAYMENT_RECORD_TYPE.SUBSCRIPTION,
+                    amount: event.amount,
+                    currency: event.currency,
+                    status: PAYMENT_RECORD_STATUS.DECLINED,
+                    providerTransactionId: event.transactionId,
+                    cardMask: event.cardMask,
+                });
+            }
+            return;
+        }
+
+        // Re-bind картки: перший Approved на новому orderReference після
+        // updateCard. Це card-verification, не списання (реальне списання — на
+        // межі періоду), тож період не рухаємо, executions не нараховуємо і
+        // платіж не пишемо — лише оновлюємо токен/маску і знімаємо прапорець.
+        // Без цієї гілки re-bind класифікувався б як charge: подвоїв би
+        // executions і продовжив період на повний інтервал.
+        if (billing.rebindPendingAt != null) {
+            const rebindSet: Record<string, unknown> = {
+                'billing.providerSubscriptionStatus': event.transactionStatus,
+                'billing.rebindPendingAt': null,
+            };
+            if (event.recToken) rebindSet['billing.recToken'] = event.recToken;
+            if (event.cardMask) rebindSet['billing.cardMask'] = event.cardMask;
+            await this.applyBillingUpdate(userId, event, rebindSet);
+            return;
+        }
+
+        // Approved. Класифікуємо за поточним станом: INCOMPLETE → привʼязка
+        // (trial), інакше → списання (trial-end або renewal). Застосовуємо
+        // запланований downgrade, якщо настала його дата.
+        const wasBinding =
+            billing.subscriptionStatus === SUBSCRIPTION_STATUS.INCOMPLETE;
+
+        const scheduledDue =
+            billing.scheduledPlanCode != null &&
+            billing.scheduledChangeDate != null &&
+            event.occurredAt.getTime() >= billing.scheduledChangeDate.getTime();
+        const effectivePlanCode = scheduledDue
+            ? billing.scheduledPlanCode!
+            : billing.planCode;
+        const plan = findSubscriptionPlan(effectivePlanCode ?? '');
+        const interval = plan?.interval ?? 'month';
+
+        const periodEnd = wasBinding
+            ? (billing.currentPeriodEnd ??
+              addInterval(event.occurredAt, interval))
+            : addInterval(event.occurredAt, interval);
+
+        const set: Record<string, unknown> = {
+            'billing.subscriptionStatus': wasBinding
+                ? SUBSCRIPTION_STATUS.TRIALING
+                : SUBSCRIPTION_STATUS.ACTIVE,
+            'billing.hasActiveSubscription': true,
+            'billing.cancelAtPeriodEnd': false,
+            'billing.providerSubscriptionStatus': event.transactionStatus,
+            'billing.currentPeriodEnd': periodEnd,
+            'billing.planCode': effectivePlanCode,
+            'billing.scheduledPlanCode': null,
+            'billing.scheduledChangeDate': null,
+            'billing.rebindPendingAt': null,
+        };
+        if (event.recToken) set['billing.recToken'] = event.recToken;
+        if (event.cardMask) set['billing.cardMask'] = event.cardMask;
+
+        const updated = await this.applyBillingUpdate(userId, event, set);
+        if (!updated) {
+            return;
+        }
+
+        if (plan) {
+            await this.usersService.addExecutions(
+                userId,
+                plan.executions,
+                EXECUTION_ACTION.SUBSCRIPTION_ACTIVATION
+            );
+        }
+        await this.recordPayment({
+            userId,
+            orderReference: event.orderReference,
+            type: PAYMENT_RECORD_TYPE.SUBSCRIPTION,
+            amount: event.amount,
+            currency: event.currency,
+            status: PAYMENT_RECORD_STATUS.APPROVED,
+            providerTransactionId: event.transactionId,
+            cardMask: event.cardMask,
+        });
         this.logger.log(
-            `Processed ${event.type} for user ${userId} (event: ${event.providerEventId})`
+            `Subscription ${wasBinding ? 'trial-binding' : 'charge'} for user ${userId} ` +
+                `(plan ${effectivePlanCode}, event ${event.providerEventId})`
         );
     }
 
     /**
-     * Processes subscription events atomically: billing state and execution
-     * adjustment are combined in a single MongoDB aggregation pipeline update.
-     *
-     * The execution adjustment uses a $cond guard on lastProviderEventAt ($lt,
-     * not $lte) so that replayed events (same occurredAt) do NOT double-count.
-     * The billing $set itself is idempotent (same values re-applied on replay).
+     * Atomic billing $set з guard на out-of-order: застосовується лише якщо
+     * подія новіша за останню (`lastProviderEventAt < occurredAt`). Повертає
+     * true, якщо застосовано (тоді безпечно нараховувати executions).
      */
-    private async processSubscriptionEvent(
+    private async applyBillingUpdate(
+        userId: string,
         event: BillingWebhookEvent,
-        userId: string
+        set: Record<string, unknown>
     ): Promise<boolean> {
-        const priceToPlan = await this.catalogService.getPriceToPlanMap();
-        const billingFields = this.buildBillingUpdate(event, priceToPlan);
-        const executionAdjustment =
-            await this.resolveExecutionAdjustment(event);
-
-        // Phase 1: dot-notation update for existing billing object
-        const dotNotation: Record<string, unknown> = {};
-        for (const [key, value] of Object.entries(billingFields)) {
-            dotNotation[`billing.${key}`] = value;
-        }
-
-        const phase1Update = this.buildAtomicUpdatePipeline(
-            { $set: dotNotation },
-            executionAdjustment,
-            event.occurredAt
-        );
-
         const updated = await this.userModel.findOneAndUpdate(
             {
                 _id: userId,
@@ -344,444 +793,407 @@ export class PaymentsService {
                     { 'billing.lastProviderEventAt': null },
                     {
                         'billing.lastProviderEventAt': {
-                            $lte: event.occurredAt,
+                            $lt: event.occurredAt,
                         },
                     },
                 ],
             },
-            phase1Update,
+            {
+                $set: {
+                    ...set,
+                    'billing.lastProviderEventAt': event.occurredAt,
+                },
+            },
             { new: true, maxTimeMS: WEBHOOK_MONGO_TIMEOUT_MS }
         );
-
-        let appliedUser = updated;
-
-        if (!appliedUser) {
-            // Phase 2: billing is null (first billing event) — set full subdocument.
-            // The { billing: null } filter guarantees exactly-once, so no $cond
-            // guard is needed — but buildAtomicUpdatePipeline still adds it for
-            // consistency (it evaluates to true when lastProviderEventAt is null).
-            const phase2Update = this.buildAtomicUpdatePipeline(
-                { $set: { billing: billingFields } },
-                executionAdjustment,
-                event.occurredAt
-            );
-
-            appliedUser = await this.userModel.findOneAndUpdate(
-                { _id: userId, billing: null },
-                phase2Update,
-                { new: true, maxTimeMS: WEBHOOK_MONGO_TIMEOUT_MS }
-            );
-
-            if (!appliedUser) {
-                this.logger.debug(
-                    `Skipping stale/orphan event ${event.providerEventId} for user ${userId}`
-                );
-                return false;
-            }
-        }
-
-        if (executionAdjustment !== 0) {
-            const txAction =
-                event.type === BILLING_EVENT_TYPE.CHECKOUT_COMPLETED
-                    ? EXECUTION_ACTION.SUBSCRIPTION_ACTIVATION
-                    : EXECUTION_ACTION.PLAN_CHANGE;
-            const txType =
-                executionAdjustment > 0
-                    ? EXECUTION_TRANSACTION_TYPE.CREDIT
-                    : EXECUTION_TRANSACTION_TYPE.DEBIT;
-
-            // Use the post-update document returned by findOneAndUpdate ({ new: true }).
-            // This is the same atomic operation that applied the adjustment, so
-            // balanceAfter reflects exactly this event — no race window with other
-            // concurrent webhooks mutating balance between update and read.
-            await this.usersService.recordTransaction({
-                userId,
-                type: txType,
-                action: txAction,
-                amount: Math.abs(executionAdjustment),
-                balanceAfter: appliedUser.executions.balance,
-            });
-
-            const direction = executionAdjustment > 0 ? 'Added' : 'Deducted';
-            const reason =
-                event.type === BILLING_EVENT_TYPE.CHECKOUT_COMPLETED
-                    ? 'subscription checkout'
-                    : 'plan change proration';
-            this.logger.log(
-                `${direction} ${Math.abs(executionAdjustment)} executions for ${reason} ` +
-                    `(user: ${userId}, event: ${event.providerEventId})`
+        if (!updated) {
+            this.logger.debug(
+                `Stale subscription event ${event.providerEventId} for user ${userId}, skipped`
             );
         }
-
-        return true;
+        return updated != null;
     }
 
-    private async resolveUserId(
-        event: BillingWebhookEvent
-    ): Promise<string | null> {
-        if (event.userId?.length > 0) {
-            return event.userId;
+    private async markRefunded(event: BillingWebhookEvent): Promise<void> {
+        // Рефандимо лише APPROVED-списання: інакше findOneAndUpdate мітив би
+        // найновіший запис будь-якого статусу (DECLINED / вже REFUNDED). Кілька
+        // рекурентних списань ділять orderReference, тож звужуємо до того, що
+        // збігається сумою; інакше — найсвіжіше підтверджене списання.
+        const base = {
+            orderReference: event.orderReference,
+            status: PAYMENT_RECORD_STATUS.APPROVED,
+        };
+        const update = {
+            $set: {
+                status: PAYMENT_RECORD_STATUS.REFUNDED,
+                refundAmount: event.amount,
+            },
+        };
+        const options = { sort: { createdAt: -1 as const } };
+
+        const byAmount = await this.paymentRecordModel.findOneAndUpdate(
+            { ...base, amount: event.amount },
+            update,
+            options
+        );
+        if (!byAmount) {
+            await this.paymentRecordModel.findOneAndUpdate(
+                base,
+                update,
+                options
+            );
         }
-
-        // For subscription events, look up user by providerSubscriptionId
-        const subscriptionId =
-            typeof event.raw.id === 'string' ? event.raw.id : undefined;
-
-        if (!subscriptionId) {
-            return null;
-        }
-
-        const user = await this.userModel
-            .findOne({ 'billing.providerSubscriptionId': subscriptionId })
-            .maxTimeMS(WEBHOOK_MONGO_TIMEOUT_MS)
-            .lean();
-
-        return user?._id?.toString() ?? null;
     }
+
+    // ── Idempotency primitives ───────────────────────────────────────────
 
     private async insertWebhookEvent(
-        provider: string,
         event: BillingWebhookEvent,
         userId: string
-    ): Promise<'new' | 'retry' | 'applied'> {
+    ): Promise<'new' | 'skip'> {
         try {
             await this.webhookEventModel.create({
-                provider,
+                provider: PROVIDER,
                 providerEventId: event.providerEventId,
                 receivedAt: new Date(),
                 occurredAt: event.occurredAt,
-                type: event.type,
+                type: event.transactionStatus,
                 userId,
-                packCode: event.packCode ?? null,
+                packCode: null,
                 status: 'pending',
             });
             return 'new';
         } catch (error: unknown) {
-            // Duplicate key error (MongoDB code 11000)
-            if (
-                error instanceof Error &&
-                'code' in error &&
-                (error as { code: number }).code === 11000
-            ) {
+            if (isDuplicateKeyError(error)) {
+                // Унікальний індекс (provider, providerEventId) гарантує одного
+                // творця pending-запису. Будь-яка інша доставка тієї ж події —
+                // дублікат: вона НЕ застосовує ефекти. 'applied' = вже
+                // оброблено; 'pending' = творець ще в обробці (або crash-orphan,
+                // який добиває `PaymentsCleanupService` stale-sweep).
                 const existing = await this.webhookEventModel
                     .findOne({
-                        provider,
+                        provider: PROVIDER,
                         providerEventId: event.providerEventId,
                     })
                     .lean();
-
-                if (existing?.status === 'applied') {
-                    this.logger.debug(
-                        `Duplicate webhook event ${event.providerEventId}, already applied`
-                    );
-                    return 'applied';
-                }
-
-                this.logger.warn(
-                    `Retrying pending webhook event ${event.providerEventId}`
+                this.logger.debug(
+                    `Duplicate webhook event ${event.providerEventId} ` +
+                        `(status ${existing?.status ?? 'unknown'}), skipped`
                 );
-                return 'retry';
+                return 'skip';
             }
             throw error;
         }
     }
 
-    private async markWebhookEventApplied(
-        provider: string,
+    /**
+     * Атомарний перехід webhook-події pending→applied. Повертає true, якщо саме
+     * цей виклик зробив перехід — гард проти подвійного нарахування для
+     * неідемпотентних ефектів (pack-grant) при rollback+redelivery.
+     */
+    private async claimPendingWebhookEvent(
         providerEventId: string
-    ): Promise<void> {
-        await this.webhookEventModel.updateOne(
-            { provider, providerEventId },
+    ): Promise<boolean> {
+        const res = await this.webhookEventModel.updateOne(
+            { provider: PROVIDER, providerEventId, status: 'pending' },
             { $set: { status: 'applied' } },
             { maxTimeMS: WEBHOOK_MONGO_TIMEOUT_MS }
         );
+        return res.modifiedCount === 1;
     }
 
-    private async rollbackPendingWebhookEvent(
-        provider: string,
+    private async markWebhookEventApplied(
         providerEventId: string
     ): Promise<void> {
         try {
-            await this.webhookEventModel.deleteOne(
-                {
-                    provider,
-                    providerEventId,
-                    status: 'pending',
-                },
+            await this.webhookEventModel.updateOne(
+                { provider: PROVIDER, providerEventId },
+                { $set: { status: 'applied' } },
                 { maxTimeMS: WEBHOOK_MONGO_TIMEOUT_MS }
             );
-        } catch (deleteError) {
+        } catch (error) {
+            this.logger.error(
+                `Failed to mark webhook event ${providerEventId} applied (already processed)`,
+                error instanceof Error ? error.stack : String(error)
+            );
+        }
+    }
+
+    private async rollbackPendingWebhookEvent(
+        providerEventId: string
+    ): Promise<void> {
+        try {
+            await this.webhookEventModel.deleteOne({
+                provider: PROVIDER,
+                providerEventId,
+                status: 'pending',
+            });
+        } catch (error) {
             this.logger.error(
                 `Failed to rollback pending webhook event ${providerEventId}`,
-                deleteError instanceof Error
-                    ? deleteError.stack
-                    : String(deleteError)
+                error instanceof Error ? error.stack : String(error)
             );
         }
     }
 
-    private async applyOneOffPayment(
-        userId: string,
-        event: BillingWebhookEvent
-    ): Promise<void> {
-        const executionsAmount = event.executionsAmount ?? 0;
-        if (!Number.isFinite(executionsAmount) || executionsAmount <= 0) {
-            this.logger.warn(
-                `ONE_OFF_PAYMENT_COMPLETED event ${event.providerEventId} has no executionsAmount`
-            );
-            return;
+    // ── Helpers ──────────────────────────────────────────────────────────
+
+    private async requireActiveSubscription(userId: string) {
+        const user = await this.userModel.findById(userId).lean();
+        if (
+            !user?.billing?.hasActiveSubscription ||
+            !user.billing.orderReference
+        ) {
+            throw new BadRequestException({
+                code: RESPONSE_CODE.NO_ACTIVE_SUBSCRIPTION,
+                message: 'No active subscription',
+            });
         }
-        await this.usersService.addExecutions(
-            userId,
-            executionsAmount,
-            EXECUTION_ACTION.PACK_PURCHASE
-        );
-        this.logger.log(
-            `Added ${executionsAmount} executions to user ${userId} (event: ${event.providerEventId})`
-        );
+        return { user, billing: user.billing };
     }
 
-    private async resolveExecutionAdjustment(
-        event: BillingWebhookEvent
-    ): Promise<number> {
-        if (event.type === BILLING_EVENT_TYPE.CHECKOUT_COMPLETED) {
-            const amount = event.executionsAmount ?? 0;
-            if (!Number.isFinite(amount) || amount <= 0) {
-                this.logger.warn(
-                    `CHECKOUT_COMPLETED event ${event.providerEventId} has no executionsAmount`
-                );
-                return 0;
-            }
-            return amount;
-        }
-
-        if (event.type === BILLING_EVENT_TYPE.SUBSCRIPTION_UPDATED) {
-            return this.calculatePlanChangeAdjustment(event);
-        }
-
-        return 0;
-    }
-
-    private async calculatePlanChangeAdjustment(
-        event: BillingWebhookEvent
-    ): Promise<number> {
-        if (!event.previousPriceId) return 0;
-
-        const items = event.raw.items as
-            | { data?: Array<{ price?: { id?: string } }> }
-            | undefined;
-        const currentPriceId =
-            typeof items?.data?.[0]?.price?.id === 'string'
-                ? items.data[0].price.id
-                : null;
-
-        if (!currentPriceId || currentPriceId === event.previousPriceId)
-            return 0;
-
-        const priceToExecutions =
-            await this.catalogService.getPriceToExecutionsMap();
-        const oldExecutions = priceToExecutions[event.previousPriceId];
-        const newExecutions = priceToExecutions[currentPriceId];
-
-        if (oldExecutions == null || newExecutions == null) {
-            this.logger.warn(
-                `Cannot calculate prorated executions: ` +
-                    `old price ${event.previousPriceId} (${oldExecutions ?? 'unknown'}), ` +
-                    `new price ${currentPriceId} (${newExecutions ?? 'unknown'}) ` +
-                    `(event: ${event.providerEventId})`
-            );
-            return 0;
-        }
-
-        const delta = newExecutions - oldExecutions;
-        if (delta === 0) return 0;
-
-        const remainingRatio = this.calculateRemainingPeriodRatio(event);
-        const adjustment = Math.floor(Math.abs(delta) * remainingRatio);
-        if (adjustment <= 0) return 0;
-
-        return delta > 0 ? adjustment : -adjustment;
+    private async recordPayment(data: {
+        userId: string;
+        orderReference: string;
+        type: PaymentRecordType;
+        amount: number;
+        currency: string;
+        status: (typeof PAYMENT_RECORD_STATUS)[keyof typeof PAYMENT_RECORD_STATUS];
+        providerTransactionId: string | null;
+        cardMask: string | null;
+    }): Promise<void> {
+        await this.paymentRecordModel.create({
+            userId: new Types.ObjectId(data.userId),
+            orderReference: data.orderReference,
+            type: data.type,
+            amount: data.amount,
+            currency: data.currency,
+            status: data.status,
+            providerTransactionId: data.providerTransactionId,
+            cardMask: data.cardMask,
+            refundAmount: null,
+        });
     }
 
     /**
-     * Wraps a billing $set stage in an aggregation pipeline that atomically
-     * adjusts executions.balance. The adjustment is guarded by a $cond on
-     * lastProviderEventAt ($lt, strict) so replayed events (same occurredAt)
-     * do NOT double-count. When executionAdjustment is 0, returns the plain
-     * billingStage (no pipeline overhead).
+     * REMOVE рекуренту: при збої НЕ кидаємо (локальне скасування/re-bind має
+     * завершитись для користувача), але ставимо orderReference у retry-чергу —
+     * `PaymentsCleanupService` добиває REMOVE, інакше WayForPay списував би далі
+     * зі скасованої підписки.
      */
-    private buildAtomicUpdatePipeline(
-        billingStage: Record<string, unknown>,
-        executionAdjustment: number,
-        occurredAt: Date
-    ): Record<string, unknown>[] | Record<string, unknown> {
-        if (executionAdjustment === 0) {
-            return billingStage;
-        }
-
-        return [
-            // Stage 1: adjust executions BEFORE lastProviderEventAt is overwritten.
-            // Uses $lt (strict) so that replayed events (equal timestamp) are no-ops.
-            {
-                $set: {
-                    'executions.balance': {
-                        $cond: {
-                            if: {
-                                $or: [
-                                    {
-                                        $eq: [
-                                            '$billing.lastProviderEventAt',
-                                            null,
-                                        ],
-                                    },
-                                    {
-                                        $lt: [
-                                            '$billing.lastProviderEventAt',
-                                            occurredAt,
-                                        ],
-                                    },
-                                ],
-                            },
-                            then: {
-                                $max: [
-                                    0,
-                                    {
-                                        $add: [
-                                            '$executions.balance',
-                                            executionAdjustment,
-                                        ],
-                                    },
-                                ],
-                            },
-                            else: '$executions.balance',
-                        },
-                    },
-                },
-            },
-            // Stage 2: update billing fields (including lastProviderEventAt)
-            billingStage,
-        ];
-    }
-
-    private calculateRemainingPeriodRatio(event: BillingWebhookEvent): number {
-        const periodStart = event.currentPeriodStart;
-        const periodEnd = event.currentPeriodEnd;
-
-        if (!periodStart || !periodEnd) {
-            this.logger.warn(
-                `Missing period boundaries for proration (event: ${event.providerEventId}), ` +
-                    `defaulting to full period`
-            );
-            return 1;
-        }
-
-        const now = event.occurredAt.getTime();
-        const start = periodStart.getTime();
-        const end = periodEnd.getTime();
-        const totalPeriod = end - start;
-
-        if (totalPeriod <= 0) return 0;
-
-        const remaining = end - now;
-        return Math.max(0, Math.min(1, remaining / totalPeriod));
-    }
-
-    private buildBillingUpdate(
-        event: BillingWebhookEvent,
-        priceToPlan: Record<string, string>
-    ): Record<string, unknown> {
-        const status = event.subscriptionStatus ?? SUBSCRIPTION_STATUS.UNKNOWN;
-        const hasActive =
-            status === SUBSCRIPTION_STATUS.ACTIVE ||
-            status === SUBSCRIPTION_STATUS.TRIALING;
-
-        const fields: Record<string, unknown> = {
-            subscriptionStatus: status,
-            hasActiveSubscription: hasActive,
-            lastProviderEventAt: event.occurredAt,
-            cancelAtPeriodEnd: event.cancelAtPeriodEnd ?? false,
-        };
-
-        if (event.currentPeriodEnd) {
-            fields['currentPeriodEnd'] = event.currentPeriodEnd;
-        }
-
-        const str = (v: unknown): string | null =>
-            typeof v === 'string' ? v : null;
-
-        switch (event.type) {
-            case BILLING_EVENT_TYPE.CHECKOUT_COMPLETED: {
-                const { raw } = event;
-                const metadata =
-                    raw.metadata != null && typeof raw.metadata === 'object'
-                        ? (raw.metadata as Record<string, unknown>)
-                        : undefined;
-                fields['provider'] = 'stripe';
-                fields['providerCustomerId'] = str(raw.customer);
-                fields['providerSubscriptionId'] = str(raw.subscription);
-                fields['planCode'] = str(metadata?.planCode) ?? null;
-                fields['currency'] = str(raw.currency);
-                fields['providerSubscriptionStatus'] = str(raw.status);
-                break;
-            }
-
-            case BILLING_EVENT_TYPE.SUBSCRIPTION_UPDATED: {
-                fields['providerSubscriptionStatus'] = str(event.raw.status);
-
-                // Detect plan switch via reverse priceId → planCode lookup
-                const items = event.raw.items as
-                    | { data?: Array<{ price?: { id?: string } }> }
-                    | undefined;
-                const priceId = str(items?.data?.[0]?.price?.id ?? null);
-                if (priceId) {
-                    const newPlanCode = priceToPlan[priceId];
-                    if (newPlanCode) {
-                        fields['planCode'] = newPlanCode;
-                    }
-                }
-
-                // Scheduled plan change (downgrade deferred to period end)
-                fields['scheduledPlanCode'] = event.scheduledPlanCode ?? null;
-                fields['scheduledChangeDate'] =
-                    event.scheduledChangeDate ?? null;
-                break;
-            }
-
-            case BILLING_EVENT_TYPE.SUBSCRIPTION_DELETED: {
-                fields['subscriptionStatus'] = SUBSCRIPTION_STATUS.CANCELED;
-                fields['hasActiveSubscription'] = false;
-                fields['providerSubscriptionStatus'] = 'canceled';
-                break;
-            }
-        }
-
-        return fields;
-    }
-
-    async enqueueOrphanedCustomer(
-        provider: string,
-        providerCustomerId: string,
+    private async removeRecurringWithRetry(
+        orderReference: string,
         reason: string
     ): Promise<void> {
         try {
-            await this.orphanModel.create({
-                provider,
-                providerCustomerId,
+            await this.paymentProvider.removeSubscription(orderReference);
+        } catch (error) {
+            this.logger.error(
+                `Failed to REMOVE recurring ${orderReference} (${reason}), queued for retry`,
+                error instanceof Error ? error.stack : String(error)
+            );
+            await this.enqueueFailedRemoval(orderReference, reason);
+        }
+    }
+
+    private async enqueueFailedRemoval(
+        orderReference: string,
+        reason: string
+    ): Promise<void> {
+        try {
+            await this.failedRemovalModel.create({
+                provider: PROVIDER,
+                orderReference,
                 reason,
                 failedAt: new Date(),
                 attempts: 0,
                 lastAttemptAt: null,
             });
         } catch (error: unknown) {
-            // Duplicate — already queued, nothing to do
-            if (
-                error instanceof Error &&
-                'code' in error &&
-                (error as { code: number }).code === 11000
-            ) {
-                return;
-            }
+            if (isDuplicateKeyError(error)) return;
             throw error;
         }
     }
+
+    /**
+     * CHANGE рекуренту (сума/інтервал/дата): при збої кидаємо mapped-помилку.
+     * CHANGE не має retry-черги, а тихий збій лишив би рекурент з невірною
+     * сумою/датою (недо/переплата на наступних циклах) непомітно. Краще явна
+     * помилка користувачу, ніж мовчазний дрейф білінгу.
+     */
+    private async changeRecurringOrThrow(
+        orderReference: string,
+        change: SubscriptionChange
+    ): Promise<void> {
+        try {
+            await this.paymentProvider.changeSubscription(
+                orderReference,
+                change
+            );
+        } catch (error) {
+            this.logger.error(
+                `Failed to CHANGE recurring ${orderReference}`,
+                error instanceof Error ? error.stack : String(error)
+            );
+            throw new BadRequestException({
+                code: RESPONSE_CODE.SUBSCRIPTION_OPERATION_FAILED,
+                message: 'Subscription change failed',
+            });
+        }
+    }
+
+    /**
+     * Best-effort повернення proration-доплати, коли апгрейд не завершився.
+     * Не кидає: caller і так re-throw-ить початкову помилку CHANGE. Якщо й
+     * refund впав — гроші зависли, логуємо ERROR для ручного розбору.
+     */
+    private async refundProration(
+        orderReference: string,
+        amount: number,
+        currency: string
+    ): Promise<void> {
+        try {
+            const result = await this.paymentProvider.refund({
+                orderReference,
+                amount,
+                currency,
+                comment: 'Повернення доплати: апгрейд плану не завершився',
+            });
+            if (!result.success) {
+                this.logger.error(
+                    `Proration refund declined for ${orderReference} ` +
+                        `(reason ${result.reason ?? '?'}), manual review required`
+                );
+                return;
+            }
+            await this.paymentRecordModel.updateOne(
+                { orderReference },
+                {
+                    $set: {
+                        status: PAYMENT_RECORD_STATUS.REFUNDED,
+                        refundAmount: amount,
+                    },
+                }
+            );
+        } catch (error) {
+            this.logger.error(
+                `Proration refund failed for ${orderReference}, manual review required`,
+                error instanceof Error ? error.stack : String(error)
+            );
+        }
+    }
+
+    private freshBilling(partial: {
+        orderReference: string;
+        planCode: string;
+        currency: string;
+        subscriptionStatus: string;
+        currentPeriodEnd: Date;
+    }): NonNullable<UserDocument['billing']> {
+        return {
+            provider: PROVIDER,
+            orderReference: partial.orderReference,
+            recToken: null,
+            cardMask: null,
+            planCode: partial.planCode,
+            currency: partial.currency,
+            subscriptionStatus: partial.subscriptionStatus,
+            providerSubscriptionStatus: null,
+            currentPeriodEnd: partial.currentPeriodEnd,
+            cancelAtPeriodEnd: false,
+            hasActiveSubscription: false,
+            lastProviderEventAt: null,
+            scheduledPlanCode: null,
+            scheduledChangeDate: null,
+            rebindPendingAt: null,
+        };
+    }
+
+    private planInterval(planCode: string | null): BillingInterval {
+        return findSubscriptionPlan(planCode ?? '')?.interval ?? 'month';
+    }
+
+    private planLabel(code: string): string {
+        return `Підписка ${findSubscriptionPlan(code)?.name ?? code}`;
+    }
+
+    private packLabel(code: string): string {
+        return `Пакет виконань ${findExecutionPack(code)?.name ?? code}`;
+    }
+
+    private serviceUrl(): string {
+        return `${ENV.WEB_URL}/api/payments/webhook/${PROVIDER}`;
+    }
+
+    private returnUrl(returnPath?: string): string {
+        const query = returnPath
+            ? `?returnPath=${encodeURIComponent(returnPath)}`
+            : '';
+        return `${ENV.WEB_URL}/billing/success${query}`;
+    }
+
+    private disabled(): BadRequestException {
+        return new BadRequestException({
+            code: RESPONSE_CODE.PAYMENT_TYPE_DISABLED,
+            message: 'Payment type is disabled',
+        });
+    }
+}
+
+// ── Module-level pure helpers ────────────────────────────────────────────
+
+function isDuplicateKeyError(error: unknown): boolean {
+    return (
+        error instanceof Error &&
+        'code' in error &&
+        (error as { code: number }).code === 11000
+    );
+}
+
+function addMonths(date: Date, months: number): Date {
+    const next = new Date(date);
+    next.setMonth(next.getMonth() + months);
+    return next;
+}
+
+function addInterval(date: Date, interval: BillingInterval): Date {
+    const next = new Date(date);
+    if (interval === 'year') {
+        next.setFullYear(next.getFullYear() + 1);
+    } else {
+        next.setMonth(next.getMonth() + 1);
+    }
+    return next;
+}
+
+/**
+ * Частка невикористаного періоду на момент now: `(periodEnd - now) /
+ * intervalLength`. Clamp [0,1]. periodStart похідний від periodEnd - інтервал.
+ */
+function remainingRatio(
+    periodEnd: Date | null,
+    interval: BillingInterval
+): number {
+    if (!periodEnd) return 0;
+    const end = periodEnd.getTime();
+    const start =
+        interval === 'year'
+            ? subYears(periodEnd).getTime()
+            : subMonths(periodEnd).getTime();
+    const now = Date.now();
+    const total = end - start;
+    if (total <= 0) return 0;
+    return Math.max(0, Math.min(1, (end - now) / total));
+}
+
+function subMonths(date: Date): Date {
+    const d = new Date(date);
+    d.setMonth(d.getMonth() - 1);
+    return d;
+}
+
+function subYears(date: Date): Date {
+    const d = new Date(date);
+    d.setFullYear(d.getFullYear() - 1);
+    return d;
 }

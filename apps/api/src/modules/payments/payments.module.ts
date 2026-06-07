@@ -11,9 +11,9 @@ import {
     ProcessedWebhookEventSchema,
 } from './schemas/processed-webhook-event.schema';
 import {
-    OrphanedProviderCustomer,
-    OrphanedProviderCustomerSchema,
-} from './schemas/orphaned-provider-customer.schema';
+    FailedRecurringRemoval,
+    FailedRecurringRemovalSchema,
+} from './schemas/failed-recurring-removal.schema';
 import {
     PaymentRecord,
     PaymentRecordSchema,
@@ -28,8 +28,8 @@ import { UsersModule } from '../users/users.module';
                 schema: ProcessedWebhookEventSchema,
             },
             {
-                name: OrphanedProviderCustomer.name,
-                schema: OrphanedProviderCustomerSchema,
+                name: FailedRecurringRemoval.name,
+                schema: FailedRecurringRemovalSchema,
             },
             {
                 name: PaymentRecord.name,

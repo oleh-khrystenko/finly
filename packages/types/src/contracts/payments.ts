@@ -34,6 +34,7 @@ export type BillingInterval = 'month' | 'year';
 
 export interface SubscriptionPlanItem {
     code: SubscriptionPlanCode;
+    name: string;
     priceAmount: number; // копійки
     currency: string;
     interval: BillingInterval;
@@ -44,6 +45,7 @@ export interface SubscriptionPlanItem {
 
 export interface ExecutionPackItem {
     code: ExecutionPackCode;
+    name: string;
     priceAmount: number; // копійки
     currency: string;
     executions: number;
@@ -63,6 +65,7 @@ export interface PaymentsCatalog {
 export const SUBSCRIPTION_PLANS: readonly SubscriptionPlanItem[] = [
     {
         code: 'starter',
+        name: 'Starter',
         priceAmount: 4900,
         currency: BILLING_CURRENCY,
         interval: 'month',
@@ -72,6 +75,7 @@ export const SUBSCRIPTION_PLANS: readonly SubscriptionPlanItem[] = [
     },
     {
         code: 'pro',
+        name: 'Pro',
         priceAmount: 14_900,
         currency: BILLING_CURRENCY,
         interval: 'month',
@@ -84,6 +88,7 @@ export const SUBSCRIPTION_PLANS: readonly SubscriptionPlanItem[] = [
 export const EXECUTION_PACKS: readonly ExecutionPackItem[] = [
     {
         code: 'basic',
+        name: 'Basic',
         priceAmount: 2900,
         currency: BILLING_CURRENCY,
         executions: 5_000,
@@ -92,6 +97,7 @@ export const EXECUTION_PACKS: readonly ExecutionPackItem[] = [
     },
     {
         code: 'max',
+        name: 'Max',
         priceAmount: 9900,
         currency: BILLING_CURRENCY,
         executions: 18_000,
@@ -209,6 +215,28 @@ export const CreateCheckoutSessionSchema = z
 
 export type CreateCheckoutSession = z.infer<typeof CreateCheckoutSessionSchema>;
 
+export const CancelSubscriptionSchema = z.object({
+    /**
+     * true → скасування з поверненням за невикористаний період (refund +
+     * REMOVE одразу). false → у кінці періоду (лишається активною до межі).
+     */
+    withRefund: z.boolean(),
+});
+
+export type CancelSubscription = z.infer<typeof CancelSubscriptionSchema>;
+
+export const ChangePlanSchema = z.object({
+    planCode: z.enum(SUBSCRIPTION_PLAN_CODES),
+});
+
+export type ChangePlan = z.infer<typeof ChangePlanSchema>;
+
+export const UpdateCardSchema = z.object({
+    returnPath: z.string().startsWith('/').max(256).optional(),
+});
+
+export type UpdateCard = z.infer<typeof UpdateCardSchema>;
+
 /**
  * Public billing shape, що повертається у `getMe`. НЕ містить provider-secret
  * полів (`recToken`) і внутрішніх ordering-полів (`orderReference`,
@@ -265,9 +293,11 @@ export type WayforpayTransactionStatus =
 
 export const BillingWebhookEventSchema = z.object({
     /**
-     * Ключ дедуплікації. `txn:${transactionId}` — унікальний per-transaction id
-     * WayForPay (рекурентні списання мають той самий orderReference, але різні
-     * transactionId). Fallback `${orderReference}:${transactionStatus}:${processingDate}`
+     * Ключ дедуплікації. `txn:${transactionId}:${transactionStatus}` —
+     * per-transaction id WayForPay плюс статус: один transactionId проходить
+     * кілька статус-переходів (InProcessing → Approved), і кожен має оброблятись
+     * окремо, інакше фінальний Approved відкинувся б як дубль проміжного
+     * колбеку. Fallback `${orderReference}:${transactionStatus}:${processingDate}`
      * лише для рідких колбеків без transactionId.
      */
     providerEventId: z.string(),

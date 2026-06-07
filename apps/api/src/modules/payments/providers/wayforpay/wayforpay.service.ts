@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
     WAYFORPAY_TRANSACTION_STATUS,
-    getKyivYmd,
     type BillingWebhookEvent,
 } from '@finly/types';
 import { ENV } from '../../../../config/env';
@@ -66,11 +65,9 @@ export class WayForPayService implements IPaymentProvider {
             regularBehavior: 'preset',
             regularMode: intervalToRegularMode(input.interval),
         };
-        // Trial: відкладене перше списання через dateNext у майбутньому.
-        if (input.trialMonths > 0) {
-            regularFields.dateNext = formatRegularDate(
-                addMonths(new Date(), input.trialMonths)
-            );
+        // Відкладене перше списання (trial або re-bind картки) через dateNext.
+        if (input.firstChargeDate) {
+            regularFields.dateNext = formatRegularDate(input.firstChargeDate);
         }
         return this.createInvoice(input, input.planName, regularFields);
     }
@@ -318,15 +315,16 @@ export class WayForPayService implements IPaymentProvider {
             ? new Date(num(data.processingDate)! * 1000)
             : new Date();
 
-        // `transactionId` — унікальний per-transaction id WayForPay, стабільний
-        // між повторами того самого колбеку. Кожне рекурентне списання має свій
-        // transactionId при незмінному orderReference, тож саме він, а не пара
-        // orderReference:status, є коректним ключем дедуплікації. Fallback (рідкі
-        // колбеки без transactionId) лишаємо payload-детермінованим — processingDate
-        // не змінюється між повторами, тому idempotency не ламається.
+        // Ключ дедуплікації = transactionId + статус. Один transactionId
+        // проходить кілька статус-переходів (InProcessing → Approved) з тим
+        // самим orderReference; без статусу в ключі фінальний Approved відкинувся
+        // б як дубль проміжного колбеку — користувача списали б, але не
+        // зарахували. Повтори того самого (transactionId, status) дедуплікуються
+        // коректно. Fallback (рідкі колбеки без transactionId) лишаємо
+        // payload-детермінованим — processingDate не змінюється між повторами.
         const transactionId = rawScalar(data.transactionId) || null;
         const providerEventId = transactionId
-            ? `txn:${transactionId}`
+            ? `txn:${transactionId}:${transactionStatus}`
             : `${orderReference}:${transactionStatus}:${rawScalar(data.processingDate)}`;
 
         const event: BillingWebhookEvent = {
@@ -349,7 +347,7 @@ export class WayForPayService implements IPaymentProvider {
         };
     }
 
-    private buildAccept(orderReference: string): string {
+    private buildAccept(orderReference: string): Record<string, unknown> {
         const time = unixNow();
         const status = 'accept';
         const signature = buildAcceptSignature(this.secret, {
@@ -357,7 +355,7 @@ export class WayForPayService implements IPaymentProvider {
             status,
             time,
         });
-        return JSON.stringify({ orderReference, status, time, signature });
+        return { orderReference, status, time, signature };
     }
 
     private async postJson(
@@ -393,17 +391,6 @@ export class WayForPayService implements IPaymentProvider {
 
 function unixNow(): number {
     return Math.floor(Date.now() / 1000);
-}
-
-/**
- * Календарний `+N місяців` у Kyiv-зоні: спершу беремо Kyiv-день instant-а, далі
- * `Date.UTC` нормалізує overflow місяця. Anchor 12:00 UTC тримає результат у
- * межах одного Kyiv-дня (offset +2/+3 не перетинає північ), тож `formatRegularDate`
- * віддає очікувану дату. Арифметика і форматування — в одній зоні.
- */
-function addMonths(date: Date, months: number): Date {
-    const { year, month, day } = getKyivYmd(date);
-    return new Date(Date.UTC(year, month - 1 + months, day, 12));
 }
 
 /**

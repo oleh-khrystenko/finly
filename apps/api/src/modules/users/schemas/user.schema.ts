@@ -190,6 +190,7 @@ export class User {
             lastProviderEventAt: { type: Date, default: null },
             scheduledPlanCode: { type: String, default: null },
             scheduledChangeDate: { type: Date, default: null },
+            rebindPendingAt: { type: Date, default: null },
         },
         default: null,
         _id: false,
@@ -209,6 +210,14 @@ export class User {
         lastProviderEventAt: Date | null;
         scheduledPlanCode: string | null;
         scheduledChangeDate: Date | null;
+        /**
+         * Set when `updateCard` tears down the old recurring and awaits a new
+         * card binding; cleared by the first approved webhook on the new
+         * orderReference. Lets the cleanup cron expire abandoned re-binds whose
+         * period already lapsed (old recurring gone, new one never confirmed),
+         * instead of leaving `hasActiveSubscription` true indefinitely.
+         */
+        rebindPendingAt: Date | null;
     } | null;
 }
 

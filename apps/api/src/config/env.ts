@@ -30,9 +30,9 @@ export const ENV = {
     PORT: getEnvVar('PORT'),
     /**
      * Cabinet origin (`finly.com.ua` prod, `localhost:3000` dev). Використовується
-     * для CORS, OAuth callback, magic-link redirect, Stripe success/cancel URL,
-     * email-template посилань на кабінет — усі шляхи, що ведуть авторизованого
-     * ФОП назад у його кабінет.
+     * для CORS, OAuth callback, magic-link redirect, WayForPay return/service
+     * URL, email-template посилань на кабінет — усі шляхи, що ведуть
+     * авторизованого ФОП назад у його кабінет.
      */
     WEB_URL: getEnvVar('WEB_URL'),
     /**
@@ -55,9 +55,6 @@ export const ENV = {
 
     RESEND_API_KEY: getEnvVar('RESEND_API_KEY'),
     RESEND_FROM_EMAIL: getEnvVar('RESEND_FROM_EMAIL'),
-
-    STRIPE_SECRET_KEY: getEnvVar('STRIPE_SECRET_KEY'),
-    STRIPE_WEBHOOK_SECRET: getEnvVar('STRIPE_WEBHOOK_SECRET'),
 
     // WayForPay (Sprint 17) — merchant-реквізити білінгу. `merchantDomainName`
     // має збігатись з доменом, зареєстрованим у кабінеті WayForPay, інакше

@@ -17,8 +17,11 @@ export interface SubscriptionCheckoutInput {
     amount: number; // копійки
     currency: string;
     interval: BillingInterval;
-    /** 0 = без trial; >0 = перше списання відкладене на N місяців. */
-    trialMonths: number;
+    /**
+     * Дата першого списання. undefined → негайно. У майбутньому → відкладене
+     * (trial або re-bind картки зі збереженням дати наступного списання).
+     */
+    firstChargeDate?: Date;
     /** Server-to-server callback URL (вебхук). */
     serviceUrl: string;
     /** Куди повертається користувач після оплати. */
@@ -90,12 +93,12 @@ export interface WebhookParseResult {
     /** null, якщо підпис невалідний або подію треба ігнорувати. */
     event: BillingWebhookEvent | null;
     /**
-     * Підписане тіло accept-handshake, яке контролер віддає назад WayForPay.
-     * Завжди присутнє для валідного-за-структурою колбеку (навіть якщо event
-     * ігнорується) — інакше WayForPay шле повтори. null лише на невалідному
-     * підписі.
+     * Підписане тіло accept-handshake (JSON-обʼєкт), яке контролер віддає назад
+     * WayForPay. Присутнє для будь-якого валідного-за-підписом колбеку (навіть
+     * якщо event ігнорується сервісом) — інакше WayForPay шле повтори. null лише
+     * на невалідному підписі.
      */
-    acceptResponse: string | null;
+    acceptResponse: Record<string, unknown> | null;
 }
 
 export interface IPaymentProvider {

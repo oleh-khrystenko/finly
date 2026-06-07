@@ -14,8 +14,6 @@ process.env.GOOGLE_CALLBACK_URL ??=
     'http://localhost:4000/api/auth/google/callback';
 process.env.RESEND_API_KEY ??= 're_test_placeholder';
 process.env.RESEND_FROM_EMAIL ??= 'Finly <test@test.dev>';
-process.env.STRIPE_SECRET_KEY ??= 'sk_test_placeholder';
-process.env.STRIPE_WEBHOOK_SECRET ??= 'whsec_test_placeholder';
 process.env.WAYFORPAY_MERCHANT_ACCOUNT ??= 'test_merch_n1';
 process.env.WAYFORPAY_MERCHANT_SECRET_KEY ??= 'flk3409refn54t54t*FNJRET';
 process.env.WAYFORPAY_MERCHANT_DOMAIN ??= 'finly.com.ua';
