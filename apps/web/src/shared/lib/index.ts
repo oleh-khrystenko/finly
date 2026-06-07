@@ -7,6 +7,7 @@ export { getZodFieldError } from './getZodFieldError';
 export { INTL_LOCALE, formatLocalDate, pluralizeUa } from './intl';
 export { authEvents, type AuthEvent } from './authEvents';
 export { kyivEndOfDayInstant } from './kyivTz';
+export { uaDateToIso, isoToUaDate } from './uaDate';
 export {
     parseUaMoney,
     formatKopecksForInput,

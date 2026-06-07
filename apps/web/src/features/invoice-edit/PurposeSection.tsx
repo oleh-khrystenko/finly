@@ -19,7 +19,7 @@ interface Props {
  * Sprint 4 §4.6 — рядок "Призначення".
  *
  * **Cardless** — рядок усередині спільної `PaymentDetailsCard`; лейбл поля
- * («Текст призначення») несе смисл рядка, окремий титул-картки прибрано.
+ * («Призначення платежу») несе смисл рядка, окремий титул-картки прибрано.
  *
  * **Inheritance UI:** якщо `paymentPurpose === null`, відображаємо italic
  * fallback з business.paymentPurposeTemplate, щоб ФОП бачив, що насправді
@@ -28,7 +28,7 @@ interface Props {
 export default function PurposeSection({ invoice, business, onSave }: Props) {
     return (
         <UiEditableField<string | null>
-            label="Текст призначення"
+            label="Призначення платежу"
             value={invoice.paymentPurpose}
             renderRead={(v) =>
                 v === null ? (
