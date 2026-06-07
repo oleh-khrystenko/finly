@@ -24,11 +24,8 @@ import UiPageContainer from '@/shared/ui/UiPageContainer';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
 import {
-    AmountSection,
-    InvoiceQrSection,
-    PurposeSection,
+    PaymentDetailsCard,
     SlugSection,
-    ValidUntilSection,
     scheduleInvoiceDeleteWithUndo,
     useDeleteInvoiceConfirmStore,
 } from '@/features/invoice-edit';
@@ -275,7 +272,9 @@ export default function InvoiceCabinetPage() {
                         {formattedAmount && (
                             <>
                                 {' '}
-                                <span className="text-muted-foreground">—</span>{' '}
+                                <span className="text-muted-foreground">
+                                    ·
+                                </span>{' '}
                                 {formattedAmount}
                             </>
                         )}
@@ -295,13 +294,11 @@ export default function InvoiceCabinetPage() {
             </div>
 
             <div className="space-y-4">
-                <AmountSection invoice={invoice} onSave={onSave} />
-                <PurposeSection
+                <PaymentDetailsCard
                     invoice={invoice}
                     business={business}
                     onSave={onSave}
                 />
-                <ValidUntilSection invoice={invoice} onSave={onSave} />
                 <SlugSection
                     invoice={invoice}
                     businessSlug={business.slug}
@@ -309,11 +306,6 @@ export default function InvoiceCabinetPage() {
                     payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
                     onSave={onSave}
                     onResetSlug={handleResetSlug}
-                />
-                <InvoiceQrSection
-                    invoice={invoice}
-                    businessSlug={business.slug}
-                    accountSlug={accountSlug}
                 />
 
                 <UiSectionCard title="Небезпечна зона" variant="destructive">

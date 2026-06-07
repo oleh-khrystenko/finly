@@ -1,14 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import {
-    Check,
-    Copy,
-    Download,
-    ExternalLink,
-    Pencil,
-    RefreshCw,
-} from 'lucide-react';
+import { Check, Copy, ExternalLink, Pencil, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import {
     buildQrDownloadFilename,
@@ -19,8 +12,7 @@ import {
 import UiButton from '@/shared/ui/UiButton';
 import UiEditableField from '@/shared/ui/UiEditableField';
 import UiPrefixInput from '@/shared/ui/UiPrefixInput';
-import { useQrDownload, withQrQuery } from '@/shared/ui/UiQrCard/useQrDownload';
-import UiQrImage from '@/shared/ui/UiQrImage';
+import UiQrPanel from '@/shared/ui/UiQrPanel';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSwitch from '@/shared/ui/UiSwitch';
 import { mapValidationCode } from '@/shared/lib';
@@ -73,10 +65,6 @@ export default function PublicSection({
     const qrEndpoint = `${apiBase}/businesses/public/${encodeURIComponent(
         business.slug
     )}/qr/business.png`;
-    const { downloading, download } = useQrDownload(
-        qrEndpoint,
-        buildQrDownloadFilename('page', { businessSlug: business.slug })
-    );
 
     const handleCopy = async () => {
         try {
@@ -134,14 +122,10 @@ export default function PublicSection({
                                         variant="outline"
                                         size="md"
                                         onClick={() => void handleCopy()}
-                                        IconLeft={
-                                            copied ? <Check /> : <Copy />
-                                        }
+                                        IconLeft={copied ? <Check /> : <Copy />}
                                         className="w-full sm:w-auto"
                                     >
-                                        {copied
-                                            ? 'Скопійовано'
-                                            : 'Копіювати'}
+                                        {copied ? 'Скопійовано' : 'Копіювати'}
                                     </UiButton>
                                     <UiButton
                                         type="button"
@@ -195,32 +179,14 @@ export default function PublicSection({
                     />
                 </div>
                 <div className="py-6">
-                    <div className="bg-muted/50 flex flex-col gap-6 rounded-lg p-4 sm:flex-row sm:items-center sm:gap-8">
-                        <div className="w-60 max-w-full shrink-0">
-                            <UiQrImage
-                                src={withQrQuery(qrEndpoint)}
-                                alt="QR на публічну сторінку бізнесу"
-                                className="rounded-md bg-white"
-                            />
-                        </div>
-                        <div className="flex flex-col items-start gap-3">
-                            <p className="text-muted-foreground text-base">
-                                Роздрукуйте код на вивісці, чеку чи візитці.
-                                Клієнт наведе камеру й одразу опиниться на вашій
-                                сторінці.
-                            </p>
-                            <UiButton
-                                type="button"
-                                variant="outline"
-                                size="md"
-                                onClick={() => void download()}
-                                disabled={downloading}
-                                IconLeft={<Download />}
-                            >
-                                Завантажити
-                            </UiButton>
-                        </div>
-                    </div>
+                    <UiQrPanel
+                        endpoint={qrEndpoint}
+                        description="Роздрукуйте код на вивісці, чеку чи візитці. Клієнт наведе камеру й одразу опиниться на вашій сторінці."
+                        alt="QR на публічну сторінку бізнесу"
+                        downloadFilename={buildQrDownloadFilename('page', {
+                            businessSlug: business.slug,
+                        })}
+                    />
                 </div>
                 <label
                     htmlFor="seo-toggle"
@@ -250,4 +216,3 @@ export default function PublicSection({
         </UiSectionCard>
     );
 }
-

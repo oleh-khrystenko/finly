@@ -2,8 +2,7 @@
 
 import { buildQrDownloadFilename, type Account } from '@finly/types';
 import UiDisclosure from '@/shared/ui/UiDisclosure';
-import UiQrCard from '@/shared/ui/UiQrCard';
-import UiSectionCard from '@/shared/ui/UiSectionCard';
+import UiQrPanel from '@/shared/ui/UiQrPanel';
 
 interface Props {
     account: Account;
@@ -12,17 +11,18 @@ interface Props {
 }
 
 /**
- * QR-секція на account-cabinet-page — дві чіткі дії замість трьох карток
- * (дві з яких раніше мали ідентичний заголовок «Оплата в банку» і плутали):
+ * QR-блок усередині картки «Публічна сторінка» (account-cabinet-page) — друге
+ * кодування тієї самої публічної адреси: URL для людини (рядок вище), QR для
+ * камери телефона. Layout — `UiQrPanel`: великий горизонтальний блок (QR зліва,
+ * опис + завантаження праворуч).
  *
- *  - «QR для оплати в банку» (тип-1, НБУ primary-host) — клієнт сканує
- *    банк-додатком і одразу бачить заповнений платіж.
- *  - «QR-вивіска» (тип-2, `qr/business.png`) — веде на публічну сторінку
- *    реквізитів; для друку, вітрини, вкладення в рахунок.
+ * Порядок дій: спочатку «QR-вивіска» (тип-2, `qr/business.png`) — веде на
+ * публічну сторінку реквізитів, для друку/вітрини; нижче — «QR для оплати в
+ * банку» (тип-1, НБУ primary-host), який клієнт сканує банк-додатком і одразу
+ * бачить заповнений платіж.
  *
  * Запасний НБУ-код (legacy-host, для старіших банк-парсерів) схований під
- * disclosure — він потрібен рідко, тож не конкурує за увагу з основними.
- * Технічні host-адреси з підписів прибрано — ФОП їх не розшифровує.
+ * disclosure — потрібен рідко, тож не конкурує за увагу з основними.
  */
 export default function QrSection({
     account,
@@ -32,53 +32,44 @@ export default function QrSection({
     const base = `${apiBase}/businesses/public/${encodeURIComponent(businessSlug)}/account/${encodeURIComponent(account.slug)}/qr`;
 
     return (
-        <UiSectionCard title="QR-коди">
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <UiQrCard
+        <div className="space-y-4">
+            <UiQrPanel
+                endpoint={`${base}/business.png`}
+                title="QR-вивіска на сторінку реквізитів"
+                description="Роздрукуйте на вивісці, чеку чи візитці. Клієнт наведе камеру й одразу опиниться на сторінці реквізитів."
+                alt="QR на публічну сторінку реквізитів"
+                downloadFilename={buildQrDownloadFilename('page', {
+                    businessSlug,
+                    accountSlug: account.slug,
+                })}
+            />
+            <UiQrPanel
+                endpoint={`${base}/nbu.png`}
+                params={{ host: 'primary' }}
+                title="QR для оплати в банку"
+                description="Клієнт сканує код банк-додатком і одразу бачить заповнений платіж."
+                alt="QR за стандартом НБУ для оплати в банку"
+                downloadFilename={buildQrDownloadFilename('payment-primary', {
+                    businessSlug,
+                    accountSlug: account.slug,
+                })}
+            />
+            <UiDisclosure label="Запасний QR для старіших банків">
+                <UiQrPanel
                     endpoint={`${base}/nbu.png`}
-                    params={{ host: 'primary' }}
-                    title="QR для оплати в банку"
-                    caption="Клієнт сканує, банк-додаток одразу заповнює реквізити"
-                    alt="QR за стандартом НБУ для оплати в банку"
+                    params={{ host: 'legacy' }}
+                    title="Запасний код для оплати"
+                    description="Покажіть його, якщо банк клієнта не зчитав основний код для оплати."
+                    alt="QR за стандартом НБУ — запасна адреса"
                     downloadFilename={buildQrDownloadFilename(
-                        'payment-primary',
-                        { businessSlug, accountSlug: account.slug }
+                        'payment-legacy',
+                        {
+                            businessSlug,
+                            accountSlug: account.slug,
+                        }
                     )}
                 />
-                <UiQrCard
-                    endpoint={`${base}/business.png`}
-                    title="QR-вивіска"
-                    caption="Надрукувати, наклеїти на вітрину, вкласти в рахунок"
-                    alt="QR на публічну сторінку реквізитів"
-                    downloadFilename={buildQrDownloadFilename('page', {
-                        businessSlug,
-                        accountSlug: account.slug,
-                    })}
-                />
-            </div>
-            <UiDisclosure
-                className="mt-4"
-                label="Запасний QR для старіших банків"
-            >
-                <div className="grid gap-4 sm:grid-cols-2">
-                    <UiQrCard
-                        endpoint={`${base}/nbu.png`}
-                        params={{ host: 'legacy' }}
-                        title="Запасний код для оплати"
-                        caption="Якщо банк клієнта не зчитав основний"
-                        alt="QR за стандартом НБУ — запасна адреса"
-                        downloadFilename={buildQrDownloadFilename(
-                            'payment-legacy',
-                            { businessSlug, accountSlug: account.slug }
-                        )}
-                    />
-                </div>
             </UiDisclosure>
-            <p className="text-muted-foreground mt-4 text-sm">
-                «QR для оплати» клієнт сканує банк-додатком і одразу бачить
-                заповнений платіж. «QR-вивіску» зручно роздрукувати: вона веде на
-                сторінку реквізитів, де клієнт сам обирає банк.
-            </p>
-        </UiSectionCard>
+        </div>
     );
 }

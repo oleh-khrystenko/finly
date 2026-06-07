@@ -5,7 +5,6 @@ import { Check, Pencil, X } from 'lucide-react';
 import { type Invoice } from '@finly/types';
 import UiButton from '@/shared/ui/UiButton';
 import UiInput from '@/shared/ui/UiInput';
-import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSwitch from '@/shared/ui/UiSwitch';
 import {
     formatKopecksForInput,
@@ -23,12 +22,16 @@ interface Props {
 }
 
 /**
- * Sprint 4 §4.6 — секція "Сума і блокування".
+ * Sprint 4 §4.6 — рядок "Сума і блокування".
  *
  * **Inline-edit для двох полів:** amount + amountLocked. Coupled-rule
  * SP-6 enforced на UI: amount-edit-readonly якщо `amountLocked=true`
  * (inverted display). Через окрему секцію — для invoice-flow саме ці два
  * поля логічно групуються.
+ *
+ * **Cardless** — рендериться рядком усередині спільної `PaymentDetailsCard`
+ * (дзеркало business `RequisitesCard`), без власного `UiSectionCard`-
+ * обгортника; титул блоку («Параметри платежу») живе на merged-картці.
  *
  * **Окремий `MoneyEditableField`** (review fix), а не generic
  * `UiEditableField`, бо money-input має multi-stage state (raw string ↔
@@ -40,22 +43,20 @@ interface Props {
  */
 export default function AmountSection({ invoice, onSave }: Props) {
     return (
-        <UiSectionCard title="Сума і блокування">
-            <div className="mt-4 space-y-4">
-                <MoneyEditableField
-                    label="Сума"
-                    value={invoice.amount}
-                    onSave={(amount) => {
-                        // SP-6 — auto-reset amountLocked при amount → null.
-                        if (amount === null && invoice.amountLocked) {
-                            return onSave({ amount, amountLocked: false });
-                        }
-                        return onSave({ amount });
-                    }}
-                />
-                <AmountLockSwitch invoice={invoice} onSave={onSave} />
-            </div>
-        </UiSectionCard>
+        <div className="space-y-4">
+            <MoneyEditableField
+                label="Сума"
+                value={invoice.amount}
+                onSave={(amount) => {
+                    // SP-6 — auto-reset amountLocked при amount → null.
+                    if (amount === null && invoice.amountLocked) {
+                        return onSave({ amount, amountLocked: false });
+                    }
+                    return onSave({ amount });
+                }}
+            />
+            <AmountLockSwitch invoice={invoice} onSave={onSave} />
+        </div>
     );
 }
 

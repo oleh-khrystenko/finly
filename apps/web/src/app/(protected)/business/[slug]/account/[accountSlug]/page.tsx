@@ -29,7 +29,6 @@ import {
     EditableAccountName,
     InvoicesSection,
     PublicSection,
-    QrSection,
     RequisitesSection,
     scheduleAccountDeleteWithUndo,
     useDeleteAccountConfirmStore,
@@ -40,11 +39,11 @@ import {
  * `/business/{slug}/account/{accountSlug}`.
  *
  * **Секції** (порядок: share-артефакти → робочий контент → довідка → danger):
- *  1. PublicSection (посилання на публічну сторінку рахунку + slug-edit)
- *  2. QrSection (рівно 2 NBU QR — primary + legacy — + URL-код)
- *  3. InvoicesSection (список інвойсів + gear-меню нумерації у хедері)
- *  4. RequisitesSection (банк-label + IBAN readonly + copy; об'єднана)
- *  5. DangerSection (cascade-видалення з confirm-dialog)
+ *  1. PublicSection (картка «Публічна сторінка»: посилання + slug-edit +
+ *     QR-коди в одній картці — дзеркало business-page)
+ *  2. InvoicesSection (список інвойсів + gear-меню нумерації у хедері)
+ *  3. RequisitesSection (банк-label + IBAN readonly + copy; об'єднана)
+ *  4. DangerSection (cascade-видалення з confirm-dialog)
  *
  * **Delete-flow:** `<DeleteAccountConfirmDialog>` → confirm → `schedule...WithUndo`
  * з optimistic redirect на `/business/{slug}` (де AccountsSection автоматично
@@ -175,11 +174,7 @@ export default function AccountCabinetPage() {
         );
     }
 
-    if (
-        error &&
-        error.paramBiz === paramBiz &&
-        error.paramAcc === paramAcc
-    ) {
+    if (error && error.paramBiz === paramBiz && error.paramAcc === paramAcc) {
         return <ErrorPage code={error.code} />;
     }
     if (!data || !isDataCurrent) {
@@ -237,8 +232,7 @@ export default function AccountCabinetPage() {
                     bankCode: account.bankCode,
                     ibanMask: `•${last4}`,
                 }),
-                onScheduled: () =>
-                    router.replace(`/business/${business.slug}`),
+                onScheduled: () => router.replace(`/business/${business.slug}`),
                 onCancelled: () =>
                     router.replace(
                         `/business/${business.slug}/account/${account.slug}`
@@ -271,7 +265,6 @@ export default function AccountCabinetPage() {
                     onSave={onSaveAccount}
                     onResetSlug={handleResetSlug}
                 />
-                <QrSection account={account} businessSlug={business.slug} />
                 <InvoicesSection
                     businessSlug={business.slug}
                     accountSlug={account.slug}
