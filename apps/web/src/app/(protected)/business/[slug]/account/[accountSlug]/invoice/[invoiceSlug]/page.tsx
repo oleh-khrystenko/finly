@@ -6,11 +6,14 @@ import { ArrowLeft, ExternalLink, Trash2 } from 'lucide-react';
 import { AxiosError } from 'axios';
 import { toast } from 'sonner';
 import {
+    type AccountWithCounts,
+    type AutoSlugMode,
     type BusinessWithCounts,
     type Invoice,
     type UpdateInvoiceRequest,
 } from '@finly/types';
 import {
+    getAccountBySlug,
     getApiMessage,
     getBusinessBySlug,
     getInvoiceBySlug,
@@ -50,6 +53,7 @@ interface LoadedData {
     paramAcc: string;
     paramInv: string;
     business: BusinessWithCounts;
+    account: AccountWithCounts;
     invoice: Invoice;
 }
 
@@ -91,15 +95,17 @@ export default function InvoiceCabinetPage() {
         let cancelled = false;
         Promise.all([
             getBusinessBySlug(paramBiz),
+            getAccountBySlug(paramBiz, paramAcc),
             getInvoiceBySlug(paramBiz, paramAcc, paramInv),
         ])
-            .then(([b, inv]) => {
+            .then(([b, acc, inv]) => {
                 if (cancelled) return;
                 setData({
                     paramBiz,
                     paramAcc,
                     paramInv,
                     business: b,
+                    account: acc,
                     invoice: inv,
                 });
                 setError(null);
@@ -192,7 +198,7 @@ export default function InvoiceCabinetPage() {
         );
     }
 
-    const { business, paramAcc: accountSlug, invoice } = data;
+    const { business, account, paramAcc: accountSlug, invoice } = data;
     const formattedAmount = formatKopecksAsHryvnia(invoice.amount);
     const publicUrl = `${ENV.NEXT_PUBLIC_PAY_PUBLIC_URL.replace(/\/$/, '')}/${business.slug}/${accountSlug}/${invoice.slug}`;
 
@@ -203,14 +209,15 @@ export default function InvoiceCabinetPage() {
             invoiceSlug: invoice.slug,
         });
 
-    const handleResetSlug = async () => {
+    const handleResetSlug = async (mode: AutoSlugMode) => {
         const businessSlug = business.slug;
         const invoiceSlug = invoice.slug;
         try {
             const updated = await resetInvoiceSlug(
                 businessSlug,
                 accountSlug,
-                invoiceSlug
+                invoiceSlug,
+                mode
             );
             setData((prev) =>
                 prev &&
@@ -304,6 +311,7 @@ export default function InvoiceCabinetPage() {
                     businessSlug={business.slug}
                     accountSlug={accountSlug}
                     payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
+                    defaultMode={account.invoiceSlugPresetDefault}
                     onSave={onSave}
                     onResetSlug={handleResetSlug}
                 />

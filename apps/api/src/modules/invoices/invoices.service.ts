@@ -10,8 +10,9 @@ import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Connection, Model, Types, type FilterQuery } from 'mongoose';
 import {
     RESPONSE_CODE,
+    type AutoSlugMode,
     type CreateInvoiceRequest,
-    type SlugPreset,
+    type SlugInput,
     type UpdateInvoiceRequest,
 } from '@finly/types';
 
@@ -603,12 +604,12 @@ export class InvoicesService {
     }
 
     /**
-     * Скидання slug-у інвойсу "за форматом нумерації рахунку" (дзеркало
-     * `create` retry-loop). На відміну від business/account (random → новий
-     * random), invoice перегенеровується за `account.invoiceSlugPresetDefault`
-     * (fallback `'simple'`) — тобто як новий інвойс за замовчуванням. Counter
-     * monotonic: новий slug отримує **наступний** номер scope-у, оригінальний
-     * номер не відтворюється (counter permanently consumed).
+     * Скидання slug-у інвойсу за авто-форматом нумерації (дзеркало `create`
+     * retry-loop). `mode` — one-time вибір з діалогу перевипуску; відсутність →
+     * fallback на `account.invoiceSlugPresetDefault ?? 'simple'` («домашній
+     * формат»). Перевипуск дефолт рахунку НЕ змінює (Sprint 17 §billing-design).
+     * Counter monotonic: новий slug отримує **наступний** номер scope-у,
+     * оригінальний номер не відтворюється (counter permanently consumed).
      *
      * Той самий counter-race захист, що `create`: generate+update у TX; на
      * 11000 — fresh session retry (counter-collision або bootstrap-race).
@@ -616,9 +617,15 @@ export class InvoicesService {
     async resetSlug(
         business: BusinessDocument,
         account: AccountDocument,
-        invoice: InvoiceDocument
+        invoice: InvoiceDocument,
+        mode?: AutoSlugMode
     ): Promise<InvoiceDocument> {
-        const preset: SlugPreset = account.invoiceSlugPresetDefault ?? 'simple';
+        const effectiveMode: AutoSlugMode =
+            mode ?? account.invoiceSlugPresetDefault ?? 'simple';
+        const slugInput: SlugInput =
+            effectiveMode === 'random'
+                ? { kind: 'random' }
+                : { kind: 'preset', preset: effectiveMode };
         let lastError: unknown;
         for (
             let attempt = 1;
@@ -630,7 +637,7 @@ export class InvoicesService {
                     business,
                     account,
                     invoice,
-                    preset
+                    slugInput
                 );
             } catch (err) {
                 if (isDuplicateKeyError(err)) {
@@ -661,7 +668,7 @@ export class InvoicesService {
         business: BusinessDocument,
         account: AccountDocument,
         invoice: InvoiceDocument,
-        preset: SlugPreset
+        slugInput: SlugInput
     ): Promise<InvoiceDocument> {
         const accountId = account._id;
         const businessId = business._id;
@@ -676,7 +683,7 @@ export class InvoicesService {
                     {
                         businessId,
                         accountId,
-                        slugInput: { kind: 'preset', preset },
+                        slugInput,
                         paymentPurpose: invoice.paymentPurpose,
                         businessPaymentPurposeTemplate:
                             business.paymentPurposeTemplate,

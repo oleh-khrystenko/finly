@@ -5,6 +5,7 @@ import { Check, Copy, ExternalLink, Pencil, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import {
     invoiceSlugSchema,
+    type AutoSlugMode,
     type Invoice,
     type UpdateInvoiceRequest,
 } from '@finly/types';
@@ -24,8 +25,10 @@ interface Props {
     /** Public payment-page origin (NEXT_PUBLIC_PAY_PUBLIC_URL). */
     payPublicOrigin: string;
     onSave: (patch: UpdateInvoiceRequest) => Promise<void>;
-    /** Скидання slug-у на нове посилання за форматом нумерації (confirm-dialog). */
-    onResetSlug: () => Promise<void>;
+    /** «Домашній формат» рахунку — picker перевипуску відкривається на ньому. */
+    defaultMode: AutoSlugMode | null;
+    /** Скидання slug-у на нове посилання за обраним у діалозі форматом. */
+    onResetSlug: (mode: AutoSlugMode) => Promise<void>;
 }
 
 /**
@@ -44,6 +47,7 @@ export default function SlugSection({
     businessSlug,
     accountSlug,
     payPublicOrigin,
+    defaultMode,
     onSave,
     onResetSlug,
 }: Props) {
@@ -120,8 +124,11 @@ export default function SlugSection({
                                         variant="outline"
                                         size="md"
                                         onClick={() =>
-                                            openResetConfirm(() => {
-                                                void onResetSlug();
+                                            openResetConfirm({
+                                                defaultMode,
+                                                onConfirm: (mode) => {
+                                                    void onResetSlug(mode);
+                                                },
                                             })
                                         }
                                         IconLeft={<RefreshCw />}

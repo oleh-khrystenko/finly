@@ -1,10 +1,10 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
 import {
+    AUTO_SLUG_MODES,
     MVP_BANKS,
-    SLUG_PRESETS,
+    type AutoSlugMode,
     type BankCode,
-    type SlugPreset,
 } from '@finly/types';
 
 import { applyJsonTransform } from '../../../common/mongoose/json-transform';
@@ -77,13 +77,14 @@ export class Account {
     slugLower!: string;
 
     /**
-     * §SP-6 — per-account дефолт slug-preset для нових інвойсів. `null` =
-     * "не визначено", форма створення інвойсу fallback-ить на global system
-     * default `'simple'`. Sprint 9 переніс власника поля з Business на
-     * Account (нумерація інвойсів per-account).
+     * §SP-6 — per-account «домашній формат» нумерації нових рахунків. `null` =
+     * "не визначено", форма створення fallback-ить на global system default
+     * `'simple'`. Тип розширено з 4 пресетів до `AutoSlugMode` (+`random`):
+     * випадковий код теж може бути запам'ятаним дефолтом і відтвореним при
+     * перевипуску посилання (Sprint 17 §billing-design).
      */
-    @Prop({ type: String, enum: SLUG_PRESETS, default: null })
-    invoiceSlugPresetDefault!: SlugPreset | null;
+    @Prop({ type: String, enum: AUTO_SLUG_MODES, default: null })
+    invoiceSlugPresetDefault!: AutoSlugMode | null;
 
     @Prop({ type: Date, default: null })
     deletedAt!: Date | null;

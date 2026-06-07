@@ -3,14 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FileText, Plus } from 'lucide-react';
 import { AxiosError } from 'axios';
-import { type Invoice, type SlugPreset } from '@finly/types';
+import { type Invoice } from '@finly/types';
 import { getApiMessage, listInvoices } from '@/shared/api';
 import UiButton from '@/shared/ui/UiButton';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
 import { usePendingInvoiceDeletesStore } from '@/features/invoice-edit';
 import InvoiceCard from './InvoiceCard';
-import InvoiceNumberingMenu from './InvoiceNumberingMenu';
 
 interface Props {
     businessSlug: string;
@@ -22,12 +21,6 @@ interface Props {
     businessPaymentPurposeTemplate: string;
     /** Public-payment-page origin для побудови copy-link URL. */
     payPublicOrigin: string;
-    /**
-     * Sprint 15 §UI — формат нумерації нових інвойсів цього рахунку, керований
-     * gear-меню у хедері (демоут зі старої окремої "Налаштування інвойсів").
-     */
-    invoiceSlugPresetDefault: SlugPreset | null;
-    onSavePreset: (preset: SlugPreset | null) => Promise<void>;
 }
 
 const PAGE_SIZE = 10;
@@ -83,8 +76,6 @@ export default function InvoicesSection({
     accountSlug,
     businessPaymentPurposeTemplate,
     payPublicOrigin,
-    invoiceSlugPresetDefault,
-    onSavePreset,
 }: Props) {
     const [data, setData] = useState<SectionData | null>(null);
     const [error, setError] = useState<SectionError | null>(null);
@@ -195,44 +186,27 @@ export default function InvoicesSection({
 
     const createInvoiceHref = `/business/${businessSlug}/account/${accountSlug}/invoice/new`;
 
-    // Той самий елемент рендериться у двох позиціях через responsive show/hide:
-    // desktop — у хедері поряд з CTA; mobile — окремим рядком під шапкою (у
-    // тісному 360px-хедері він не вміщається поряд із заголовком і CTA).
-    const numberingMenu = (
-        <InvoiceNumberingMenu
-            value={invoiceSlugPresetDefault}
-            onSave={onSavePreset}
-        />
-    );
-
     return (
         <UiSectionCard
             id="invoices"
             title="Рахунки"
             headerRight={
-                <div className="flex items-center gap-2">
-                    <div className="hidden sm:block">{numberingMenu}</div>
-                    {visibleItems !== null && visibleItems.length > 0 && (
-                        <UiButton
-                            as="link"
-                            href={createInvoiceHref}
-                            variant="filled"
-                            size="md"
-                            aria-label="Виставити рахунок"
-                            IconLeft={<Plus />}
-                        >
-                            <span className="hidden sm:inline">
-                                Виставити рахунок
-                            </span>
-                        </UiButton>
-                    )}
-                </div>
+                visibleItems !== null && visibleItems.length > 0 ? (
+                    <UiButton
+                        as="link"
+                        href={createInvoiceHref}
+                        variant="filled"
+                        size="md"
+                        aria-label="Виставити рахунок"
+                        IconLeft={<Plus />}
+                    >
+                        <span className="hidden sm:inline">
+                            Виставити рахунок
+                        </span>
+                    </UiButton>
+                ) : undefined
             }
         >
-            <div className="mt-4 flex justify-end sm:hidden">
-                {numberingMenu}
-            </div>
-
             {visibleItems === null && !isErrorCurrent && (
                 <div className="flex justify-center py-8">
                     <UiSpinner size="md" />

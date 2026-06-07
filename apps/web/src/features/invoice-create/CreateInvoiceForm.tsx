@@ -18,10 +18,8 @@ import {
     type Account,
     type Business,
     type CreateInvoiceRequest,
-    type SlugInput,
-    type SlugPreset,
 } from '@finly/types';
-import { createInvoice, getApiMessage } from '@/shared/api';
+import { createInvoice, getApiMessage, updateAccount } from '@/shared/api';
 import {
     getZodFieldError,
     kyivEndOfDayInstant,
@@ -29,12 +27,20 @@ import {
     parseUaMoney,
 } from '@/shared/lib';
 import UiButton from '@/shared/ui/UiButton';
+import UiCheckbox from '@/shared/ui/UiCheckbox';
 import UiInput from '@/shared/ui/UiInput';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSelect from '@/shared/ui/UiSelect';
 import UiSwitch from '@/shared/ui/UiSwitch';
 import UiTextarea from '@/shared/ui/UiTextarea';
-import { useSlugPresetWarningStore } from '@/entities/invoice';
+import {
+    CREATE_FORMAT_ORDER,
+    InvoiceFormatPicker,
+    choiceToSlugInput,
+    isAutoSlugMode,
+    useSlugPresetWarningStore,
+    type InvoiceFormatChoice,
+} from '@/entities/invoice';
 
 interface Props {
     business: Business;
@@ -89,36 +95,6 @@ interface Props {
 
 type ValidUntilMode = 'none' | 'date';
 
-/**
- * Flat 6-option discriminator. `'preset:simple'` etc. — один-к-одному
- * мапиться на `SlugInput`. Кодуємо як string (UiSelect requirement).
- */
-type SlugInputOption =
-    | 'explicit'
-    | 'preset:simple'
-    | 'preset:with-month'
-    | 'preset:with-year'
-    | 'preset:with-purpose'
-    | 'random';
-
-const SLUG_OPTIONS: { value: SlugInputOption; label: string }[] = [
-    { value: 'preset:simple', label: 'Автоматично — простий номер (inv-001)' },
-    {
-        value: 'preset:with-month',
-        label: 'Автоматично — з місяцем (2026-05-001)',
-    },
-    {
-        value: 'preset:with-year',
-        label: 'Автоматично — з роком (2026-001)',
-    },
-    {
-        value: 'preset:with-purpose',
-        label: 'Автоматично — з призначення (oplata-...)',
-    },
-    { value: 'explicit', label: 'Ввести самому' },
-    { value: 'random', label: 'Випадковий код (без префікса)' },
-];
-
 const VALID_UNTIL_OPTIONS: { value: ValidUntilMode; label: string }[] = [
     { value: 'none', label: 'Без терміну' },
     { value: 'date', label: 'До конкретної дати' },
@@ -140,34 +116,23 @@ interface FormValues {
     validUntilMode: ValidUntilMode;
     /** ISO-date рядок (без часу) — конвертується у Date при submit. */
     validUntilDate: string;
-    slugOption: SlugInputOption;
-    /** Активний при `slugOption === 'explicit'`. */
+    slugChoice: InvoiceFormatChoice;
+    /** Активний при `slugChoice === 'explicit'`. */
     humanPart: string;
+    /**
+     * Опт-ін «запам'ятати обраний формат як домашній для цих реквізитів».
+     * Видимий лише коли вибір — авто-режим, відмінний від поточного дефолту.
+     * На submit (якщо `true`) PATCH-ить `account.invoiceSlugPresetDefault`.
+     */
+    rememberDefault: boolean;
 }
 
 const PURPOSE_CHAR_LIMIT = effectiveLimit('purpose').chars;
 
-function defaultSlugOption(account: Account): SlugInputOption {
-    // Sprint 9 §SP-6 — preset-default тепер на Account (per-account нумерація);
-    // null fallback на global system default `'simple'` (Sprint 4 §SP-1).
-    const preset: SlugPreset = account.invoiceSlugPresetDefault ?? 'simple';
-    return `preset:${preset}` as SlugInputOption;
-}
-
-/**
- * Конструюємо `SlugInput`-discriminated union з flat-form-state — single
- * source of truth для submit-payload + Zod-resolver pre-validation.
- */
-function buildSlugInput(values: FormValues): SlugInput {
-    if (values.slugOption === 'explicit') {
-        return { kind: 'explicit', humanPart: values.humanPart };
-    }
-    if (values.slugOption === 'random') {
-        return { kind: 'random' };
-    }
-    // 'preset:*'
-    const preset = values.slugOption.slice('preset:'.length) as SlugPreset;
-    return { kind: 'preset', preset };
+function defaultSlugChoice(account: Account): InvoiceFormatChoice {
+    // Sprint 9 §SP-6 — «домашній формат» на Account; null fallback на global
+    // system default `'simple'` (Sprint 4 §SP-1).
+    return account.invoiceSlugPresetDefault ?? 'simple';
 }
 
 /**
@@ -199,7 +164,7 @@ function formValuesToCreateRequest(values: FormValues): CreateInvoiceRequest {
                   // backend Kyiv-tz parsing на сусідній день).
                   kyivEndOfDayInstant(values.validUntilDate)
                 : null,
-        slugInput: buildSlugInput(values),
+        slugInput: choiceToSlugInput(values.slugChoice, values.humanPart),
     };
 }
 
@@ -218,7 +183,7 @@ const createInvoiceResolver: Resolver<FormValues> = async (values) => {
     // 1. Pre-validate humanPart (live-feedback). `error.message` зберігаємо як
     //    SCREAMING_SNAKE-код — UI рендерить через `getZodFieldError(...)`
     //    (`mapValidationCode`).
-    if (values.slugOption === 'explicit') {
+    if (values.slugChoice === 'explicit') {
         const r = humanSlugPartSchema.safeParse(values.humanPart);
         if (!r.success) {
             errors.humanPart = {
@@ -287,9 +252,9 @@ const createInvoiceResolver: Resolver<FormValues> = async (values) => {
                     };
                 } else if (path === 'slugInput') {
                     const target =
-                        values.slugOption === 'explicit'
+                        values.slugChoice === 'explicit'
                             ? 'humanPart'
-                            : 'slugOption';
+                            : 'slugChoice';
                     errors[target] = {
                         type: 'zod',
                         message: issue.message,
@@ -321,10 +286,8 @@ export default function CreateInvoiceForm({ business, account }: Props) {
     const openWarning = useSlugPresetWarningStore((s) => s.open);
     const [submitting, setSubmitting] = useState(false);
 
-    const initialOption = useMemo(
-        () => defaultSlugOption(account),
-        [account]
-    );
+    const homeDefault = account.invoiceSlugPresetDefault;
+    const initialChoice = useMemo(() => defaultSlugChoice(account), [account]);
 
     const form = useForm<FormValues>({
         resolver: createInvoiceResolver,
@@ -342,8 +305,9 @@ export default function CreateInvoiceForm({ business, account }: Props) {
             paymentPurpose: null,
             validUntilMode: 'none',
             validUntilDate: '',
-            slugOption: initialOption,
+            slugChoice: initialChoice,
             humanPart: '',
+            rememberDefault: false,
         },
         // `onChange` для live-validation `humanPart` + immediate-feedback на
         // amount-overflow / purpose-length errors. План §4.5 явно: "live-
@@ -356,8 +320,9 @@ export default function CreateInvoiceForm({ business, account }: Props) {
     const amountLocked = watch('amountLocked');
     const paymentPurpose = watch('paymentPurpose');
     const validUntilMode = watch('validUntilMode');
-    const slugOption = watch('slugOption');
+    const slugChoice = watch('slugChoice');
     const humanPart = watch('humanPart');
+    const rememberDefault = watch('rememberDefault');
 
     /**
      * Derived parse-state amountInput. Розмежовуємо три режими:
@@ -398,30 +363,39 @@ export default function CreateInvoiceForm({ business, account }: Props) {
     const lockSwitchChecked = isSignage ? true : !amountLocked;
 
     /**
-     * §4.5 — warning-modal на manual select `'preset:with-purpose'` (не на
+     * §4.5 — warning-modal на manual select `'with-purpose'` (не на
      * default-mount). Tracking через `acknowledged: Set` (на life of form).
-     * Cancel → revert до previous option.
+     * Cancel → picker лишається controlled на попередньому виборі (no-op).
      */
-    const [acknowledged, setAcknowledged] = useState<Set<SlugInputOption>>(
+    const [acknowledged, setAcknowledged] = useState<Set<InvoiceFormatChoice>>(
         new Set()
     );
-    const handleSlugOptionChange = (
-        next: SlugInputOption,
-        prev: SlugInputOption
-    ): void => {
-        if (next === 'preset:with-purpose' && !acknowledged.has(next)) {
+
+    const effectiveHome: InvoiceFormatChoice = homeDefault ?? 'simple';
+    // Галочка «запам'ятати» доречна лише коли вибір — авто-режим, відмінний від
+    // поточного домашнього формату (ручний ввід не зберігається; збіг з дефолтом
+    // нема що запам'ятовувати).
+    const canRemember = isAutoSlugMode(slugChoice) && slugChoice !== effectiveHome;
+
+    const applyChoice = (next: InvoiceFormatChoice): void => {
+        setValue('slugChoice', next, { shouldDirty: true });
+        // Кожне нове відхилення від дефолту вимагає свідомого опт-іну заново.
+        setValue('rememberDefault', false, { shouldDirty: false });
+    };
+
+    const handleFormatChange = (next: InvoiceFormatChoice): void => {
+        if (next === slugChoice) return;
+        if (next === 'with-purpose' && !acknowledged.has(next)) {
             openWarning(
                 () => {
                     setAcknowledged((s) => new Set(s).add(next));
-                    setValue('slugOption', next, { shouldDirty: true });
+                    applyChoice(next);
                 },
-                () => {
-                    setValue('slugOption', prev, { shouldDirty: false });
-                }
+                () => undefined
             );
             return;
         }
-        setValue('slugOption', next, { shouldDirty: true });
+        applyChoice(next);
     };
 
     const onSubmit = async (values: FormValues): Promise<void> => {
@@ -433,6 +407,21 @@ export default function CreateInvoiceForm({ business, account }: Props) {
                 account.slug,
                 payload
             );
+            const choice = values.slugChoice;
+            if (
+                values.rememberDefault &&
+                isAutoSlugMode(choice) &&
+                choice !== effectiveHome
+            ) {
+                try {
+                    await updateAccount(business.slug, account.slug, {
+                        invoiceSlugPresetDefault: choice,
+                    });
+                } catch {
+                    // Рахунок уже створено — це другорядна дія, не блокуємо.
+                    toast.error('Формат за замовчуванням не вдалося зберегти');
+                }
+            }
             toast.success('Рахунок створено');
             router.replace(
                 `/business/${business.slug}/account/${account.slug}/invoice/${created.slug}`
@@ -608,20 +597,16 @@ export default function CreateInvoiceForm({ business, account }: Props) {
                 </div>
             </UiSectionCard>
 
-            {/* Slug-input — flat 6-option dropdown */}
+            {/* Формат номера — спільний picker (форма + перевипуск) */}
             <UiSectionCard title="Як назвати рахунок">
                 <div className="space-y-3">
-                    <UiSelect
-                        options={SLUG_OPTIONS}
-                        value={slugOption}
-                        onChange={(v) =>
-                            handleSlugOptionChange(
-                                v as SlugInputOption,
-                                slugOption
-                            )
-                        }
+                    <InvoiceFormatPicker
+                        value={slugChoice}
+                        onChange={handleFormatChange}
+                        options={CREATE_FORMAT_ORDER}
+                        defaultMode={homeDefault}
                     />
-                    {slugOption === 'explicit' && (
+                    {slugChoice === 'explicit' && (
                         <Controller
                             name="humanPart"
                             control={control}
@@ -656,18 +641,31 @@ export default function CreateInvoiceForm({ business, account }: Props) {
                             )}
                         />
                     )}
-                    {slugOption === 'preset:with-purpose' && (
+                    {slugChoice === 'with-purpose' && (
                         <p className="text-muted-foreground text-xs">
-                            У URL потрапить ім&apos;я / ключові слова з
+                            У URL потрапить ім&apos;я або ключові слова з
                             призначення.
                         </p>
                     )}
-                    {slugOption === 'random' && (
+                    {slugChoice === 'random' && (
                         <p className="text-muted-foreground text-xs">
-                            Найкоротший варіант — лише унікальний код типу{' '}
+                            Найкоротший варіант: лише унікальний код типу{' '}
                             <span className="font-mono">aB3xQ9k7</span>.
                             Підходить, коли URL-вид не важливий.
                         </p>
+                    )}
+                    {canRemember && (
+                        <UiCheckbox
+                            checked={rememberDefault}
+                            onChange={(checked) =>
+                                setValue('rememberDefault', checked, {
+                                    shouldDirty: true,
+                                })
+                            }
+                        >
+                            Запам&apos;ятати як формат за замовчуванням для цих
+                            реквізитів
+                        </UiCheckbox>
                     )}
                 </div>
             </UiSectionCard>

@@ -272,10 +272,6 @@ export default function AccountCabinetPage() {
                         business.paymentPurposeTemplate
                     }
                     payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
-                    invoiceSlugPresetDefault={account.invoiceSlugPresetDefault}
-                    onSavePreset={(preset) =>
-                        onSaveAccount({ invoiceSlugPresetDefault: preset })
-                    }
                 />
                 <RequisitesSection account={account} />
                 <DangerSection onDelete={handleDelete} />

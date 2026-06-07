@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { BANK_LABEL, type BankCode, MVP_BANKS } from '../constants/banks';
-import { slugPresetSchema } from '../enums/slug-preset';
+import { autoSlugModeSchema } from '../enums/slug-preset';
 import { isWithinNbuCharset } from '../qr/charset';
 import { isWithinByteLimit } from '../qr/limits';
 import { objectIdSchema } from '../validation/common';
@@ -127,18 +127,19 @@ export const AccountSchema = z.object({
      */
     bankCode: bankCodeSchema.nullable(),
     /**
-     * §SP-6 — per-account дефолт slug-preset для інвойсу. Семантика ідентична
-     * попередньому полю на Business (Sprint 4 §4.1): `null` = "не визначено",
-     * форма створення інвойсу fallback-ить на global system default `'simple'`.
-     * Sprint 9 переносить власника поля з Business на Account (нумерація
-     * інвойсів per-account).
+     * §SP-6 — per-account «домашній формат» нумерації нових рахунків. `null` =
+     * "не визначено", форма створення fallback-ить на global system default
+     * `'simple'`. Тип розширено з 4 пресетів до `AutoSlugMode` (+`random`):
+     * випадковий код теж може бути запам'ятаним дефолтом і відтвореним при
+     * перевипуску посилання; `explicit` лишається поза дефолтом (ручний текст
+     * не зберігається).
      *
      * `.default(null)` страхує від retroactive missing-field-on-load для
      * документів, створених до Sprint 9 (Mongoose default спрацьовує лише
      * при create, не на read existing-doc; на Sprint 9 production-data немає,
      * але dev-environment-документи проходитимуть Zod-парсинг без падіння).
      */
-    invoiceSlugPresetDefault: slugPresetSchema.nullable().default(null),
+    invoiceSlugPresetDefault: autoSlugModeSchema.nullable().default(null),
     deletedAt: z.coerce.date().nullable(),
     createdAt: z.coerce.date(),
     updatedAt: z.coerce.date(),

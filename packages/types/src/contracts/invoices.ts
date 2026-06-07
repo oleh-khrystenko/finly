@@ -9,7 +9,7 @@ import {
     invoicePaymentPurposeSchema,
     invoiceSlugSchema,
 } from '../entities/invoice';
-import { slugPresetSchema } from '../enums/slug-preset';
+import { autoSlugModeSchema, slugPresetSchema } from '../enums/slug-preset';
 import { PublicAccountListItemSchema } from './accounts';
 
 /**
@@ -171,6 +171,21 @@ export const UpdateInvoiceSchema = z
     );
 
 export type UpdateInvoiceRequest = z.infer<typeof UpdateInvoiceSchema>;
+
+/**
+ * `ResetInvoiceSlugSchema` — body для `POST .../reset-slug`. `mode` — one-time
+ * формат перевипуску (5 авто-режимів, без `explicit`: ручний rename живе у
+ * `UpdateInvoiceSchema.slug`). `optional`: відсутність → service fallback на
+ * `account.invoiceSlugPresetDefault ?? 'simple'`. Перевипуск НЕ змінює дефолт
+ * рахунку — це разовий вибір (Sprint 17 §billing-design).
+ */
+export const ResetInvoiceSlugSchema = z
+    .object({
+        mode: autoSlugModeSchema.optional(),
+    })
+    .strict();
+
+export type ResetInvoiceSlugRequest = z.infer<typeof ResetInvoiceSlugSchema>;
 
 /**
  * `PublicInvoiceSchema` — view-схема public endpoint

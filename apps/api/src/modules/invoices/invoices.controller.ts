@@ -25,6 +25,7 @@ import {
 } from '../businesses/business-access.guard';
 import type { BusinessDocument } from '../businesses/schemas/business.schema';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
+import { ResetInvoiceSlugDto } from './dto/reset-invoice-slug.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { CurrentInvoice, InvoiceAccessGuard } from './invoice-access.guard';
 import { InvoicesService, type PaginatedInvoices } from './invoices.service';
@@ -103,12 +104,14 @@ export class InvoicesController {
     async resetSlug(
         @CurrentBusiness() business: BusinessDocument,
         @CurrentAccount() account: AccountDocument,
-        @CurrentInvoice() invoice: InvoiceDocument
+        @CurrentInvoice() invoice: InvoiceDocument,
+        @Body() dto: ResetInvoiceSlugDto
     ): Promise<{ data: InvoiceDocument }> {
         const updated = await this.invoicesService.resetSlug(
             business,
             account,
-            invoice
+            invoice,
+            dto.mode
         );
         return { data: updated };
     }

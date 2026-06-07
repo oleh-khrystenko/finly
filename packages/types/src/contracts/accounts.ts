@@ -11,7 +11,7 @@ import {
     businessSlugSchema,
     businessTypeSchema,
 } from '../entities/business';
-import { slugPresetSchema } from '../enums/slug-preset';
+import { autoSlugModeSchema } from '../enums/slug-preset';
 import { ibanZod } from '../validation/iban';
 
 /**
@@ -71,6 +71,9 @@ export type CreateAccountRequest = z.infer<typeof CreateAccountSchema>;
  * `UpdateAccountSchema` — partial по edit-allowed підмножині.
  *
  * **Editable: `name`, `slug`, `invoiceSlugPresetDefault`** — обираються ФОП.
+ * `invoiceSlugPresetDefault` — `AutoSlugMode` (4 пресети + `random`); записується
+ * не лише з cabinet-форми, а й опт-ін галочкою «запам'ятати» у формі створення
+ * рахунку (Sprint 17 §billing-design переніс вибір формату в точки використання).
  * `slug` (Sprint 15) — редаговуваний vanity-string; backend детектить rename,
  * пише старе значення в `AccountSlugHistory` (308-redirect + anti-squatting) і
  * оновлює `slug + slugLower` атомарно. Колізія у межах бізнесу → `SLUG_TAKEN`.
@@ -91,7 +94,7 @@ export const UpdateAccountSchema = z
     .object({
         name: accountNameSchema,
         slug: accountSlugSchema,
-        invoiceSlugPresetDefault: slugPresetSchema.nullable(),
+        invoiceSlugPresetDefault: autoSlugModeSchema.nullable(),
     })
     .partial()
     .strict();
