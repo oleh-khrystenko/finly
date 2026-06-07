@@ -33,6 +33,7 @@ import { ENV } from '../../config/env';
 import {
     IPaymentProvider,
     PAYMENT_PROVIDER,
+    type ChargeResult,
     type SubscriptionChange,
 } from './interfaces/payment-provider.interface';
 import { User, UserDocument } from '../users/schemas/user.schema';
@@ -303,47 +304,79 @@ export class PaymentsService {
             return { refundedAmount: null };
         }
 
-        // З поверненням за невикористаний період.
+        // З поверненням за невикористаний період. Останнє списання беремо як
+        // APPROVED або вже REFUNDED: повторний виклик після часткового збою
+        // (refund пройшов, локальний flip не завершився) має впізнати завершене
+        // повернення і не списати refund удруге.
         const lastCharge = await this.paymentRecordModel
             .findOne({
                 userId: new Types.ObjectId(userId),
                 type: PAYMENT_RECORD_TYPE.SUBSCRIPTION,
-                status: PAYMENT_RECORD_STATUS.APPROVED,
+                status: {
+                    $in: [
+                        PAYMENT_RECORD_STATUS.APPROVED,
+                        PAYMENT_RECORD_STATUS.REFUNDED,
+                    ],
+                },
             })
             .sort({ createdAt: -1 })
             .lean();
 
-        const interval = this.planInterval(billing.planCode);
-        const refundAmount = lastCharge
-            ? Math.round(
-                  lastCharge.amount *
-                      remainingRatio(billing.currentPeriodEnd, interval)
-              )
-            : 0;
+        let refundedAmount: number | null = null;
 
-        if (lastCharge && refundAmount > 0) {
-            const result = await this.paymentProvider.refund({
-                orderReference,
-                amount: refundAmount,
-                currency: billing.currency ?? BILLING_CURRENCY,
-                comment:
-                    'Скасування підписки з поверненням за невикористаний період',
-            });
-            if (!result.success) {
-                throw new BadRequestException({
-                    code: RESPONSE_CODE.REFUND_FAILED,
-                    message: 'Refund failed',
-                });
-            }
-            await this.paymentRecordModel.updateOne(
-                { _id: lastCharge._id },
-                {
-                    $set: {
-                        status: PAYMENT_RECORD_STATUS.REFUNDED,
-                        refundAmount,
-                    },
-                }
+        if (lastCharge?.status === PAYMENT_RECORD_STATUS.REFUNDED) {
+            // Уже повернуто попередньою спробою — лишилось добити REMOVE + flip.
+            refundedAmount = lastCharge.refundAmount;
+        } else if (lastCharge) {
+            const interval = this.planInterval(billing.planCode);
+            const refundAmount = Math.round(
+                lastCharge.amount *
+                    remainingRatio(billing.currentPeriodEnd, interval)
             );
+            if (refundAmount > 0) {
+                // Claim-first: атомарно мітимо REFUNDED ДО виклику провайдера.
+                // refund впав → відкочуємо мітку (гроші не рухались, повтор
+                // спробує знову). refund пройшов, а наступні кроки впали →
+                // повторний виклик побачить REFUNDED і не списуватиме повторно.
+                const claimed = await this.paymentRecordModel.findOneAndUpdate(
+                    {
+                        _id: lastCharge._id,
+                        status: PAYMENT_RECORD_STATUS.APPROVED,
+                    },
+                    {
+                        $set: {
+                            status: PAYMENT_RECORD_STATUS.REFUNDED,
+                            refundAmount,
+                        },
+                    },
+                    { new: true }
+                );
+                if (claimed) {
+                    const result = await this.paymentProvider.refund({
+                        orderReference,
+                        amount: refundAmount,
+                        currency: billing.currency ?? BILLING_CURRENCY,
+                        comment:
+                            'Скасування підписки з поверненням за невикористаний період',
+                    });
+                    if (!result.success) {
+                        await this.paymentRecordModel.updateOne(
+                            { _id: lastCharge._id },
+                            {
+                                $set: {
+                                    status: PAYMENT_RECORD_STATUS.APPROVED,
+                                    refundAmount: null,
+                                },
+                            }
+                        );
+                        throw new BadRequestException({
+                            code: RESPONSE_CODE.REFUND_FAILED,
+                            message: 'Refund failed',
+                        });
+                    }
+                }
+                refundedAmount = refundAmount;
+            }
         }
 
         await this.removeRecurringWithRetry(orderReference, 'cancel_refund');
@@ -358,7 +391,7 @@ export class PaymentsService {
             },
         });
 
-        return { refundedAmount: refundAmount > 0 ? refundAmount : null };
+        return { refundedAmount };
     }
 
     async changePlan(
@@ -432,38 +465,42 @@ export class PaymentsService {
         );
 
         let prorationRef: string | null = null;
+        let prorationCharge: ChargeResult | null = null;
         if (prorationAmount > 0) {
             prorationRef = `fin-prorate-${userId}-${Date.now().toString(36)}`;
-            const charge = await this.paymentProvider.chargeByToken({
+            prorationCharge = await this.paymentProvider.chargeByToken({
                 orderReference: prorationRef,
                 recToken: billing.recToken,
                 amount: prorationAmount,
                 currency: target.currency,
                 description: `Доплата за апгрейд плану ${this.planLabel(target.code)}`,
             });
-            if (!charge.success) {
+            if (!prorationCharge.success) {
                 throw new BadRequestException({
                     code: RESPONSE_CODE.PRORATION_PAYMENT_FAILED,
                     message: 'Proration charge declined',
                 });
             }
-            await this.recordPayment({
-                userId,
-                orderReference: prorationRef,
-                type: PAYMENT_RECORD_TYPE.PRORATION,
-                amount: prorationAmount,
-                currency: target.currency,
-                status: PAYMENT_RECORD_STATUS.APPROVED,
-                providerTransactionId: charge.transactionId,
-                cardMask: charge.cardMask ?? billing.cardMask,
-            });
         }
 
-        // Якщо proration уже списано, а підняти рекурент не вдалось — повертаємо
-        // доплату, інакше користувач заплатив за апгрейд, якого не отримав
-        // (план/рекурент лишаються старими). Тільки після успішного CHANGE
-        // піднімаємо план і нараховуємо executions.
+        // Після успішного списання БУДЬ-ЯКИЙ збій (запис платежу чи CHANGE) має
+        // повернути доплату. Інакше повторний апгрейд згенерував би новий
+        // orderReference і списав різницю вдруге, а користувач лишився б зі
+        // сплаченою, але незастосованою доплатою (план/рекурент старі). Тільки
+        // після успішного CHANGE піднімаємо план і нараховуємо executions.
         try {
+            if (prorationRef && prorationCharge) {
+                await this.recordPayment({
+                    userId,
+                    orderReference: prorationRef,
+                    type: PAYMENT_RECORD_TYPE.PRORATION,
+                    amount: prorationAmount,
+                    currency: target.currency,
+                    status: PAYMENT_RECORD_STATUS.APPROVED,
+                    providerTransactionId: prorationCharge.transactionId,
+                    cardMask: prorationCharge.cardMask ?? billing.cardMask,
+                });
+            }
             await this.changeRecurringOrThrow(orderReference, {
                 amount: target.priceAmount,
                 currency: target.currency,
@@ -647,12 +684,13 @@ export class PaymentsService {
             return acceptResponse;
         }
 
+        let shouldAck: boolean;
         try {
             // Серіалізуємо обробку вебхука тим самим per-user локом, що й
             // user-мутації. Без цього renewal-колбек, що приземлився під час
             // changePlan/cancel, конкурував би з їх (негардованим) записом
             // billing і міг затерти план/період.
-            await this.withBillingLock(parsed.userId, () =>
+            shouldAck = await this.withBillingLock(parsed.userId, () =>
                 this.routeTransaction(event, parsed)
             );
         } catch (error) {
@@ -675,22 +713,32 @@ export class PaymentsService {
             return null;
         }
 
-        return acceptResponse;
+        // shouldAck=false → подія застрягла як pending crash-orphan: НЕ
+        // підтверджуємо, щоб WayForPay передоставляв до stale-sweep.
+        return shouldAck ? acceptResponse : null;
     }
 
     private async routeTransaction(
         event: BillingWebhookEvent,
         parsed: ParsedOrderReference
-    ): Promise<void> {
+    ): Promise<boolean> {
         const userId = parsed.userId;
         const insert = await this.insertWebhookEvent(event, userId);
-        if (insert !== 'new') {
-            // 'applied' (already processed) або 'pending' (інша доставка цієї ж
-            // події вже в обробці, або crash-orphan, який добиває cron-sweep).
-            // НЕ переобробляємо: pack-ефект (`addExecutions`) не ідемпотентний,
-            // тож повторний прогін під час конкурентної доставки задвоїв би
-            // нарахування.
-            return;
+        if (insert === 'applied') {
+            // Подію вже застосовано — звичайний дубль доставки. Підтверджуємо.
+            // НЕ переобробляємо: pack-ефект (`addExecutions`) не ідемпотентний.
+            return true;
+        }
+        if (insert === 'pending') {
+            // Crash-orphan незавершеної обробки (живий творець утримує per-user
+            // лок, тож побачити pending тут можна лише після краху процесу): ефект
+            // НЕ застосовано. НЕ підтверджуємо — WayForPay передоставлятиме подію,
+            // доки `sweepStalePendingEvents` не прибере orphan і наступна доставка
+            // не обробить її з нуля. ack тут втратив би оплачену подію назавжди.
+            this.logger.warn(
+                `Webhook ${event.providerEventId} is a pending crash-orphan, not acked`
+            );
+            return false;
         }
 
         // Усі side-effects події + перехід webhook-події pending→applied — в
@@ -733,6 +781,7 @@ export class PaymentsService {
         } finally {
             await session.endSession();
         }
+        return true;
     }
 
     private async applyPackTransaction(
@@ -1048,7 +1097,7 @@ export class PaymentsService {
     private async insertWebhookEvent(
         event: BillingWebhookEvent,
         userId: string
-    ): Promise<'new' | 'skip'> {
+    ): Promise<'new' | 'applied' | 'pending'> {
         try {
             await this.webhookEventModel.create({
                 provider: PROVIDER,
@@ -1065,9 +1114,12 @@ export class PaymentsService {
             if (isDuplicateKeyError(error)) {
                 // Унікальний індекс (provider, providerEventId) гарантує одного
                 // творця pending-запису. Будь-яка інша доставка тієї ж події —
-                // дублікат: вона НЕ застосовує ефекти. 'applied' = вже
-                // оброблено; 'pending' = творець ще в обробці (або crash-orphan,
-                // який добиває `PaymentsCleanupService` stale-sweep).
+                // дублікат: вона НЕ застосовує ефекти. 'applied' = подію вже
+                // оброблено (безпечно ack-нути); 'pending' = crash-orphan, ефект
+                // не застосовано (ack заборонений — `PaymentsCleanupService`
+                // stale-sweep прибере, а WayForPay передоставить заново). Якщо
+                // запис зник між create-fail і read (rollback/sweep) — теж
+                // 'pending': fail-safe, повтор обробить з нуля.
                 const existing = await this.webhookEventModel
                     .findOne({
                         provider: PROVIDER,
@@ -1076,9 +1128,9 @@ export class PaymentsService {
                     .lean();
                 this.logger.debug(
                     `Duplicate webhook event ${event.providerEventId} ` +
-                        `(status ${existing?.status ?? 'unknown'}), skipped`
+                        `(status ${existing?.status ?? 'unknown'})`
                 );
-                return 'skip';
+                return existing?.status === 'applied' ? 'applied' : 'pending';
             }
             throw error;
         }

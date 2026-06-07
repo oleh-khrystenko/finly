@@ -23,11 +23,14 @@ const MAX_ATTEMPTS = 5;
 
 /**
  * `pending` webhook-подія, старша за цей поріг, — crash-orphan (нормальна
- * обробка триває мілісекунди). Видаляємо, щоб наступна доставка WayForPay
- * створила свіжий запис і застосувала ефект; доти дублікати лише пропускаються
- * (див. `PaymentsService.insertWebhookEvent`).
+ * обробка — десятки секунд щонайбільше: REQUEST_TIMEOUT 20s + TX maxTimeMS 10s,
+ * а живий творець утримує per-user лок). Видаляємо, щоб наступна доставка
+ * WayForPay створила свіжий запис і застосувала ефект. Поки orphan живий,
+ * `PaymentsService.routeTransaction` НЕ підтверджує його accept-ом, тож WayForPay
+ * передоставляє; поріг тримаємо коротким, щоб recovery встиг у вікно ретраїв
+ * провайдера, а не чекав добового cron.
  */
-const STALE_PENDING_EVENT_MS = 60 * 60 * 1000;
+const STALE_PENDING_EVENT_MS = 15 * 60 * 1000;
 
 @Injectable()
 export class PaymentsCleanupService {
@@ -52,6 +55,16 @@ export class PaymentsCleanupService {
         await this.retryFailedRemovals();
         await this.expireCanceledSubscriptions();
         await this.expireAbandonedRebinds();
+    }
+
+    /**
+     * Окремий частий cron: crash-orphan pending-події не підтверджуються accept-ом
+     * (див. `PaymentsService.routeTransaction`), тож recovery залежить від того,
+     * чи встигне sweep прибрати orphan у вікно ретраїв WayForPay. Добовий cron для
+     * цього надто рідкий — sweep-имо кожні 10 хв.
+     */
+    @Cron(CronExpression.EVERY_10_MINUTES)
+    async runStalePendingSweep(): Promise<void> {
         await this.sweepStalePendingEvents();
     }
 
@@ -151,10 +164,10 @@ export class PaymentsCleanupService {
     }
 
     /**
-     * Видаляємо crash-orphan `pending` webhook-події: нормальна обробка триває
-     * мілісекунди, тож pending старший за поріг — слід урваної обробки. Видалення
-     * дозволяє наступній доставці WayForPay переобробити подію з нуля (доти
-     * дублікати лише пропускаються, не переобробляються).
+     * Видаляємо crash-orphan `pending` webhook-події (слід урваної обробки).
+     * Видалення дозволяє наступній доставці WayForPay переобробити подію з нуля;
+     * доти `routeTransaction` не підтверджує orphan accept-ом, тож провайдер
+     * продовжує передоставку і ефект не губиться.
      */
     private async sweepStalePendingEvents(): Promise<void> {
         const cutoff = new Date(Date.now() - STALE_PENDING_EVENT_MS);
