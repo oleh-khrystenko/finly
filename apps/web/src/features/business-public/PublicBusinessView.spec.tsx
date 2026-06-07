@@ -26,12 +26,12 @@ const TWO_ACCOUNTS: PublicAccountListItem[] = [
  * cards-list (2+ Account). 1-Account випадок резолвиться Server-Component
  * 307-redirect-ом перед render-ом цього компонента; тут не тестується.
  *
- * Sprint 7 §SP-5 heading type-нейтральний — лишається без змін.
+ * Hero-h1 = отримувач (`formatPayeeName`): ФОП/ТОВ — частина назви.
  */
 describe('PublicBusinessView (Sprint 9 §SP-4)', () => {
     describe('empty-state (accounts.length === 0)', () => {
         it.each<BusinessType>(['individual', 'fop', 'tov', 'organization'])(
-            '%s — повідомлення "Власник ще не налаштував жодного рахунку"',
+            '%s — повідомлення "Власник ще не налаштував реквізити"',
             (type) => {
                 render(
                     <PublicBusinessView
@@ -47,7 +47,7 @@ describe('PublicBusinessView (Sprint 9 §SP-4)', () => {
             }
         );
 
-        it('heading зі звертанням до бізнесу присутній навіть для empty-state', () => {
+        it('hero-h1 = отримувач (з юр-формою) присутній навіть для empty-state', () => {
             render(
                 <PublicBusinessView
                     type="fop"
@@ -57,12 +57,13 @@ describe('PublicBusinessView (Sprint 9 §SP-4)', () => {
                 />
             );
             const heading = screen.getByRole('heading', { level: 1 });
-            expect(heading).toHaveTextContent('Платіж на користь Іваненко');
+            expect(heading).toHaveTextContent('ФОП Іваненко');
+            expect(screen.getByText('Отримувач')).toBeInTheDocument();
         });
     });
 
     describe('cards-list (accounts.length >= 2)', () => {
-        it('Sprint 7 §SP-5 type-нейтральний heading "Платіж на користь {name}"', () => {
+        it('hero-h1 = отримувач з юр-формою "ФОП {name}" + підпис «Оберіть реквізити»', () => {
             render(
                 <PublicBusinessView
                     type="fop"
@@ -72,13 +73,14 @@ describe('PublicBusinessView (Sprint 9 §SP-4)', () => {
                 />
             );
             const heading = screen.getByRole('heading', { level: 1 });
-            expect(heading).toHaveTextContent('Платіж на користь Іваненко');
-            // Guard: heading НЕ містить BUSINESS_TYPE_LABEL префіксу.
-            expect(heading.textContent).not.toMatch(/^Оплата на/);
+            expect(heading).toHaveTextContent('ФОП Іваненко');
+            expect(
+                screen.getByText('Оберіть реквізити для оплати')
+            ).toBeInTheDocument();
         });
 
-        it('рендерить картку на кожен account з name + bank-label + ibanMask', () => {
-            render(
+        it('рендерить картку на кожен account: логотип банку + банк-лейбл + маска', () => {
+            const { container } = render(
                 <PublicBusinessView
                     type="fop"
                     name="Іваненко"
@@ -86,14 +88,43 @@ describe('PublicBusinessView (Sprint 9 §SP-4)', () => {
                     accounts={TWO_ACCOUNTS}
                 />
             );
-            expect(screen.getByText('ПриватБанк •2580')).toBeInTheDocument();
-            expect(screen.getByText('monobank •8104')).toBeInTheDocument();
-            // bank-label-rows (non-null bankCode).
-            expect(screen.getByText('ПриватБанк')).toBeInTheDocument();
-            expect(screen.getByText('monobank')).toBeInTheDocument();
-            // 2 ibanMask-tag-и (•2580 + •8104) — render симетрично.
-            expect(screen.getByText('•2580')).toBeInTheDocument();
-            expect(screen.getByText('•8104')).toBeInTheDocument();
+            // Логотипи банків — наш патерн UiBankLogo (/banks/<code>.webp).
+            expect(
+                container.querySelector('img[src="/banks/privatbank.webp"]')
+            ).not.toBeNull();
+            expect(
+                container.querySelector('img[src="/banks/monobank.webp"]')
+            ).not.toBeNull();
+            // auto-default name (містить маску) → primary = «банк •номер» одним
+            // рядком (без «·»).
+            expect(screen.getByText('•2580').closest('p')).toHaveTextContent(
+                'ПриватБанк •2580'
+            );
+            expect(screen.getByText('•8104').closest('p')).toHaveTextContent(
+                'monobank •8104'
+            );
+        });
+
+        it('осмислена власна назва → primary назва, банк + маска вторинні', () => {
+            render(
+                <PublicBusinessView
+                    type="fop"
+                    name="Іваненко"
+                    slug="IvanEnko"
+                    accounts={[
+                        {
+                            slug: 'aBc12345',
+                            name: 'Основний',
+                            bankCode: 'privatbank',
+                            ibanMask: '•2580',
+                        },
+                    ]}
+                />
+            );
+            expect(screen.getByText('Основний')).toBeInTheDocument();
+            const secondary = screen.getByText('•2580').closest('p')!;
+            expect(secondary).toHaveTextContent('ПриватБанк');
+            expect(secondary).toHaveTextContent('•2580');
         });
 
         it('§SP-9 null-fallback rule — на bankCode=null bank-label-row ВІДСУТНІЙ у DOM (а не fallback на "Невідомий банк")', () => {
@@ -119,13 +150,15 @@ describe('PublicBusinessView (Sprint 9 §SP-4)', () => {
                     accounts={withNullBank}
                 />
             );
-            // monobank label рендериться (non-null bankCode).
-            expect(screen.getByText('monobank')).toBeInTheDocument();
+            // monobank (non-null bankCode) — у combined primary «банк •номер».
+            expect(screen.getByText('•8104').closest('p')).toHaveTextContent(
+                'monobank •8104'
+            );
             // Жодного fallback-тексту для null-bankCode.
             expect(
                 screen.queryByText(/Невідомий банк/)
             ).not.toBeInTheDocument();
-            // ibanMask все одно показуємо — disambiguator.
+            // null-bank → primary = сама маска (банк-лейбл drop-ається).
             expect(screen.getByText('•2580')).toBeInTheDocument();
         });
 

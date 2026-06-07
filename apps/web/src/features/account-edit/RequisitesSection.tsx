@@ -78,10 +78,6 @@ export default function RequisitesSection({ account }: Props) {
                     </dd>
                 </div>
             </dl>
-
-            <p className="text-muted-foreground mt-4 text-sm">
-                IBAN не можна змінити після створення реквізитів.
-            </p>
         </UiSectionCard>
     );
 }

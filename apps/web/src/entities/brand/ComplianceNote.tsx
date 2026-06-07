@@ -1,7 +1,7 @@
 import { ShieldCheck } from 'lucide-react';
 
 /**
- * Compliance-band бренду — пояснення моделі НБУ-QR + формати 003/002.
+ * Compliance-band бренду — пояснення моделі НБУ-QR (Finly не платіжний посередник).
  * Витягнуто з `widgets/landing-footer` без зміни стилів, щоб шарити між
  * landing-футером (cabinet) і public-футером (`pay.finly.com.ua`).
  */
@@ -15,21 +15,15 @@ export function ComplianceNote() {
                     </div>
                     <div className="space-y-3 text-sm leading-relaxed">
                         <p className="text-muted-foreground">
-                            Finly генерує платіжні QR-коди за стандартом НБУ
-                            (постанова №97). Гроші проходять напряму між банком
-                            клієнта і вашим IBAN-ом. Finly не зберігає платежі,
-                            не утримує комісій з обороту і не отримує доступу до
-                            ваших коштів.
+                            Finly створює платіжні QR-коди та посилання за
+                            стандартом НБУ, затвердженим постановою №97. Платник
+                            сплачує у своєму банку, а кошти надходять прямо на ваш
+                            банківський рахунок.
                         </p>
                         <p className="text-muted-foreground">
-                            <span className="text-foreground font-medium">
-                                Формат 003
-                            </span>{' '}
-                            (чинний з 01.11.2025) — основний.{' '}
-                            <span className="text-foreground font-medium">
-                                Формат 002
-                            </span>{' '}
-                            — fallback для банків, які ще не оновились.
+                            Finly лише готує платіж, але не проводить його: ми не
+                            зберігаємо платежі, не утримуємо комісій з обороту і
+                            не маємо доступу до ваших коштів.
                         </p>
                     </div>
                 </div>

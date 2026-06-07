@@ -5,27 +5,27 @@ describe('formatKopecksAsHryvnia', () => {
         expect(formatKopecksAsHryvnia(null)).toBeNull();
     });
 
-    it('150000 копійок → "1 500,00 ₴" (NBSP-thousands, comma-decimal)', () => {
+    it('150000 копійок → "1 500,00 грн" (NBSP-thousands, comma-decimal)', () => {
         // Очікуємо UKR-формат: NBSP як thousands-separator, кома як десяткова.
         const result = formatKopecksAsHryvnia(150000);
-        expect(result).toMatch(/^1\s500,00\s?₴$/);
+        expect(result).toMatch(/^1\s500,00\sгрн$/);
     });
 
-    it('100 копійок → "1,00 ₴"', () => {
-        expect(formatKopecksAsHryvnia(100)).toMatch(/^1,00\s?₴$/);
+    it('100 копійок → "1,00 грн"', () => {
+        expect(formatKopecksAsHryvnia(100)).toMatch(/^1,00\sгрн$/);
     });
 
-    it('0 копійок → "0,00 ₴"', () => {
-        expect(formatKopecksAsHryvnia(0)).toMatch(/^0,00\s?₴$/);
+    it('0 копійок → "0,00 грн"', () => {
+        expect(formatKopecksAsHryvnia(0)).toMatch(/^0,00\sгрн$/);
     });
 
-    it('1 копійка → "0,01 ₴"', () => {
-        expect(formatKopecksAsHryvnia(1)).toMatch(/^0,01\s?₴$/);
+    it('1 копійка → "0,01 грн"', () => {
+        expect(formatKopecksAsHryvnia(1)).toMatch(/^0,01\sгрн$/);
     });
 
-    it('99_999_999_999 копійок (максимум) → "999 999 999,99 ₴"', () => {
+    it('99_999_999_999 копійок (максимум) → "999 999 999,99 грн"', () => {
         expect(formatKopecksAsHryvnia(99_999_999_999)).toMatch(
-            /^999\s999\s999,99\s?₴$/
+            /^999\s999\s999,99\sгрн$/
         );
     });
 });

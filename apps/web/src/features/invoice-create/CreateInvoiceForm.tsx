@@ -467,7 +467,7 @@ export default function CreateInvoiceForm({ business, account }: Props) {
                                 type="text"
                                 inputMode="decimal"
                                 placeholder="1500,50"
-                                label="Сума, ₴"
+                                label="Сума, грн"
                                 value={field.value}
                                 onChange={(e) => field.onChange(e.target.value)}
                                 onBlur={field.onBlur}

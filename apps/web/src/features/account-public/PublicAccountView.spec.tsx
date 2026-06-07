@@ -23,20 +23,20 @@ const baseProps = {
 };
 
 describe('PublicAccountView (Sprint 9 §SP-4 + §SP-9)', () => {
-    describe('Heading + parenthetical (§SP-9)', () => {
-        it('bankCode != null → heading має name + parenthetical "({BANK_LABEL} {ibanMask})"', () => {
+    describe('Отримувач (hero) + Реквізити (UiPayeeCard, §SP-9)', () => {
+        it('hero-h1 = отримувач з юр-формою; реквізити = банк + маска', () => {
             render(<PublicAccountView {...baseProps} />);
             const heading = screen.getByRole('heading', { level: 1 });
-            expect(heading).toHaveTextContent(
-                'Платіж на користь Іваненко через ПриватБанк •2580'
-            );
-            // Parenthetical disambiguator у sub-line.
-            expect(
-                screen.getByText('(ПриватБанк •2580)')
-            ).toBeInTheDocument();
+            expect(heading).toHaveTextContent('ФОП Іваненко');
+            // Підписані секції: «Отримувач» (eyebrow) + «Реквізити» (картка).
+            expect(screen.getByText('Отримувач')).toBeInTheDocument();
+            const requisites = screen.getByText('Реквізити').closest('div')!;
+            expect(requisites).toHaveTextContent('ПриватБанк');
+            expect(requisites).toHaveTextContent('•2580');
+            // Auto-default назва «ПриватБанк •2580» містить маску → не дублюється.
         });
 
-        it('bankCode === null → parenthetical drop-ає BANK_LABEL, але `•{last4}` лишається unconditional', () => {
+        it('bankCode === null → банк-лейбл drop-ається, маска лишається unconditional', () => {
             render(
                 <PublicAccountView
                     {...baseProps}
@@ -47,15 +47,17 @@ describe('PublicAccountView (Sprint 9 §SP-4 + §SP-9)', () => {
                     }}
                 />
             );
-            const heading = screen.getByRole('heading', { level: 1 });
-            expect(heading).toHaveTextContent(
-                'Платіж на користь Іваненко через Основний'
-            );
-            // BANK_LABEL-prefix дроп-нутий, ibanMask-postfix unconditional.
-            expect(screen.getByText('(•2580)')).toBeInTheDocument();
+            expect(
+                screen.getByRole('heading', { level: 1 })
+            ).toHaveTextContent('ФОП Іваненко');
+            const requisites = screen.getByText('Реквізити').closest('div')!;
+            expect(requisites).toHaveTextContent('•2580');
+            expect(requisites).not.toHaveTextContent('ПриватБанк');
+            // Кастомна назва (не містить маску) показується вторинним рядком.
+            expect(requisites).toHaveTextContent('Основний');
         });
 
-        it('ФОП перейменував account → heading тримає custom-name + last4-postfix лишається з IBAN-документа', () => {
+        it('ФОП перейменував account → custom-name + маска лишається з IBAN-документа', () => {
             render(
                 <PublicAccountView
                     {...baseProps}
@@ -65,13 +67,10 @@ describe('PublicAccountView (Sprint 9 §SP-4 + §SP-9)', () => {
                     }}
                 />
             );
-            const heading = screen.getByRole('heading', { level: 1 });
-            expect(heading).toHaveTextContent(
-                'Платіж на користь Іваненко через Основний'
-            );
-            expect(
-                screen.getByText('(ПриватБанк •2580)')
-            ).toBeInTheDocument();
+            const requisites = screen.getByText('Реквізити').closest('div')!;
+            expect(requisites).toHaveTextContent('ПриватБанк');
+            expect(requisites).toHaveTextContent('•2580');
+            expect(requisites).toHaveTextContent('Основний');
         });
     });
 
@@ -83,9 +82,10 @@ describe('PublicAccountView (Sprint 9 §SP-4 + §SP-9)', () => {
                 name: /^Оплатити через /,
             });
             expect(tiles).toHaveLength(MVP_BANKS.length);
-            // BANK_LABEL для privatbank і monobank — обидва присутні.
-            expect(screen.getByText('ПриватБанк')).toBeInTheDocument();
-            expect(screen.getByText('monobank')).toBeInTheDocument();
+            // BANK_LABEL для privatbank і monobank — обидва присутні у сітці
+            // (банк-tile + рядок реквізитів → getAllByText, не унікальний).
+            expect(screen.getAllByText('ПриватБанк').length).toBeGreaterThan(0);
+            expect(screen.getAllByText('monobank').length).toBeGreaterThan(0);
         });
 
         it('bank-кнопка інтерактивна (type=button, не disabled) — клік не кидає', () => {

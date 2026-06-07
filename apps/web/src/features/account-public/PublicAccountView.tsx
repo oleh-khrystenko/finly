@@ -2,6 +2,8 @@
 
 import { BANK_LABEL, type BankCode, type BusinessType } from '@finly/types';
 import UiPaymentOptions from '@/shared/ui/UiPaymentOptions';
+import UiPayeeCard from '@/shared/ui/UiPayeeCard';
+import { formatPayeeName } from '@/entities/business';
 
 interface Props {
     /** Account-fields (з `PublicAccountViewSchema`-whitelist). */
@@ -35,22 +37,16 @@ interface Props {
  * Це Sprint 3 `PublicBusinessView` payment-view, переміщений на per-account
  * рівень: IBAN тепер живе на Account, тому payment-vector (NBU payload, QR)
  * генерується для триплета `(business, account)`:
- *   - heading зі звертанням + parenthetical disambiguator (§SP-9).
+ *   - hero-h1 = отримувач (`formatPayeeName` з юр-формою) — «кому платять».
+ *   - `UiPayeeCard` — підписаний бокс реквізитів (банк + маска IBAN) — «по чому
+ *     платять». Розділення замість злитого «Платіж на користь {X} через {Y}».
  *   - `UiPaymentOptions` — сітка банків + disclosure-сховані app-link і QR
  *     (спільний composite з `invoice-public`).
  *
- * **Heading-formula (§SP-9):**
- *  - `bankCode !== null` → `"Платіж на користь {business.name} через {account.name}
- *    ({BANK_LABEL[bankCode]} •{last4})"`.
- *  - `bankCode === null` → `"Платіж на користь {business.name} через {account.name}
- *    (•{last4})"` (BANK_LABEL-prefix drop-ається; `•{last4}`-postfix
- *    unconditional як server-derived disambiguator).
- *
- * **Чому `•{last4}` unconditional**: heading — єдина точка на per-account-
- * вивісці, де клієнт бачить ідентифікатор рахунку незалежно від name-стану.
- * Якщо ФОП перейменував рахунок з auto-default "ПриватБанк •2580" на
- * "Основний", `•2580` у parenthetical лишається — server-derived з IBAN-
- * документа.
+ * **Null-fallback rule (§SP-9):** на `bankCode === null` банк-лейбл у реквізитах
+ * drop-ається; `•{last4}`-маска показується unconditional як server-derived
+ * disambiguator — єдина точка, де клієнт бачить ідентифікатор рахунку незалежно
+ * від name-стану (ФОП перейменував рахунок → маска лишається з IBAN-документа).
  */
 export default function PublicAccountView({
     account,
@@ -58,32 +54,32 @@ export default function PublicAccountView({
     nbuLinks,
     apiBase = '/api',
 }: Props) {
-    // §SP-9 — bank-label лише на non-null bankCode; last4-postfix unconditional.
+    // §SP-9 — bank-label лише на non-null bankCode; last4-маска unconditional.
     const bankLabel =
         account.bankCode !== null ? BANK_LABEL[account.bankCode] : null;
-    const parenthetical = bankLabel
-        ? `(${bankLabel} ${account.ibanMask})`
-        : `(${account.ibanMask})`;
-    // Без власної назви рахунку опускаємо "через {назва}" — parenthetical нижче
-    // вже ідентифікує рахунок (банк + маска), тож дубль не потрібен.
-    const heading = account.name
-        ? `Платіж на користь ${business.name} через ${account.name}`
-        : `Платіж на користь ${business.name}`;
+    // Отримувач — hero сторінки (це і є мета вивіски: «кому ви платите»).
+    // Реквізити («по чому») винесено в окремий підписаний бокс нижче, замість
+    // злитого «Платіж на користь {X} через {Y}».
+    const payeeName = formatPayeeName(business.type, business.name);
 
     const qrBase = `${apiBase}/businesses/public/${encodeURIComponent(business.slug)}/account/${encodeURIComponent(account.slug)}/qr`;
     const qrPrimary = `${qrBase}/nbu.png?host=primary`;
     const qrLegacy = `${qrBase}/nbu.png?host=legacy`;
 
     return (
-        <div className="mx-auto max-w-md space-y-8 px-4 py-8">
-            <header className="space-y-2 text-center">
+        <div className="mx-auto max-w-md space-y-6 px-4 py-8 md:max-w-2xl">
+            <header className="space-y-1 text-center">
+                <p className="text-muted-foreground text-sm">Отримувач</p>
                 <h1 className="text-foreground text-2xl font-bold tracking-tight break-words md:text-3xl">
-                    {heading}
+                    {payeeName}
                 </h1>
-                <p className="text-muted-foreground text-sm break-words">
-                    {parenthetical}
-                </p>
             </header>
+
+            <UiPayeeCard
+                bankLabel={bankLabel}
+                ibanMask={account.ibanMask}
+                accountName={account.name}
+            />
 
             <UiPaymentOptions
                 nbuLinks={nbuLinks}

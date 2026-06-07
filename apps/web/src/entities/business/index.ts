@@ -1,3 +1,4 @@
+export { formatPayeeName } from './formatPayeeName';
 export {
     paymentPurposeTemplateFieldConfig,
     type PaymentPurposeTemplateFieldConfig,

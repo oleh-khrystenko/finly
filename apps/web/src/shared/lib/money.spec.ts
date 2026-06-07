@@ -34,12 +34,18 @@ describe('parseUaMoney', () => {
         expect(parseUaMoney('0,00')).toEqual({ ok: true, kopecks: 0 });
     });
 
-    it('strip NBSP/space (paste з formatted-displaying)', () => {
-        // Intl uk-UA NBSP як thousands; "1 500,50 ₴" — типовий paste-source.
+    it('strip currency-unit + NBSP/space (paste з formatted-displaying)', () => {
+        // Intl uk-UA NBSP як thousands; "1 500,50 грн" — типовий paste-source.
         expect(parseUaMoney('1 500,50')).toEqual({
             ok: true,
             kopecks: 150050,
         });
+        // round-trip: copy displayed «грн» назад у поле суми.
+        expect(parseUaMoney('1 500,50 грн')).toEqual({
+            ok: true,
+            kopecks: 150050,
+        });
+        // legacy ₴ paste-source все ще підтримуємо.
         expect(parseUaMoney('1 500,50 ₴')).toEqual({
             ok: true,
             kopecks: 150050,

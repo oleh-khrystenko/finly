@@ -3,7 +3,7 @@
  *
  * **Власник: `entities/invoice`** — pure formatter поверх invoice-моделі;
  * shared і invoice-create / invoice-edit / invoice-public / cabinet pages
- * однаково бачать ту саму "1 500,00 ₴"-репрезентацію. Розміщення в
+ * однаково бачать ту саму "1 500,00 грн"-репрезентацію. Розміщення в
  * `features/invoices` помилково створювало feature→feature імпорти
  * (FSD-violation).
  *
@@ -20,7 +20,7 @@ const HRYVNIA_FORMATTER = new Intl.NumberFormat('uk-UA', {
 export function formatKopecksAsHryvnia(kopecks: number | null): string | null {
     if (kopecks === null) return null;
     const hryvnia = kopecks / 100;
-    return `${HRYVNIA_FORMATTER.format(hryvnia)} ₴`;
+    return `${HRYVNIA_FORMATTER.format(hryvnia)} грн`;
 }
 
 /**

@@ -62,7 +62,7 @@ export default function UiBankAppGrid({
     return (
         <div
             className={composeClasses(
-                'grid grid-cols-2 gap-3 sm:grid-cols-3',
+                'grid grid-cols-2 gap-3 md:grid-cols-3',
                 className
             )}
         >

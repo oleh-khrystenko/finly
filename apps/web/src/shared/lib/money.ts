@@ -41,9 +41,9 @@ export type MoneyParseResult =
  * `null` → signage-mode "сума вводиться у банку".
  */
 export function parseUaMoney(raw: string): MoneyParseResult {
-    // Strip whitespace + NBSP (U+00A0) — користувач міг вставити з
-    // formatted-displaying ("1 500,50 ₴" → стандартні Intl-thousands).
-    const cleaned = raw.replace(/[\s ₴]/g, '');
+    // Strip currency-unit ("грн" / legacy "₴") + whitespace/NBSP — користувач
+    // міг вставити з formatted-displaying ("1 500,50 грн" → Intl-thousands).
+    const cleaned = raw.replace(/грн/gi, '').replace(/[\s ₴]/g, '');
     if (cleaned === '') return { ok: true, kopecks: null };
 
     if (cleaned.startsWith('-')) {
