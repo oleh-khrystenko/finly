@@ -7,7 +7,9 @@ import Image from 'next/image';
 import {
     PAYMENTS_SUBSCRIPTION_ENABLED,
     PAYMENTS_ONE_OFF_ENABLED,
+    BILLING_DEMO_MODE,
 } from '@/shared/config/env';
+import { INTL_LOCALE } from '@/shared/lib';
 import {
     getCatalog,
     createSubscriptionCheckout,
@@ -39,7 +41,6 @@ const PLAN_COPY: Record<string, PlanCopy> = {
         tagline: 'Для невеликих команд на старті',
         features: [
             'До 5 учасників команди',
-            '10 000 виконань/місяць',
             'Базова аналітика',
             'Підтримка через email',
         ],
@@ -50,7 +51,6 @@ const PLAN_COPY: Record<string, PlanCopy> = {
         badge: 'Популярний',
         features: [
             'Необмежена кількість учасників',
-            '50 000 виконань/місяць',
             'Розширена аналітика',
             'Пріоритетна підтримка',
             'Кастомні інтеграції',
@@ -135,7 +135,7 @@ export default function BillingPage() {
     return (
         <UiPageContainer className="space-y-10 py-12">
             {/* ── Demo Banner ── */}
-            <DemoBanner />
+            {BILLING_DEMO_MODE && <DemoBanner />}
 
             {/* ── Page Header ── */}
             <div>
@@ -208,6 +208,13 @@ export default function BillingPage() {
                                         )}
 
                                         <ul className="mt-6 flex-1 space-y-3">
+                                            <li className="text-muted-foreground flex items-center gap-2 text-sm">
+                                                <Check className="text-success h-4 w-4 shrink-0" />
+                                                {plan.executions.toLocaleString(
+                                                    INTL_LOCALE
+                                                )}{' '}
+                                                виконань за період
+                                            </li>
                                             {(copy?.features ?? []).map(
                                                 (feature, idx) => (
                                                     <li
@@ -276,7 +283,7 @@ export default function BillingPage() {
                             Ваш баланс:{' '}
                             <span className="text-primary font-semibold">
                                 {user.executions.balance.toLocaleString(
-                                    'en-US'
+                                    INTL_LOCALE
                                 )}
                             </span>{' '}
                             виконань
@@ -340,7 +347,7 @@ export default function BillingPage() {
                                             </p>
                                             <p className="text-muted-foreground text-xs">
                                                 {pack.executions.toLocaleString(
-                                                    'en-US'
+                                                    INTL_LOCALE
                                                 )}{' '}
                                                 виконань
                                             </p>

@@ -4,10 +4,13 @@ import {
     getModelToken,
 } from '@nestjs/mongoose';
 import { Test, type TestingModule } from '@nestjs/testing';
+import { ConflictException } from '@nestjs/common';
 import { Connection, Model, Types } from 'mongoose';
 import {
     PAYMENT_RECORD_STATUS,
     PAYMENT_RECORD_TYPE,
+    PAYMENT_TYPE,
+    RESPONSE_CODE,
     SUBSCRIPTION_STATUS,
     WAYFORPAY_TRANSACTION_STATUS,
     findExecutionPack,
@@ -18,6 +21,7 @@ import {
 import { createStandaloneMongo, type InMemoryMongo } from '../../test-utils/mongo';
 import { PaymentsService } from './payments.service';
 import { PAYMENT_PROVIDER } from './interfaces/payment-provider.interface';
+import { REDIS_CLIENT } from '../../common/modules/redis.module';
 import { UsersService } from '../users/users.service';
 import { User, UserDocument, UserSchema } from '../users/schemas/user.schema';
 import {
@@ -80,10 +84,15 @@ describe('PaymentsService (MongoMemoryServer)', () => {
     let failedRemovalModel: Model<FailedRecurringRemovalDocument>;
     let provider: ProviderMock;
     let connection: Connection;
+    let redisMock: { set: jest.Mock; eval: jest.Mock };
 
     beforeAll(async () => {
         mongo = await createStandaloneMongo();
         provider = makeProviderMock();
+        redisMock = {
+            set: jest.fn().mockResolvedValue('OK'),
+            eval: jest.fn().mockResolvedValue(1),
+        };
 
         moduleRef = await Test.createTestingModule({
             imports: [
@@ -109,6 +118,13 @@ describe('PaymentsService (MongoMemoryServer)', () => {
                 PaymentsService,
                 UsersService,
                 { provide: PAYMENT_PROVIDER, useValue: provider },
+                {
+                    // Per-user білінг-лок: за замовчуванням вільний (set → 'OK',
+                    // release → 1). Окремий тест нижче форсує set → null, щоб
+                    // перевірити відмову при зайнятому локу.
+                    provide: REDIS_CLIENT,
+                    useValue: redisMock,
+                },
             ],
         }).compile();
 
@@ -560,5 +576,36 @@ describe('PaymentsService (MongoMemoryServer)', () => {
         const updated = await userModel.findById(user._id).lean();
         expect(updated!.billing!.cancelAtPeriodEnd).toBe(true);
         expect(updated!.billing!.hasActiveSubscription).toBe(true);
+    });
+
+    it('зайнятий per-user лок відхиляє конкурентну білінг-мутацію', async () => {
+        redisMock.set.mockResolvedValueOnce(null);
+
+        const error = await service
+            .changePlan(new Types.ObjectId().toString(), { planCode: 'pro' })
+            .catch((e: unknown) => e);
+
+        expect(error).toBeInstanceOf(ConflictException);
+        expect((error as ConflictException).getResponse()).toMatchObject({
+            code: RESPONSE_CODE.BILLING_OPERATION_IN_PROGRESS,
+        });
+        // Lock не захоплено → release не викликається.
+        expect(redisMock.eval).not.toHaveBeenCalled();
+    });
+
+    it('checkout-session серіалізується тим самим локом', async () => {
+        redisMock.set.mockResolvedValueOnce(null);
+
+        const error = await service
+            .createCheckoutSession(new Types.ObjectId().toString(), {
+                paymentType: PAYMENT_TYPE.SUBSCRIPTION,
+                planCode: 'starter',
+            })
+            .catch((e: unknown) => e);
+
+        expect(error).toBeInstanceOf(ConflictException);
+        expect((error as ConflictException).getResponse()).toMatchObject({
+            code: RESPONSE_CODE.BILLING_OPERATION_IN_PROGRESS,
+        });
     });
 });

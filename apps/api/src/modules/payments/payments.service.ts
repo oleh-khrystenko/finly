@@ -7,6 +7,8 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { randomBytes } from 'crypto';
+import Redis from 'ioredis';
 import {
     BILLING_CURRENCY,
     EXECUTION_ACTION,
@@ -48,6 +50,7 @@ import {
     PaymentRecordLean,
 } from './schemas/payment-record.schema';
 import { UsersService } from '../users/users.service';
+import { REDIS_CLIENT } from '../../common/modules/redis.module';
 import {
     ORDER_KIND,
     buildPackOrderReference,
@@ -57,6 +60,22 @@ import {
 
 const WEBHOOK_MONGO_TIMEOUT_MS = 10_000;
 const PROVIDER = 'wayforpay';
+
+// Стеля утримання per-user білінг-локу. Найдовша операція (changePlan upgrade)
+// робить послідовно proration-Charge + CHANGE, кожен до REQUEST_TIMEOUT_MS=20s,
+// тож 60s покриває з запасом. Lock авто-звільняється по TTL, якщо процес упав
+// усередині критичної секції.
+const BILLING_LOCK_TTL_MS = 60_000;
+const BILLING_LOCK_PREFIX = 'billing_op:';
+
+// Звільнення локу — compare-and-delete: знімаємо лише власний токен, інакше
+// операція, що перевищила TTL, видалила б lock, уже захоплений іншим запитом.
+const BILLING_LOCK_RELEASE_SCRIPT = `
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+    return redis.call('DEL', KEYS[1])
+end
+return 0
+`;
 
 // Нефінальні статуси транзакції: проміжний колбек, після якого WayForPay
 // надішле фінальний статус окремою подією (providerEventId містить статус).
@@ -85,12 +104,69 @@ export class PaymentsService {
         @InjectModel(PaymentRecord.name)
         private readonly paymentRecordModel: Model<PaymentRecordDocument>,
 
+        @Inject(REDIS_CLIENT)
+        private readonly redis: Redis,
+
         private readonly usersService: UsersService
     ) {}
+
+    /**
+     * Серіалізує білінг-write-операції одного користувача per-user Redis-локом.
+     * WayForPay charge/refund/CHANGE неідемпотентні: два паралельні запити (дві
+     * вкладки) інакше задвоїли б proration-списання чи refund. Lock зайнятий →
+     * `BILLING_OPERATION_IN_PROGRESS`. Звільнення гарантоване (`finally`) +
+     * TTL-fallback на випадок краху всередині секції.
+     */
+    private async withBillingLock<T>(
+        userId: string,
+        fn: () => Promise<T>
+    ): Promise<T> {
+        const key = `${BILLING_LOCK_PREFIX}${userId}`;
+        const token = randomBytes(16).toString('hex');
+        const acquired = await this.redis.set(
+            key,
+            token,
+            'PX',
+            BILLING_LOCK_TTL_MS,
+            'NX'
+        );
+        if (acquired !== 'OK') {
+            throw new ConflictException({
+                code: RESPONSE_CODE.BILLING_OPERATION_IN_PROGRESS,
+                message: 'Billing operation already in progress',
+            });
+        }
+        try {
+            return await fn();
+        } finally {
+            try {
+                await this.redis.eval(
+                    BILLING_LOCK_RELEASE_SCRIPT,
+                    1,
+                    key,
+                    token
+                );
+            } catch (error) {
+                this.logger.error(
+                    `Failed to release billing lock for user ${userId} (expires in ≤${BILLING_LOCK_TTL_MS}ms)`,
+                    error instanceof Error ? error.stack : String(error)
+                );
+            }
+        }
+    }
 
     // ── Checkout ─────────────────────────────────────────────────────────
 
     async createCheckoutSession(
+        userId: string,
+        dto: CreateCheckoutSession
+    ): Promise<{ checkoutUrl: string }> {
+        return this.withBillingLock(userId, () =>
+            this.createCheckoutSessionLocked(userId, dto)
+        );
+    }
+
+    private async createCheckoutSessionLocked(
         userId: string,
         dto: CreateCheckoutSession
     ): Promise<{ checkoutUrl: string }> {
@@ -196,6 +272,15 @@ export class PaymentsService {
         userId: string,
         dto: CancelSubscription
     ): Promise<{ refundedAmount: number | null }> {
+        return this.withBillingLock(userId, () =>
+            this.cancelSubscriptionLocked(userId, dto)
+        );
+    }
+
+    private async cancelSubscriptionLocked(
+        userId: string,
+        dto: CancelSubscription
+    ): Promise<{ refundedAmount: number | null }> {
         const { billing } = await this.requireActiveSubscription(userId);
         const orderReference = billing.orderReference!;
 
@@ -273,6 +358,15 @@ export class PaymentsService {
     }
 
     async changePlan(
+        userId: string,
+        dto: ChangePlan
+    ): Promise<{ scheduled: boolean }> {
+        return this.withBillingLock(userId, () =>
+            this.changePlanLocked(userId, dto)
+        );
+    }
+
+    private async changePlanLocked(
         userId: string,
         dto: ChangePlan
     ): Promise<{ scheduled: boolean }> {
@@ -408,6 +502,15 @@ export class PaymentsService {
         userId: string,
         returnPath?: string
     ): Promise<{ checkoutUrl: string }> {
+        return this.withBillingLock(userId, () =>
+            this.updateCardLocked(userId, returnPath)
+        );
+    }
+
+    private async updateCardLocked(
+        userId: string,
+        returnPath?: string
+    ): Promise<{ checkoutUrl: string }> {
         const { user, billing } = await this.requireActiveSubscription(userId);
         const oldOrderReference = billing.orderReference!;
 
@@ -470,6 +573,12 @@ export class PaymentsService {
     // ── Reset (REMOVE recurring + clear local) ───────────────────────────
 
     async resetBilling(userId: string): Promise<void> {
+        return this.withBillingLock(userId, () =>
+            this.resetBillingLocked(userId)
+        );
+    }
+
+    private async resetBillingLocked(userId: string): Promise<void> {
         const user = await this.userModel.findById(userId).lean();
         if (!user) {
             throw new BadRequestException({

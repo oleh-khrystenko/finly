@@ -24,6 +24,14 @@ export const RESPONSE_CODE = {
     PRORATION_PAYMENT_FAILED: 'PRORATION_PAYMENT_FAILED',
     REFUND_FAILED: 'REFUND_FAILED',
     SUBSCRIPTION_OPERATION_FAILED: 'SUBSCRIPTION_OPERATION_FAILED',
+    /**
+     * Sprint 17 — конкурентна білінг-мутація. Усі write-операції над підпискою
+     * (checkout, cancel, change-plan, update-card, reset) серіалізовані
+     * per-user Redis-локом: WayForPay charge/refund/CHANGE неідемпотентні, тож
+     * два паралельні запити (дві вкладки) інакше задвоїли б списання чи
+     * повернення. Lock зайнятий → цей код. Recovery: дочекатись і повторити.
+     */
+    BILLING_OPERATION_IN_PROGRESS: 'BILLING_OPERATION_IN_PROGRESS',
 
     // --- onboarding error ---
     ONBOARDING_INCOMPLETE: 'ONBOARDING_INCOMPLETE',
@@ -280,6 +288,7 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.PRORATION_PAYMENT_FAILED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.REFUND_FAILED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.SUBSCRIPTION_OPERATION_FAILED]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BILLING_OPERATION_IN_PROGRESS]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.AI_RATE_LIMIT_EXCEEDED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.AI_MESSAGE_TOO_LONG]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.AI_HELP_BUDGET_EXHAUSTED]: RESPONSE_TYPE.ERROR,
