@@ -46,7 +46,7 @@ function BusinessNewContent() {
     if (fromLanding && !hasHydrated) {
         return (
             <UiPageContainer className="space-y-8 py-12 md:py-16">
-                <UiPageHeading>Створення бізнесу</UiPageHeading>
+                <UiPageHeading>Створення отримувача</UiPageHeading>
                 <div className="flex justify-center py-12">
                     <UiSpinner size="md" />
                 </div>
@@ -56,7 +56,7 @@ function BusinessNewContent() {
 
     return (
         <UiPageContainer className="space-y-8 py-12 md:py-16">
-            <UiPageHeading>Створення бізнесу</UiPageHeading>
+            <UiPageHeading>Створення отримувача</UiPageHeading>
             <BusinessCreateForm
                 initialValues={initialValues}
                 fromLanding={fromLanding}
@@ -70,7 +70,7 @@ export default function BusinessNewPage() {
         <Suspense
             fallback={
                 <UiPageContainer className="space-y-8 py-12 md:py-16">
-                    <UiPageHeading>Створення бізнесу</UiPageHeading>
+                    <UiPageHeading>Створення отримувача</UiPageHeading>
                     <div className="flex justify-center py-12">
                         <UiSpinner size="md" />
                     </div>

@@ -76,7 +76,7 @@ describe('useUserMenu', () => {
             );
             expect(businesses).toBeDefined();
             expect(businesses?.route).toBe('/business');
-            expect(businesses?.label).toBe('Бізнеси');
+            expect(businesses?.label).toBe('Отримувачі');
         });
 
         it('НЕ містить item з value="dashboard" (видалено E2)', () => {
@@ -104,7 +104,7 @@ describe('useUserMenu', () => {
         it('description без hover-tooltip — inline-текст (responsive.md §6)', () => {
             const { result } = renderHook(() => useUserMenu(icons));
             expect(result.current.bookkeeperToggle?.description).toBe(
-                'вести бізнеси клієнтів, які ще не зареєстровані у Finly'
+                'вести отримувачів клієнтів, які ще не зареєстровані у Finly'
             );
         });
 

@@ -33,7 +33,7 @@ export default function PurposeSection({ invoice, business, onSave }: Props) {
             renderRead={(v) =>
                 v === null ? (
                     <span className="text-muted-foreground italic">
-                        Використано з налаштувань бізнесу: «
+                        Використано з налаштувань отримувача: «
                         {business.paymentPurposeTemplate}»
                     </span>
                 ) : (

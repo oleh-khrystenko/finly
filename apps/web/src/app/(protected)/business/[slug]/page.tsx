@@ -168,8 +168,8 @@ export default function BusinessSlugPage() {
             <div className="flex flex-col gap-4">
                 <UiBreadcrumb
                     items={[
-                        { label: 'Усі бізнеси', href: '/business' },
-                        { label: 'Бізнес' },
+                        { label: 'Усі отримувачі', href: '/business' },
+                        { label: 'Отримувач' },
                     ]}
                 />
                 <div className="flex min-w-0 flex-col gap-1">
@@ -197,7 +197,7 @@ export default function BusinessSlugPage() {
                 <UiSectionCard title="Небезпечна зона" variant="destructive">
                     <p className="text-muted-foreground mt-2 text-base">
                         Видалення повне і незворотне. Усі реквізити і
-                        виставлені рахунки цього бізнесу будуть видалені.
+                        виставлені рахунки цього отримувача будуть видалені.
                         Клієнти, які мають збережене посилання, не зможуть
                         оплатити.
                     </p>
@@ -209,7 +209,7 @@ export default function BusinessSlugPage() {
                             onClick={handleDelete}
                             IconLeft={<Trash2 />}
                         >
-                            Видалити бізнес
+                            Видалити отримувача
                         </UiButton>
                     </div>
                 </UiSectionCard>
@@ -221,16 +221,16 @@ export default function BusinessSlugPage() {
 function ErrorPage({ code }: { code: string }) {
     const message =
         code === 'BUSINESS_NOT_FOUND' || code === 'NOT_FOUND'
-            ? 'Бізнес не знайдено'
+            ? 'Отримувача не знайдено'
             : code === 'BUSINESS_ACCESS_DENIED'
-              ? 'У вас немає доступу до цього бізнесу'
+              ? 'У вас немає доступу до цього отримувача'
               : getApiMessage(code, 'businesses');
 
     return (
         <UiPageContainer className="space-y-6 py-12">
             <UiSectionCard title={message}>
                 <p className="text-muted-foreground mt-2 text-sm">
-                    Поверніться до списку бізнесів і оберіть інший.
+                    Поверніться до списку отримувачів і оберіть іншого.
                 </p>
                 <div className="mt-4">
                     <UiButton
@@ -240,7 +240,7 @@ function ErrorPage({ code }: { code: string }) {
                         size="md"
                         IconLeft={<ArrowLeft />}
                     >
-                        Повернутись до моїх бізнесів
+                        Повернутись до моїх отримувачів
                     </UiButton>
                 </div>
             </UiSectionCard>

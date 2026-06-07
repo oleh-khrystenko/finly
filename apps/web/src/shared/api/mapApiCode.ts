@@ -90,8 +90,8 @@ const ERRORS: Record<string, MessageDict> = {
             'Цей файл не може бути використаний як фото. Спробуйте інше зображення',
     },
     businesses: {
-        business_not_found: 'Бізнес не знайдено',
-        business_access_denied: 'У вас немає доступу до цього бізнесу',
+        business_not_found: 'Отримувача не знайдено',
+        business_access_denied: 'У вас немає доступу до цього отримувача',
         slug_generation_failed:
             'Не вдалося згенерувати посилання. Спробуйте ще раз',
         invalid_vat_for_taxation_system:
@@ -120,7 +120,7 @@ const ERRORS: Record<string, MessageDict> = {
         // повідомляє користувача коротким inline-text-ом без перерахування
         // дозволених систем (dropdown уже відфільтрований).
         taxation_system_not_allowed_for_type:
-            'Ця система оподаткування недоступна для обраного типу бізнесу',
+            'Ця система оподаткування недоступна для обраного типу отримувача',
         // Sprint 14 — vanity-slug edit. Користувач намагається встановити slug,
         // що співпадає з зарезервованим route-namespace-ом (`qr`, `api`,
         // `host-pay`, …).
@@ -142,7 +142,7 @@ const ERRORS: Record<string, MessageDict> = {
         account_access_denied: 'У вас немає доступу до цих реквізитів',
         account_slug_generation_failed:
             'Не вдалося згенерувати реквізити. Спробуйте ще раз',
-        account_iban_duplicate: 'Цей IBAN вже доданий до бізнесу',
+        account_iban_duplicate: 'Цей IBAN вже доданий до отримувача',
         account_create_failed:
             'Не вдалося створити реквізити. Спробуйте ще раз',
         // Sprint 15 — vanity-slug edit рахунку: посилання зайняте іншим

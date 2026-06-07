@@ -115,7 +115,7 @@ const VALIDATION_MESSAGES: Record<string, string> = {
     // і 2 єдиного податку — виключно для ФОП. Inline-помилка під полем
     // "Система оподаткування" у wizard-step і edit-section.
     TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE:
-        'Ця система оподаткування недоступна для обраного типу бізнесу',
+        'Ця система оподаткування недоступна для обраного типу отримувача',
 
     // --- Single-form /business/new (BusinessCreateForm) cross-field ---
     // Коди емітяться superRefine-ом форми, не entity-Zod-схемами з

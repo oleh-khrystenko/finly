@@ -246,8 +246,8 @@ export default function AccountCabinetPage() {
             <div className="flex flex-col gap-4">
                 <UiBreadcrumb
                     items={[
-                        { label: 'Усі бізнеси', href: '/business' },
-                        { label: 'Бізнес', href: `/business/${business.slug}` },
+                        { label: 'Усі отримувачі', href: '/business' },
+                        { label: 'Отримувач', href: `/business/${business.slug}` },
                         { label: 'Реквізити' },
                     ]}
                 />
@@ -287,16 +287,16 @@ function ErrorPage({ code }: { code: string }) {
             : code === 'ACCOUNT_ACCESS_DENIED'
               ? 'У вас немає доступу до цих реквізитів'
               : code === 'BUSINESS_NOT_FOUND'
-                ? 'Бізнес не знайдено'
+                ? 'Отримувача не знайдено'
                 : code === 'BUSINESS_ACCESS_DENIED'
-                  ? 'У вас немає доступу до цього бізнесу'
+                  ? 'У вас немає доступу до цього отримувача'
                   : getApiMessage(code, 'accounts');
 
     return (
         <UiPageContainer className="space-y-6 py-12">
             <UiSectionCard title={message}>
                 <p className="text-muted-foreground mt-2 text-sm">
-                    Поверніться до бізнесу і оберіть інші реквізити.
+                    Поверніться до отримувача і оберіть інші реквізити.
                 </p>
                 <div className="mt-4">
                     <UiButton
@@ -306,7 +306,7 @@ function ErrorPage({ code }: { code: string }) {
                         size="md"
                         IconLeft={<ArrowLeft />}
                     >
-                        До списку бізнесів
+                        До списку отримувачів
                     </UiButton>
                 </div>
             </UiSectionCard>

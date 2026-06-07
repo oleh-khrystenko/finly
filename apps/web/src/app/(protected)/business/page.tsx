@@ -101,9 +101,9 @@ export default function BusinessListPage() {
     return (
         <UiPageContainer className="space-y-8 py-12 md:py-16">
             <div className="flex flex-wrap items-start justify-between gap-4">
-                <UiPageHeading>Бізнеси</UiPageHeading>
+                <UiPageHeading>Отримувачі</UiPageHeading>
                 {!isEmpty && (
-                    <CreateBusinessButton>Створити бізнес</CreateBusinessButton>
+                    <CreateBusinessButton>Створити отримувача</CreateBusinessButton>
                 )}
             </div>
 
@@ -126,14 +126,14 @@ export default function BusinessListPage() {
 
 function EmptyState({ isBookkeeper }: { isBookkeeper: boolean }) {
     const title = isBookkeeper
-        ? 'У вас поки немає клієнтських бізнесів'
-        : 'У вас поки немає бізнесів';
+        ? 'У вас поки немає отримувачів клієнтів'
+        : 'У вас поки немає отримувачів';
     const description = isBookkeeper
-        ? 'Додайте бізнес клієнта, щоб згенерувати посилання на оплату для нього'
-        : 'Створіть перший бізнес, щоб згенерувати посилання на оплату';
+        ? 'Додайте отримувача клієнта, щоб згенерувати посилання на оплату для нього'
+        : 'Створіть першого отримувача, щоб згенерувати посилання на оплату';
     const ctaLabel = isBookkeeper
-        ? 'Додати бізнес клієнта'
-        : 'Створити перший бізнес';
+        ? 'Додати отримувача клієнта'
+        : 'Створити першого отримувача';
 
     return (
         <div className="border-border bg-card flex flex-col items-center gap-4 rounded-xl border p-10 text-center md:p-16">

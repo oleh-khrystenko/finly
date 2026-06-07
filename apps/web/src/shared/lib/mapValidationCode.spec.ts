@@ -45,7 +45,7 @@ describe('mapValidationCode', () => {
             expect(
                 mapValidationCode('TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE')
             ).toBe(
-                'Ця система оподаткування недоступна для обраного типу бізнесу'
+                'Ця система оподаткування недоступна для обраного типу отримувача'
             );
         });
 

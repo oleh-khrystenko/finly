@@ -182,7 +182,7 @@ export default function PublicSection({
                     <UiQrPanel
                         endpoint={qrEndpoint}
                         description="Роздрукуйте код на вивісці, чеку чи візитці. Клієнт наведе камеру й одразу опиниться на вашій сторінці."
-                        alt="QR на публічну сторінку бізнесу"
+                        alt="QR на публічну сторінку отримувача"
                         downloadFilename={buildQrDownloadFilename('page', {
                             businessSlug: business.slug,
                         })}

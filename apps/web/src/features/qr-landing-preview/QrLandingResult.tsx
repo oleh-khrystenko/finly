@@ -102,7 +102,7 @@ export function QrLandingResult({ form }: QrLandingResultProps) {
         const parsed = LandingDraftSchema.safeParse(formData);
         if (!parsed.success) {
             toast.error(
-                'Не вдалося відновити чернетку. Створіть бізнес вручну з кабінету'
+                'Не вдалося відновити чернетку. Створіть отримувача вручну з кабінету'
             );
             return;
         }
@@ -177,8 +177,8 @@ export function QrLandingResult({ form }: QrLandingResultProps) {
                 role="note"
                 className="border-border bg-muted/30 text-muted-foreground rounded-md border px-3 py-2 text-sm"
             >
-                Ці дані не зберігаються на нашому сервері. Збережіть бізнес у
-                кабінет, щоб повернутися до нього пізніше.
+                Ці дані не зберігаються на нашому сервері. Збережіть отримувача
+                в кабінет, щоб повернутися до нього пізніше.
             </div>
 
             <UiButton

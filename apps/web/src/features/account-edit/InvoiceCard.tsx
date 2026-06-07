@@ -93,7 +93,7 @@ export default function InvoiceCard({
                 )}
                 title={
                     isRuntimeInherited
-                        ? 'Успадковано з налаштувань бізнесу'
+                        ? 'Успадковано з налаштувань отримувача'
                         : undefined
                 }
             >

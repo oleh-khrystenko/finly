@@ -549,8 +549,8 @@ export default function CreateInvoiceForm({ business, account }: Props) {
                      */}
                     <div className="flex items-center justify-between">
                         <p className="text-muted-foreground text-xs">
-                            Залиште порожнім — щоб використати призначення з
-                            налаштувань бізнесу.
+                            Залиште порожнім, щоб використати призначення з
+                            налаштувань отримувача.
                         </p>
                         <span
                             className={`text-xs ${

@@ -85,7 +85,7 @@ describe('getApiMessage', () => {
             expect(
                 getApiMessage('TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE', 'businesses')
             ).toBe(
-                'Ця система оподаткування недоступна для обраного типу бізнесу'
+                'Ця система оподаткування недоступна для обраного типу отримувача'
             );
         });
 

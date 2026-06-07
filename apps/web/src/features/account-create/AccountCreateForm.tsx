@@ -110,7 +110,7 @@ export default function AccountCreateForm({
             const created = await createAccount(businessSlug, parsed.data);
             if (landingRecovery) {
                 useQrLandingDraftStore.getState().clearAll();
-                toast.success('Бізнес і реквізити збережено');
+                toast.success('Отримувача і реквізити збережено');
                 router.replace(
                     `/business/${businessSlug}/account/${created.slug}`
                 );

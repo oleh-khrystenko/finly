@@ -54,7 +54,7 @@ export function useUserMenu(icons: {
             // був порожньою заглушкою; реальна аналітика повернеться як
             // окрема `/analytics` сторінка, не через відновлення dashboard.
             value: 'businesses',
-            label: 'Бізнеси',
+            label: 'Отримувачі',
             icon: icons.businesses,
             route: '/business',
         },
@@ -121,7 +121,7 @@ export function useUserMenu(icons: {
               checked: user.worksAsBookkeeper,
               label: 'Режим бухгалтера',
               description:
-                  'вести бізнеси клієнтів, які ще не зареєстровані у Finly',
+                  'вести отримувачів клієнтів, які ще не зареєстровані у Finly',
               onToggle: async () => {
                   const previous = user.worksAsBookkeeper;
                   const next = !previous;

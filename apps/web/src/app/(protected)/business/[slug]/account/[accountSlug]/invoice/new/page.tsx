@@ -113,7 +113,7 @@ export default function NewInvoicePage() {
                             size="md"
                             IconLeft={<ArrowLeft />}
                         >
-                            До списку бізнесів
+                            До списку отримувачів
                         </UiButton>
                     </div>
                 </UiSectionCard>

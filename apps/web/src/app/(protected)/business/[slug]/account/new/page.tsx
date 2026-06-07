@@ -108,7 +108,7 @@ function NewAccountContent() {
             <UiPageContainer className="space-y-6 py-12">
                 <UiSectionCard title={error.message}>
                     <p className="text-muted-foreground mt-2 text-sm">
-                        Поверніться до бізнесу і повторіть.
+                        Поверніться до отримувача і повторіть.
                     </p>
                     <div className="mt-4">
                         <UiButton
@@ -118,7 +118,7 @@ function NewAccountContent() {
                             size="md"
                             IconLeft={<ArrowLeft />}
                         >
-                            До списку бізнесів
+                            До списку отримувачів
                         </UiButton>
                     </div>
                 </UiSectionCard>

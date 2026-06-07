@@ -60,7 +60,7 @@ export default async function HostPayRootPage() {
 
             <p className="border-border bg-card text-foreground mt-4 rounded-lg border px-4 py-2.5 font-mono text-sm">
                 pay.finly.com.ua/
-                <span className="text-muted-foreground">назва-бізнесу</span>
+                <span className="text-muted-foreground">назва-отримувача</span>
             </p>
 
             <p className="text-muted-foreground mt-6 text-sm leading-relaxed">

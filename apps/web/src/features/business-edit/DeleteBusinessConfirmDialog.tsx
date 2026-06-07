@@ -62,7 +62,7 @@ export default function DeleteBusinessConfirmDialog() {
                 open={isOpen}
                 onOpenChange={(o) => !o && close()}
                 onConfirm={confirmAndClose}
-                title="Видалити бізнес?"
+                title="Видалити отримувача?"
                 description={`«${business.name}» буде видалено остаточно разом з ${nestedPhrase}. Клієнти, які мають збережене посилання, не зможуть оплатити.`}
                 gates={gates}
                 renderPrompt={(input) =>
@@ -89,7 +89,7 @@ export default function DeleteBusinessConfirmDialog() {
             open={isOpen}
             onOpenChange={(o) => !o && close()}
             onConfirm={confirmAndClose}
-            title="Видалити бізнес?"
+            title="Видалити отримувача?"
             description={
                 business
                     ? `«${business.name}» буде видалено. Клієнти, які мають збережене посилання, не зможуть оплатити.`
