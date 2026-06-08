@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { AutoSlugMode } from '@finly/types';
 import { useAutoCancelOnRouteChange } from '@/shared/lib';
 import {
@@ -37,9 +37,14 @@ export default function ResetInvoiceSlugConfirmDialog() {
     );
 
     // Перевідкриття на іншому рахунку → picker стартує з його домашнього формату.
-    useEffect(() => {
-        if (isOpen) setSelected(defaultMode ?? 'simple');
-    }, [isOpen, defaultMode]);
+    // Скидання під час рендеру (а не в ефекті): порівнюємо ключ відкриття з
+    // попереднім, інакше синхронний setState в ефекті дає каскадний ре-рендер.
+    const openKey = isOpen ? (defaultMode ?? 'simple') : null;
+    const [prevOpenKey, setPrevOpenKey] = useState<AutoSlugMode | null>(openKey);
+    if (openKey !== prevOpenKey) {
+        setPrevOpenKey(openKey);
+        if (openKey) setSelected(openKey);
+    }
 
     const handleConfirm = () => {
         onConfirm?.(selected);

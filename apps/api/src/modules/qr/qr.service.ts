@@ -282,7 +282,8 @@ export class QrService {
         const opts = { ...DEFAULT_RENDER_OPTIONS, ...options };
         // Корекція береться з бренд-дескриптора (тип-1 `Q` за нормативом, тип-2
         // `H`), але явна опція callsite має пріоритет (тестова гнучкість).
-        const errorCorrection = options?.errorCorrection ?? brand.errorCorrection;
+        const errorCorrection =
+            options?.errorCorrection ?? brand.errorCorrection;
         const qrPng = await this.imageRenderer.render(text, {
             sizePx: opts.sizePx,
             errorCorrection,

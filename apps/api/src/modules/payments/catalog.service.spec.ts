@@ -1,7 +1,4 @@
-import {
-    EXECUTION_PACK_CODES,
-    SUBSCRIPTION_PLAN_CODES,
-} from '@finly/types';
+import { EXECUTION_PACK_CODES, SUBSCRIPTION_PLAN_CODES } from '@finly/types';
 import { CatalogService } from './catalog.service';
 
 describe('CatalogService (static config)', () => {

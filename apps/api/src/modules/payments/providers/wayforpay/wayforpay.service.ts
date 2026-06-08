@@ -217,7 +217,12 @@ export class WayForPayService implements IPaymentProvider {
     async getSubscriptionStatus(
         orderReference: string
     ): Promise<SubscriptionStatusResult> {
-        const res = await this.regularRequest('STATUS', orderReference, {}, true);
+        const res = await this.regularRequest(
+            'STATUS',
+            orderReference,
+            {},
+            true
+        );
         return {
             status: str(res.status) ?? 'Unknown',
             nextPaymentDate: parseRegularDate(str(res.nextPaymentDate)),
@@ -243,7 +248,8 @@ export class WayForPayService implements IPaymentProvider {
         change: SubscriptionChange
     ): Promise<void> {
         const extra: Record<string, unknown> = {};
-        if (change.amount != null) extra.amount = kopecksToAmount(change.amount);
+        if (change.amount != null)
+            extra.amount = kopecksToAmount(change.amount);
         if (change.currency) extra.currency = change.currency;
         if (change.interval)
             extra.regularMode = intervalToRegularMode(change.interval);
@@ -279,7 +285,11 @@ export class WayForPayService implements IPaymentProvider {
         return res;
     }
 
-    async parseWebhook(rawBody: Buffer): Promise<WebhookParseResult> {
+    parseWebhook(rawBody: Buffer): Promise<WebhookParseResult> {
+        return Promise.resolve(this.parseWebhookSync(rawBody));
+    }
+
+    private parseWebhookSync(rawBody: Buffer): WebhookParseResult {
         const data = parseCallbackBody(rawBody);
         if (!data) {
             this.logger.warn('WayForPay webhook: unparsable body');

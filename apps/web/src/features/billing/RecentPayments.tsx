@@ -39,10 +39,12 @@ export default function RecentPayments({ reloadKey }: { reloadKey: string }) {
 
     useEffect(() => {
         let active = true;
-        setFailed(false);
         listPayments(10)
             .then((items) => {
-                if (active) setPayments(items);
+                if (active) {
+                    setPayments(items);
+                    setFailed(false);
+                }
             })
             .catch(() => {
                 if (active) {

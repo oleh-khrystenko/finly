@@ -664,7 +664,9 @@ describe('Businesses E2E', () => {
                 .get('/api/businesses/me?context=client')
                 .set('Authorization', bearerFor(user))
                 .expect(200);
-            expect((clientRes.body as { data: unknown[] }).data).toHaveLength(0);
+            expect((clientRes.body as { data: unknown[] }).data).toHaveLength(
+                0
+            );
 
             // А context=own — власний (1), при тому ж незмінному флазі.
             const ownRes = await supertest(app.getHttpServer())

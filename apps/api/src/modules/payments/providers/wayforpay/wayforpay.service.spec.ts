@@ -61,8 +61,7 @@ describe('WayForPayService', () => {
 
             expect(result.event).not.toBeNull();
             expect(result.event).toMatchObject({
-                orderReference:
-                    'fin-pack-max-507f1f77bcf86cd799439011-abc',
+                orderReference: 'fin-pack-max-507f1f77bcf86cd799439011-abc',
                 transactionStatus: 'Approved',
                 amount: 9900, // 99.00 грн → копійки
                 currency: 'UAH',

@@ -44,9 +44,7 @@ export function buildPackOrderReference(
     return `${PREFIX}-${ORDER_KIND.PACK}-${packCode}-${userId}-${nonce()}`;
 }
 
-export function parseOrderReference(
-    ref: string
-): ParsedOrderReference | null {
+export function parseOrderReference(ref: string): ParsedOrderReference | null {
     const parts = ref.split('-');
     if (parts[0] !== PREFIX) return null;
 

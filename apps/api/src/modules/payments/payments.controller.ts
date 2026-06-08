@@ -48,8 +48,8 @@ export class PaymentsController {
     @SkipThrottle()
     @SkipOnboarding()
     @Get('catalog')
-    async getCatalog(): Promise<{ data: PaymentsCatalog }> {
-        const catalog = await this.catalogService.getCatalog();
+    getCatalog(): { data: PaymentsCatalog } {
+        const catalog = this.catalogService.getCatalog();
         return {
             data: {
                 subscriptionPlans: ENV.PAYMENTS_SUBSCRIPTION_ENABLED
