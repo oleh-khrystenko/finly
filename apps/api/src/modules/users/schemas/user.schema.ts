@@ -26,42 +26,12 @@ class UserProfileData {
 }
 
 @Schema({ _id: false })
-class CompensationOps {
-    @Prop({ type: Object, default: {} })
-    inc!: Record<string, number>;
-}
-
-@Schema({ _id: false })
-class ActiveReservation {
-    @Prop({ required: true })
-    id!: string;
-
-    @Prop({ required: true, min: 1 })
-    amount!: number;
-
-    @Prop({ required: true })
-    reservedAt!: Date;
-
-    @Prop({ required: true })
-    expiresAt!: Date;
-
-    @Prop({ required: true })
-    feature!: string;
-
-    @Prop({ type: CompensationOps, required: true })
-    compensationOps!: CompensationOps;
-}
-
-@Schema({ _id: false })
 class UserExecutions {
     @Prop({ required: true, default: 0, min: 0 })
     balance!: number;
 
     @Prop({ required: true, default: false })
     freeReportUsed!: boolean;
-
-    @Prop({ type: ActiveReservation, default: null })
-    activeReservation!: ActiveReservation | null;
 }
 
 @Schema({ _id: false })
@@ -109,7 +79,6 @@ export class User {
         default: () => ({
             balance: 0,
             freeReportUsed: false,
-            activeReservation: null,
         }),
     })
     executions!: UserExecutions;
@@ -225,7 +194,3 @@ export const UserSchema = SchemaFactory.createForClass(User);
 
 UserSchema.index({ 'provider.id': 1 }, { sparse: true });
 UserSchema.index({ 'billing.orderReference': 1 }, { sparse: true });
-UserSchema.index(
-    { 'executions.activeReservation.expiresAt': 1 },
-    { sparse: true }
-);

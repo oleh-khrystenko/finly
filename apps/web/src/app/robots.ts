@@ -15,13 +15,7 @@ export default function robots(): MetadataRoute.Robots {
         rules: {
             userAgent: '*',
             allow: '/',
-            disallow: [
-                '/auth/',
-                '/business',
-                '/profile',
-                '/billing',
-                '/ai-chat',
-            ],
+            disallow: ['/auth/', '/business', '/profile', '/billing'],
         },
         sitemap: `${BASE_URL}/sitemap.xml`,
     };

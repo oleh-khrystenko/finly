@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { LogOut, User, CreditCard, Menu, Briefcase, Bot } from 'lucide-react';
+import { LogOut, User, CreditCard, Menu, Briefcase } from 'lucide-react';
 import ChangeTheme from '@/features/change-theme';
 import { Logo } from '@/entities/brand';
 import UiButton from '@/shared/ui/UiButton';
@@ -52,7 +52,6 @@ const Header = () => {
             // Sprint 3 рішення E2: Dashboard → Бізнеси (`/business`).
             // `Briefcase` як іконка бізнес-сегмента (заміна LayoutDashboard).
             businesses: <Briefcase />,
-            aiChat: <Bot />,
             profile: <User />,
             billing: <CreditCard />,
             logout: <LogOut />,

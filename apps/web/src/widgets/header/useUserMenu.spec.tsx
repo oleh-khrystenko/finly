@@ -56,7 +56,6 @@ const baseUser = {
 
 const icons = {
     businesses: <span data-testid="ic-businesses" />,
-    aiChat: <span data-testid="ic-ai" />,
     profile: <span data-testid="ic-profile" />,
     billing: <span data-testid="ic-billing" />,
     logout: <span data-testid="ic-logout" />,

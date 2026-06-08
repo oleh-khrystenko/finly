@@ -32,7 +32,6 @@ export interface BookkeeperToggle {
 
 export function useUserMenu(icons: {
     businesses: ReactNode;
-    aiChat: ReactNode;
     profile: ReactNode;
     billing: ReactNode;
     logout: ReactNode;
@@ -42,10 +41,6 @@ export function useUserMenu(icons: {
     const user = useAuthStore((s) => s.user);
     const setUser = useAuthStore((s) => s.setUser);
     const clearUser = useAuthStore((s) => s.clearUser);
-
-    const formattedExecutions = (user?.executions.balance ?? 0).toLocaleString(
-        'en-US'
-    );
 
     const allItems: UserMenuItem[] = [
         {
@@ -59,12 +54,6 @@ export function useUserMenu(icons: {
             route: '/business',
         },
         {
-            value: 'ai-chat',
-            label: 'AI Чат',
-            icon: icons.aiChat,
-            route: '/ai-chat',
-        },
-        {
             value: 'profile',
             label: 'Профіль',
             icon: icons.profile,
@@ -75,7 +64,6 @@ export function useUserMenu(icons: {
             label: 'Білінг',
             icon: icons.billing,
             route: '/billing',
-            badge: formattedExecutions,
         },
         {
             value: 'logout',

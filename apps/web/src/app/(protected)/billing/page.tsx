@@ -110,7 +110,7 @@ export default function BillingPage() {
 
     const billing = user.billing;
     const hasActive = billing?.hasActiveSubscription === true;
-    const hasBillingData = billing != null || user.executions.balance > 0;
+    const hasBillingData = billing != null;
 
     const handleSubscriptionCheckout = async (planCode: string) => {
         setLoadingAction(`subscribe_${planCode}`);
@@ -277,19 +277,10 @@ export default function BillingPage() {
             {/* ── Executions Section ── */}
             {PAYMENTS_ONE_OFF_ENABLED && !catalogLoading && catalog && (
                 <section>
-                    <div className="mb-6 flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+                    <div className="mb-6">
                         <h2 className="text-foreground text-2xl font-bold">
                             Пакети виконань
                         </h2>
-                        <p className="text-muted-foreground text-sm">
-                            Ваш баланс:{' '}
-                            <span className="text-primary font-semibold">
-                                {user.executions.balance.toLocaleString(
-                                    INTL_LOCALE
-                                )}
-                            </span>{' '}
-                            виконань
-                        </p>
                     </div>
 
                     <div

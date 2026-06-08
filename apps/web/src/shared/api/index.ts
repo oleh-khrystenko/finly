@@ -27,13 +27,6 @@ export {
     updateCard,
     listPayments,
 } from './payments';
-export { spendExecutions, getExecutionTransactions } from './executions';
-export {
-    streamAiChat,
-    getChatHistory,
-    clearChatHistory,
-    AiChatError,
-} from './ai';
 export {
     requestAvatarUploadUrl,
     commitAvatarUpload,

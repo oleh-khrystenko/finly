@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
 import { Bot, Send, BookOpen, AlertCircle, Sparkles } from 'lucide-react';
-import { AI_CHAT_EVENT, AI_CHAT_MESSAGE_MAX_LENGTH } from '@finly/types';
+import { HELP_CHAT_EVENT, HELP_CHAT_MESSAGE_MAX_LENGTH } from '@finly/types';
 
 import UiButton from '@/shared/ui/UiButton';
 import UiLink from '@/shared/ui/UiLink';
@@ -64,7 +64,7 @@ export function HelpChat() {
             !trimmed ||
             isStreaming ||
             degraded ||
-            trimmed.length > AI_CHAT_MESSAGE_MAX_LENGTH
+            trimmed.length > HELP_CHAT_MESSAGE_MAX_LENGTH
         ) {
             return;
         }
@@ -103,7 +103,7 @@ export function HelpChat() {
                 trimmed,
                 history,
                 (event) => {
-                    if (event.type === AI_CHAT_EVENT.TOKEN) {
+                    if (event.type === HELP_CHAT_EVENT.TOKEN) {
                         setMessages((prev) =>
                             prev.map((m) =>
                                 m.id === assistantMsgId
@@ -111,7 +111,7 @@ export function HelpChat() {
                                     : m
                             )
                         );
-                    } else if (event.type === AI_CHAT_EVENT.ERROR) {
+                    } else if (event.type === HELP_CHAT_EVENT.ERROR) {
                         setNotice({ kind: 'error' });
                         rollback();
                     }
@@ -151,7 +151,7 @@ export function HelpChat() {
         [handleSubmit]
     );
 
-    const overLimit = input.length > AI_CHAT_MESSAGE_MAX_LENGTH;
+    const overLimit = input.length > HELP_CHAT_MESSAGE_MAX_LENGTH;
     const isEmpty = messages.length === 0;
 
     return (
@@ -297,7 +297,7 @@ export function HelpChat() {
                                             }`}
                                         >
                                             {input.length}/
-                                            {AI_CHAT_MESSAGE_MAX_LENGTH}
+                                            {HELP_CHAT_MESSAGE_MAX_LENGTH}
                                         </span>
                                     ) : (
                                         <span />

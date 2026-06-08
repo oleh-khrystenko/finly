@@ -2,7 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import { useTheme } from 'next-themes';
-import { LogOut, User, CreditCard, LogIn, Briefcase, Bot } from 'lucide-react';
+import { LogOut, User, CreditCard, LogIn, Briefcase } from 'lucide-react';
 import ChangeTheme, {
     THEME_ICONS,
     THEME_LABELS,
@@ -50,7 +50,6 @@ export default function MobileMenuSheet() {
             // Sprint 3 §3.5 — Dashboard → Бізнеси (E2). Briefcase replaces
             // LayoutDashboard як іконка бізнес-сегмента.
             businesses: <Briefcase />,
-            aiChat: <Bot />,
             profile: <User />,
             billing: <CreditCard />,
             logout: <LogOut />,

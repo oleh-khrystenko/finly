@@ -5,7 +5,7 @@ import { isPublicHost } from '@/shared/config/publicHosts';
 // Sprint 3 §3.5 — `/dashboard` видалена (E2: → `/business`); `/pay`
 // видалений як рудимент (E4: піддомен `pay.finly.com.ua` — окрема історія
 // host-aware routing-у §3.9, не protected path).
-const PROTECTED_PATHS = ['/business', '/ai-chat', '/profile', '/billing'];
+const PROTECTED_PATHS = ['/business', '/profile', '/billing'];
 const AUTH_PATHS = ['/auth/signin'];
 const COOKIE_NAME = 'bid_refresh';
 const DELETED_COOKIE = 'bid_account_deleted';
