@@ -142,11 +142,12 @@ export default function AccountCreateForm({
             className="space-y-6"
             noValidate
         >
-            <div className="border-border bg-card space-y-6 rounded-xl border p-5 md:p-6">
+            <div className="border-border bg-card space-y-6 rounded-xl border p-6 md:p-8">
                 <UiInput
                     label="IBAN"
+                    labelSize="md"
                     placeholder="UA213223130000026007233566001"
-                    description="IBAN неможливо буде змінити після створення. Якщо помилитеся — видаліть реквізити і створіть нові."
+                    description="Після створення IBAN не можна змінити."
                     inputMode="text"
                     {...ibanField}
                     onChange={(e) => {
@@ -158,8 +159,9 @@ export default function AccountCreateForm({
 
                 <UiInput
                     label="Назва"
+                    labelSize="md"
                     placeholder="За замовчуванням підтягнеться з банку"
-                    description="Залиште порожнім — назва підтягнеться автоматично з МФО (наприклад, «ПриватБанк •2580»)."
+                    description="Можна не заповнювати: назва підтягнеться з банку (наприклад, «ПриватБанк •2580»)."
                     {...register('name')}
                     error={getZodFieldError(errors.name)}
                     maxLength={60}

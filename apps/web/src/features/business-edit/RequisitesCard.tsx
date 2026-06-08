@@ -22,7 +22,7 @@ interface Props {
  */
 export default function RequisitesCard({ business, onSave }: Props) {
     return (
-        <UiSectionCard title="Дані одержувача">
+        <UiSectionCard title="Дані отримувача">
             <div className="divide-border mt-4 divide-y">
                 <div className="pb-6">
                     <RequisitesSection business={business} onSave={onSave} />

@@ -8,7 +8,6 @@ export const EXECUTION_ACTION = {
     AI_ANALYSIS: 'ai_analysis',
     DEEP_ANALYSIS: 'deep_analysis',
     FULL_AUDIT: 'full_audit',
-    AI_CHAT: 'ai_chat',
     // Credit (system, via webhooks)
     SUBSCRIPTION_ACTIVATION: 'subscription_activation',
     PACK_PURCHASE: 'pack_purchase',

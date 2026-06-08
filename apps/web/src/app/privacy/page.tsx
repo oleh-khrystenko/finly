@@ -1,6 +1,7 @@
 import { Metadata } from 'next';
 import { CURRENT_TERMS_VERSION } from '@finly/types';
 import { Header } from '@/widgets/header';
+import { AppFooter } from '@/widgets/app-footer';
 import UiLink from '@/shared/ui/UiLink';
 import { fetchMetadata } from '@/shared/seo/metadata';
 
@@ -39,7 +40,7 @@ export default function PrivacyPage() {
     return (
         <>
             <Header />
-            <main className="mx-auto max-w-3xl px-6 py-12">
+            <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-12">
                 <h1 className="text-foreground text-3xl font-semibold tracking-tight">
                     Політика конфіденційності
                 </h1>
@@ -270,6 +271,8 @@ export default function PrivacyPage() {
                     </p>
                 </Section>
             </main>
+
+            <AppFooter />
         </>
     );
 }

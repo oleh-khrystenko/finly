@@ -1,7 +1,11 @@
 'use client';
 
 import { forwardRef, useId } from 'react';
-import { composeClasses, OUTLINED_FIELD_STYLES } from '@/shared/lib';
+import {
+    composeClasses,
+    FIELD_LABEL_STYLES,
+    OUTLINED_FIELD_STYLES,
+} from '@/shared/lib';
 import type { UiInputProps, UiInputSize, UiInputVariant } from './types';
 
 const iconSizeStyles: Record<UiInputSize, string> = {
@@ -30,6 +34,7 @@ const UiInput = forwardRef<HTMLInputElement, UiInputProps>((props, ref) => {
     const {
         variant = 'outlined',
         size = 'md',
+        labelSize = 'sm',
         label,
         description,
         error,
@@ -68,7 +73,10 @@ const UiInput = forwardRef<HTMLInputElement, UiInputProps>((props, ref) => {
             {label && (
                 <label
                     htmlFor={inputId}
-                    className="text-foreground mb-1 block text-sm font-medium"
+                    className={composeClasses(
+                        'text-foreground',
+                        FIELD_LABEL_STYLES[labelSize]
+                    )}
                 >
                     {label}
                     {required && (

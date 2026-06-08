@@ -53,12 +53,6 @@ const ERRORS: Record<string, MessageDict> = {
             'Попередня операція з підпискою ще виконується. Зачекайте і спробуйте знову.',
         payment_type_disabled: 'Цей тип оплати наразі недоступний.',
     },
-    users: {
-        insufficient_executions:
-            'Недостатньо виконань для цієї операції. Придбайте більше або оновіть підписку.',
-        executions_reservation_active:
-            'Попередній запит ще обробляється. Зачекайте кілька секунд і спробуйте знову.',
-    },
     generic: {
         validation_error: 'Перевірте введені дані',
         rate_limit_exceeded:

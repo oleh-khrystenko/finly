@@ -449,12 +449,12 @@ export default function CreateInvoiceForm({ business, account }: Props) {
             onSubmit={(e) => {
                 void handleSubmit(onSubmit)(e);
             }}
-            className="space-y-4"
+            className="space-y-8"
             noValidate
         >
             {/* Сума + lock-switch */}
             <UiSectionCard title="Сума">
-                <div className="space-y-3">
+                <div className="mt-6 space-y-6">
                     <Controller
                         name="amountInput"
                         control={control}
@@ -467,7 +467,9 @@ export default function CreateInvoiceForm({ business, account }: Props) {
                                 type="text"
                                 inputMode="decimal"
                                 placeholder="1500,50"
-                                label="Сума, грн"
+                                aria-label="Сума у гривнях"
+                                IconRight={<span className="text-sm">грн</span>}
+                                description="Якщо не вказати суму, клієнт впише її самостійно під час оплати."
                                 value={field.value}
                                 onChange={(e) => field.onChange(e.target.value)}
                                 onBlur={field.onBlur}
@@ -475,9 +477,6 @@ export default function CreateInvoiceForm({ business, account }: Props) {
                             />
                         )}
                     />
-                    <p className="text-muted-foreground text-xs">
-                        Залиште порожнім, щоб клієнт сам ввів суму у банку.
-                    </p>
                     <label
                         htmlFor="amount-lock-switch"
                         className={`border-border flex items-start justify-between gap-3 rounded-md border p-3 ${
@@ -487,10 +486,10 @@ export default function CreateInvoiceForm({ business, account }: Props) {
                         }`}
                     >
                         <div className="flex flex-1 flex-col gap-1">
-                            <span className="text-foreground text-sm font-medium">
+                            <span className="text-foreground text-base font-medium">
                                 Дозволити клієнту правити суму
                             </span>
-                            <span className="text-muted-foreground text-xs">
+                            <span className="text-muted-foreground text-sm">
                                 {/*
                                  * Hint розрізняє три стани:
                                  *  - signage: пояснюємо чому disabled.
@@ -503,7 +502,7 @@ export default function CreateInvoiceForm({ business, account }: Props) {
                                     ? 'Заблокувати редагування можна лише при заданій сумі'
                                     : isAmountInvalid
                                       ? 'Введіть коректну суму, щоб керувати блокуванням'
-                                      : 'Якщо вимкнено — клієнт сплатить точно зазначену суму'}
+                                      : 'Коли вимкнено, клієнт сплатить рівно вказану суму без можливості її змінити'}
                             </span>
                         </div>
                         <UiSwitch
@@ -523,7 +522,7 @@ export default function CreateInvoiceForm({ business, account }: Props) {
 
             {/* Призначення */}
             <UiSectionCard title="Призначення платежу">
-                <div className="space-y-2">
+                <div className="mt-6 space-y-6">
                     <Controller
                         name="paymentPurpose"
                         control={control}
@@ -548,12 +547,12 @@ export default function CreateInvoiceForm({ business, account }: Props) {
                      * `PAYLOAD_VERSIONS`).
                      */}
                     <div className="flex items-center justify-between">
-                        <p className="text-muted-foreground text-xs">
+                        <p className="text-muted-foreground text-sm">
                             Залиште порожнім, щоб використати призначення з
                             налаштувань отримувача.
                         </p>
                         <span
-                            className={`text-xs ${
+                            className={`text-sm ${
                                 purposeOverflow
                                     ? 'text-destructive'
                                     : 'text-muted-foreground'
@@ -568,7 +567,7 @@ export default function CreateInvoiceForm({ business, account }: Props) {
 
             {/* Термін дії */}
             <UiSectionCard title="Термін дії">
-                <div className="space-y-3">
+                <div className="mt-6 space-y-6">
                     <UiSelect
                         options={VALID_UNTIL_OPTIONS}
                         value={validUntilMode}
@@ -599,7 +598,7 @@ export default function CreateInvoiceForm({ business, account }: Props) {
 
             {/* Формат номера — спільний picker (форма + перевипуск) */}
             <UiSectionCard title="Як назвати рахунок">
-                <div className="space-y-3">
+                <div className="mt-6 space-y-6">
                     <InvoiceFormatPicker
                         value={slugChoice}
                         onChange={handleFormatChange}
@@ -628,7 +627,7 @@ export default function CreateInvoiceForm({ business, account }: Props) {
                                             fieldState.error
                                         )}
                                     />
-                                    <p className="text-muted-foreground text-xs">
+                                    <p className="text-muted-foreground text-sm">
                                         Сервер додасть унікальний хвіст
                                         автоматично:{' '}
                                         <span className="font-mono break-all">
@@ -642,13 +641,13 @@ export default function CreateInvoiceForm({ business, account }: Props) {
                         />
                     )}
                     {slugChoice === 'with-purpose' && (
-                        <p className="text-muted-foreground text-xs">
+                        <p className="text-muted-foreground text-sm">
                             У URL потрапить ім&apos;я або ключові слова з
                             призначення.
                         </p>
                     )}
                     {slugChoice === 'random' && (
-                        <p className="text-muted-foreground text-xs">
+                        <p className="text-muted-foreground text-sm">
                             Найкоротший варіант: лише унікальний код типу{' '}
                             <span className="font-mono">aB3xQ9k7</span>.
                             Підходить, коли URL-вид не важливий.

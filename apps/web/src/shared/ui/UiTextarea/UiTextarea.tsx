@@ -1,7 +1,7 @@
 'use client';
 
 import { forwardRef, useCallback, useId, useRef, useEffect } from 'react';
-import { composeClasses } from '@/shared/lib';
+import { composeClasses, FIELD_LABEL_STYLES } from '@/shared/lib';
 import type {
     UiTextareaProps,
     UiTextareaSize,
@@ -30,6 +30,7 @@ const UiTextarea = forwardRef<HTMLTextAreaElement, UiTextareaProps>(
         const {
             variant = 'outlined',
             size = 'md',
+            labelSize = 'sm',
             label,
             description,
             error,
@@ -105,7 +106,10 @@ const UiTextarea = forwardRef<HTMLTextAreaElement, UiTextareaProps>(
                 {label && (
                     <label
                         htmlFor={textareaId}
-                        className="text-foreground mb-1 block text-sm font-medium"
+                        className={composeClasses(
+                            'text-foreground',
+                            FIELD_LABEL_STYLES[labelSize]
+                        )}
                     >
                         {label}
                         {required && (

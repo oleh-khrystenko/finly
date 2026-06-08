@@ -11,8 +11,8 @@
 | Forms      | React Hook Form + Zod resolver                            | RHF 7.72                               |
 | Backend    | NestJS, Mongoose, ioredis, Passport, nestjs-zod            | NestJS 11.1, Mongoose 8                |
 | Validation | Zod (shared contracts у `packages/types`)                 | Zod 4.3                                |
-| AI         | Anthropic SDK (Claude Haiku 4.5)                          | SDK 0.80                               |
-| Payments   | Stripe (білінг; міграція на WayForPay — Sprint 17, planned) | 20.4                                  |
+| AI         | Anthropic SDK (Claude Haiku 4.5) — лише публічний help-assistant | SDK 0.80                          |
+| Payments   | WayForPay (Regular Payments — підписка + one-off; абстракція `IPaymentProvider`) | —              |
 | Email      | Resend + React Email                                      | 6.9                                    |
 | Storage    | Cloudflare R2 (S3 SDK + presigner), `sharp`               | SDK 3, sharp 0.34                      |
 | Content    | `react-markdown` (help-center статті)                      | 10.1                                   |
@@ -21,7 +21,7 @@
 
 ## Architecture Overview
 
-Monorepo з трьома workspace: `apps/api` (NestJS — system of record), `apps/web` (Next.js — тонкий клієнт), `packages/types` (shared Zod contracts). Frontend організовано за Feature-Sliced Design. Один Next.js project обслуговує два host-и (`finly.com.ua` cabinet + `pay.finly.com.ua` public) через host-aware `proxy.ts` (Next 16 rename of `middleware.ts`) з 3-сегментним матрьошковим routing-ом. Реалізовано: auth/session lifecycle, billing Stripe, executions ledger, AI chat streaming, public help-center + grounded AI-assistant, avatar R2, NBU QR pipeline (формати 002/003 + branded frames), трирівнева доменна модель Business → Account → Invoice з editable vanity-slug-ами + anti-squatting history, anon QR-preview лендінг + claim flow, orphan-profile cleanup. Модуль `reports` — scaffold.
+Monorepo з трьома workspace: `apps/api` (NestJS — system of record), `apps/web` (Next.js — тонкий клієнт), `packages/types` (shared Zod contracts). Frontend організовано за Feature-Sliced Design. Один Next.js project обслуговує два host-и (`finly.com.ua` cabinet + `pay.finly.com.ua` public) через host-aware `proxy.ts` (Next 16 rename of `middleware.ts`) з 3-сегментним матрьошковим routing-ом. Реалізовано: auth/session lifecycle, WayForPay-білінг (підписка + one-off), executions ledger (лише CREDIT-нарахування), публічний grounded AI help-assistant на `/help`, avatar R2, NBU QR pipeline (формати 002/003 + branded frames), трирівнева доменна модель Business → Account → Invoice з editable vanity-slug-ами + anti-squatting history, anon QR-preview лендінг + claim flow, orphan-profile cleanup. **Sprint 18** зніс user-facing валюту «виконань» (cabinet AI-chat + резерваційна машинерія) — AI став підкапотним, монетизація через підписку/one-off. Модуль `reports` — scaffold.
 
 ## Project Structure
 
@@ -43,7 +43,7 @@ apps/
 │   ├── features/            # auth, billing, profile, change-theme, business-{wizard,edit,public},
 │   │                        # account-{create,edit,public}, invoice-{create,edit,public},
 │   │                        # qr-landing-preview, help-center, help-chat
-│   ├── widgets/             # header, public-{header,footer}, help-footer, landing-* (hero, why, banks, …)
+│   ├── widgets/             # header, app-footer, public-{header,footer}, help-footer, landing-* (hero, why, banks, …)
 │   ├── shared/              # api, ui, config, lib, seo, styles, icons, fonts, types
 │   └── proxy.ts             # host-aware routing (Branch A0/A1/A2/A3/B/C) + auth cookie checks
 packages/
@@ -52,7 +52,7 @@ docs/
 ├── conventions/             # tone, fail-fast, modular-boundaries, ui-primitives, design-tokens, overlays, responsive
 ├── manual-checks/           # UAT-чекліст (живі банк-додатки, друк, малі екрани)
 ├── product/                 # business-flow, qr-decisions, qr-custom-branding, tech-backlog
-└── sprints/                 # 01-foundation … 16-public-help-docs (+ 17 WayForPay у 06-billing)
+└── sprints/                 # 01-foundation … 16-public-help-docs, 06-billing (Sprint 17 WayForPay), 18-remove-ai-chat-currency
 ```
 
 ## Domain Model
@@ -62,11 +62,11 @@ docs/
 Файл: `apps/api/src/modules/users/schemas/user.schema.ts` | Zod: `packages/types/src/entities/user.ts`
 
 - Soft-delete: `deletedAt` + `accountDeletionRequestedAt` (grace period, cron hard-delete)
-- Embedded `billing` subdocument (nullable; `lastProviderEventAt` для out-of-order webhook guard)
-- Embedded `executions` (`balance`, `freeReportUsed`, `activeReservation.compensationOps`) — atomic `$inc`
-- `worksAsBookkeeper: boolean` — UI-фільтр для списку бізнесів
+- Embedded `billing` subdocument (nullable, default `null`) — **WayForPay**: `orderReference` (наш ідентифікатор підписки), `recToken` (secret card-token для ad-hoc списань), `cardMask`, `scheduledPlanCode/scheduledChangeDate` (відкладена зміна плану), `rebindPendingAt` (re-bind картки), `lastProviderEventAt` (out-of-order webhook guard)
+- Embedded `executions` — **тільки** `balance` + `freeReportUsed` (Sprint 18 зніс `activeReservation`/`compensationOps`); нарахування atomic `$inc`, без user-facing spend
+- `worksAsBookkeeper: boolean` — UI-фільтр для списку отримувачів
 - `profileCompletionReminders` — cron-only поля orphan-cleanup; `pendingPostLoginTarget` — deep-link recovery
-- Sparse indexes: `provider.id`, `billing.providerCustomerId`, `billing.providerSubscriptionId`, `executions.activeReservation.expiresAt`
+- Sparse indexes: `provider.id`, `billing.orderReference`
 
 ### Business
 
@@ -84,7 +84,7 @@ docs/
 
 Файл: `apps/api/src/modules/accounts/schemas/account.schema.ts` | Zod: `packages/types/src/entities/account.ts`
 
-- Банківський рахунок під бізнесом (`businessId` immutable, `iban` immutable post-creation)
+- Банківський рахунок («реквізити») під бізнесом (`businessId` immutable, `iban` immutable post-creation)
 - `bankCode: BankCode | null` — **stored derived** (обчислюється з IBAN рівно один раз на create)
 - `slug` (case-preserved) + `slugLower` — editable vanity (Sprint 15), compound-unique `(businessId, slugLower)`
 - `invoiceSlugPresetDefault: SlugPreset | null` (per-account нумерація інвойсів)
@@ -113,10 +113,10 @@ docs/
 ### Інші схеми
 
 - `InvoiceSlugCounter` (`invoices/schemas/invoice-slug-counter.schema.ts`) — окрема collection проти counter reuse; unique `(accountId, scope)`, `last` через `$inc`
-- `ExecutionTransaction` (`users/schemas/execution-transaction.schema.ts`) — ledger; compound `(userId, createdAt -1)`
-- `ChatMessage` (`ai/schemas/chat-message.schema.ts`) — cabinet AI history; compound `(userId, createdAt)`
+- `ExecutionTransaction` (`users/schemas/execution-transaction.schema.ts`) — CREDIT-ledger нарахувань; compound `(userId, createdAt -1)`
+- `PaymentRecord` (`payments/schemas/payment-record.schema.ts`) — історія платежів; `(userId, createdAt -1)`, sparse `providerTransactionId`
+- `FailedRecurringRemoval` (`payments/schemas/failed-recurring-removal.schema.ts`) — retry-черга на видалення recurring-токена у WayForPay (max-retries)
 - `ProcessedWebhookEvent` (`payments/schemas/`) — unique `(provider, providerEventId)`, two-phase `pending → applied`
-- `OrphanedProviderCustomer` (`payments/schemas/`) — unique `(provider, providerCustomerId)`, max 5 retries
 
 ## Module Dependency Map
 
@@ -125,8 +125,8 @@ docs/
 - `AuthModule` ↔ `UsersModule` (`forwardRef`, circular)
 - `UsersModule` → `StorageModule` (avatar — `AvatarController` живе у Users після Sprint 13); Google avatar re-upload через `StorageService`
 - `EmailModule`, `RedisModule` — `@Global()`; `RedisModule` exports `REDIS_CLIENT` + `RedisCounterService` (Lua-based atomic counters)
-- `PaymentsModule` → `UsersModule`; `PAYMENT_PROVIDER` (StripeService) + окремий `CatalogService` зі своїм Stripe SDK (no dep on `IPaymentProvider`)
-- `AiModule` → `UsersModule`; `AI_PROVIDER` (AnthropicService) + cabinet `AiRateLimitGuard` + public `HelpChatRateLimitGuard`
+- `PaymentsModule` → `UsersModule`; `PAYMENT_PROVIDER` (`WayForPayService` за `IPaymentProvider`) + окремий `CatalogService` (статичний типізований конфіг, Redis-кеш як coherence-bus)
+- `AiModule` — **standalone** (Sprint 18 розірвав залежність від `UsersModule`); `AI_PROVIDER` (AnthropicService) + public `HelpChatRateLimitGuard`
 - **One-way DAG**: `Users ← Businesses ← Accounts ← Invoices`
   - `BusinessesModule` → registers `Business, Account, Invoice, InvoiceSlugCounter, *SlugHistory` schemas (для cascade)
   - `AccountsModule` → `BusinessesModule` + `QrModule`; registers `Invoice/Counter/InvoiceSlugHistory` (cascade-delete)
@@ -134,7 +134,7 @@ docs/
 - `LandingClaimModule` → `BusinessesModule` + `AccountsModule` + `UsersModule`; містить `MagicLinkVerifyController` (Sprint 13 separation — verify делегує anon-claim)
 - `OrphanCleanupModule` → `UsersModule` + `BusinessesModule` (Sprint 12 separation; cascade-delete orphan businesses)
 - `QrModule` — exports `QrService`; consumed by 3 public controllers + cabinet/landing
-- Cron services: `CleanupService` (users; 6h), `ReservationReconcileService` (5min), `PaymentsCleanupService` (4 AM), `OrphanProfileCleanupService` (orphan businesses)
+- Cron services: `CleanupService` (users; 6h), `PaymentsCleanupService` (past-due sweep + failed-recurring retry), `OrphanProfileCleanupService` (orphan businesses)
 
 ## Key Patterns
 
@@ -155,7 +155,7 @@ React Hook Form + Zod resolver. Приклад: `apps/web/src/features/profile/P
 - `JwtActiveGuard` — основний, JWT + блокує soft-deleted
 - `JwtAuthGuard` — JWT без soft-delete check (тільки restore)
 - `SubscriptionGuard` — перевіряє `hasActiveSubscription`
-- `AiRateLimitGuard` / `HelpChatRateLimitGuard` — IP-based Redis rate limit (24h TTL; cabinet vs public help)
+- `HelpChatRateLimitGuard` — IP-based Redis rate limit (24h TTL; public help)
 - `BusinessAccessGuard` / `AccountAccessGuard` / `InvoiceAccessGuard` — slug-lookup (case-insensitive `slugLower`) + attach `request.{business,account,invoice}`
 
 Файли: `apps/api/src/common/guards/`, `apps/api/src/modules/{businesses,accounts,invoices,ai}/`
@@ -168,21 +168,17 @@ React Hook Form + Zod resolver. Приклад: `apps/web/src/features/profile/P
 
 Access JWT in-memory (web), refresh JWT в `bid_refresh` httpOnly cookie, Redis token families з ротацією + reuse detection. Axios дедуплікує concurrent refresh calls (`apps/web/src/shared/api/client.ts`).
 
-### Billing webhooks
+### Billing — WayForPay (Sprint 17)
 
-`PAYMENT_PROVIDER` → `StripeService`. Two-phase idempotency через `ProcessedWebhookEvent` (pending → applied). Out-of-order guard у Mongo query (`lastProviderEventAt: $lt`).
+`PAYMENT_PROVIDER` → `WayForPayService` (Regular Payments). Checkout (subscription/one-off) + ad-hoc `chargeByToken` (proration-доплата при зміні плану) за збереженим `recToken`. Webhook side-effects + flip статусу — в **одній Mongo-транзакції**; two-phase idempotency через `ProcessedWebhookEvent` (pending → applied); out-of-order guard `lastProviderEventAt: $lt`. Per-user **Redis-лок** на білінг-мутації (`payments.service.ts`). Signature HMAC-MD5 — `providers/wayforpay/wayforpay.signature.ts`.
 
-### Catalog (Stripe as source of truth)
+### Catalog (статичний конфіг)
 
-`CatalogService` тягне Products/Prices зі Stripe; кеш у Redis 5 min TTL. Власний Stripe SDK instance (уникає circular з `IPaymentProvider`). Warm fetch на startup (fail-fast). Public `GET /payments/catalog`. Plan codes — TS union; ціни/executions/featured — Stripe metadata.
+`CatalogService` тягне Products/Prices зі статичного типізованого конфігу (Sprint 17 переїхав зі Stripe). Public `GET /payments/catalog`. Plan codes — TS union; ціни/executions/featured — у конфізі.
 
-### AI chat + public help-assistant
+### Public help-assistant (AI)
 
-Cabinet: SSE через `res.write()`. `AiService.reserveChatRequest` робить atomic `findOneAndUpdate` (balance + single-flight) → stream → commit/refund. Refundable до першого токена. Public help (`POST /ai/help/chat`, Sprint 16): anon, без executions/history-persist, grounded на `packages/types/src/help` статтях; 2 layers — IP rate-limit + global daily-budget circuit-breaker.
-
-### Reservation primitives
-
-`UsersService.commitReservation` — Mongo TX з claim-first порядком. `refundReservation` — single atomic `findOneAndUpdate`, що застосовує `compensationOps`. `ReservationReconcileService` cron підбирає expired. Фіча, що мутує поля при reserve, декларує `$inc`-компенсації у `activeReservation.compensationOps`.
+`POST /ai/help/chat` (Sprint 16): anon, без executions/history-persist, grounded на `packages/types/src/help` статтях (single source для help-center UI + AI-grounding). SSE через `res.write()`. 2 layers — IP rate-limit (`HelpChatRateLimitGuard`) + global daily-budget circuit-breaker. Cabinet AI-chat знесено у Sprint 18.
 
 ### QR pipeline
 
@@ -208,6 +204,10 @@ Zustand store → `UiModal`/`UiSheet`/`UiConfirmDialog`/`UiDangerGateDialog` →
 
 Деструктивне підтвердження — користувач вписує очікувані числа (кількість вкладеного) у cloze-фразу замість назви/ланцюга модалок. `apps/web/src/shared/ui/UiDangerGateDialog/` (`gates: { label, expected }[]` + `renderPrompt`). Account/Business delete cascade-видаляють піддерево; дія активна лише на повний збіг. Account-delete API повертає `{ affectedInvoices }` (інформативний toast).
 
+### Навігаційні UI-примітиви (Sprint 18 design)
+
+`UiNavCard` — єдина картка для матрьошкових списків (отримувачі/реквізити/рахунки). `UiPayeeCard` — блок «отримувач/реквізити». `UiDisclosure` — приховування технічних QR-деталей. Термінологія: «бізнес»→«отримувач», голий «рахунок»=виставлений документ (invoice), «реквізити»=банк-рахунок (account); ₴→грн у копії. Код лишається `invoice`/`account`.
+
 ### FSD layer inversion
 
 `shared/lib/authEvents` — parameterless lifecycle events. Нижчий шар (`shared/api`) публікує, вищий (`entities/user`) підписується. ESLint guardrail `SHARED_MUST_NOT_IMPORT_HIGHER_LAYERS`.
@@ -232,22 +232,22 @@ Global prefix `/api`. Rate limiting: `ThrottlerModule` named buckets. Global pip
 ### UsersController (`apps/api/src/modules/users/users.controller.ts`)
 
 - `GET /users/me` + `PATCH /users/me` + `POST /users/me/accept-terms` — `JwtActive` + `@SkipOnboarding`
-- `POST /users/me/executions/spend` + `GET /users/me/executions/transactions` — `JwtActive`
 - `POST /users/account/delete` + `/delete/confirm` — `JwtActive` + `@SkipOnboarding`
 - `POST /users/account/restore` — `JwtAuthGuard` (без soft-delete блокування)
 - Avatar: `AvatarController` — `POST /storage/avatar/upload-url`, `/commit`, `DELETE /storage/avatar` (class-level `JwtActive`)
 
-### PaymentsController
+### PaymentsController (`apps/api/src/modules/payments/payments.controller.ts`)
 
-- `GET /payments/catalog` — `@SkipThrottle` + `@SkipOnboarding`; cached 5 min
-- `POST /payments/checkout-session` / `portal-session` / `reset` — `JwtActive`
-- `POST /payments/webhook/:provider` — `@SkipThrottle`, rawBody, only `stripe`
+- `GET /payments/catalog` — `@SkipThrottle` + `@SkipOnboarding`; static-config
+- `POST /payments/checkout-session` — `JwtActive`; subscription | one-off checkout
+- `POST /payments/subscription/{cancel,change-plan,update-card}` — `JwtActive`
+- `GET /payments/payments` — `JwtActive`; історія `PaymentRecord`
+- `POST /payments/reset` — `JwtActive`
+- `POST /payments/webhook/:provider` — `@SkipThrottle`, rawBody; only `wayforpay` (`SUPPORTED_PROVIDERS`)
 
-### AiController
+### AiController (`apps/api/src/modules/ai/ai.controller.ts`)
 
-- `POST /ai/chat` — `JwtActive` + `AiRateLimitGuard`; SSE
-- `POST /ai/help/chat` — anon public help-assistant, `help-chat` throttle + `HelpChatRateLimitGuard` + `@SkipOnboarding`; SSE
-- `GET` + `DELETE /ai/chat/history` — `JwtActive`
+- `POST /ai/help/chat` — **єдиний** ендпоінт; anon public help-assistant, `help-chat` throttle + `HelpChatRateLimitGuard` + `@SkipOnboarding`; SSE
 
 ### Businesses / Accounts / Invoices
 
@@ -284,12 +284,12 @@ Public (`'public-payment'` 600/min) — `/businesses/public/:slug` → `/account
 - `MONGODB_URI` (mandatory replica-set), `REDIS_URL`
 - `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL`
-- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
+- `WAYFORPAY_MERCHANT_ACCOUNT`, `WAYFORPAY_MERCHANT_SECRET_KEY`, `WAYFORPAY_MERCHANT_DOMAIN`
 - `RESEND_API_KEY`, `RESEND_FROM_EMAIL`
 - `PAYMENTS_SUBSCRIPTION_ENABLED`, `PAYMENTS_ONE_OFF_ENABLED` (хоча б один `true`)
 - Auth tuning: `AUTH_PASSWORD_MIN_LENGTH`, `AUTH_LOCKOUT_THRESHOLDS`, `AUTH_LOGIN_ATTEMPTS_TTL_MIN`, `AUTH_MAGIC_LINK_TTL_MIN`, `AUTH_MAGIC_LINK_RATE_LIMIT`, `AUTH_MAGIC_LINK_RATE_WINDOW_MIN`, `AUTH_MAGIC_LINK_DEDUP_SEC`, `ACCOUNT_DELETION_GRACE_DAYS`
 - Orphan-cleanup (Sprint 12): `ORPHAN_REMINDER_FIRST_DAYS`, `ORPHAN_REMINDER_FINAL_DAYS`, `ORPHAN_CLEANUP_DELETION_DAYS`
-- AI cabinet: `ANTHROPIC_API_KEY`, `AI_CHAT_MAX_TOKENS`, `AI_CHAT_IP_LIMIT`
+- AI (Anthropic): `ANTHROPIC_API_KEY`
 - AI public help (Sprint 16): `HELP_CHAT_MAX_TOKENS`, `HELP_CHAT_IP_LIMIT`, `HELP_CHAT_DAILY_BUDGET`
 - Storage (R2): `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_URL`
 - **Cross-field invariants** (fail-fast у env.ts): `AUTH_MAGIC_LINK_TTL_MIN * 60 ≥ AUTH_MAGIC_LINK_DEDUP_SEC`; `ORPHAN_REMINDER_FIRST < FINAL < DELETION`
@@ -371,44 +371,45 @@ Full index: [docs/conventions/README.md](docs/conventions/README.md)
 
 ## Known Complexities
 
-- **rawBody для Stripe**: `NestFactory.create(AppModule, { rawBody: true })` у `main.ts` — без цього signature verification ламається.
+- **rawBody для webhook signature**: `NestFactory.create(AppModule, { rawBody: true })` у `main.ts` — без нього WayForPay HMAC signature verification ламається.
 - **AuthModule ↔ UsersModule circular**: обидва через `forwardRef`.
 - **Refresh token rotation atomic**: Redis `GETDEL` = single-use. Reuse detection → full revoke. Grace 10 s для concurrent tabs.
 - **Out-of-order webhooks**: `lastProviderEventAt: $lt` guard. Старіші events тихо ігноруються.
+- **Webhook side-effects atomic**: нарахування/списання + flip `subscriptionStatus` — в одній Mongo-транзакції. Crash-orphan вебхуки НЕ ack-аються (re-deliver). Refund-вебхук не псує стороннє списання (claim-first refund при скасуванні).
+- **Per-user Redis-лок на білінг-мутації**: concurrent checkout/cancel/change-plan серіалізуються per-userId (`payments.service.ts`) — інакше race на `recToken`/`orderReference`.
+- **Past-due sweep**: `PaymentsCleanupService` cron експайрить підписку після past-due + чистить `rebindPendingAt`.
 - **`packages/types` build order**: ДО `apps/api`/`apps/web`. Turborepo `dependsOn: ["^build"]` гарантує — manual build без turbo зламається.
 - **`test-setup.ts` fallback env**: без нього fail-fast крашить Jest до запуску (`??=`).
 - **Single-locale uk only**: продукт українською без перемикача. Email-копії інлайн; URL без locale-префіксу.
-- **CatalogService own Stripe instance**: уникає circular DI з `IPaymentProvider`. Startup warm fetch → Stripe недоступний ⇒ app crash (fail-fast).
-- **AI chat SSE errors after headers**: після `flushHeaders()` помилки йдуть як SSE `ERROR`-event. Reservation робиться ДО SSE headers — будь-яка 4xx — звичайний HTTP error.
+- **CatalogService Redis-кеш як coherence-bus**: дані — compile-time константа (статичний конфіг), Redis тримає coherence між інстансами, не source-of-truth.
+- **AI help-chat SSE errors after headers**: після `flushHeaders()` помилки йдуть як SSE `ERROR`-event. Rate-limit/budget-check робиться ДО SSE headers — будь-яка 4xx — звичайний HTTP error.
+- **R2 public URL ↔ web hostname invariant**: `R2_PUBLIC_URL` hostname МУСИТЬ дорівнювати `NEXT_PUBLIC_STORAGE_HOSTNAME` — інакше `next/image` блокує фото. `next.config.ts` fail-fast.
 - **Presigned PUT signs Content-Type only**: `Content-Length` НЕ підписується (forbidden Fetch header). Клієнт мусить надіслати `Content-Type: image/webp` exact-match — інакше R2 → 403.
 - **Avatar commit idempotency**: повторний commit з тим самим fileKey повертає existing URL без `safeDeleteR2File(oldUrl)` — без guard другий виклик видалив би щойно збережений файл.
-- **R2 public URL ↔ web hostname invariant**: `R2_PUBLIC_URL` hostname МУСИТЬ дорівнювати `NEXT_PUBLIC_STORAGE_HOSTNAME` — інакше `next/image` блокує фото. `next.config.ts` fail-fast.
 - **QR field separator semantics**: рядки розділені `\n`. Trailing-empty fields ОБОВ'ЯЗКОВІ (002 — 13 полів, 003 — 17). Без них банк-парсер відхиляє QR.
-- **QR UTF-8 bytes vs chars**: норматив оперує `B`/`C`. JS `.length` рахує UTF-16 code units; Cyrillic = 2 B, U+2019 = 3 B. `assertWithinUtf8Limits` (`packages/types/src/qr/limits.ts`) тримає окремі ліміти.
+- **QR UTF-8 bytes vs chars**: норматив оперує `B`/`C`. JS `.length` рахує UTF-16 code units (Cyrillic = 2 B). `assertWithinUtf8Limits` (`packages/types/src/qr/limits.ts`) тримає окремі ліміти. Base64URL ≤ 475 chars restrictive за raw ≤ 507 B.
 - **QR error-correction `Q`, не `H`**: норматив 003 §IV.10.4 дозволяє лише `M` або `Q`. Дефолт `Q` (~25%) + `logoMaxRatio ≤ 0.20`.
-- **QR Base64URL ≤ 475 chars vs raw ≤ 507 B**: b64url restrictive за raw. `buildNbuPayloadLink` асертить b64url до host-валідації.
 - **QR sharp у ts-jest**: interop bug з default-export. У `qr-logo.compositor.ts` + integration-spec — `import sharp = require('sharp')`. `storage.service.ts` — default-import (тести мокають).
 - **`PayloadValidationError` mapping**: окремий `instanceof`-check у `AllExceptionsFilter`. Overall-size overflow → 400 `PAYLOAD_TOO_LARGE`. Field-format → 400 `VALIDATION_ERROR`. Host-config → 500.
 - **Slug case-preserved + uniqueness on lower** (Twitter-style): display `slug`, lookup і uniqueness на `slugLower`. Reserved-перевірка на lowercase лише для business-slug. **308 Permanent Redirect** на canonical case.
 - **Editable nested-slug + history (Sprint 15)**: account/invoice slug тепер editable vanity (як business). Старий `slugLower` → `*SlugHistory` collection (TTL ~90 днів) для 308-redirect + anti-squatting reuse-block у scope. Cascade-delete мусить чистити history — інакше orphan-hit lookup + заблокований slug.
 - **Hard-delete з frontend-only 5s Undo**: жоден API call поки 5 s. **Timer ID живе у closure**, не у React ref — cabinet page розмонтовується через optimistic redirect; cleanup-effect з clearTimeout вбив би timer. `pending*DeletesStore` (Zustand) ховає item з list UI синхронно.
-- **Cascade-delete confirmation = ввести числа, не назву**: `UiDangerGateDialog` вимагає вписати кількість вкладеного (рахунки/реквізити) для cascade-видалення. 409 `ACCOUNT_HAS_INVOICES` прибрано — account-delete тепер cascade як business (повертає `affectedInvoices`).
+- **Cascade-delete confirmation = ввести числа, не назву**: `UiDangerGateDialog` вимагає вписати кількість вкладеного (реквізити/рахунки) для cascade-видалення. 409 `ACCOUNT_HAS_INVOICES` прибрано — account-delete тепер cascade як business (повертає `affectedInvoices`).
 - **Public endpoint whitelist — leak-vector тільки через NBU-payload-link**: реквізити IBAN/taxId не leak-аються JSON-ом — лише через формати, що читаються банком як платіжна команда. `ibanMask = '•{last4}'` server-derived. `Public*Schema.parse()` strip-ають leak-fields.
-- **Host-aware routing на одному Next.js project (`proxy.ts`, не `middleware.ts` у Next 16)**: cabinet/public ділять контейнер. Branches: **A0** (public+`/` → explainer); **A1** (public+`/{biz}` → rewrite + `Cache-Control: no-store` проти 1→2-account redirect-flip); **A2**/**A3** (account/invoice); **B** (public+невалідний-segment → 404); **C** (cabinet+`/host-pay/` → 404, direct-URL guard). Host comparison case-insensitive. `bid_refresh` без `Domain=` → invisible на pay-host. Server Components `host-pay/[slug]/*` роблять defense-in-depth host check через `headers()`.
+- **Host-aware routing на одному Next.js project (`proxy.ts`, не `middleware.ts` у Next 16)**: cabinet/public ділять контейнер. Branches **A0–A3/B/C** (детально у `proxy.ts`): A1 (public+`/{biz}`) робить rewrite + `Cache-Control: no-store` проти 1→2-account redirect-flip; C (cabinet+`/host-pay/`) → 404 direct-URL guard. Host comparison case-insensitive. `bid_refresh` без `Domain=` → invisible на pay-host. Server Components `host-pay/[slug]/*` — defense-in-depth host check через `headers()`.
 - **Invoice slug-case asymmetry**: business-slug case-insensitive (vanity-target); invoice/account slug compound-unique на `slugLower`. Два account-и одного business можуть мати інвойс з однаковим slug через per-account counter-namespace.
 - **Counter monotonic per `(accountId, scope)`**: окрема `InvoiceSlugCounter` collection (захист від reuse after delete). Fast-path `findOneAndUpdate({$inc: { last: 1 }})`; lazy-bootstrap на first-touch. Session-binding з invoice-TX — abort rollback-ить counter. Partial-unique + retry-on-11000 (3) у `InvoicesService.create`.
 - **Lock-mask FEFF/FFFF derived from `amountLocked`**: backend-only mapping у `payload-mapper.ts`. `true → FFFF` (locked), `false → FEFF` (editable). Frontend оперує boolean — інверсна UI-семантика "Дозволити правити суму" живе тільки у формах.
 - **`validUntil` у Kyiv-tz, не UTC**: `Intl.DateTimeFormat({ timeZone: 'Europe/Kyiv' })` + `formatToParts`. NBU input — локальний український час. UTC ламав би slug `with-month` на edge нічних меж.
-- **Cascade hard-delete atomic-or-nothing**: `BusinessesService.delete` + `AccountsService.delete` через `withTransaction` (parent + accounts + invoices + counters + history). Mongo вимагає replica-set; standalone mongod → 500 `TRANSACTION_REQUIRES_REPLICA_SET` / `CASCADE_DELETE_REQUIRES_REPLICA_SET`. Жодного fallback на sequential. Test-suite: `MongoMemoryReplSet`.
-- **Account/Business pre-count поза транзакцією**: `affectedInvoices` у response інформативний (toast). Stale by ~tick на concurrent-create не порушує atomic-or-nothing.
+- **Cascade hard-delete atomic-or-nothing**: `BusinessesService.delete` + `AccountsService.delete` через `withTransaction` (parent + accounts + invoices + counters + history). Mongo вимагає replica-set; standalone mongod → 500 (`*_REQUIRES_REPLICA_SET`). Жодного fallback на sequential. Test-suite: `MongoMemoryReplSet`.
 - **Public root 1-Account redirect — 307 not 308**: Branch A1 при `accounts.length === 1` робить 307 на `/{biz}/{acc}`. Chrome агресивно кешує 308 in-memory навіть з `Cache-Control: no-cache` — користувач після додавання 2-го застряг би.
 - **NBU charset refine на entity-Zod**: `businessNameSchema`, `*Purpose`-schemas мають `.refine(isWithinNbuCharset)` поверх char/byte-limits. Інакше невалідний-для-NBU символ (emoji, multi-line) проходив save → QR-render падав з 500.
-- **`useHasHydrated` через `useSyncExternalStore`**: Zustand `persist` гідратує асинхронно. RHF `defaultValues` frozen на mount → потрібен gate. Канонічний React API — SSR-safe + без `react-hooks/set-state-in-effect` warning.
 - **`publicPostJson`/`streamHelpChat` symmetric до `publicFetchJson`**: native `fetch` з `credentials: 'omit'`. Axios `apiClient` (withCredentials + Bearer) для anon-flow заборонений — cabinet-credentials просочилися б. Help-chat history — client-side only.
 - **Public help-assistant grounded**: контент-джерело — `packages/types/src/help` статті (single source для help-center UI + AI-grounding). Anon, без executions/persist; global daily-budget circuit-breaker поверх IP-limit.
 - **Claim-flow intent state-machine**: `qrLandingDraftStore.intent: 'idle' | 'claim-pending' | 'claimed' | 'claim-failed'`. `useClaimLandingDraft` — sibling до `AuthGuard` у `(protected)/layout.tsx`. Гілка B (incomplete profile після magic-link signup): hook fires автоматично після PATCH `/users/me`.
-- **Anon-claim 2 sequential POSTs + form-recovery**: `LandingClaimService.attemptLandingClaim` робить Business → Account create. Response 3-state: `'success'` | `'business-failed'` | `'account-failed'` (з `partialBusinessSlug`). Success-with-state, не throw. Окремий `LandingClaimModule` містить і `MagicLinkVerifyController` (Sprint 13 dependency-inversion).
-- **Magic-link dedup × overwrite з `KEEPTTL`**: `sendMagicLink` дозволяє overwrite trio `landingDraft + claimIdempotencyKey + termsVersion` у dedup-window. Без `KEEPTTL` `SET` reset-нув би TTL. Env invariant `AUTH_MAGIC_LINK_TTL_MIN * 60 ≥ AUTH_MAGIC_LINK_DEDUP_SEC` — fail-fast.
+- **Anon-claim 2 sequential POSTs + form-recovery**: `LandingClaimService.attemptLandingClaim` робить Business → Account create. Response 3-state: `'success'` | `'business-failed'` | `'account-failed'` (з `partialBusinessSlug`). Success-with-state, не throw. `LandingClaimModule` містить і `MagicLinkVerifyController` (Sprint 13 dependency-inversion).
+- **Magic-link dedup × overwrite з `KEEPTTL`**: `sendMagicLink` overwrite-ить trio `landingDraft + claimIdempotencyKey + termsVersion` у dedup-window. Без `KEEPTTL` `SET` reset-нув би TTL. Env invariant `AUTH_MAGIC_LINK_TTL_MIN * 60 ≥ AUTH_MAGIC_LINK_DEDUP_SEC` — fail-fast.
 - **`Business.claimIdempotencyKey` partial-unique**: persisted UUID v4 + partial-unique `(ownerId, claimIdempotencyKey)`. `partialFilterExpression: { claimIdempotencyKey: { $type: 'string' } }` критично — plain sparse ламав би cabinet wizard-create через null-bucket. Tab-close mid-flight resume: retry з тим самим UUID.
-- **Terms-pre-stamp у `verifyMagicLink`**: order — auth-resolve → `stampAcceptedTerms` ДО `attemptLandingClaim`. Інакше frontend `acceptTerms()` post-claim throw на network glitch залишав би business+account без terms-stamp. Frontend `acceptTerms()` idempotent через server-filter `acceptedTermsVersion: { $ne: version }`. Google OAuth / password-flows — Sprint 13+ scope.
+- **Terms-pre-stamp у `verifyMagicLink`**: order — auth-resolve → `stampAcceptedTerms` ДО `attemptLandingClaim`. Інакше post-claim throw на network glitch залишав би business+account без terms-stamp. Frontend `acceptTerms()` idempotent через server-filter `acceptedTermsVersion: { $ne: version }`.
 - **Orphan-profile cleanup (Sprint 12)**: `OrphanCleanupModule` (окремий від Users — separation of concerns). Cron шле reminders на `FIRST`/`FINAL` днях і cascade-видаляє orphan businesses incomplete-profile users на `DELETION`. Env invariant `FIRST < FINAL < DELETION` fail-fast.
+- **Executions — CREDIT-only після Sprint 18**: `addExecutions`/`recordTransaction`/`balance`/`ExecutionTransaction` ledger живі (нарахування при білінгу), але резерваційна машинерія (`reserve`/`commit`/`refund`/`activeReservation`/reconcile cron) + user-facing spend знесені. Колекцію `chatmessages` дропнути на проді вручну.

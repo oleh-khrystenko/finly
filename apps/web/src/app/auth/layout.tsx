@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import { Logo } from '@/entities/brand';
+import { AppFooter } from '@/widgets/app-footer';
 import UiButton from '@/shared/ui/UiButton';
 import UiHeaderShell from '@/shared/ui/UiHeaderShell';
 import ChangeTheme from '@/features/change-theme';
@@ -26,6 +27,8 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
             <div className="flex flex-1 items-center justify-center px-4 py-8">
                 {children}
             </div>
+
+            <AppFooter />
         </main>
     );
 }

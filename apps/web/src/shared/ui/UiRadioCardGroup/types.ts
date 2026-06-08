@@ -43,6 +43,8 @@ export interface UiRadioCardGroupProps<TValue extends string> {
     onChange: (value: TValue) => void;
     columns?: UiRadioCardGroupColumns;
     label?: string;
+    /** Розмір лейбла: `sm` (14px, default) або `md` (16px — ритм еталона). */
+    labelSize?: 'sm' | 'md';
     description?: ReactNode;
     error?: ReactNode;
     required?: boolean;

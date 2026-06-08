@@ -1,5 +1,9 @@
 export { composeClasses } from './utils';
-export { OUTLINED_FIELD_STYLES } from './outlinedFieldStyles';
+export {
+    OUTLINED_FIELD_STYLES,
+    FIELD_LABEL_STYLES,
+    type FieldLabelSize,
+} from './outlinedFieldStyles';
 export { isValidRedirect, saveRedirect, consumeRedirect } from './redirect';
 export { getTimezone } from './timezone';
 export { mapValidationCode } from './mapValidationCode';

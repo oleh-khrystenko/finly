@@ -160,24 +160,6 @@ export class UsersService {
         });
     }
 
-    async deductExecution(userId: string): Promise<boolean> {
-        // Try atomic paid-execution deduction first (no race condition).
-        const paid = await this.userModel.findOneAndUpdate(
-            { _id: userId, 'executions.balance': { $gt: 0 } },
-            { $inc: { 'executions.balance': -1 } },
-            { new: true }
-        );
-        if (paid) return true;
-
-        // Fallback: consume free report atomically.
-        const free = await this.userModel.findOneAndUpdate(
-            { _id: userId, 'executions.freeReportUsed': false },
-            { $set: { 'executions.freeReportUsed': true } },
-            { new: true }
-        );
-        return free !== null;
-    }
-
     async updateTimezone(userId: string, timezone: string): Promise<void> {
         await this.userModel.findByIdAndUpdate(userId, { timezone }).exec();
     }
@@ -401,12 +383,5 @@ export class UsersService {
                 $unset: { pendingPostLoginTarget: 1 },
             }
         );
-    }
-
-    async hasExecution(userId: string): Promise<boolean> {
-        const user = await this.userModel.findById(userId).exec();
-        if (!user) return false;
-
-        return user.executions.balance > 0 || !user.executions.freeReportUsed;
     }
 }
