@@ -208,17 +208,17 @@ describe('CreateInvoiceForm — slugInput happy paths', () => {
     it('"Ввести самому" + valid humanPart → POST {kind:"explicit", humanPart}', async () => {
         renderForm();
         await selectSlugOption(/Ввести самому/);
-        const input = await screen.findByPlaceholderText(/order-2026-may/);
+        const input = await screen.findByPlaceholderText(/order-1024/);
         await act(async () => {
             fireEvent.change(input, {
-                target: { value: 'order-2026-may' },
+                target: { value: 'order-1024' },
             });
         });
         await clickSubmit();
         await waitFor(() => expect(mockCreateInvoice).toHaveBeenCalled());
         expect(mockCreateInvoice.mock.calls[0]![2].slugInput).toEqual({
             kind: 'explicit',
-            humanPart: 'order-2026-may',
+            humanPart: 'order-1024',
         });
     });
 });
@@ -231,7 +231,7 @@ describe('CreateInvoiceForm — humanPart live-validation', () => {
                 screen.getByRole('radio', { name: /Ввести самому/ })
             );
         });
-        return screen.findByPlaceholderText(/order-2026-may/);
+        return screen.findByPlaceholderText(/order-1024/);
     }
 
     it.each([
@@ -408,7 +408,7 @@ describe('CreateInvoiceForm — запам`ятати формат за замо
         await act(async () => {
             fireEvent.click(
                 screen.getByRole('checkbox', {
-                    name: /Запам.ятати як формат за замовчуванням/,
+                    name: /Запам.ятати формат для наступних рахунків/,
                 })
             );
         });
@@ -443,7 +443,7 @@ describe('CreateInvoiceForm — запам`ятати формат за замо
 });
 
 describe('CreateInvoiceForm — required-fields validation', () => {
-    it('validUntilMode="date" + empty date → submit blocked', async () => {
+    it('режим "до дати" + очищена дата → submit-кнопка disabled', async () => {
         renderForm();
         const triggers = screen.getAllByRole('button');
         const validUntilTrigger = triggers.find((b) =>
@@ -458,20 +458,56 @@ describe('CreateInvoiceForm — required-fields validation', () => {
         await act(async () => {
             fireEvent.click(option);
         });
+        // Перемикання у «до дати» авто-заповнює завтра (спільний ValidUntilField).
+        // Очищаємо вручну → draft невалідний → submit заблокований.
+        const dateInput = screen.getByLabelText('Дата у форматі ДД.ММ.РРРР');
+        await act(async () => {
+            fireEvent.change(dateInput, { target: { value: '' } });
+        });
+        const submitBtn = screen.getByRole('button', {
+            name: /Створити рахунок/,
+        });
+        expect(submitBtn).toBeDisabled();
+        expect(mockCreateInvoice).not.toHaveBeenCalled();
+    });
+
+    it('режим "до дати" з авто-датою → submit передає validUntil (23:59:59 Kyiv)', async () => {
+        renderForm();
+        const triggers = screen.getAllByRole('button');
+        const validUntilTrigger = triggers.find((b) =>
+            /Без терміну|До конкретної дати/.test(b.textContent ?? '')
+        )!;
+        await act(async () => {
+            fireEvent.click(validUntilTrigger);
+        });
+        const option = await screen.findByRole('option', {
+            name: /До конкретної дати/,
+        });
+        await act(async () => {
+            fireEvent.click(option);
+        });
+        const dateInput = screen.getByLabelText('Дата у форматі ДД.ММ.РРРР');
+        await act(async () => {
+            fireEvent.change(dateInput, { target: { value: '15.08.2026' } });
+        });
         await act(async () => {
             fireEvent.click(
-                screen.getByRole('button', {
-                    name: /Створити рахунок/,
-                })
+                screen.getByRole('button', { name: /Створити рахунок/ })
             );
         });
-        expect(mockCreateInvoice).not.toHaveBeenCalled();
-        expect(await screen.findByText(/Оберіть дату/)).toBeInTheDocument();
+        await waitFor(() => expect(mockCreateInvoice).toHaveBeenCalledTimes(1));
+        const payload = mockCreateInvoice.mock.calls[0]![2] as {
+            validUntil: Date;
+        };
+        // 15.08.2026 23:59:59 Europe/Kyiv (літо UTC+3) = 20:59:59Z.
+        expect(payload.validUntil.toISOString()).toBe(
+            '2026-08-15T20:59:59.000Z'
+        );
     });
 
     it('purpose-overflow → submit-кнопка disabled', async () => {
         renderForm();
-        const purposeTextarea = screen.getByPlaceholderText(/Якщо порожньо/);
+        const purposeTextarea = screen.getByPlaceholderText(/За замовчуванням/);
         const longPurpose = 'a'.repeat(500);
         await act(async () => {
             fireEvent.change(purposeTextarea, {

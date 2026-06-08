@@ -22,7 +22,6 @@ import {
 import { createInvoice, getApiMessage, updateAccount } from '@/shared/api';
 import {
     getZodFieldError,
-    kyivEndOfDayInstant,
     mapValidationCode,
     parseUaMoney,
 } from '@/shared/lib';
@@ -30,16 +29,20 @@ import UiButton from '@/shared/ui/UiButton';
 import UiCheckbox from '@/shared/ui/UiCheckbox';
 import UiInput from '@/shared/ui/UiInput';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
-import UiSelect from '@/shared/ui/UiSelect';
 import UiSwitch from '@/shared/ui/UiSwitch';
 import UiTextarea from '@/shared/ui/UiTextarea';
 import {
     CREATE_FORMAT_ORDER,
+    EMPTY_VALID_UNTIL_DRAFT,
     InvoiceFormatPicker,
+    ValidUntilField,
     choiceToSlugInput,
     isAutoSlugMode,
+    isValidUntilDraftValid,
+    resolveValidUntil,
     useSlugPresetWarningStore,
     type InvoiceFormatChoice,
+    type ValidUntilDraft,
 } from '@/entities/invoice';
 
 interface Props {
@@ -93,13 +96,6 @@ interface Props {
  * версій).
  */
 
-type ValidUntilMode = 'none' | 'date';
-
-const VALID_UNTIL_OPTIONS: { value: ValidUntilMode; label: string }[] = [
-    { value: 'none', label: 'Без терміну' },
-    { value: 'date', label: 'До конкретної дати' },
-];
-
 interface FormValues {
     /**
      * Raw сума з input-а (UA-формат: кома або крапка, optional NBSP-thousands).
@@ -113,9 +109,8 @@ interface FormValues {
     /** `true` = ФОП фіксує, клієнт не може правити. */
     amountLocked: boolean;
     paymentPurpose: string | null;
-    validUntilMode: ValidUntilMode;
-    /** ISO-date рядок (без часу) — конвертується у Date при submit. */
-    validUntilDate: string;
+    /** Спільна модель «Терміну дії» (mode + raw `ДД.ММ.РРРР`). */
+    validUntilDraft: ValidUntilDraft;
     slugChoice: InvoiceFormatChoice;
     /** Активний при `slugChoice === 'explicit'`. */
     humanPart: string;
@@ -128,6 +123,11 @@ interface FormValues {
 }
 
 const PURPOSE_CHAR_LIMIT = effectiveLimit('purpose').chars;
+
+// Безчасовий приклад читабельної частини посилання (схема: лише [a-z0-9-]).
+// Використовується і в placeholder, і в live-прев'ю, щоб порожнє поле показувало
+// узгоджений результат.
+const SLUG_EXAMPLE = 'order-1024';
 
 function defaultSlugChoice(account: Account): InvoiceFormatChoice {
     // Sprint 9 §SP-6 — «домашній формат» на Account; null fallback на global
@@ -156,14 +156,10 @@ function formValuesToCreateRequest(values: FormValues): CreateInvoiceRequest {
         amount: money.kopecks,
         amountLocked: isSignage ? false : values.amountLocked,
         paymentPurpose: values.paymentPurpose,
-        validUntil:
-            values.validUntilMode === 'date' && values.validUntilDate
-                ? // SP-7 — фіксуємо 23:59:59 у Europe/Kyiv tz, незалежно
-                  // від tz браузера (`new Date('YYYY-MM-DDTHH:MM:SS')` без
-                  // `Z` interpret-ується як local time клієнта — зсунуло б
-                  // backend Kyiv-tz parsing на сусідній день).
-                  kyivEndOfDayInstant(values.validUntilDate)
-                : null,
+        // SP-7 Kyiv-tz 23:59:59 інкапсульовано у `resolveValidUntil`. Resolver
+        // нижче гарантує, що сюди не доходить невалідний date-draft (інакше
+        // `value` був би `null` — silent «без терміну» замість помилки).
+        validUntil: resolveValidUntil(values.validUntilDraft).value,
         slugInput: choiceToSlugInput(values.slugChoice, values.humanPart),
     };
 }
@@ -195,13 +191,12 @@ const createInvoiceResolver: Resolver<FormValues> = async (values) => {
         }
     }
 
-    // 2. validUntilMode='date' + empty validUntilDate → submit-blocking error.
-    //    Власний код у словнику `mapValidationCode` (`VALID_UNTIL_DATE_REQUIRED`).
-    if (
-        values.validUntilMode === 'date' &&
-        values.validUntilDate.trim() === ''
-    ) {
-        errors.validUntilDate = {
+    // 2. Невалідний date-draft (режим «до дати» з порожнім/невалідним текстом)
+    //    блокує submit. `ValidUntilField` показує live-формат-помилку сам;
+    //    submit-кнопка disabled за тим самим `isValidUntilDraftValid`. Тут —
+    //    defense-in-depth, щоб `resolveValidUntil` не дав silent `null`.
+    if (!isValidUntilDraftValid(values.validUntilDraft)) {
+        errors.validUntilDraft = {
             type: 'manual',
             message: 'VALID_UNTIL_DATE_REQUIRED',
         };
@@ -246,7 +241,7 @@ const createInvoiceResolver: Resolver<FormValues> = async (values) => {
                         message: issue.message,
                     };
                 } else if (path === 'validUntil') {
-                    errors.validUntilDate = {
+                    errors.validUntilDraft = {
                         type: 'zod',
                         message: issue.message,
                     };
@@ -303,8 +298,7 @@ export default function CreateInvoiceForm({ business, account }: Props) {
             // `''`-default fail-ить Zod refine `invoicePaymentPurposeSchema.min(1)`
             // ще до першого user-input-у.
             paymentPurpose: null,
-            validUntilMode: 'none',
-            validUntilDate: '',
+            validUntilDraft: EMPTY_VALID_UNTIL_DRAFT,
             slugChoice: initialChoice,
             humanPart: '',
             rememberDefault: false,
@@ -319,7 +313,7 @@ export default function CreateInvoiceForm({ business, account }: Props) {
     const amountInput = watch('amountInput');
     const amountLocked = watch('amountLocked');
     const paymentPurpose = watch('paymentPurpose');
-    const validUntilMode = watch('validUntilMode');
+    const validUntilDraft = watch('validUntilDraft');
     const slugChoice = watch('slugChoice');
     const humanPart = watch('humanPart');
     const rememberDefault = watch('rememberDefault');
@@ -349,7 +343,6 @@ export default function CreateInvoiceForm({ business, account }: Props) {
         if (r.kopecks === null) return { kind: 'valid-signage' };
         return { kind: 'valid-amount', kopecks: r.kopecks };
     }, [amountInput]);
-    const isAmountInvalid = amountUiState.kind === 'invalid';
     const isSignage = amountUiState.kind === 'valid-signage';
     const lockSwitchDisabled = amountUiState.kind !== 'valid-amount';
 
@@ -452,147 +445,144 @@ export default function CreateInvoiceForm({ business, account }: Props) {
             className="space-y-8"
             noValidate
         >
-            {/* Сума + lock-switch */}
-            <UiSectionCard title="Сума">
-                <div className="mt-6 space-y-6">
-                    <Controller
-                        name="amountInput"
-                        control={control}
-                        render={({ field, fieldState }) => (
-                            <UiInput
-                                // `type="text"`, не `number` — щоб приймати UA-кому
-                                // (кома у HTML5 `number` interpret-ується locale-
-                                // dependent і часто rejected). `inputMode="decimal"`
-                                // дає mobile numeric keypad з комою.
-                                type="text"
-                                inputMode="decimal"
-                                placeholder="1500,50"
-                                aria-label="Сума у гривнях"
-                                IconRight={<span className="text-sm">грн</span>}
-                                description="Якщо не вказати суму, клієнт впише її самостійно під час оплати."
-                                value={field.value}
-                                onChange={(e) => field.onChange(e.target.value)}
-                                onBlur={field.onBlur}
-                                error={getZodFieldError(fieldState.error)}
-                            />
-                        )}
-                    />
-                    <label
-                        htmlFor="amount-lock-switch"
-                        className={`border-border flex items-start justify-between gap-3 rounded-md border p-3 ${
-                            lockSwitchDisabled
-                                ? 'cursor-not-allowed opacity-60'
-                                : 'cursor-pointer'
-                        }`}
-                    >
-                        <div className="flex flex-1 flex-col gap-1">
-                            <span className="text-foreground text-base font-medium">
-                                Дозволити клієнту правити суму
-                            </span>
-                            <span className="text-muted-foreground text-sm">
-                                {/*
-                                 * Hint розрізняє три стани:
-                                 *  - signage: пояснюємо чому disabled.
-                                 *  - invalid: коротко натякаємо, що сума ще
-                                 *    не валідна (не reset-имо lock — див.
-                                 *    SP-6 useEffect).
-                                 *  - valid: lock-effect explanation.
-                                 */}
-                                {isSignage
-                                    ? 'Заблокувати редагування можна лише при заданій сумі'
-                                    : isAmountInvalid
-                                      ? 'Введіть коректну суму, щоб керувати блокуванням'
-                                      : 'Коли вимкнено, клієнт сплатить рівно вказану суму без можливості її змінити'}
-                            </span>
-                        </div>
-                        <UiSwitch
-                            id="amount-lock-switch"
-                            // Інверсна семантика: switch ON = "дозволити правити" = amountLocked=false.
-                            checked={lockSwitchChecked}
-                            disabled={lockSwitchDisabled}
-                            onChange={(allowEdit) =>
-                                setValue('amountLocked', !allowEdit, {
-                                    shouldDirty: true,
-                                })
-                            }
-                        />
-                    </label>
-                </div>
-            </UiSectionCard>
-
-            {/* Призначення */}
-            <UiSectionCard title="Призначення платежу">
-                <div className="mt-6 space-y-6">
-                    <Controller
-                        name="paymentPurpose"
-                        control={control}
-                        render={({ field, fieldState }) => (
-                            <UiTextarea
-                                value={field.value ?? ''}
-                                onChange={(e) => {
-                                    const v = e.target.value;
-                                    field.onChange(v === '' ? null : v);
-                                }}
-                                placeholder={`Якщо порожньо — використано: «${business.paymentPurposeTemplate}»`}
-                                error={getZodFieldError(fieldState.error)}
-                                autoGrow
-                                maxRows={4}
-                            />
-                        )}
-                    />
-                    {/*
-                     * Лічильник символів (план §4.5 явно). Граничне значення
-                     * — `effectiveLimit('purpose').chars` (Sprint 2 §2.2:
-                     * MIN-по-версіях, гарантує QR-render для всіх supported
-                     * `PAYLOAD_VERSIONS`).
-                     */}
-                    <div className="flex items-center justify-between">
-                        <p className="text-muted-foreground text-sm">
-                            Залиште порожнім, щоб використати призначення з
-                            налаштувань отримувача.
-                        </p>
-                        <span
-                            className={`text-sm ${
-                                purposeOverflow
-                                    ? 'text-destructive'
-                                    : 'text-muted-foreground'
-                            }`}
-                            aria-live="polite"
-                        >
-                            {purposeLength} / {PURPOSE_CHAR_LIMIT}
-                        </span>
-                    </div>
-                </div>
-            </UiSectionCard>
-
-            {/* Термін дії */}
-            <UiSectionCard title="Термін дії">
-                <div className="mt-6 space-y-6">
-                    <UiSelect
-                        options={VALID_UNTIL_OPTIONS}
-                        value={validUntilMode}
-                        onChange={(v) =>
-                            setValue('validUntilMode', v as ValidUntilMode, {
-                                shouldDirty: true,
-                            })
-                        }
-                    />
-                    {validUntilMode === 'date' && (
+            {/*
+             * Деталі рахунку — зміст платежу (скільки / за що / доки) в одній
+             * картці. Три параметри читаються як одна думка про один рахунок;
+             * окремі картки на однопольні секції роздували б форму. Заголовки
+             * картки більше не служать лейблами полів — кожне поле має власний
+             * видимий label (`labelSize="md"`, ритм create-форм).
+             */}
+            <UiSectionCard title="Деталі рахунку">
+                <div className="mt-6 space-y-8">
+                    {/* Сума + lock-switch (тісно зв'язана пара) */}
+                    <div className="space-y-4">
                         <Controller
-                            name="validUntilDate"
+                            name="amountInput"
                             control={control}
                             render={({ field, fieldState }) => (
                                 <UiInput
-                                    type="date"
+                                    // `type="text"`, не `number` — щоб приймати UA-кому
+                                    // (кома у HTML5 `number` interpret-ується locale-
+                                    // dependent і часто rejected). `inputMode="decimal"`
+                                    // дає mobile numeric keypad з комою.
+                                    type="text"
+                                    inputMode="decimal"
+                                    label="Сума"
+                                    labelSize="md"
+                                    placeholder="1500,50"
+                                    IconRight={
+                                        <span className="text-sm">грн</span>
+                                    }
+                                    description="Якщо не вказати суму, клієнт впише її самостійно під час оплати."
                                     value={field.value}
                                     onChange={(e) =>
                                         field.onChange(e.target.value)
                                     }
+                                    onBlur={field.onBlur}
                                     error={getZodFieldError(fieldState.error)}
                                 />
                             )}
                         />
-                    )}
+                        {/*
+                         * Тогл блокування суми — формулювання дзеркалить SEO-тогл
+                         * business-сторінки і `AmountLockSwitch` edit-сторінки:
+                         * заголовок-статус описує поточний стан (не імператив),
+                         * switch праворуч, пояснення знизу. Інверсна семантика:
+                         * switch ON = «дозволити правити» = amountLocked=false.
+                         */}
+                        <label
+                            htmlFor="amount-lock-switch"
+                            className={`flex flex-col gap-1 ${
+                                lockSwitchDisabled
+                                    ? 'cursor-not-allowed opacity-60'
+                                    : 'cursor-pointer'
+                            }`}
+                        >
+                            <span className="flex items-center justify-between gap-3">
+                                <span className="text-foreground text-lg font-medium">
+                                    {lockSwitchDisabled
+                                        ? 'Клієнт вписує суму у банку сам'
+                                        : amountLocked
+                                          ? 'Клієнт сплатить точно зазначену суму'
+                                          : 'Клієнт може змінити суму перед оплатою'}
+                                </span>
+                                <UiSwitch
+                                    id="amount-lock-switch"
+                                    className="shrink-0"
+                                    checked={lockSwitchChecked}
+                                    disabled={lockSwitchDisabled}
+                                    onChange={(allowEdit) =>
+                                        setValue('amountLocked', !allowEdit, {
+                                            shouldDirty: true,
+                                        })
+                                    }
+                                />
+                            </span>
+                            <span className="text-muted-foreground text-sm">
+                                {lockSwitchDisabled
+                                    ? 'Доступно лише коли задано суму. Поки суми немає, клієнт вписує її сам.'
+                                    : 'Керує тим, чи може клієнт змінити суму у банку. Якщо вимкнено, клієнт сплатить рівно зазначену суму.'}
+                            </span>
+                        </label>
+                    </div>
+
+                    {/* Призначення платежу */}
+                    <div className="space-y-2">
+                        <Controller
+                            name="paymentPurpose"
+                            control={control}
+                            render={({ field, fieldState }) => (
+                                <UiTextarea
+                                    label="Призначення платежу"
+                                    labelSize="md"
+                                    value={field.value ?? ''}
+                                    onChange={(e) => {
+                                        const v = e.target.value;
+                                        field.onChange(v === '' ? null : v);
+                                    }}
+                                    placeholder={`За замовчуванням: «${business.paymentPurposeTemplate}»`}
+                                    error={getZodFieldError(fieldState.error)}
+                                    autoGrow
+                                    maxRows={4}
+                                />
+                            )}
+                        />
+                        {/*
+                         * Лічильник символів (план §4.5 явно). Граничне значення
+                         * — `effectiveLimit('purpose').chars` (Sprint 2 §2.2:
+                         * MIN-по-версіях, гарантує QR-render для всіх supported
+                         * `PAYLOAD_VERSIONS`).
+                         */}
+                        <div className="flex items-center justify-between">
+                            <p className="text-muted-foreground text-sm">
+                                Якщо лишити порожнім, клієнт побачить стандартне
+                                призначення отримувача.
+                            </p>
+                            <span
+                                className={`text-sm ${
+                                    purposeOverflow
+                                        ? 'text-destructive'
+                                        : 'text-muted-foreground'
+                                }`}
+                                aria-live="polite"
+                            >
+                                {purposeLength} / {PURPOSE_CHAR_LIMIT}
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* Термін дії — спільний редактор з edit-сторінкою */}
+                    <Controller
+                        name="validUntilDraft"
+                        control={control}
+                        render={({ field }) => (
+                            <ValidUntilField
+                                label="Термін дії"
+                                draft={field.value}
+                                onChange={field.onChange}
+                            />
+                        )}
+                    />
                 </div>
             </UiSectionCard>
 
@@ -621,20 +611,18 @@ export default function CreateInvoiceForm({ business, account }: Props) {
                                         onChange={(e) =>
                                             field.onChange(e.target.value)
                                         }
-                                        placeholder="наприклад: order-2026-may"
+                                        placeholder={`Наприклад: ${SLUG_EXAMPLE}`}
                                         maxLength={60}
                                         error={getZodFieldError(
                                             fieldState.error
                                         )}
                                     />
                                     <p className="text-muted-foreground text-sm">
-                                        Сервер додасть унікальний хвіст
-                                        автоматично:{' '}
+                                        Наприкінці додамо кілька символів, щоб
+                                        посилання було унікальним:{' '}
                                         <span className="font-mono break-all">
-                                            {humanPart || 'ваш-варіант'}
-                                            -aB3xQ9k7
-                                        </span>{' '}
-                                        (хвіст згенерується при створенні)
+                                            {humanPart || SLUG_EXAMPLE}-aB3xQ9k7
+                                        </span>
                                     </p>
                                 </div>
                             )}
@@ -662,8 +650,7 @@ export default function CreateInvoiceForm({ business, account }: Props) {
                                 })
                             }
                         >
-                            Запам&apos;ятати як формат за замовчуванням для цих
-                            реквізитів
+                            Запам&apos;ятати формат для наступних рахунків
                         </UiCheckbox>
                     )}
                 </div>
@@ -693,7 +680,10 @@ export default function CreateInvoiceForm({ business, account }: Props) {
                     variant="filled"
                     size="md"
                     disabled={
-                        submitting || formState.isSubmitting || purposeOverflow
+                        submitting ||
+                        formState.isSubmitting ||
+                        purposeOverflow ||
+                        !isValidUntilDraftValid(validUntilDraft)
                     }
                 >
                     {submitting ? 'Створюю...' : 'Створити рахунок'}

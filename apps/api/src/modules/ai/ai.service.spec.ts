@@ -10,8 +10,6 @@ jest.mock('../../config/env', () => ({
 }));
 
 const mockAiProvider = {
-    contextWindow: 200_000,
-    countTokens: jest.fn().mockResolvedValue(500),
     streamChat: jest.fn(),
 };
 

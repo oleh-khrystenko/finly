@@ -43,7 +43,7 @@ export default function PurposeSection({ invoice, business, onSave }: Props) {
             renderEdit={({ value, setValue, error }) => (
                 <UiTextarea
                     value={value ?? ''}
-                    placeholder={`Залиште порожнім — щоб використати: «${business.paymentPurposeTemplate}»`}
+                    placeholder={`За замовчуванням: «${business.paymentPurposeTemplate}»`}
                     onChange={(e) => {
                         const v = e.target.value;
                         setValue(v === '' ? null : v);
