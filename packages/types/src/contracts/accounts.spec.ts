@@ -72,6 +72,11 @@ describe('UpdateAccountSchema', () => {
         expect(r.success).toBe(true);
     });
 
+    it('accepts slug update (Sprint 15 editable vanity)', () => {
+        const r = UpdateAccountSchema.safeParse({ slug: 'mono-cafe' });
+        expect(r.success).toBe(true);
+    });
+
     it.each(['simple', 'with-month', 'with-year', 'with-purpose'])(
         'accepts invoiceSlugPresetDefault=%s update',
         (preset) => {
@@ -89,7 +94,9 @@ describe('UpdateAccountSchema', () => {
         expect(r.success).toBe(true);
     });
 
-    it.each(['iban', 'slug', 'businessId', 'bankCode', 'id', 'createdAt'])(
+    // Sprint 15 — `slug` став editable vanity-string, тож більше не у
+    // immutable-списку (перевіряється у тесті accepts slug-update нижче).
+    it.each(['iban', 'businessId', 'bankCode', 'id', 'createdAt'])(
         'rejects immutable field %s через .strict()',
         (field) => {
             const r = UpdateAccountSchema.safeParse({ [field]: 'whatever' });
@@ -240,6 +247,7 @@ describe('AccountWithCountsSchema', () => {
         iban: VALID_IBAN,
         name: 'ПриватБанк •6001',
         slug: 'aB3xQ9k7',
+        slugLower: 'ab3xq9k7',
         bankCode: 'privatbank' as const,
         invoiceSlugPresetDefault: null,
         deletedAt: null,

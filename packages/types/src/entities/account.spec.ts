@@ -6,6 +6,7 @@ const VALID_ACCOUNT = {
     iban: 'UA213223130000026007233566001',
     name: 'ПриватБанк •6001',
     slug: 'aB3xQ9k7',
+    slugLower: 'ab3xq9k7',
     bankCode: 'privatbank' as const,
     invoiceSlugPresetDefault: null,
     deletedAt: null,
@@ -178,31 +179,36 @@ describe('accountNameSchema', () => {
 });
 
 describe('accountSlugSchema', () => {
-    it.each(['aB3xQ9k7', 'ABCDEFGH', '12345678', 'a1b2c3d4'])(
-        'parses valid 8-char alphanum slug "%s"',
-        (slug) => {
-            expect(accountSlugSchema.safeParse(slug).success).toBe(true);
-        }
-    );
+    // Sprint 15 — slug став редаговуваним vanity-string 3-63 chars (дзеркало
+    // businessSlugSchema), а не immutable 8-char tail. Дефіс — валідний
+    // роздільник між alphanumeric-сегментами.
+    it.each([
+        'aB3xQ9k7',
+        'ABCDEFGH',
+        '12345678',
+        'a1b2c3d4',
+        'mono-cafe',
+        'aB3xQ-k7',
+        'abc',
+    ])('parses valid alphanum slug "%s"', (slug) => {
+        expect(accountSlugSchema.safeParse(slug).success).toBe(true);
+    });
 
     it.each([
-        ['aB3xQ9k', '7 chars'],
-        ['aB3xQ9k7q', '9 chars'],
-        ['', 'empty'],
-        ['aB3xQ-k7', 'dash'],
-        ['aB3xQ_k7', 'underscore'],
-        ['aB3xQ k7', 'space'],
-        ['aB3xQ.k7', 'dot'],
-        ['aB3xQ9к7', 'cyrillic char'],
-    ])('rejects "%s" (%s) → INVALID_ACCOUNT_SLUG_FORMAT', (slug) => {
+        ['ab', 'too short (2 chars)', 'INVALID_SLUG_TOO_SHORT'],
+        ['', 'empty', 'INVALID_SLUG_TOO_SHORT'],
+        ['a'.repeat(64), 'too long (64 chars)', 'INVALID_SLUG_TOO_LONG'],
+        ['aB3xQ_k7', 'underscore', 'INVALID_SLUG_FORMAT'],
+        ['aB3xQ k7', 'space', 'INVALID_SLUG_FORMAT'],
+        ['aB3xQ.k7', 'dot', 'INVALID_SLUG_FORMAT'],
+        ['aB3xQ9к7', 'cyrillic char', 'INVALID_SLUG_FORMAT'],
+        ['-abc', 'leading dash', 'INVALID_SLUG_FORMAT'],
+        ['abc-', 'trailing dash', 'INVALID_SLUG_FORMAT'],
+    ])('rejects "%s" (%s)', (slug, _desc, code) => {
         const r = accountSlugSchema.safeParse(slug);
         expect(r.success).toBe(false);
         if (!r.success) {
-            expect(
-                r.error.issues.some(
-                    (i) => i.message === 'INVALID_ACCOUNT_SLUG_FORMAT'
-                )
-            ).toBe(true);
+            expect(r.error.issues.some((i) => i.message === code)).toBe(true);
         }
     });
 
