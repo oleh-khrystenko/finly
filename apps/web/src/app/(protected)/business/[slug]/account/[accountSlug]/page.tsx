@@ -18,6 +18,8 @@ import {
     resetAccountSlug,
     updateAccount,
 } from '@/shared/api';
+import { OwnershipBadge } from '@/entities/business';
+import { useAuthStore } from '@/entities/user';
 import { ENV } from '@/shared/config/env';
 import UiButton from '@/shared/ui/UiButton';
 import UiBreadcrumb from '@/shared/ui/UiBreadcrumb';
@@ -81,6 +83,7 @@ function extractErrorCode(err: unknown): string {
 export default function AccountCabinetPage() {
     const router = useRouter();
     const params = useParams<{ slug: string; accountSlug: string }>();
+    const userId = useAuthStore((s) => s.user?.id);
     const openDeleteConfirm = useDeleteAccountConfirmStore((s) => s.open);
 
     const [data, setData] = useState<LoadedData | null>(null);
@@ -244,13 +247,21 @@ export default function AccountCabinetPage() {
     return (
         <UiPageContainer className="space-y-6 py-10 md:py-14">
             <div className="flex flex-col gap-4">
-                <UiBreadcrumb
-                    items={[
-                        { label: 'Усі отримувачі', href: '/business' },
-                        { label: 'Отримувач', href: `/business/${business.slug}` },
-                        { label: 'Реквізити' },
-                    ]}
-                />
+                <div className="flex items-center justify-between gap-3">
+                    <UiBreadcrumb
+                        items={[
+                            { label: 'Усі отримувачі', href: '/business' },
+                            {
+                                label: 'Отримувач',
+                                href: `/business/${business.slug}`,
+                            },
+                            { label: 'Реквізити' },
+                        ]}
+                    />
+                    {userId && (
+                        <OwnershipBadge isOwner={business.ownerId === userId} />
+                    )}
+                </div>
                 <EditableAccountName
                     account={account}
                     onSave={(name) => onSaveAccount({ name })}

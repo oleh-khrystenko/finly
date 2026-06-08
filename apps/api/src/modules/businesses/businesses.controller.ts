@@ -7,6 +7,7 @@ import {
     HttpStatus,
     Patch,
     Post,
+    Query,
     UseGuards,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -67,14 +68,27 @@ export class BusinessesController {
 
     @Get()
     async list(
-        @CurrentUser() user: UserDocument
+        @CurrentUser() user: UserDocument,
+        // Sprint 18 design — явний контекст списку. Frontend-перемикач
+        // «Власні / Клієнтські» шле `?context=own|client`, щоб GET був
+        // самодостатнім і не залежав від того, чи встиг паралельний
+        // PATCH `worksAsBookkeeper` закомітитись (read-after-write race).
+        // Відсутній/невалідний context → fallback на персистентний флаг
+        // (initial-load, прямий API-виклик).
+        @Query('context') context?: string
     ): Promise<{ data: BusinessWithCounts[] }> {
+        const isBookkeeper =
+            context === 'client'
+                ? true
+                : context === 'own'
+                  ? false
+                  : user.worksAsBookkeeper;
         // Sprint 9 §9.1 — single-aggregation pipeline з двома counters
         // (`accountsCount` + `invoicesCount`) per item. Один Mongo round-trip
         // незалежно від кількості бізнесів.
         const items = await this.businessesService.getOwnedAndManagedWithCounts(
             user._id.toString(),
-            user.worksAsBookkeeper
+            isBookkeeper
         );
         return { data: items };
     }

@@ -9,9 +9,10 @@ import {
 } from '@finly/types';
 import { getApiMessage, listBusinesses } from '@/shared/api';
 import { taxIdFieldConfig } from '@/entities/business';
-import { useAuthStore } from '@/entities/user';
+import { useBookkeeperMode } from '@/entities/user';
 import { usePendingDeletesStore } from '@/features/business-edit/pendingDeletesStore';
 import UiButton from '@/shared/ui/UiButton';
+import UiChipGroup from '@/shared/ui/UiChipGroup';
 import UiNavCard from '@/shared/ui/UiNavCard';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
 import UiPageHeading from '@/shared/ui/UiPageHeading';
@@ -34,11 +35,27 @@ function extractApiErrorCode(err: unknown): string {
  *
  * Empty/filled states з різним текстом для bookkeeper-режиму, щоб ФОП не
  * плутався, чому "його" бізнес не видно.
+ *
+ * Контекст «власні / клієнтські» перемикається segmented-control-ом
+ * (`UiChipGroup`) над списком — `useBookkeeperMode` робить optimistic-flip
+ * `worksAsBookkeeper` + PATCH. Прапор персистентний, тож вибір лишається
+ * дефолтним контекстом на наступний логін.
  */
+// Роль-фреймінг замість «Власні/Клієнтські»: новачок не мусить розуміти
+// модель «отримувачів», він просто відповідає «хто я зараз». Рядок-підказка
+// під табами пояснює активний контекст звичайною мовою (і ненав'язливо
+// вчить, що «отримувач» = бізнес).
+const CONTEXT_OPTIONS = [
+    { value: 'own', label: 'Я власник' },
+    { value: 'client', label: 'Я бухгалтер' },
+];
+const CONTEXT_HINT: Record<'own' | 'client', string> = {
+    own: 'Бізнеси, якими ви володієте.',
+    client: 'Бізнеси клієнтів, для яких ви ведете облік.',
+};
+
 export default function BusinessListPage() {
-    const isBookkeeper = useAuthStore(
-        (s) => s.user?.worksAsBookkeeper ?? false
-    );
+    const { isBookkeeper, setBookkeeper } = useBookkeeperMode();
     const [items, setItems] = useState<BusinessWithCounts[] | null>(null);
     const [error, setError] = useState<string | null>(null);
     // Optimistic delete-removal (Sprint 3 §3.8 §C2). pendingDeletes-store
@@ -46,16 +63,21 @@ export default function BusinessListPage() {
     // фактичний DELETE спрацює.
     const pendingDeleteSlugs = usePendingDeletesStore((s) => s.slugs);
 
-    // Re-fetch при перемиканні toggle — backend filter залежить від
-    // `worksAsBookkeeper` стану user-а. State-mutation тільки в async-callback-ах
-    // (.then/.catch) — синхронний reset перед fetch порушує react-hooks/
-    // set-state-in-effect (React 19) і без нього UX навіть кращий: items
-    // залишаються видимими під час фонового re-fetch (stale-while-revalidate),
-    // без flash спінера. Initial mount — `items === null` показує спінер до
-    // першої відповіді.
+    // Re-fetch при зміні контексту. Передаємо `context` явно у запит, щоб
+    // GET не залежав від того, чи встиг паралельний PATCH `worksAsBookkeeper`
+    // закомітитись — інакше read-after-write race лишав список у старому
+    // контексті. `cancelled`-guard відкидає out-of-order відповіді при швидких
+    // перемиканнях (застосовується лише результат останнього effect-у).
+    //
+    // State-mutation тільки в async-callback-ах (.then/.catch) — синхронний
+    // reset перед fetch порушує react-hooks/set-state-in-effect (React 19) і
+    // без нього UX кращий: items лишаються видимими під час фонового re-fetch
+    // (stale-while-revalidate), без flash спінера. Initial mount —
+    // `items === null` показує спінер до першої відповіді.
+    const context = isBookkeeper ? 'client' : 'own';
     useEffect(() => {
         let cancelled = false;
-        listBusinesses()
+        listBusinesses(context)
             .then((res) => {
                 if (cancelled) return;
                 setItems(res);
@@ -68,7 +90,7 @@ export default function BusinessListPage() {
         return () => {
             cancelled = true;
         };
-    }, [isBookkeeper]);
+    }, [context]);
 
     if (items === null && !error) {
         return (
@@ -94,6 +116,22 @@ export default function BusinessListPage() {
                 )}
             </div>
 
+            {/* Контекст списку: власні бізнеси (ownerId=я) проти клієнтських
+                (ownerless, я в managers). Зміна сегмента = optimistic-flip
+                worksAsBookkeeper + PATCH; backend фільтрує за прапором, тож
+                цей же вибір персиститься як дефолтний контекст. */}
+            <div className="space-y-2">
+                <UiChipGroup
+                    size="sm"
+                    options={CONTEXT_OPTIONS}
+                    value={context}
+                    onChange={(value) => void setBookkeeper(value === 'client')}
+                />
+                <p className="text-muted-foreground text-sm" aria-live="polite">
+                    {CONTEXT_HINT[context]}
+                </p>
+            </div>
+
             {error && (
                 <UiSectionCard title="Не вдалося завантажити">
                     <p className="text-muted-foreground mt-2 text-sm">
@@ -104,9 +142,7 @@ export default function BusinessListPage() {
 
             {isEmpty && !error && <EmptyState isBookkeeper={isBookkeeper} />}
 
-            {!isEmpty && (
-                <BusinessGrid items={visibleItems} isBookkeeper={isBookkeeper} />
-            )}
+            {!isEmpty && <BusinessGrid items={visibleItems} />}
         </UiPageContainer>
     );
 }
@@ -160,33 +196,17 @@ function CreateBusinessButton({ children }: { children: ReactNode }) {
     );
 }
 
-function BusinessGrid({
-    items,
-    isBookkeeper,
-}: {
-    items: BusinessWithCounts[];
-    isBookkeeper: boolean;
-}) {
+function BusinessGrid({ items }: { items: BusinessWithCounts[] }) {
     return (
         <div className="grid gap-4 sm:grid-cols-2">
             {items.map((business) => (
-                <BusinessCard
-                    key={business.id}
-                    business={business}
-                    isBookkeeper={isBookkeeper}
-                />
+                <BusinessCard key={business.id} business={business} />
             ))}
         </div>
     );
 }
 
-function BusinessCard({
-    business,
-    isBookkeeper,
-}: {
-    business: BusinessWithCounts;
-    isBookkeeper: boolean;
-}) {
+function BusinessCard({ business }: { business: BusinessWithCounts }) {
     const typeLabel = BUSINESS_TYPE_LABEL[business.type];
     const { accountsCount, invoicesCount } = business;
     // Type-aware податковий код: «РНОКПП» для individual/fop, «ЄДРПОУ» для
@@ -200,7 +220,6 @@ function BusinessCard({
             href={`/business/${business.slug}${accountsCount > 0 ? '#accounts' : ''}`}
             ariaLabel={`Відкрити отримувача ${business.name}`}
             eyebrow={typeLabel}
-            badge={isBookkeeper ? <CardBadge>Клієнтський</CardBadge> : undefined}
             title={business.name}
             titleAttr={business.name}
             meta={
@@ -232,15 +251,6 @@ function CountValue({ count }: { count: number }) {
     return (
         <span className={count > 0 ? 'text-foreground' : undefined}>
             {count} шт
-        </span>
-    );
-}
-
-/** Нейтральний pill-бейдж для top-right слота навігаційної картки. */
-function CardBadge({ children }: { children: ReactNode }) {
-    return (
-        <span className="bg-muted text-muted-foreground shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium">
-            {children}
         </span>
     );
 }

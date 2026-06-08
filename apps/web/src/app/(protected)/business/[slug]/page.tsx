@@ -16,6 +16,8 @@ import {
     updateBusiness,
 } from '@/shared/api';
 import type { BusinessWithCounts } from '@finly/types';
+import { OwnershipBadge } from '@/entities/business';
+import { useAuthStore } from '@/entities/user';
 import { ENV } from '@/shared/config/env';
 import UiButton from '@/shared/ui/UiButton';
 import UiBreadcrumb from '@/shared/ui/UiBreadcrumb';
@@ -51,6 +53,7 @@ import {
 export default function BusinessSlugPage() {
     const router = useRouter();
     const params = useParams<{ slug: string }>();
+    const userId = useAuthStore((s) => s.user?.id);
     const openDeleteConfirm = useDeleteBusinessConfirmStore((s) => s.open);
 
     const [business, setBusiness] = useState<BusinessWithCounts | null>(null);
@@ -166,12 +169,17 @@ export default function BusinessSlugPage() {
         <UiPageContainer className="space-y-6 py-10 md:py-14">
             {/* Top toolbar: breadcrumb + identity heading. */}
             <div className="flex flex-col gap-4">
-                <UiBreadcrumb
-                    items={[
-                        { label: 'Усі отримувачі', href: '/business' },
-                        { label: 'Отримувач' },
-                    ]}
-                />
+                <div className="flex items-center justify-between gap-3">
+                    <UiBreadcrumb
+                        items={[
+                            { label: 'Усі отримувачі', href: '/business' },
+                            { label: 'Отримувач' },
+                        ]}
+                    />
+                    {userId && (
+                        <OwnershipBadge isOwner={business.ownerId === userId} />
+                    )}
+                </div>
                 <div className="flex min-w-0 flex-col gap-1">
                     <p className="text-muted-foreground text-xl font-semibold tracking-wide uppercase">
                         {typeLabel}

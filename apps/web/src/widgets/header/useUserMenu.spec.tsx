@@ -1,5 +1,5 @@
 import React from 'react';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook } from '@testing-library/react';
 
 const mockUpdateProfile = jest.fn();
 const mockLogout = jest.fn();
@@ -83,93 +83,6 @@ describe('useUserMenu', () => {
             expect(
                 result.current.allItems.find((i) => i.value === 'dashboard')
             ).toBeUndefined();
-        });
-    });
-
-    describe('Sprint 3 §3.5 §E5 — bookkeeper toggle', () => {
-        it('повертає bookkeeperToggle helper з checked=user.worksAsBookkeeper', () => {
-            userState.user = { ...baseUser, worksAsBookkeeper: false };
-            const { result } = renderHook(() => useUserMenu(icons));
-            expect(result.current.bookkeeperToggle).not.toBeNull();
-            expect(result.current.bookkeeperToggle?.checked).toBe(false);
-        });
-
-        it('повертає null коли user не залогінений', () => {
-            userState.user = null;
-            const { result } = renderHook(() => useUserMenu(icons));
-            expect(result.current.bookkeeperToggle).toBeNull();
-        });
-
-        it('description без hover-tooltip — inline-текст (responsive.md §6)', () => {
-            const { result } = renderHook(() => useUserMenu(icons));
-            expect(result.current.bookkeeperToggle?.description).toBe(
-                'вести отримувачів клієнтів, які ще не зареєстровані у Finly'
-            );
-        });
-
-        it('onToggle: optimistic update setUser({...user, worksAsBookkeeper: !current})', async () => {
-            mockUpdateProfile.mockResolvedValue({});
-            userState.user = { ...baseUser, worksAsBookkeeper: false };
-            const { result } = renderHook(() => useUserMenu(icons));
-
-            await act(async () => {
-                await result.current.bookkeeperToggle!.onToggle();
-            });
-
-            // Optimistic flip — миттєвий setUser перед PATCH
-            expect(mockSetUser).toHaveBeenNthCalledWith(1, {
-                ...baseUser,
-                worksAsBookkeeper: true,
-            });
-            // PATCH з новим значенням
-            expect(mockUpdateProfile).toHaveBeenCalledWith({
-                worksAsBookkeeper: true,
-            });
-            // Жодного rollback при success
-            expect(mockSetUser).toHaveBeenCalledTimes(1);
-            expect(mockToastError).not.toHaveBeenCalled();
-        });
-
-        it('onToggle: rollback на error через toast (mapApiCode users)', async () => {
-            const apiError = {
-                response: {
-                    data: { error: { code: 'INTERNAL_ERROR' } },
-                },
-            };
-            mockUpdateProfile.mockRejectedValue(apiError);
-            userState.user = { ...baseUser, worksAsBookkeeper: false };
-            const { result } = renderHook(() => useUserMenu(icons));
-
-            await act(async () => {
-                await result.current.bookkeeperToggle!.onToggle();
-            });
-
-            // 1) Optimistic flip → true
-            expect(mockSetUser).toHaveBeenNthCalledWith(1, {
-                ...baseUser,
-                worksAsBookkeeper: true,
-            });
-            // 2) Rollback → false
-            expect(mockSetUser).toHaveBeenNthCalledWith(2, {
-                ...baseUser,
-                worksAsBookkeeper: false,
-            });
-            // Toast з UA-message
-            expect(mockToastError).toHaveBeenCalled();
-        });
-
-        it('onToggle працює і на ON→OFF (вимкнення режиму)', async () => {
-            mockUpdateProfile.mockResolvedValue({});
-            userState.user = { ...baseUser, worksAsBookkeeper: true };
-            const { result } = renderHook(() => useUserMenu(icons));
-
-            await act(async () => {
-                await result.current.bookkeeperToggle!.onToggle();
-            });
-
-            expect(mockUpdateProfile).toHaveBeenCalledWith({
-                worksAsBookkeeper: false,
-            });
         });
     });
 });

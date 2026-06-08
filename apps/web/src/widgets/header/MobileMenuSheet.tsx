@@ -11,7 +11,6 @@ import type { Theme } from '@/shared/types/settings';
 import { THEME } from '@/shared/types/settings';
 import { Logo } from '@/entities/brand';
 import UiButton from '@/shared/ui/UiButton';
-import UiSwitch from '@/shared/ui/UiSwitch';
 import { UiAvatar } from '@/shared/ui/UiAvatar';
 import {
     UiSheet,
@@ -45,8 +44,7 @@ export default function MobileMenuSheet() {
     const hasNav = navItems.length > 0;
     const activeSection = useHeaderNavStore((s) => s.activeSection);
 
-    const { visibleItems, handleSelect, bookkeeperToggle, initials } =
-        useUserMenu({
+    const { visibleItems, handleSelect, initials } = useUserMenu({
             // Sprint 3 §3.5 — Dashboard → Бізнеси (E2). Briefcase replaces
             // LayoutDashboard як іконка бізнес-сегмента.
             businesses: <Briefcase />,
@@ -153,38 +151,6 @@ export default function MobileMenuSheet() {
                                         )}
                                     </button>
                                 ))}
-
-                            {/* Sprint 3 §3.5 §E5 — bookkeeper toggle.
-                                Inline-опис без hover-tooltip (responsive.md §6).
-                                `<label htmlFor>` обгортає UiSwitch — Headless
-                                UI Switch handle-ить click нативно; вкладений
-                                <button> ламав DOM (nested interactive). */}
-                            {bookkeeperToggle && (
-                                <>
-                                    <div className="bg-border mx-1 my-2 h-px" />
-                                    <label
-                                        htmlFor="mobile-bookkeeper-toggle"
-                                        className="hover:bg-muted/50 -mx-2 flex w-full cursor-pointer items-start justify-between gap-3 rounded-lg px-3 py-2.5 transition-colors"
-                                    >
-                                        <div className="flex min-w-0 flex-col">
-                                            <span className="text-foreground text-sm font-medium">
-                                                {bookkeeperToggle.label}
-                                            </span>
-                                            <span className="text-muted-foreground text-xs">
-                                                {bookkeeperToggle.description}
-                                            </span>
-                                        </div>
-                                        <UiSwitch
-                                            id="mobile-bookkeeper-toggle"
-                                            size="sm"
-                                            checked={bookkeeperToggle.checked}
-                                            onChange={() =>
-                                                void bookkeeperToggle.onToggle()
-                                            }
-                                        />
-                                    </label>
-                                </>
-                            )}
 
                             <div className="bg-border mx-1 my-2 h-px" />
 

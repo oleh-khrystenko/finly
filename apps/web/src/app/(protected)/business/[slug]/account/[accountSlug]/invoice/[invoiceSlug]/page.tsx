@@ -20,6 +20,8 @@ import {
     resetInvoiceSlug,
     updateInvoice,
 } from '@/shared/api';
+import { OwnershipBadge } from '@/entities/business';
+import { useAuthStore } from '@/entities/user';
 import { ENV } from '@/shared/config/env';
 import UiButton from '@/shared/ui/UiButton';
 import UiBreadcrumb from '@/shared/ui/UiBreadcrumb';
@@ -79,6 +81,7 @@ export default function InvoiceCabinetPage() {
         accountSlug: string;
         invoiceSlug: string;
     }>();
+    const userId = useAuthStore((s) => s.user?.id);
     const openDeleteConfirm = useDeleteInvoiceConfirmStore((s) => s.open);
 
     const [data, setData] = useState<LoadedData | null>(null);
@@ -255,17 +258,25 @@ export default function InvoiceCabinetPage() {
     return (
         <UiPageContainer className="space-y-6 py-8 md:py-12">
             <div className="flex flex-col gap-4">
-                <UiBreadcrumb
-                    items={[
-                        { label: 'Усі отримувачі', href: '/business' },
-                        { label: 'Отримувач', href: `/business/${business.slug}` },
-                        {
-                            label: 'Реквізити',
-                            href: `/business/${business.slug}/account/${accountSlug}`,
-                        },
-                        { label: 'Рахунок' },
-                    ]}
-                />
+                <div className="flex items-center justify-between gap-3">
+                    <UiBreadcrumb
+                        items={[
+                            { label: 'Усі отримувачі', href: '/business' },
+                            {
+                                label: 'Отримувач',
+                                href: `/business/${business.slug}`,
+                            },
+                            {
+                                label: 'Реквізити',
+                                href: `/business/${business.slug}/account/${accountSlug}`,
+                            },
+                            { label: 'Рахунок' },
+                        ]}
+                    />
+                    {userId && (
+                        <OwnershipBadge isOwner={business.ownerId === userId} />
+                    )}
+                </div>
                 <h1 className="text-foreground min-w-0 font-mono text-3xl font-bold tracking-tight break-all md:text-4xl">
                     {invoice.slug}
                 </h1>
