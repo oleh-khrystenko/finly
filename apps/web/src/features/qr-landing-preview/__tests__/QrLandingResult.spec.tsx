@@ -263,7 +263,7 @@ describe('QrLandingResult — claim CTA по auth-state', () => {
                 '/business/iva-X3kQ/account/acc-aB12cD34'
             );
             expect(mockToastSuccess).toHaveBeenCalledWith(
-                'Бізнес і рахунок збережено'
+                'Отримувача і реквізити збережено'
             );
             const s = useQrLandingDraftStore.getState();
             expect(s.formData).toEqual({});

@@ -30,9 +30,9 @@ export const ENV = {
     PORT: getEnvVar('PORT'),
     /**
      * Cabinet origin (`finly.com.ua` prod, `localhost:3000` dev). Використовується
-     * для CORS, OAuth callback, magic-link redirect, Stripe success/cancel URL,
-     * email-template посилань на кабінет — усі шляхи, що ведуть авторизованого
-     * ФОП назад у його кабінет.
+     * для CORS, OAuth callback, magic-link redirect, WayForPay return/service
+     * URL, email-template посилань на кабінет — усі шляхи, що ведуть
+     * авторизованого ФОП назад у його кабінет.
      */
     WEB_URL: getEnvVar('WEB_URL'),
     /**
@@ -56,8 +56,13 @@ export const ENV = {
     RESEND_API_KEY: getEnvVar('RESEND_API_KEY'),
     RESEND_FROM_EMAIL: getEnvVar('RESEND_FROM_EMAIL'),
 
-    STRIPE_SECRET_KEY: getEnvVar('STRIPE_SECRET_KEY'),
-    STRIPE_WEBHOOK_SECRET: getEnvVar('STRIPE_WEBHOOK_SECRET'),
+    // WayForPay (Sprint 17) — merchant-реквізити білінгу. `merchantDomainName`
+    // має збігатись з доменом, зареєстрованим у кабінеті WayForPay, інакше
+    // підпис Purchase/CREATE_INVOICE відхиляється. Sandbox: test_merch_n1 /
+    // flk3409refn54t54t*FNJRET.
+    WAYFORPAY_MERCHANT_ACCOUNT: getEnvVar('WAYFORPAY_MERCHANT_ACCOUNT'),
+    WAYFORPAY_MERCHANT_SECRET_KEY: getEnvVar('WAYFORPAY_MERCHANT_SECRET_KEY'),
+    WAYFORPAY_MERCHANT_DOMAIN: getEnvVar('WAYFORPAY_MERCHANT_DOMAIN'),
 
     PAYMENTS_SUBSCRIPTION_ENABLED: subscriptionEnabled,
     PAYMENTS_ONE_OFF_ENABLED: oneOffEnabled,
@@ -103,8 +108,13 @@ export const ENV = {
     ),
 
     ANTHROPIC_API_KEY: getEnvVar('ANTHROPIC_API_KEY'),
-    AI_CHAT_MAX_TOKENS: parseInt(getEnvVar('AI_CHAT_MAX_TOKENS'), 10),
-    AI_CHAT_IP_LIMIT: parseInt(getEnvVar('AI_CHAT_IP_LIMIT'), 10),
+
+    // Public help assistant (Sprint 16) — anon, no executions. Own short
+    // max-tokens (concise answers), own per-IP 24h limit and a global daily
+    // budget circuit-breaker.
+    HELP_CHAT_MAX_TOKENS: parseInt(getEnvVar('HELP_CHAT_MAX_TOKENS'), 10),
+    HELP_CHAT_IP_LIMIT: parseInt(getEnvVar('HELP_CHAT_IP_LIMIT'), 10),
+    HELP_CHAT_DAILY_BUDGET: parseInt(getEnvVar('HELP_CHAT_DAILY_BUDGET'), 10),
 
     // Cloudflare R2 — media storage (presigned uploads, Google avatar re-upload).
     // R2_PUBLIC_URL hostname MUST match NEXT_PUBLIC_STORAGE_HOSTNAME on the web

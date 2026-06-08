@@ -6,9 +6,8 @@ import {
     NotFoundException,
 } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { Connection, Model, Types } from 'mongoose';
+import { ClientSession, Connection, Model, Types } from 'mongoose';
 import {
-    BANK_LABEL,
     RESPONSE_CODE,
     bankCodeFromIban,
     type AccountWithCounts,
@@ -16,36 +15,37 @@ import {
     type UpdateAccountRequest,
 } from '@finly/types';
 
-import { pluralizeUa } from '../../common/intl/pluralize-ua';
 import { isTransactionsUnsupportedError } from '../../common/mongoose/transactions-unsupported';
 import {
     Business,
     type BusinessDocument,
 } from '../businesses/schemas/business.schema';
 import { InvoiceSlugCounter } from '../invoices/schemas/invoice-slug-counter.schema';
+import { InvoiceSlugHistory } from '../invoices/schemas/invoice-slug-history.schema';
 import { Invoice } from '../invoices/schemas/invoice.schema';
 import { AccountSlugGeneratorService } from './account-slug-generator.service';
+import {
+    AccountSlugHistory,
+    AccountSlugHistoryDocument,
+} from './schemas/account-slug-history.schema';
 import { Account, AccountDocument } from './schemas/account.schema';
 
 /**
  * Sprint 9 §9.1 — primary CRUD service для Account.
  *
  * **Create** — `bankCode` stored derived з `bankCodeFromIban(iban)` рівно
- * один раз (§SP-9). Auto-name `"{BANK_LABEL[bankCode]} •{last4}"` або
- * `"Банк •{last4}"` на null-bankCode, якщо клієнт не передав. На 11000 →
+ * один раз (§SP-9). `name` — `dto.name ?? null` (без матеріалізації авто-рядка;
+ * display-лейбл деривується на льоту через `deriveAccountLabel`). На 11000 →
  * розгалуження: collision на `(businessId, slug)` → `ACCOUNT_SLUG_GENERATION_FAILED`,
  * collision на `(businessId, iban)` → `ACCOUNT_IBAN_DUPLICATE`, інакше →
  * safety-net `ACCOUNT_CREATE_FAILED`.
  *
- * **Delete** (§SP-3 race-protection) — атомарно у `session.withTransaction`:
- *  - `Invoice.countDocuments({accountId}, { session })` → `> 0 → 409
- *    ACCOUNT_HAS_INVOICES` (abort tx; повідомлення pre-resolved через
- *    `pluralizeUa`).
- *  - інакше: `Account.deleteOne` + `InvoiceSlugCounter.deleteMany({accountId})`.
- *
- * Race з concurrent `InvoicesService.create` (touch-account у власній tx,
- * symmetric до Sprint 4 touch-business pattern) серіалізується Mongo write-
- * write conflict-detection-ом.
+ * **Delete** — cascade hard-delete atomic-or-nothing у `session.withTransaction`
+ * (дзеркало `BusinessesService.delete`): рахунок видаляється разом з усім
+ * invoice-піддерев'ям (`Invoice` + `InvoiceSlugHistory` + `InvoiceSlugCounter`)
+ * і власною `AccountSlugHistory`. Race з concurrent `InvoicesService.create`
+ * (touch-account у власній tx, symmetric до Sprint 4 touch-business pattern)
+ * серіалізується Mongo write-write conflict-detection-ом.
  */
 @Injectable()
 export class AccountsService {
@@ -54,12 +54,18 @@ export class AccountsService {
     constructor(
         @InjectModel(Account.name)
         private readonly accountModel: Model<AccountDocument>,
+        @InjectModel(AccountSlugHistory.name)
+        private readonly historyModel: Model<AccountSlugHistoryDocument>,
         @InjectModel(Business.name)
         private readonly businessModel: Model<BusinessDocument>,
         @InjectModel(Invoice.name)
         private readonly invoiceModel: Model<{ accountId: Types.ObjectId }>,
         @InjectModel(InvoiceSlugCounter.name)
         private readonly counterModel: Model<{ accountId: Types.ObjectId }>,
+        @InjectModel(InvoiceSlugHistory.name)
+        private readonly invoiceHistoryModel: Model<{
+            accountId: Types.ObjectId;
+        }>,
         @InjectConnection()
         private readonly connection: Connection,
         private readonly slugGenerator: AccountSlugGeneratorService
@@ -93,11 +99,6 @@ export class AccountsService {
         dto: CreateAccountRequest
     ): Promise<AccountDocument> {
         const bankCode = bankCodeFromIban(dto.iban);
-        const last4 = dto.iban.slice(-4);
-        const defaultName =
-            bankCode === null
-                ? `Банк •${last4}`
-                : `${BANK_LABEL[bankCode]} •${last4}`;
         const slug = await this.slugGenerator.generateUnique(business._id);
         const session = await this.connection.startSession();
         try {
@@ -122,8 +123,9 @@ export class AccountsService {
                             businessId: business._id,
                             iban: dto.iban,
                             bankCode,
-                            name: dto.name ?? defaultName,
+                            name: dto.name ?? null,
                             slug,
+                            slugLower: slug.toLowerCase(),
                         },
                     ],
                     { session }
@@ -140,7 +142,7 @@ export class AccountsService {
                         message: 'IBAN already used for this business',
                     });
                 }
-                if (keyPattern.slug === 1) {
+                if (keyPattern.slugLower === 1) {
                     this.logger.error(
                         `Slug collision race for business ${business._id.toString()} slug "${slug}"`
                     );
@@ -228,16 +230,42 @@ export class AccountsService {
     }
 
     /**
-     * Case-sensitive lookup compound `(businessId, slug)`. Повертає `null`
-     * якщо не знайдено — caller (`AccountAccessGuard`) обертає у 404.
+     * Sprint 15 — case-insensitive lookup compound `(businessId, slugLower)`.
+     * Повертає `null` якщо не знайдено — caller (`AccountAccessGuard`) обертає
+     * у 404. **Cabinet-only:** strict (без history-fallback). Public-зона
+     * ходить через `getBySlugOrHistorical`.
      */
     async getBySlug(
         businessId: Types.ObjectId,
         accountSlug: string
     ): Promise<AccountDocument | null> {
         return this.accountModel
-            .findOne({ businessId, slug: accountSlug })
+            .findOne({ businessId, slugLower: accountSlug.toLowerCase() })
             .exec();
+    }
+
+    /**
+     * Sprint 15 — public lookup з history-fallback. Якщо slug не знайдений у
+     * `Account.slugLower` (у межах бізнесу), але є у `AccountSlugHistory`
+     * (rename у межах TTL), повертає **поточний** account. Caller (public
+     * controller) віддає view з canonical `account.slug`; SC ловить mismatch
+     * і робить `permanentRedirect()`. Extra query лише на cache-miss old-slug.
+     */
+    async getBySlugOrHistorical(
+        businessId: Types.ObjectId,
+        accountSlug: string
+    ): Promise<AccountDocument | null> {
+        const slugLower = accountSlug.toLowerCase();
+        const account = await this.accountModel
+            .findOne({ businessId, slugLower })
+            .exec();
+        if (account) return account;
+        const historyEntry = await this.historyModel
+            .findOne({ businessId, slugLower })
+            .lean<{ accountId: Types.ObjectId }>()
+            .exec();
+        if (!historyEntry) return null;
+        return this.accountModel.findById(historyEntry.accountId).exec();
     }
 
     async countInvoices(accountId: Types.ObjectId): Promise<number> {
@@ -267,10 +295,25 @@ export class AccountsService {
         if (Object.keys(dto).length === 0) {
             return account;
         }
+
+        // Sprint 15 — slug-rename detection by lowercase різниця. Case-only
+        // зміна (`slugLower` незмінний) йде звичайним шляхом: оновлюємо display
+        // `slug`, history-entry не потрібен.
+        const renaming =
+            dto.slug !== undefined &&
+            dto.slug.toLowerCase() !== account.slugLower;
+        if (renaming) {
+            return this.renameAndUpdate(account, dto);
+        }
+
+        const setPayload: Record<string, unknown> = { ...dto };
+        if (dto.slug !== undefined) {
+            setPayload.slugLower = dto.slug.toLowerCase();
+        }
         const updated = await this.accountModel
             .findOneAndUpdate(
                 { _id: account._id },
-                { $set: dto },
+                { $set: setPayload },
                 { new: true, runValidators: true }
             )
             .exec();
@@ -288,42 +331,182 @@ export class AccountsService {
     }
 
     /**
-     * §SP-3 — атомарно у `session.withTransaction`:
-     *  1. `Invoice.countDocuments({accountId}, { session })` → > 0 throw
-     *     409 `ACCOUNT_HAS_INVOICES` (abort tx);
-     *  2. `Account.deleteOne` + `InvoiceSlugCounter.deleteMany({accountId})`.
+     * Sprint 15 — slug-rename у TX (дзеркало `BusinessesService`):
+     *  1. pre-write resolve uniqueness `(businessId, slugLower)` проти живих
+     *     account-ів та history іншого account-у (self-history дозволено для
+     *     revert);
+     *  2. delete self-history-entry `slugLower=newLower` (revert re-claim);
+     *  3. insert старого slug у history (anti-squatting + 308-redirect grace);
+     *  4. `$set` нових `slug + slugLower + …rest dto`.
      *
-     * Concurrent `InvoicesService.create` (touch-account у власній tx,
-     * symmetric Sprint 4 touch-business) → Mongo write-write conflict
-     * serialize-ить два TX: або create-touch виграє і delete-tx retry-неться
-     * (увидить count=1 і кине 409), або delete-tx виграє і create-tx
-     * matchedCount=0 → 404.
-     *
-     * Replica-set requirement — без змін від Sprint 4. На standalone Mongo
-     * → 500 `TRANSACTION_REQUIRES_REPLICA_SET`.
+     * 11000 на будь-якому unique-індексі (concurrent rename) → `SLUG_TAKEN`.
      */
-    async delete(account: AccountDocument): Promise<void> {
+    private async renameAndUpdate(
+        account: AccountDocument,
+        dto: UpdateAccountRequest
+    ): Promise<AccountDocument> {
+        const businessId = account.businessId;
+        const oldLower = account.slugLower;
+        const newLower = dto.slug!.toLowerCase();
+
+        await this.assertSlugAvailable(businessId, account._id, newLower);
+
+        const setPayload: Record<string, unknown> = {
+            ...dto,
+            slugLower: newLower,
+        };
+
+        const session = await this.connection.startSession();
+        try {
+            let updated: AccountDocument | null = null;
+            await session.withTransaction(async () => {
+                updated = await this.runRenameInsideTx(
+                    account._id,
+                    businessId,
+                    oldLower,
+                    newLower,
+                    setPayload,
+                    session
+                );
+            });
+            return updated!;
+        } catch (err) {
+            if (isDuplicateKeyError(err)) {
+                throw new ConflictException({
+                    code: RESPONSE_CODE.SLUG_TAKEN,
+                    message: 'Account slug already taken in this business',
+                });
+            }
+            if (isTransactionsUnsupportedError(err)) {
+                this.logger.error(
+                    `Account slug rename failed: replica-set required. Account ${account._id.toString()}. Original: ${
+                        err instanceof Error ? err.message : String(err)
+                    }`
+                );
+                throw new InternalServerErrorException({
+                    code: RESPONSE_CODE.TRANSACTION_REQUIRES_REPLICA_SET,
+                    message:
+                        'Account slug rename requires Mongo replica-set; check MONGODB_URI',
+                });
+            }
+            throw err;
+        } finally {
+            await session.endSession();
+        }
+    }
+
+    private async runRenameInsideTx(
+        accountId: Types.ObjectId,
+        businessId: Types.ObjectId,
+        oldLower: string,
+        newLower: string,
+        setPayload: Record<string, unknown>,
+        session: ClientSession
+    ): Promise<AccountDocument> {
+        await this.historyModel
+            .deleteMany({ businessId, slugLower: newLower }, { session })
+            .exec();
+        await this.historyModel.create(
+            [{ businessId, accountId, slugLower: oldLower }],
+            { session }
+        );
+        const updated = await this.accountModel
+            .findOneAndUpdate(
+                { _id: accountId },
+                { $set: setPayload },
+                { new: true, runValidators: true, session }
+            )
+            .exec();
+        if (updated) return updated;
+        throw new NotFoundException({
+            code: RESPONSE_CODE.ACCOUNT_NOT_FOUND,
+            message: 'Account disappeared between resolve and rename',
+        });
+    }
+
+    /**
+     * Скидання slug-у рахунку на свіжий випадковий (дзеркало
+     * `BusinessesService.resetSlug`). Початковий random-tail не зберігається —
+     * "скидання" генерує новий унікальний slug у межах бізнесу і проганяє через
+     * `update`, що заходить у rename-TX (history + anti-squatting). Reserved-
+     * check рахунку не потрібен (вкладений сегмент, §account-slug-generator).
+     */
+    async resetSlug(account: AccountDocument): Promise<AccountDocument> {
+        const newSlug = await this.slugGenerator.generateUnique(
+            account.businessId
+        );
+        return this.update(account, { slug: newSlug });
+    }
+
+    private async assertSlugAvailable(
+        businessId: Types.ObjectId,
+        accountId: Types.ObjectId,
+        newLower: string
+    ): Promise<void> {
+        const [liveClash, historyClash] = await Promise.all([
+            this.accountModel.exists({
+                businessId,
+                slugLower: newLower,
+                _id: { $ne: accountId },
+            }),
+            this.historyModel.exists({
+                businessId,
+                slugLower: newLower,
+                accountId: { $ne: accountId },
+            }),
+        ]);
+        if (liveClash || historyClash) {
+            throw new ConflictException({
+                code: RESPONSE_CODE.SLUG_TAKEN,
+                message: 'Account slug already taken in this business',
+            });
+        }
+    }
+
+    /**
+     * Cascade hard-delete рахунку **atomic-or-nothing через `withTransaction`**
+     * (дзеркало `BusinessesService.delete`, рівнем нижче). Видаляє увесь
+     * invoice-піддерев'я рахунку разом з ним:
+     *  1. `Invoice.deleteMany({accountId})`;
+     *  2. `InvoiceSlugHistory.deleteMany({accountId})` — без cleanup-у history-
+     *     entries блокували б slug у anti-squatting до TTL і давали б orphan
+     *     history-hit lookup-и на public hits після delete;
+     *  3. `InvoiceSlugCounter.deleteMany({accountId})` — counter-namespace;
+     *  4. `AccountSlugHistory.deleteMany({accountId})` — власна rename-history;
+     *  5. `Account.deleteOne`.
+     *
+     * **Race з concurrent `InvoicesService.create`.** Create тримає власну tx і
+     * touch-ає account-документ (write-intent); цей delete завершується
+     * `accountModel.deleteOne({_id})` на тому самому документі → Mongo write-
+     * write conflict серіалізує два TX: або create виграє і delete-tx
+     * retry-неться (deleteMany побачить новий рахунок і видалить його теж), або
+     * delete виграє і create на retry бачить matchedCount=0 → 404. Orphan-state
+     * неможливий.
+     *
+     * **Pre-count поза транзакцією** — `affectedInvoices` у response
+     * інформативний (toast). Stale by ~tick на concurrent-create-у не порушує
+     * atomic-or-nothing (symmetric `BusinessesService.delete`).
+     *
+     * Replica-set requirement: на standalone Mongo → 500
+     * `TRANSACTION_REQUIRES_REPLICA_SET`, жодного delete не виконано.
+     */
+    async delete(
+        account: AccountDocument
+    ): Promise<{ affectedInvoices: number }> {
         const accountId = account._id;
+        const affectedInvoices = await this.invoiceModel.countDocuments({
+            accountId,
+        });
         const session = await this.connection.startSession();
         try {
             await session.withTransaction(async () => {
-                const count = await this.invoiceModel.countDocuments(
+                await this.invoiceModel.deleteMany({ accountId }, { session });
+                await this.invoiceHistoryModel.deleteMany(
                     { accountId },
                     { session }
                 );
-                if (count > 0) {
-                    const invoicesPhrase = pluralizeUa(
-                        count,
-                        'виставлений інвойс',
-                        'виставлені інвойси',
-                        'виставлених інвойсів'
-                    );
-                    throw new ConflictException({
-                        code: RESPONSE_CODE.ACCOUNT_HAS_INVOICES,
-                        message: `Цей рахунок має ${invoicesPhrase}. Спочатку видаліть їх або весь бізнес`,
-                    });
-                }
                 await this.counterModel.deleteMany({ accountId }, { session });
+                await this.historyModel.deleteMany({ accountId }, { session });
                 await this.accountModel.deleteOne(
                     { _id: accountId },
                     { session }
@@ -346,6 +529,7 @@ export class AccountsService {
         } finally {
             await session.endSession();
         }
+        return { affectedInvoices };
     }
 }
 

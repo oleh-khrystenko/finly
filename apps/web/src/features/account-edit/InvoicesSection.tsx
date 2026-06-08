@@ -19,8 +19,6 @@ interface Props {
      * `InvoiceCard` для inheritance fallback (`paymentPurpose ?? template`).
      */
     businessPaymentPurposeTemplate: string;
-    /** Public-payment-page origin для побудови copy-link URL. */
-    payPublicOrigin: string;
 }
 
 const PAGE_SIZE = 10;
@@ -75,7 +73,6 @@ export default function InvoicesSection({
     businessSlug,
     accountSlug,
     businessPaymentPurposeTemplate,
-    payPublicOrigin,
 }: Props) {
     const [data, setData] = useState<SectionData | null>(null);
     const [error, setError] = useState<SectionError | null>(null);
@@ -189,17 +186,20 @@ export default function InvoicesSection({
     return (
         <UiSectionCard
             id="invoices"
-            title="Інвойси"
+            title="Рахунки"
             headerRight={
                 visibleItems !== null && visibleItems.length > 0 ? (
                     <UiButton
                         as="link"
                         href={createInvoiceHref}
                         variant="filled"
-                        size="sm"
+                        size="md"
+                        aria-label="Виставити рахунок"
                         IconLeft={<Plus />}
                     >
-                        Виставити інвойс
+                        <span className="hidden sm:inline">
+                            Виставити рахунок
+                        </span>
                     </UiButton>
                 ) : undefined
             }
@@ -211,7 +211,7 @@ export default function InvoicesSection({
             )}
 
             {isErrorCurrent && (
-                <p className="text-destructive py-4 text-sm">
+                <p className="text-destructive py-4 text-base">
                     {error?.message}
                 </p>
             )}
@@ -223,8 +223,8 @@ export default function InvoicesSection({
                 )}
 
             {visibleItems !== null && visibleItems.length > 0 && (
-                <div className="space-y-3">
-                    <div className="grid gap-3 sm:grid-cols-2">
+                <div className="mt-4 space-y-3">
+                    <div className="grid gap-4 sm:grid-cols-2">
                         {visibleItems.map((inv) => (
                             <InvoiceCard
                                 key={inv.id}
@@ -234,7 +234,6 @@ export default function InvoicesSection({
                                 businessPaymentPurposeTemplate={
                                     businessPaymentPurposeTemplate
                                 }
-                                payPublicOrigin={payPublicOrigin}
                             />
                         ))}
                     </div>
@@ -243,7 +242,7 @@ export default function InvoicesSection({
                             <UiButton
                                 type="button"
                                 variant="outline"
-                                size="sm"
+                                size="md"
                                 onClick={() => void loadMore()}
                                 loading={loadingMore}
                             >
@@ -259,16 +258,16 @@ export default function InvoicesSection({
 
 function EmptyState({ createHref }: { createHref: string }) {
     return (
-        <div className="flex flex-col items-center gap-4 py-8 text-center">
-            <div className="bg-muted text-muted-foreground flex size-12 items-center justify-center rounded-full">
-                <FileText className="size-6" />
+        <div className="flex flex-col items-center gap-4 py-10 text-center">
+            <div className="bg-muted text-muted-foreground flex size-14 items-center justify-center rounded-full">
+                <FileText className="size-7" />
             </div>
-            <div className="space-y-1">
-                <p className="text-foreground text-sm font-medium">
-                    Поки немає виставлених інвойсів
+            <div className="space-y-1.5">
+                <p className="text-foreground text-lg font-semibold">
+                    Поки немає виставлених рахунків
                 </p>
-                <p className="text-muted-foreground max-w-sm text-xs">
-                    Натисніть «Виставити інвойс» — клієнт отримає посилання з
+                <p className="text-muted-foreground max-w-sm text-base">
+                    Натисніть «Виставити рахунок» — клієнт отримає посилання з
                     сумою і призначенням, готове для оплати.
                 </p>
             </div>
@@ -276,10 +275,10 @@ function EmptyState({ createHref }: { createHref: string }) {
                 as="link"
                 href={createHref}
                 variant="filled"
-                size="sm"
+                size="md"
                 IconLeft={<Plus />}
             >
-                Виставити інвойс
+                Виставити рахунок
             </UiButton>
         </div>
     );

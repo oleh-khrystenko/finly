@@ -17,6 +17,8 @@ export interface UiSelectProps {
     onChange: (value: string) => void;
     variant?: UiSelectVariant;
     size?: UiSelectSize;
+    /** Розмір лейбла: `sm` (14px, default) або `md` (16px — ритм еталона). */
+    labelSize?: 'sm' | 'md';
     className?: string;
     disabled?: boolean;
     placeholder?: string;

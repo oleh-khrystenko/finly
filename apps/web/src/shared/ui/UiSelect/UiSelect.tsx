@@ -8,7 +8,7 @@ import {
     ListboxOptions,
 } from '@headlessui/react';
 import { Check, ChevronDown } from 'lucide-react';
-import { composeClasses } from '@/shared/lib';
+import { composeClasses, FIELD_LABEL_STYLES } from '@/shared/lib';
 import type { UiSelectProps, UiSelectSize, UiSelectVariant } from './types';
 
 const sizeStyles: Record<UiSelectSize, string> = {
@@ -39,6 +39,7 @@ const UiSelect = forwardRef<HTMLButtonElement, UiSelectProps>((props, ref) => {
         onChange,
         variant = 'outlined',
         size = 'md',
+        labelSize = 'sm',
         className,
         disabled = false,
         placeholder = 'Select an option',
@@ -68,7 +69,10 @@ const UiSelect = forwardRef<HTMLButtonElement, UiSelectProps>((props, ref) => {
                 {label && (
                     <label
                         id={generatedId}
-                        className="text-foreground mb-1 block text-sm font-medium"
+                        className={composeClasses(
+                            'text-foreground',
+                            FIELD_LABEL_STYLES[labelSize]
+                        )}
                     >
                         {label}
                         {required && (

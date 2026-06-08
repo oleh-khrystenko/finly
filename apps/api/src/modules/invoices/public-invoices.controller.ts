@@ -219,10 +219,13 @@ export class PublicInvoicesController {
         account: AccountDocument;
         invoice: InvoiceDocument;
     }> {
-        // Sprint 14 — historical business-slug fallback. SC порівнює
-        // `params.slug !== view.business.slug` (invoice-page line 96) і
-        // робить `permanentRedirect()` зі збереженням account/invoice slugs
-        // (обидва immutable).
+        // Sprint 14/15 — historical-slug fallback на всіх трьох рівнях. SC
+        // порівнює кожен сегмент з canonical (`view.business.slug` /
+        // `view.account.slug` / `view.slug`) і робить один `permanentRedirect()`
+        // на повний canonical URL. Account/invoice slug тепер редаговувані
+        // (Sprint 15), тому теж мають history-fallback. Композиція: rename
+        // рахунку лагодить і вкладені invoice-посилання (сегмент рахунку
+        // резолвиться history-fallback-ом перед пошуком інвойсу).
         const business =
             await this.businessesService.getBySlugOrHistorical(slug);
         if (!business) {
@@ -231,7 +234,7 @@ export class PublicInvoicesController {
                 message: 'Business not found',
             });
         }
-        const account = await this.accountsService.getBySlug(
+        const account = await this.accountsService.getBySlugOrHistorical(
             business._id,
             accountSlug
         );
@@ -241,7 +244,7 @@ export class PublicInvoicesController {
                 message: 'Account not found',
             });
         }
-        const invoice = await this.invoicesService.getBySlug(
+        const invoice = await this.invoicesService.getBySlugOrHistorical(
             account._id,
             invoiceSlug
         );

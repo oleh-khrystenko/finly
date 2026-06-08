@@ -1,6 +1,7 @@
 import { Metadata } from 'next';
 import { CURRENT_TERMS_VERSION } from '@finly/types';
 import { Header } from '@/widgets/header';
+import { AppFooter } from '@/widgets/app-footer';
 import UiLink from '@/shared/ui/UiLink';
 import { fetchMetadata } from '@/shared/seo/metadata';
 
@@ -39,7 +40,7 @@ export default function PrivacyPage() {
     return (
         <>
             <Header />
-            <main className="mx-auto max-w-3xl px-6 py-12">
+            <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-12">
                 <h1 className="text-foreground text-3xl font-semibold tracking-tight">
                     Політика конфіденційності
                 </h1>
@@ -77,12 +78,12 @@ export default function PrivacyPage() {
                     </p>
                     <p>
                         <strong className="text-foreground">
-                            Реквізити бізнесу:
+                            Реквізити отримувача:
                         </strong>{' '}
-                        IBAN, ІПН (для ФОП), назва бізнесу, призначення платежу
-                        за замовчуванням, перелік банків, з яких ви приймаєте
-                        оплати. Ці дані ви додаєте самостійно при створенні
-                        бізнесу у вашому кабінеті.
+                        IBAN, ІПН (для ФОП), назва отримувача, призначення
+                        платежу за замовчуванням, перелік банків, з яких ви
+                        приймаєте оплати. Ці дані ви додаєте самостійно при
+                        створенні отримувача у вашому кабінеті.
                     </p>
                     <p>
                         <strong className="text-foreground">
@@ -95,9 +96,9 @@ export default function PrivacyPage() {
                         <strong className="text-foreground">
                             Дані про оплату підписки:
                         </strong>{' '}
-                        обробляються нашим платіжним партнером Stripe; ми
-                        зберігаємо лише ідентифікатори клієнта/підписки, не
-                        реквізити карток.
+                        обробляються нашим платіжним партнером WayForPay; ми
+                        зберігаємо лише ідентифікатор підписки і токен картки для
+                        списань, не повні реквізити карток.
                     </p>
                 </Section>
 
@@ -136,7 +137,8 @@ export default function PrivacyPage() {
                     <ul className="list-disc space-y-1.5 pl-6">
                         <li>
                             виконання договору (надання послуг сервісу) — для
-                            даних акаунту, реквізитів бізнесу, оплати підписки;
+                            даних акаунту, реквізитів отримувача, оплати
+                            підписки;
                         </li>
                         <li>
                             законні інтереси (безпека сервісу, протидія
@@ -162,7 +164,9 @@ export default function PrivacyPage() {
                             публічного імені на момент входу);
                         </li>
                         <li>
-                            <strong className="text-foreground">Stripe</strong>{' '}
+                            <strong className="text-foreground">
+                                WayForPay
+                            </strong>{' '}
                             — обробка платежів за підписку Finly;
                         </li>
                         <li>
@@ -217,7 +221,7 @@ export default function PrivacyPage() {
                     <p>
                         Дані, які ми зобовʼязані зберігати за вимогами
                         законодавства (наприклад, фіскальні платіжні документи
-                        Stripe), зберігаються протягом строків, встановлених
+                        WayForPay), зберігаються протягом строків, встановлених
                         відповідними нормативними актами.
                     </p>
                 </Section>
@@ -267,6 +271,8 @@ export default function PrivacyPage() {
                     </p>
                 </Section>
             </main>
+
+            <AppFooter />
         </>
     );
 }

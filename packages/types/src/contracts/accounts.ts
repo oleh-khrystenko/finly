@@ -11,7 +11,7 @@ import {
     businessSlugSchema,
     businessTypeSchema,
 } from '../entities/business';
-import { slugPresetSchema } from '../enums/slug-preset';
+import { autoSlugModeSchema } from '../enums/slug-preset';
 import { ibanZod } from '../validation/iban';
 
 /**
@@ -46,9 +46,9 @@ const ibanMaskSchema = z
 /**
  * `CreateAccountSchema` — payload з форми створення рахунку.
  *
- * **`name: optional`** — backend auto-generate `"{BANK_LABEL[bankCode]} •{last4}"`
- * якщо клієнт не передав (А4 auto-default-policy). UI у формі показує placeholder
- * "за замовчуванням буде підтягнуто з банку" і дозволяє опціональний override.
+ * **`name: optional`** — якщо клієнт не передав, backend зберігає `null`
+ * (display-лейбл деривується на льоту через `deriveAccountLabel`). UI у формі
+ * показує placeholder з тим, що буде підтягнуто, і дозволяє опціональний override.
  *
  * **`.strict()`** — невідомі ключі (`slug`, `bankCode`, `businessId`,
  * `invoiceSlugPresetDefault`, …) reject-аться ZodValidationPipe → 400
@@ -70,10 +70,16 @@ export type CreateAccountRequest = z.infer<typeof CreateAccountSchema>;
 /**
  * `UpdateAccountSchema` — partial по edit-allowed підмножині.
  *
- * **Editable: `name`, `invoiceSlugPresetDefault`** — обидва обираються ФОП.
+ * **Editable: `name`, `slug`, `invoiceSlugPresetDefault`** — обираються ФОП.
+ * `invoiceSlugPresetDefault` — `AutoSlugMode` (4 пресети + `random`); записується
+ * не лише з cabinet-форми, а й опт-ін галочкою «запам'ятати» у формі створення
+ * рахунку (Sprint 17 §billing-design переніс вибір формату в точки використання).
+ * `slug` (Sprint 15) — редаговуваний vanity-string; backend детектить rename,
+ * пише старе значення в `AccountSlugHistory` (308-redirect + anti-squatting) і
+ * оновлює `slug + slugLower` атомарно. Колізія у межах бізнесу → `SLUG_TAKEN`.
  *
- * **Immutable: `iban`, `slug`, `businessId`, `bankCode`** — навмисно відсутні
- * у shape. `.strict()` reject-ить будь-яку спробу їх передати.
+ * **Immutable: `iban`, `businessId`, `bankCode`** — навмисно відсутні у shape.
+ * `.strict()` reject-ить будь-яку спробу їх передати.
  *
  * **Чому iban immutable (§SP-2):** dual-rationale — payeeSnapshot на існуючих
  * інвойсах frozen на момент create (Sprint 4 review fix), тому зміна iban
@@ -87,7 +93,8 @@ export type CreateAccountRequest = z.infer<typeof CreateAccountSchema>;
 export const UpdateAccountSchema = z
     .object({
         name: accountNameSchema,
-        invoiceSlugPresetDefault: slugPresetSchema.nullable(),
+        slug: accountSlugSchema,
+        invoiceSlugPresetDefault: autoSlugModeSchema.nullable(),
     })
     .partial()
     .strict();
@@ -106,7 +113,7 @@ export type UpdateAccountRequest = z.infer<typeof UpdateAccountSchema>;
  */
 export const PublicAccountListItemSchema = z.object({
     slug: accountSlugSchema,
-    name: accountNameSchema,
+    name: accountNameSchema.nullable(),
     bankCode: bankCodeSchema.nullable(),
     ibanMask: ibanMaskSchema,
 });
@@ -129,7 +136,7 @@ export type PublicAccountListItem = z.infer<typeof PublicAccountListItemSchema>;
  */
 export const PublicAccountViewSchema = z.object({
     slug: accountSlugSchema,
-    name: accountNameSchema,
+    name: accountNameSchema.nullable(),
     bankCode: bankCodeSchema.nullable(),
     ibanMask: ibanMaskSchema,
     business: z.object({
@@ -153,9 +160,8 @@ export type PublicAccountView = z.infer<typeof PublicAccountViewSchema>;
  * `invoicesCount` — derived counter (real-time `Invoice.countDocuments({accountId})`
  * per-request). Не stored field — drift-immune by design.
  *
- * Frontend конусм: `DangerSection` account-page + per-card AccountsSection
- * pre-check на `> 0 → toast.error(ACCOUNT_HAS_INVOICES)` без network-call-у
- * (§SP-3 two-line-of-defense; race-protection — backend `withTransaction`).
+ * Frontend конусм: delete-confirm gate — коли `> 0`, dialog вимагає ввести цю
+ * цифру для підтвердження cascade-видалення вкладених рахунків.
  */
 export const AccountWithCountsSchema = AccountSchema.extend({
     invoicesCount: z.number().int().nonnegative(),

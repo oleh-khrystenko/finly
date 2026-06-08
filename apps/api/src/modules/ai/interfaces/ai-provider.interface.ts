@@ -6,13 +6,6 @@ export interface AiChatMessage {
 }
 
 export interface IAiProvider {
-    readonly contextWindow: number;
-
-    countTokens(
-        messages: AiChatMessage[],
-        systemPrompt: string
-    ): Promise<number>;
-
     streamChat(
         messages: AiChatMessage[],
         systemPrompt: string,

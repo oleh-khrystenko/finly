@@ -1,17 +1,17 @@
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Landmark } from 'lucide-react';
 import {
     BANK_LABEL,
     type BusinessType,
     type PublicAccountListItem,
 } from '@finly/types';
-import UiButton from '@/shared/ui/UiButton';
-import UiQrImage from '@/shared/ui/UiQrImage';
+import UiBankLogo from '@/shared/ui/UiBankLogo';
+import UiLink from '@/shared/ui/UiLink';
+import { formatPayeeName } from '@/entities/business';
 
 interface Props {
     /**
-     * Sprint 7 §SP-5 — `type` лишається у Props для майбутніх SEO-meta /
-     * aria-label use-case-ів. H1-heading його не використовує (тип-нейтральне
-     * формулювання Sprint 7 §SP-5).
+     * Юр-форма отримувача. Формує hero-назву через `formatPayeeName`
+     * (ФОП/ТОВ — частина назви: «ФОП {ПІБ}» / «ТОВ {назва}»).
      */
     type: BusinessType;
     name: string;
@@ -22,8 +22,6 @@ interface Props {
      * 1-Account випадок резолвиться `redirect()` у Server Component перед render-ом.
      */
     accounts: PublicAccountListItem[];
-    /** API endpoint origin для QR-картинки (`/api` для same-origin proxy). */
-    apiBase?: string;
 }
 
 /**
@@ -46,31 +44,34 @@ interface Props {
  * 2-й рахунок → редірект перестане бути коректним). Chrome агресивно кешує 308
  * in-memory навіть з `Cache-Control: no-cache`. Деталі — README §SP-4.
  *
- * **Null-bankCode UI-rule (§SP-9):** на `bankCode === null` bank-label-row
- * ховається повністю — без fallback-у на "Невідомий банк". Symmetric до
- * cabinet `AccountsSection` cards (`features/business-edit/AccountsSection.tsx`).
+ * **Картки реквізитів** — клікабельні рядки (вся картка = `UiLink` на сторінку
+ * реквізитів) з логотипом банку (`UiBankLogo`), ієрархією назва/банк •номер
+ * (symmetric до `UiPayeeCard`) і «Сплатити →» афордансом. **Null-bankCode
+ * UI-rule (§SP-9):** на `bankCode === null`
+ * банк-лейбл drop-ається (логотип → нейтральний плейсхолдер), без fallback-у
+ * на "Невідомий банк"; маска лишається unconditional-disambiguator.
  */
 export default function PublicBusinessView({
-    type: _type,
+    type,
     name,
     slug,
     accounts,
-    apiBase = '/api',
 }: Props) {
+    const payeeName = formatPayeeName(type, name);
+
     if (accounts.length === 0) {
-        return <EmptyState name={name} />;
+        return <EmptyState payeeName={payeeName} />;
     }
 
-    const heading = `Платіж на користь ${name}`;
-    const qrSrc = `${apiBase}/businesses/public/${encodeURIComponent(slug)}/qr/business.png`;
     return (
         <div className="mx-auto max-w-xl space-y-8 px-4 py-8">
-            <header className="space-y-2 text-center">
-                <h1 className="text-foreground text-2xl font-bold tracking-tight md:text-3xl">
-                    {heading}
+            <header className="space-y-1 text-center">
+                <p className="text-muted-foreground text-sm">Отримувач</p>
+                <h1 className="text-foreground text-2xl font-bold tracking-tight break-words md:text-3xl">
+                    {payeeName}
                 </h1>
-                <p className="text-muted-foreground text-sm">
-                    Оберіть рахунок для оплати
+                <p className="text-muted-foreground pt-1 text-sm">
+                    Оберіть реквізити для оплати
                 </p>
             </header>
 
@@ -81,17 +82,6 @@ export default function PublicBusinessView({
                     </li>
                 ))}
             </ul>
-
-            <figure className="space-y-2 text-center">
-                <UiQrImage
-                    src={qrSrc}
-                    alt="QR на цю сторінку"
-                    className="border-border mx-auto w-full max-w-[240px] rounded-md border bg-white"
-                />
-                <figcaption className="text-muted-foreground text-sm">
-                    QR на цю сторінку — для вивіски чи поширення
-                </figcaption>
-            </figure>
         </div>
     );
 }
@@ -104,55 +94,88 @@ function AccountCard({
     account: PublicAccountListItem;
 }) {
     const href = `/${encodeURIComponent(businessSlug)}/${encodeURIComponent(account.slug)}`;
-    // §SP-9 null-fallback rule — bank-label рендериться лише на non-null
-    // bankCode; ibanMask завжди показуємо як disambiguator.
+    const mask = account.ibanMask;
     const bankLabel =
         account.bankCode !== null ? BANK_LABEL[account.bankCode] : null;
-    // Pattern symmetric Sprint 9 §9.2 cabinet `features/business-edit/
-    // AccountsSection > AccountCard`: card — звичайний `<div>`-контейнер,
-    // navigation інкапсульована у `UiButton as="link"` всередині (повна
-    // ширина, повноцінний CTA). Raw `<a href>` на цілу картку був би
-    // порушенням `docs/conventions/ui-primitives.md` §1 (UiButton як єдина
-    // точка стилізації для всіх інтерактивних посилань). UiButton-only
-    // також сидрить single-anchor-per-tap UX (mobile: уся ширина CTA —
-    // комфортна tap-target).
+
+    // Ієрархія реквізитів (symmetric до `UiPayeeCard`): осмислена власна назва
+    // (не дублює банк-лейбл і не auto-default з маскою) — primary, а «банк
+    // •номер» — вторинний рядок. Без назви «банк •номер» сам стає primary.
+    // §SP-9: bank-лейбл drop-ається на null-bankCode; маска — unconditional.
+    const customName =
+        account.name !== null &&
+        account.name !== bankLabel &&
+        !account.name.includes(mask)
+            ? account.name
+            : null;
+    // «банк •номер» одним рядком (маска — mono); єдине джерело «·» немає —
+    // «•» біля номера вже візуально розділяє банк і рахунок.
+    const bankAndMask = (
+        <>
+            {bankLabel ? `${bankLabel} ` : ''}
+            <span className="font-mono">{mask}</span>
+        </>
+    );
+    const primaryText = customName ?? (bankLabel ? `${bankLabel} ${mask}` : mask);
+
+    // Уся картка — клікабельне посилання на сторінку реквізитів. `UiLink`
+    // variant="unstyled" створений саме для card-links (візуал несе вкладений
+    // контейнер) і не має хардкод-`position`, тож на відміну від `UiButton`
+    // коректно віддає всю площу під клік. Видимий «Сплатити →» — афорданс дії;
+    // декоративний (aria-hidden), бо назву посилання несе `aria-label`.
     return (
-        <div className="border-border bg-card flex flex-col gap-4 rounded-lg border p-5">
-            <div className="flex min-w-0 flex-col gap-1">
-                <span className="text-foreground truncate text-xl font-semibold tracking-tight">
-                    {account.name}
-                </span>
-                {bankLabel !== null && (
-                    <span className="text-muted-foreground truncate text-base">
-                        {bankLabel}
-                    </span>
+        <UiLink
+            as="link"
+            href={href}
+            variant="unstyled"
+            aria-label={`Перейти до оплати: ${primaryText}`}
+            className="group border-border bg-card hover:border-primary/40 hover:bg-muted/40 flex items-center gap-4 rounded-xl border p-4 transition-colors"
+        >
+            {account.bankCode !== null ? (
+                <UiBankLogo
+                    bank={account.bankCode}
+                    className="size-12 shrink-0"
+                />
+            ) : (
+                <div
+                    className="border-border bg-muted text-muted-foreground flex size-12 shrink-0 items-center justify-center rounded-lg border"
+                    aria-hidden
+                >
+                    <Landmark className="size-6" />
+                </div>
+            )}
+
+            <div className="min-w-0 flex-1">
+                <p className="text-foreground truncate text-base font-semibold">
+                    {customName ?? bankAndMask}
+                </p>
+                {customName !== null && (
+                    <p className="text-muted-foreground mt-0.5 truncate text-sm">
+                        {bankAndMask}
+                    </p>
                 )}
-                <span className="text-muted-foreground font-mono text-base">
-                    {account.ibanMask}
-                </span>
             </div>
-            <UiButton
-                as="link"
-                href={href}
-                variant="filled"
-                size="md"
-                IconRight={<ArrowRight />}
-                className="w-full justify-center"
+
+            <span
+                className="text-primary inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold"
+                aria-hidden
             >
-                Сплатити
-            </UiButton>
-        </div>
+                До оплати
+                <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+            </span>
+        </UiLink>
     );
 }
 
-function EmptyState({ name }: { name: string }) {
+function EmptyState({ payeeName }: { payeeName: string }) {
     return (
         <div className="mx-auto max-w-xl px-4 py-16 text-center">
-            <h1 className="text-foreground text-2xl font-bold tracking-tight md:text-3xl">
-                Платіж на користь {name}
+            <p className="text-muted-foreground text-sm">Отримувач</p>
+            <h1 className="text-foreground mt-1 text-2xl font-bold tracking-tight break-words md:text-3xl">
+                {payeeName}
             </h1>
             <p className="text-muted-foreground mt-4 text-sm">
-                Власник ще не налаштував жодного рахунку для прийому платежів.
+                Власник ще не налаштував реквізити для прийому платежів.
             </p>
             <p className="text-muted-foreground mt-2 text-sm">
                 Зверніться до отримувача за реквізитами.

@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, ExternalLink } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { AxiosError } from 'axios';
 import { toast } from 'sonner';
 import {
-    BANK_LABEL,
+    deriveAccountLabel,
     type AccountWithCounts,
     type BusinessWithCounts,
     type UpdateAccountRequest,
@@ -15,21 +15,23 @@ import {
     getAccountBySlug,
     getApiMessage,
     getBusinessBySlug,
+    resetAccountSlug,
     updateAccount,
 } from '@/shared/api';
+import { OwnershipBadge } from '@/entities/business';
+import { useAuthStore } from '@/entities/user';
 import { ENV } from '@/shared/config/env';
-import { pluralizeUa } from '@/shared/lib';
 import UiButton from '@/shared/ui/UiButton';
+import UiBreadcrumb from '@/shared/ui/UiBreadcrumb';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
 import {
-    BasicSection,
     DangerSection,
-    IbanSection,
-    InvoiceSettingsSection,
+    EditableAccountName,
     InvoicesSection,
-    QrSection,
+    PublicSection,
+    RequisitesSection,
     scheduleAccountDeleteWithUndo,
     useDeleteAccountConfirmStore,
 } from '@/features/account-edit';
@@ -38,20 +40,17 @@ import {
  * Sprint 9 §9.2 §6 — кабінет рахунку
  * `/business/{slug}/account/{accountSlug}`.
  *
- * **6 секцій:**
- *  1. BasicSection (name inline-edit; bank label readonly)
- *  2. IbanSection (readonly + copy)
- *  3. InvoiceSettingsSection (preset-default dropdown)
- *  4. InvoicesSection (paginated list інвойсів цього account-у)
- *  5. QrSection (рівно 2 NBU QR — primary + legacy)
- *  6. DangerSection (видалення з two-line-of-defense pre-check)
+ * **Секції** (порядок: share-артефакти → робочий контент → довідка → danger):
+ *  1. PublicSection (картка «Публічна сторінка»: посилання + slug-edit +
+ *     QR-коди в одній картці — дзеркало business-page)
+ *  2. InvoicesSection (список інвойсів + gear-меню нумерації у хедері)
+ *  3. RequisitesSection (банк-label + IBAN readonly + copy; об'єднана)
+ *  4. DangerSection (cascade-видалення з confirm-dialog)
  *
- * **Delete-flow** (§SP-3 two-line-of-defense):
- *  - `invoicesCount > 0` (pre-check з вже-fetched `AccountWithCounts`) →
- *    `toast.error(ACCOUNT_HAS_INVOICES)` без 5s-timer і без actual delete.
- *  - `=== 0` → `<DeleteAccountConfirmDialog>` → confirm → `schedule...WithUndo`
- *    з optimistic redirect на `/business/{slug}` (де AccountsSection
- *    автоматично ховає картку через `pendingAccountDeletesStore`).
+ * **Delete-flow:** `<DeleteAccountConfirmDialog>` → confirm → `schedule...WithUndo`
+ * з optimistic redirect на `/business/{slug}` (де AccountsSection автоматично
+ * ховає картку через `pendingAccountDeletesStore`). Коли у реквізитах є рахунки,
+ * dialog вимагає ввести їхню кількість (cascade-gate).
  *
  * **State-discriminator (review fix)** — `data: { paramBiz, paramAcc, business,
  * account } | null` — race-protection при швидкому переході між кабінетами
@@ -84,6 +83,7 @@ function extractErrorCode(err: unknown): string {
 export default function AccountCabinetPage() {
     const router = useRouter();
     const params = useParams<{ slug: string; accountSlug: string }>();
+    const userId = useAuthStore((s) => s.user?.id);
     const openDeleteConfirm = useDeleteAccountConfirmStore((s) => s.open);
 
     const [data, setData] = useState<LoadedData | null>(null);
@@ -146,6 +146,14 @@ export default function AccountCabinetPage() {
                           }
                         : prev
                 );
+                // Sprint 15 — slug-rename змінює canonical URL; старий
+                // `/business/{biz}/account/{old}` стає stale. `replace` веде на
+                // новий slug без stale-запису в history (дзеркало business-page).
+                if (updated.slug !== captured.accountSlug) {
+                    router.replace(
+                        `/business/${captured.businessSlug}/account/${updated.slug}`
+                    );
+                }
                 toast.success('Зміни збережено');
             } catch (err: unknown) {
                 const msg = getApiMessage(extractErrorCode(err), 'accounts');
@@ -153,7 +161,7 @@ export default function AccountCabinetPage() {
                 throw new Error(msg);
             }
         },
-        []
+        [router]
     );
 
     const isDataCurrent =
@@ -169,11 +177,7 @@ export default function AccountCabinetPage() {
         );
     }
 
-    if (
-        error &&
-        error.paramBiz === paramBiz &&
-        error.paramAcc === paramAcc
-    ) {
+    if (error && error.paramBiz === paramBiz && error.paramAcc === paramAcc) {
         return <ErrorPage code={error.code} />;
     }
     if (!data || !isDataCurrent) {
@@ -194,35 +198,44 @@ export default function AccountCabinetPage() {
             accountSlug: account.slug,
         });
 
-    const publicUrl = `${ENV.NEXT_PUBLIC_PAY_PUBLIC_URL.replace(/\/$/, '')}/${business.slug}/${account.slug}`;
-    const bankLabel =
-        account.bankCode !== null ? BANK_LABEL[account.bankCode] : null;
+    const handleResetSlug = async () => {
+        const businessSlug = business.slug;
+        const accountSlug = account.slug;
+        try {
+            const updated = await resetAccountSlug(businessSlug, accountSlug);
+            setData((prev) =>
+                prev &&
+                prev.business.slug === businessSlug &&
+                prev.account.slug === accountSlug
+                    ? {
+                          ...prev,
+                          account: {
+                              ...updated,
+                              invoicesCount: prev.account.invoicesCount,
+                          },
+                      }
+                    : prev
+            );
+            router.replace(`/business/${businessSlug}/account/${updated.slug}`);
+            toast.success('Згенеровано нове посилання');
+        } catch (err) {
+            toast.error(getApiMessage(extractErrorCode(err), 'accounts'));
+        }
+    };
+
     const last4 = account.iban.slice(-4);
-    const headingParenthetical = bankLabel
-        ? ` (${bankLabel} •${last4})`
-        : ` (•${last4})`;
 
     const handleDelete = () => {
-        // §SP-3 first-line-of-defense — frontend pre-check.
-        if (account.invoicesCount > 0) {
-            const phrase = pluralizeUa(
-                account.invoicesCount,
-                'виставлений інвойс',
-                'виставлені інвойси',
-                'виставлених інвойсів'
-            );
-            toast.error(
-                `Цей рахунок має ${phrase}. Спочатку видаліть їх або весь бізнес`
-            );
-            return;
-        }
-        openDeleteConfirm(account, () => {
+        openDeleteConfirm(account, account.invoicesCount, () => {
             scheduleAccountDeleteWithUndo({
                 businessSlug: business.slug,
                 accountSlug: account.slug,
-                name: account.name,
-                onScheduled: () =>
-                    router.replace(`/business/${business.slug}`),
+                name: deriveAccountLabel({
+                    name: account.name,
+                    bankCode: account.bankCode,
+                    ibanMask: `•${last4}`,
+                }),
+                onScheduled: () => router.replace(`/business/${business.slug}`),
                 onCancelled: () =>
                     router.replace(
                         `/business/${business.slug}/account/${account.slug}`
@@ -232,57 +245,43 @@ export default function AccountCabinetPage() {
     };
 
     return (
-        <UiPageContainer className="space-y-6 py-8 md:py-12">
+        <UiPageContainer className="space-y-6 py-10 md:py-14">
             <div className="flex flex-col gap-4">
-                <UiButton
-                    as="link"
-                    href={`/business/${business.slug}#accounts`}
-                    variant="text"
-                    size="sm"
-                    IconLeft={<ArrowLeft />}
-                    className="self-start px-0"
-                >
-                    Назад до бізнесу
-                </UiButton>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                    <h1 className="text-foreground min-w-0 text-2xl font-bold tracking-tight md:text-3xl">
-                        {account.name}
-                        <span className="text-muted-foreground font-normal">
-                            {headingParenthetical}
-                        </span>
-                    </h1>
-                    <UiButton
-                        as="a"
-                        href={publicUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        variant="outline"
-                        size="sm"
-                        IconRight={<ExternalLink />}
-                    >
-                        Відкрити в новій вкладці
-                    </UiButton>
+                <div className="flex items-center justify-between gap-3">
+                    <UiBreadcrumb
+                        items={[
+                            { label: 'Усі отримувачі', href: '/business' },
+                            {
+                                label: 'Отримувач',
+                                href: `/business/${business.slug}`,
+                            },
+                            { label: 'Реквізити' },
+                        ]}
+                    />
+                    {userId && (
+                        <OwnershipBadge isOwner={business.ownerId === userId} />
+                    )}
                 </div>
+                <EditableAccountName
+                    account={account}
+                    onSave={(name) => onSaveAccount({ name })}
+                />
             </div>
 
-            <div className="space-y-4">
-                <BasicSection account={account} onSave={onSaveAccount} />
-                <IbanSection account={account} />
-                <InvoiceSettingsSection
-                    account={account}
-                    onSave={onSaveAccount}
-                />
-                <InvoicesSection
-                    businessSlug={business.slug}
-                    accountSlug={account.slug}
-                    businessPaymentPurposeTemplate={
-                        business.paymentPurposeTemplate
-                    }
-                    payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
-                />
-                <QrSection account={account} businessSlug={business.slug} />
-                <DangerSection onDelete={handleDelete} />
-            </div>
+            <PublicSection
+                account={account}
+                businessSlug={business.slug}
+                payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
+                onSave={onSaveAccount}
+                onResetSlug={handleResetSlug}
+            />
+            <InvoicesSection
+                businessSlug={business.slug}
+                accountSlug={account.slug}
+                businessPaymentPurposeTemplate={business.paymentPurposeTemplate}
+            />
+            <RequisitesSection account={account} />
+            <DangerSection onDelete={handleDelete} />
         </UiPageContainer>
     );
 }
@@ -290,20 +289,20 @@ export default function AccountCabinetPage() {
 function ErrorPage({ code }: { code: string }) {
     const message =
         code === 'ACCOUNT_NOT_FOUND' || code === 'NOT_FOUND'
-            ? 'Рахунок не знайдено'
+            ? 'Реквізити не знайдено'
             : code === 'ACCOUNT_ACCESS_DENIED'
-              ? 'У вас немає доступу до цього рахунку'
+              ? 'У вас немає доступу до цих реквізитів'
               : code === 'BUSINESS_NOT_FOUND'
-                ? 'Бізнес не знайдено'
+                ? 'Отримувача не знайдено'
                 : code === 'BUSINESS_ACCESS_DENIED'
-                  ? 'У вас немає доступу до цього бізнесу'
+                  ? 'У вас немає доступу до цього отримувача'
                   : getApiMessage(code, 'accounts');
 
     return (
         <UiPageContainer className="space-y-6 py-12">
             <UiSectionCard title={message}>
                 <p className="text-muted-foreground mt-2 text-sm">
-                    Поверніться до бізнесу і оберіть інший рахунок.
+                    Поверніться до отримувача і оберіть інші реквізити.
                 </p>
                 <div className="mt-4">
                     <UiButton
@@ -313,7 +312,7 @@ function ErrorPage({ code }: { code: string }) {
                         size="md"
                         IconLeft={<ArrowLeft />}
                     >
-                        До списку бізнесів
+                        До списку отримувачів
                     </UiButton>
                 </div>
             </UiSectionCard>

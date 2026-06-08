@@ -197,7 +197,7 @@ describe('generateMetadata', () => {
         expect(meta.robots).toEqual({ index: false, follow: false });
     });
 
-    it('amount=number → title містить "Рахунок на 1 500,00 ₴"', async () => {
+    it('amount=number → title містить "Рахунок на 1 500,00 грн"', async () => {
         mockLoadPublicInvoiceView.mockResolvedValue(makeView());
 
         const meta = await generateMetadata({

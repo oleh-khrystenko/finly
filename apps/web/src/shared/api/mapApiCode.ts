@@ -40,12 +40,18 @@ const ERRORS: Record<string, MessageDict> = {
         already_subscribed: 'У вас вже є активна підписка.',
         subscription_required: 'Для доступу потрібна активна підписка.',
         no_billing_account: 'Платіжний акаунт не знайдено. Оформіть підписку.',
-    },
-    users: {
-        insufficient_executions:
-            'Недостатньо виконань для цієї операції. Придбайте більше або оновіть підписку.',
-        executions_reservation_active:
-            'Попередній запит ще обробляється. Зачекайте кілька секунд і спробуйте знову.',
+        no_active_subscription: 'Активної підписки немає.',
+        same_plan: 'Ви вже на цьому плані.',
+        invalid_plan: 'Невідомий план. Оновіть сторінку і спробуйте знову.',
+        proration_payment_failed:
+            'Не вдалося провести доплату за апгрейд. План не змінено, кошти не списано.',
+        refund_failed:
+            'Не вдалося оформити повернення. Спробуйте пізніше або зверніться в підтримку.',
+        subscription_operation_failed:
+            'Не вдалося виконати операцію з підпискою. Спробуйте пізніше.',
+        billing_operation_in_progress:
+            'Попередня операція з підпискою ще виконується. Зачекайте і спробуйте знову.',
+        payment_type_disabled: 'Цей тип оплати наразі недоступний.',
     },
     generic: {
         validation_error: 'Перевірте введені дані',
@@ -78,8 +84,8 @@ const ERRORS: Record<string, MessageDict> = {
             'Цей файл не може бути використаний як фото. Спробуйте інше зображення',
     },
     businesses: {
-        business_not_found: 'Бізнес не знайдено',
-        business_access_denied: 'У вас немає доступу до цього бізнесу',
+        business_not_found: 'Отримувача не знайдено',
+        business_access_denied: 'У вас немає доступу до цього отримувача',
         slug_generation_failed:
             'Не вдалося згенерувати посилання. Спробуйте ще раз',
         invalid_vat_for_taxation_system:
@@ -97,7 +103,7 @@ const ERRORS: Record<string, MessageDict> = {
         // обов'язкове taxation-поле на fop / tov через null. UX: "оберіть
         // систему оподаткування" (recovery-path відрізняється від forward-direction).
         taxation_required_for_type:
-            'Оберіть систему оподаткування — вона обов’язкова для цього типу платника',
+            'Оберіть систему оподаткування: вона обов’язкова для цього типу платника',
         // Sprint 7 §7.5 — type-binding на PATCH `requisites.taxId`. Структурно
         // валідний код, але невідповідного формату для типу бізнесу.
         tax_id_format_mismatch_type:
@@ -108,7 +114,7 @@ const ERRORS: Record<string, MessageDict> = {
         // повідомляє користувача коротким inline-text-ом без перерахування
         // дозволених систем (dropdown уже відфільтрований).
         taxation_system_not_allowed_for_type:
-            'Ця система оподаткування недоступна для обраного типу бізнесу',
+            'Ця система оподаткування недоступна для обраного типу отримувача',
         // Sprint 14 — vanity-slug edit. Користувач намагається встановити slug,
         // що співпадає з зарезервованим route-namespace-ом (`qr`, `api`,
         // `host-pay`, …).
@@ -124,25 +130,25 @@ const ERRORS: Record<string, MessageDict> = {
         rate_limit_exceeded:
             'Забагато запитів. Зачекайте хвилину і спробуйте ще раз',
     },
-    // Sprint 9 §SP-1..§SP-3 — accounts UA-messages. ACCOUNT_HAS_INVOICES не тут:
-    // backend pre-resolves повідомлення через pluralizeUa (accounts.service.ts
-    // ConflictException.message) — frontend toast.error читає поле message
-    // напряму, mapApiCode-намір не потрібен.
+    // Sprint 9 §SP-1..§SP-3 — accounts UA-messages.
     accounts: {
-        account_not_found: 'Рахунок не знайдено',
-        account_access_denied: 'У вас немає доступу до цього рахунку',
+        account_not_found: 'Реквізити не знайдено',
+        account_access_denied: 'У вас немає доступу до цих реквізитів',
         account_slug_generation_failed:
-            'Не вдалося згенерувати рахунок. Спробуйте ще раз',
-        account_iban_duplicate: 'Цей IBAN вже доданий до бізнесу',
+            'Не вдалося згенерувати реквізити. Спробуйте ще раз',
+        account_iban_duplicate: 'Цей IBAN вже доданий до отримувача',
         account_create_failed:
-            'Не вдалося створити рахунок. Спробуйте ще раз',
+            'Не вдалося створити реквізити. Спробуйте ще раз',
+        // Sprint 15 — vanity-slug edit рахунку: посилання зайняте іншим
+        // рахунком цього бізнесу (поточний slug або історія перейменувань).
+        slug_taken: 'Це посилання вже зайняте. Оберіть інше',
         rate_limit_exceeded:
             'Забагато запитів. Зачекайте хвилину і спробуйте ще раз',
     },
     invoices: {
-        // Sprint 9 disambiguation — слово "рахунок" відведено під Account
-        // (банківський рахунок). Invoice-домен везде — "інвойс".
-        invoice_not_found: 'Інвойс не знайдено',
+        // У UI "рахунок" — це виставлений документ (Invoice). Банківський
+        // рахунок (Account) у UI називається "реквізити".
+        invoice_not_found: 'Рахунок не знайдено',
         invoice_slug_generation_failed:
             'Не вдалося згенерувати посилання. Спробуйте ще раз',
         invoice_amount_locked_requires_amount:
@@ -152,8 +158,11 @@ const ERRORS: Record<string, MessageDict> = {
         // тож банер "Термін інвойсу минув" рендериться без переходу на цей
         // toast — код використовується тільки якщо клієнт прямо запитає
         // expired QR-image (e.g., cached link, scraping).
-        invoice_expired: 'Термін інвойсу минув',
+        invoice_expired: 'Термін рахунку минув',
         invoice_valid_until_in_past: 'Термін дії не може бути у минулому',
+        // Sprint 15 — vanity-slug edit інвойсу: посилання зайняте іншим
+        // інвойсом цього рахунку (поточний slug або історія перейменувань).
+        slug_taken: 'Це посилання вже зайняте. Оберіть інше',
         rate_limit_exceeded:
             'Забагато запитів. Зачекайте хвилину і спробуйте ще раз',
     },

@@ -9,6 +9,8 @@ export interface UiInputProps extends Omit<
 > {
     variant?: UiInputVariant;
     size?: UiInputSize;
+    /** Розмір лейбла: `sm` (14px, default) або `md` (16px — ритм еталона). */
+    labelSize?: 'sm' | 'md';
     label?: string;
     description?: string;
     error?: string;

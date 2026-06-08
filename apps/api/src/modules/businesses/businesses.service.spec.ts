@@ -13,7 +13,9 @@ import type {
 } from '@finly/types';
 
 import { Account } from '../accounts/schemas/account.schema';
+import { AccountSlugHistory } from '../accounts/schemas/account-slug-history.schema';
 import { InvoiceSlugCounter } from '../invoices/schemas/invoice-slug-counter.schema';
+import { InvoiceSlugHistory } from '../invoices/schemas/invoice-slug-history.schema';
 import { Invoice } from '../invoices/schemas/invoice.schema';
 import { BusinessesService } from './businesses.service';
 import { BusinessSlugHistory } from './schemas/business-slug-history.schema';
@@ -151,6 +153,23 @@ describe('BusinessesService', () => {
                 {
                     provide: getModelToken(InvoiceSlugCounter.name),
                     useValue: counterModel,
+                },
+                {
+                    // Sprint 15 — nested slug-history cascade-cleanup.
+                    provide: getModelToken(AccountSlugHistory.name),
+                    useValue: {
+                        deleteMany: jest
+                            .fn()
+                            .mockResolvedValue({ deletedCount: 0 }),
+                    },
+                },
+                {
+                    provide: getModelToken(InvoiceSlugHistory.name),
+                    useValue: {
+                        deleteMany: jest
+                            .fn()
+                            .mockResolvedValue({ deletedCount: 0 }),
+                    },
                 },
                 {
                     provide: getConnectionToken(),
@@ -659,7 +678,9 @@ describe('BusinessesService', () => {
                             code: 'TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE',
                         },
                     });
-                    expect(businessModel.findOneAndUpdate).not.toHaveBeenCalled();
+                    expect(
+                        businessModel.findOneAndUpdate
+                    ).not.toHaveBeenCalled();
                 }
             );
 
@@ -769,21 +790,26 @@ describe('BusinessesService', () => {
 
             it('happy path: вставляє old slug у history + оновлює business з новим slug+slugLower', async () => {
                 businessModel.exists.mockResolvedValue(null);
-                mockUpdateReturn({ slug: 'new-vanity', slugLower: 'new-vanity' });
+                mockUpdateReturn({
+                    slug: 'new-vanity',
+                    slugLower: 'new-vanity',
+                });
 
                 await service.update('OldSlug', {
                     slug: 'new-vanity',
                 } as UpdateBusinessRequest);
 
                 expect(historyModel.create).toHaveBeenCalledTimes(1);
-                const createArg = historyModel.create.mock.calls[0]![0] as Array<{
+                const createArg = historyModel.create.mock
+                    .calls[0]![0] as Array<{
                     businessId: Types.ObjectId;
                     slugLower: string;
                 }>;
-                expect(createArg[0]!.businessId).toEqual(businessId);
-                expect(createArg[0]!.slugLower).toBe('oldslug');
+                expect(createArg[0].businessId).toEqual(businessId);
+                expect(createArg[0].slugLower).toBe('oldslug');
 
-                const setPayload = businessModel.findOneAndUpdate.mock.calls[0]![1] as {
+                const setPayload = businessModel.findOneAndUpdate.mock
+                    .calls[0]![1] as {
                     $set: { slug: string; slugLower: string };
                 };
                 expect(setPayload.$set.slug).toBe('new-vanity');
@@ -799,7 +825,8 @@ describe('BusinessesService', () => {
                 } as UpdateBusinessRequest);
 
                 expect(historyModel.deleteMany).toHaveBeenCalledTimes(1);
-                const deleteFilter = historyModel.deleteMany.mock.calls[0]![0] as {
+                const deleteFilter = historyModel.deleteMany.mock
+                    .calls[0]![0] as {
                     businessId: Types.ObjectId;
                     slugLower: string;
                 };
@@ -820,7 +847,9 @@ describe('BusinessesService', () => {
             });
 
             it('business-clash (інший Business має цей slugLower) → 409 SLUG_TAKEN', async () => {
-                businessModel.exists.mockResolvedValue({ _id: new Types.ObjectId() });
+                businessModel.exists.mockResolvedValue({
+                    _id: new Types.ObjectId(),
+                });
 
                 await expect(
                     service.update('OldSlug', {

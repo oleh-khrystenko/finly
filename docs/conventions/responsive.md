@@ -26,18 +26,26 @@
 
 ## Стандартні breakpoints
 
-Використовуємо стандартні Tailwind v4 breakpoints без custom-значень:
+Використовуємо стандартні Tailwind v4 breakpoints плюс один санкціонований custom (`xs`):
 
-| Префікс   | Min-width | Цільові пристрої                                |
-| --------- | --------- | ----------------------------------------------- |
-| (default) | 0px       | Mobile portrait (iPhone SE → iPhone 15 Pro Max) |
-| `sm:`     | 640px     | Mobile landscape, малі планшети                 |
-| `md:`     | 768px     | Tablet portrait (iPad mini, iPad)               |
-| `lg:`     | 1024px    | Tablet landscape, малі ноутбуки                 |
-| `xl:`     | 1280px    | Desktop                                         |
-| `2xl:`    | 1536px    | Великі desktop-монітори                         |
+| Префікс   | Min-width | Цільові пристрої                                       |
+| --------- | --------- | ------------------------------------------------------ |
+| (default) | 0px       | Малі mobile portrait (iPhone SE / mini, ≤429px)        |
+| `xs:`     | 430px     | Великі mobile portrait (iPhone Pro Max та ширші)       |
+| `sm:`     | 640px     | Mobile landscape, малі планшети                        |
+| `md:`     | 768px     | Tablet portrait (iPad mini, iPad)                      |
+| `lg:`     | 1024px    | Tablet landscape, малі ноутбуки                        |
+| `xl:`     | 1280px    | Desktop                                                |
+| `2xl:`    | 1536px    | Великі desktop-монітори                                |
 
-**Не вводити custom breakpoints без сильного обґрунтування** — це фрагментує компоненти і ускладнює QA.
+**`xs` (430px)** — єдиний custom breakpoint, заведений у `apps/web/src/shared/styles/themes.css`
+(`--breakpoint-xs`). Призначення: тонкий адаптив у межах телефонів, де `sm` (640px) надто
+далеко — коли елемент влазить на ширших телефонах (≥430), але не на вузьких (375). Типовий
+кейс: компактний попап на 375px, що виростає до повного розміру від 430px.
+
+**Інших custom breakpoints не вводити без сильного обґрунтування** — фрагментація шкали
+ускладнює QA. Якщо реально потрібен новий — додавати у `themes.css` через `@theme` і
+обовʼязково оновлювати цю таблицю.
 
 ## Обов'язкові правила
 
@@ -153,6 +161,7 @@ apps/web/src/
 
 - [ ] Перевірено на 320px (iPhone SE 1) — нема horizontal scroll.
 - [ ] Перевірено на 375×667 (iPhone SE 2) — основний flow працює.
+- [ ] Якщо компонент використовує `xs:` — перевірено перемикання на межі 430px (375 vs 430).
 - [ ] Перевірено на 768×1024 (iPad portrait) — layout масштабується.
 - [ ] Перевірено на 1440×900 (desktop) — layout не "розтягнутий" (max-width контейнери де треба).
 - [ ] Touch targets ≥ 44×44 px на мобільному.

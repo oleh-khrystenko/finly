@@ -9,7 +9,6 @@ import type {
 } from '../interfaces/ai-provider.interface';
 
 const MODEL = 'claude-haiku-4-5-20251001';
-const CONTEXT_WINDOW = 200_000;
 
 function buildRequestShape(
     messages: AiChatMessage[],
@@ -53,23 +52,8 @@ function buildRequestShape(
 export class AnthropicService implements IAiProvider {
     private readonly client: Anthropic;
 
-    readonly contextWindow = CONTEXT_WINDOW;
-
     constructor() {
         this.client = new Anthropic({ apiKey: ENV.ANTHROPIC_API_KEY });
-    }
-
-    async countTokens(
-        messages: AiChatMessage[],
-        systemPrompt: string
-    ): Promise<number> {
-        const shape = buildRequestShape(messages, systemPrompt);
-        const result = await this.client.messages.countTokens({
-            model: MODEL,
-            system: shape.system,
-            messages: shape.messages,
-        });
-        return result.input_tokens;
     }
 
     streamChat(

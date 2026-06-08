@@ -1,10 +1,10 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
 import {
+    AUTO_SLUG_MODES,
     MVP_BANKS,
-    SLUG_PRESETS,
+    type AutoSlugMode,
     type BankCode,
-    type SlugPreset,
 } from '@finly/types';
 
 import { applyJsonTransform } from '../../../common/mongoose/json-transform';
@@ -51,29 +51,40 @@ export class Account {
     bankCode!: BankCode | null;
 
     /**
-     * Display-name 1..60 chars. Auto-default `"{BANK_LABEL[bankCode]} •{last4}"`
-     * (або `"Банк •{last4}"` на null-bankCode) матеріалізується у service на
-     * create, якщо клієнт не передав. Format-валідація (length, byte, NBU-
-     * charset) — Zod write-DTO.
+     * Display-name 1..60 chars, **nullable**. `null` = ФОП не ввів власну назву;
+     * display-лейбл деривується на льоту (`deriveAccountLabel`) як
+     * `"{BANK_LABEL} •{last4}"`. Раніше service матеріалізував цей рядок у поле,
+     * але він дублювався з bank-label/mask-рядками картки (§Sprint-design-fix).
+     * Format-валідація введеного значення (length, byte, NBU-charset) — Zod write-DTO.
      */
-    @Prop({ required: true, trim: true })
-    name!: string;
+    @Prop({ type: String, trim: true, default: null })
+    name!: string | null;
 
     /**
-     * §SP-10 — case-sensitive 8-char A-Za-z0-9 random tail. Compound-unique
-     * `(businessId, slug)` — без `slugLower`-derivative.
+     * Sprint 15 — редаговуваний vanity-slug (раніше §SP-10 immutable 8-char
+     * random). Display case-preserved; uniqueness/lookup на `slugLower`.
+     * Create авто-генерує 8-char tail; ФОП може перейменувати у кабінеті.
      */
     @Prop({ required: true, trim: true })
     slug!: string;
 
     /**
-     * §SP-6 — per-account дефолт slug-preset для нових інвойсів. `null` =
-     * "не визначено", форма створення інвойсу fallback-ить на global system
-     * default `'simple'`. Sprint 9 переніс власника поля з Business на
-     * Account (нумерація інвойсів per-account).
+     * Sprint 15 — lowercase-нормалізована форма `slug` (дзеркало Business).
+     * Compound-unique `(businessId, slugLower)` — case-insensitive uniqueness
+     * у межах бізнесу. Сервіс — єдина точка `slug.toLowerCase()`.
      */
-    @Prop({ type: String, enum: SLUG_PRESETS, default: null })
-    invoiceSlugPresetDefault!: SlugPreset | null;
+    @Prop({ required: true, trim: true, lowercase: true })
+    slugLower!: string;
+
+    /**
+     * §SP-6 — per-account «домашній формат» нумерації нових рахунків. `null` =
+     * "не визначено", форма створення fallback-ить на global system default
+     * `'simple'`. Тип розширено з 4 пресетів до `AutoSlugMode` (+`random`):
+     * випадковий код теж може бути запам'ятаним дефолтом і відтвореним при
+     * перевипуску посилання (Sprint 17 §billing-design).
+     */
+    @Prop({ type: String, enum: AUTO_SLUG_MODES, default: null })
+    invoiceSlugPresetDefault!: AutoSlugMode | null;
 
     @Prop({ type: Date, default: null })
     deletedAt!: Date | null;
@@ -87,11 +98,13 @@ export const AccountSchema = SchemaFactory.createForClass(Account);
 applyJsonTransform(AccountSchema);
 
 /**
- * Sprint 9 §SP-10 — compound-unique `(businessId, slug)` case-sensitive (без
- * `slugLower`-поля, на відміну від Business). Account-slug system-generated
- * 8-char random — case-sensitive lookup має нульовий UX-cost.
+ * Sprint 15 — compound-unique переходить з `(businessId, slug)` на
+ * `(businessId, slugLower)`: case-insensitive uniqueness у межах бізнесу
+ * (дзеркало Business). Vanity-slug редаговуваний, тому регістронезалежність
+ * захищає публічне посилання від case-mismatch. Міграція
+ * `2026-06-03-nested-slug-lower` drop-ає старий `(businessId, slug)` unique.
  */
-AccountSchema.index({ businessId: 1, slug: 1 }, { unique: true });
+AccountSchema.index({ businessId: 1, slugLower: 1 }, { unique: true });
 
 /**
  * Sprint 9 §SP-2 — compound-unique `(businessId, iban)`. Два account-документи

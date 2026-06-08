@@ -52,3 +52,12 @@ export const PAYMENTS_ONE_OFF_ENABLED =
         process.env.NEXT_PUBLIC_PAYMENTS_ONE_OFF_ENABLED,
         'NEXT_PUBLIC_PAYMENTS_ONE_OFF_ENABLED'
     ) === 'true';
+
+// Демо-банер на сторінці білінгу (тестова картка, "кошти не списуються").
+// Тільки для sandbox-стадії WayForPay; у проді МУСИТЬ бути 'false', інакше
+// реальним користувачам показується хибне твердження про відсутність списань.
+export const BILLING_DEMO_MODE =
+    assertEnv(
+        process.env.NEXT_PUBLIC_BILLING_DEMO_MODE,
+        'NEXT_PUBLIC_BILLING_DEMO_MODE'
+    ) === 'true';

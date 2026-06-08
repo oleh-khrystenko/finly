@@ -1,11 +1,19 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 
+import {
+    AccountSlugHistory,
+    AccountSlugHistorySchema,
+} from '../accounts/schemas/account-slug-history.schema';
 import { Account, AccountSchema } from '../accounts/schemas/account.schema';
 import {
     InvoiceSlugCounter,
     InvoiceSlugCounterSchema,
 } from '../invoices/schemas/invoice-slug-counter.schema';
+import {
+    InvoiceSlugHistory,
+    InvoiceSlugHistorySchema,
+} from '../invoices/schemas/invoice-slug-history.schema';
 import { Invoice, InvoiceSchema } from '../invoices/schemas/invoice.schema';
 import { QrModule } from '../qr/qr.module';
 import { UsersModule } from '../users/users.module';
@@ -49,8 +57,16 @@ import { SlugGeneratorService } from './slug-generator.service';
                 schema: BusinessSlugHistorySchema,
             },
             { name: Account.name, schema: AccountSchema },
+            {
+                name: AccountSlugHistory.name,
+                schema: AccountSlugHistorySchema,
+            },
             { name: Invoice.name, schema: InvoiceSchema },
             { name: InvoiceSlugCounter.name, schema: InvoiceSlugCounterSchema },
+            {
+                name: InvoiceSlugHistory.name,
+                schema: InvoiceSlugHistorySchema,
+            },
         ]),
         UsersModule,
         QrModule,

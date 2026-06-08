@@ -299,13 +299,15 @@ describe('proxy', () => {
             expect(response.status).toBe(404);
         });
 
-        it('4b. host=pay + root `/` → 404 (немає landing на pay-host)', () => {
+        it('4b. host=pay + root `/` → rewrite на /host-pay (Branch A0: пояснювач)', () => {
             const req = createMockRequest('/', {
                 host: 'pay.finly.com.ua',
             });
-            const response = proxy(req);
+            proxy(req);
 
-            expect(response.status).toBe(404);
+            expect(mockRewrite).toHaveBeenCalledTimes(1);
+            const url: URL = mockRewrite.mock.calls[0][0];
+            expect(url.pathname).toBe('/host-pay');
         });
 
         it('5. host=pay + /api/businesses/public/foo → matcher excludes (pass-through до Next)', () => {

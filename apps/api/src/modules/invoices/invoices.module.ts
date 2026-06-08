@@ -14,6 +14,10 @@ import {
     InvoiceSlugCounter,
     InvoiceSlugCounterSchema,
 } from './schemas/invoice-slug-counter.schema';
+import {
+    InvoiceSlugHistory,
+    InvoiceSlugHistorySchema,
+} from './schemas/invoice-slug-history.schema';
 import { Invoice, InvoiceSchema } from './schemas/invoice.schema';
 
 /**
@@ -42,6 +46,10 @@ import { Invoice, InvoiceSchema } from './schemas/invoice.schema';
     imports: [
         MongooseModule.forFeature([
             { name: Invoice.name, schema: InvoiceSchema },
+            {
+                name: InvoiceSlugHistory.name,
+                schema: InvoiceSlugHistorySchema,
+            },
             { name: Account.name, schema: AccountSchema },
             { name: InvoiceSlugCounter.name, schema: InvoiceSlugCounterSchema },
         ]),

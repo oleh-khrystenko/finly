@@ -2,7 +2,7 @@
 
 import { useId } from 'react';
 import { Radio, RadioGroup } from '@headlessui/react';
-import { composeClasses } from '@/shared/lib';
+import { composeClasses, FIELD_LABEL_STYLES } from '@/shared/lib';
 import type { UiRadioCardGroupColumns, UiRadioCardGroupProps } from './types';
 
 /**
@@ -58,6 +58,7 @@ function UiRadioCardGroup<TValue extends string>(
         onChange,
         columns,
         label,
+        labelSize = 'sm',
         description,
         error,
         required,
@@ -81,7 +82,10 @@ function UiRadioCardGroup<TValue extends string>(
             {label && (
                 <label
                     id={labelId}
-                    className="text-foreground mb-1 block text-sm font-medium"
+                    className={composeClasses(
+                        'text-foreground',
+                        FIELD_LABEL_STYLES[labelSize]
+                    )}
                 >
                     {label}
                     {required && (

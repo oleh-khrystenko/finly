@@ -1,8 +1,5 @@
-export { default as AmountSection } from './AmountSection';
-export { default as PurposeSection } from './PurposeSection';
-export { default as ValidUntilSection } from './ValidUntilSection';
+export { default as PaymentDetailsCard } from './PaymentDetailsCard';
 export { default as SlugSection } from './SlugSection';
-export { default as InvoiceQrSection } from './InvoiceQrSection';
 export { default as DeleteInvoiceConfirmDialog } from './DeleteInvoiceConfirmDialog';
 export { useDeleteInvoiceConfirmStore } from './deleteInvoiceConfirmStore';
 export {

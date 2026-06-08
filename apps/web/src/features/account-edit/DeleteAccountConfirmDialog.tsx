@@ -1,46 +1,83 @@
 'use client';
 
+import { deriveAccountLabel } from '@finly/types';
 import { useAutoCancelOnRouteChange } from '@/shared/lib';
 import { UiConfirmDialog } from '@/shared/ui/UiConfirmDialog';
+import { UiDangerGateDialog } from '@/shared/ui/UiDangerGateDialog';
 import { useDeleteAccountConfirmStore } from './deleteAccountConfirmStore';
 
 /**
- * Sprint 9 §9.2 — confirm dialog для account-delete-flow. Той самий patern,
- * що Sprint 3 `DeleteBusinessConfirmDialog` і Sprint 4
- * `DeleteInvoiceConfirmDialog`. Зареєстрований у `app/overlays.tsx`.
+ * Confirm dialog для account-delete-flow. Зареєстрований у `app/overlays.tsx`.
+ * Confirm закриває dialog і викликає callback (callsite орхеструє 5s undo +
+ * actual cascade-delete у toast).
  *
- * **Single-action confirm**, без cascade-warning у dialog-і. Pre-check
- * `invoicesCount > 0` живе у callsite (cabinet account-page / per-card
- * AccountsSection) і генерує `toast.error(ACCOUNT_HAS_INVOICES)` без
- * відкриття цього dialog-у. Тобто диалог відкривається тільки коли
- * `invoicesCount === 0` і delete легітимний.
+ * **Дві гілки за `invoicesCount`:**
+ *  - `> 0` → `UiDangerGateDialog`: cascade зносить вкладені рахунки, тому
+ *    кнопка активується лише після того, як користувач вписав їхню кількість.
+ *  - `=== 0` → простий `UiConfirmDialog` (нема чому зникати, крім самих
+ *    реквізитів).
  *
- * **Lifecycle cleanup на route-change** — той самий клас проблеми, що
- * `DeleteBusinessConfirmDialog` / `DeleteInvoiceConfirmDialog`: глобальний
- * store + route-local closure. Без guard-а ФОП міг би відкрити confirm на
- * account A, перейти на account B, натиснути Confirm — і запустити 5s-undo
- * для A з redirect-ом у його cabinet-context.
+ * **Lifecycle cleanup на route-change** — `useAutoCancelOnRouteChange`. Без
+ * guard-а ФОП міг би відкрити confirm на реквізитах A, перейти на B,
+ * натиснути Confirm — і запустити 5s-undo для A у його cabinet-context.
  */
 export default function DeleteAccountConfirmDialog() {
     const isOpen = useDeleteAccountConfirmStore((s) => s.isOpen);
     const account = useDeleteAccountConfirmStore((s) => s.account);
+    const invoicesCount = useDeleteAccountConfirmStore((s) => s.invoicesCount);
     const onConfirm = useDeleteAccountConfirmStore((s) => s.onConfirm);
     const close = useDeleteAccountConfirmStore((s) => s.close);
 
     useAutoCancelOnRouteChange(isOpen, close);
 
+    const label = account
+        ? deriveAccountLabel({
+              name: account.name,
+              bankCode: account.bankCode,
+              ibanMask: `•${account.iban.slice(-4)}`,
+          })
+        : '';
+
+    const confirmAndClose = () => {
+        onConfirm?.();
+        close();
+    };
+
+    if (account && invoicesCount > 0) {
+        return (
+            <UiDangerGateDialog
+                open={isOpen}
+                onOpenChange={(o) => !o && close()}
+                onConfirm={confirmAndClose}
+                title="Видалити реквізити?"
+                description={`«${label}» буде видалено остаточно разом з усіма виставленими рахунками (${invoicesCount} шт). Клієнти, які мають збережене посилання, не зможуть оплатити.`}
+                gates={[
+                    {
+                        label: 'Виставлені рахунки',
+                        expected: String(invoicesCount),
+                    },
+                ]}
+                renderPrompt={(input) => (
+                    <>
+                        Впишіть кількість рахунків {input(0)}, щоб підтвердити
+                        видалення.
+                    </>
+                )}
+                confirmLabel="Видалити"
+                cancelLabel="Скасувати"
+            />
+        );
+    }
+
     return (
         <UiConfirmDialog
             open={isOpen}
             onOpenChange={(o) => !o && close()}
-            onConfirm={() => {
-                onConfirm?.();
-                close();
-            }}
-            title="Видалити рахунок?"
+            onConfirm={confirmAndClose}
+            title="Видалити реквізити?"
             description={
                 account
-                    ? `«${account.name}» буде видалено. Клієнти, які мають збережене посилання, не зможуть оплатити.`
+                    ? `«${label}» буде видалено. Клієнти, які мають збережене посилання, не зможуть оплатити.`
                     : ''
             }
             confirmLabel="Видалити"

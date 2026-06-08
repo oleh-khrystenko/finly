@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import { Header } from '@/widgets/header';
+import { AppFooter } from '@/widgets/app-footer';
 import { AuthGuard } from '@/features/auth';
 import { ClaimLandingDraftHook } from '@/features/qr-landing-preview';
 
@@ -35,7 +36,10 @@ export default function ProtectedLayout({ children }: ProtectedLayoutProps) {
         <>
             <Header />
             <ClaimLandingDraftHook />
-            <AuthGuard>{children}</AuthGuard>
+            <div className="flex flex-1 flex-col">
+                <AuthGuard>{children}</AuthGuard>
+            </div>
+            <AppFooter />
         </>
     );
 }

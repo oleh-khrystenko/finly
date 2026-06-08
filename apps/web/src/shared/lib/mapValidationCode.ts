@@ -39,7 +39,13 @@ const VALIDATION_MESSAGES: Record<string, string> = {
         'Прізвище може містити лише літери, пробіли, дефіси та апострофи',
 
     // --- Реквізити (IBAN, ІПН / ЄДРПОУ) ---
-    INVALID_IBAN: 'Перевірте IBAN: 29 символів, починається з UA',
+    // Два коди (format / checksum), бо причини різні. Format: користувач не
+    // довів номер до 29 символів UA+цифри. Checksum: формат правильний, але
+    // контрольна сума MOD-97 не зійшлася (десь описка в цифрі). Для checksum
+    // НЕ можна писати «має бути 29 символів», бо людина це вже виконала.
+    INVALID_IBAN_FORMAT: 'Здається, номер IBAN неповний або введений з помилкою. Перевірте його',
+    INVALID_IBAN_CHECKSUM:
+        'Номер IBAN недійсний. Звірте кожну цифру з реквізитами: найчастіше це описка в одній цифрі',
     INVALID_TAX_ID: 'Перевірте РНОКПП: рівно 10 цифр',
     // Sprint 7 §7.1 — структурна перевірка ЄДРПОУ для tov / organization.
     INVALID_LEGAL_TAX_ID: 'Перевірте ЄДРПОУ: рівно 8 цифр',
@@ -69,7 +75,7 @@ const VALIDATION_MESSAGES: Record<string, string> = {
         'Призначення містить символи, які не підтримує платіжний QR-код. Використовуйте лише букви, цифри та звичайну пунктуацію',
 
     // --- Сума інвойсу ---
-    INVALID_AMOUNT_OVERFLOW: 'Сума занадто велика. Максимум 999 999 999.99 ₴',
+    INVALID_AMOUNT_OVERFLOW: 'Сума занадто велика. Максимум 999 999 999,99 грн',
     AMOUNT_LOCKED_REQUIRES_AMOUNT:
         'Заблокувати редагування суми можна лише при заданій сумі',
     INVALID_AMOUNT_FORMAT: 'Введіть число (наприклад, 1500 або 1500,50)',
@@ -83,7 +89,7 @@ const VALIDATION_MESSAGES: Record<string, string> = {
         'Дозволені лише латинські літери, цифри та дефіси (без пробілів, кирилиці й символів)',
 
     // --- Людська частина invoice-slug-у ---
-    INVALID_HUMAN_SLUG_PART_LENGTH: 'Назва рахунку — від 1 до 60 символів',
+    INVALID_HUMAN_SLUG_PART_LENGTH: 'Назва рахунку має бути від 1 до 60 символів',
     INVALID_HUMAN_SLUG_PART_FORMAT:
         'Лише малі латинські літери, цифри та дефіси (без пробілів)',
 
@@ -109,13 +115,13 @@ const VALIDATION_MESSAGES: Record<string, string> = {
     // і 2 єдиного податку — виключно для ФОП. Inline-помилка під полем
     // "Система оподаткування" у wizard-step і edit-section.
     TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE:
-        'Ця система оподаткування недоступна для обраного типу бізнесу',
+        'Ця система оподаткування недоступна для обраного типу отримувача',
 
     // --- Single-form /business/new (BusinessCreateForm) cross-field ---
     // Коди емітяться superRefine-ом форми, не entity-Zod-схемами з
     // `@finly/types`. Видимі лише у момент створення бізнесу, коли
     // обраний тип fop|tov але користувач ще не торкнув taxation-блок.
-    INVALID_TYPE_REQUIRED: 'Оберіть тип одержувача',
+    INVALID_TYPE_REQUIRED: 'Оберіть тип отримувача',
     TAXATION_REQUIRED_FOR_TYPE: 'Оберіть систему оподаткування',
     INVALID_VAT_REQUIRED: 'Оберіть варіант ПДВ',
 };

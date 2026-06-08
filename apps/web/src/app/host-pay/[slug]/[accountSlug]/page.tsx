@@ -81,11 +81,13 @@ export default async function HostPayAccountPage({ params }: Props) {
         notFound();
     }
 
-    // Canonical-redirect ТІЛЬКИ для business-slug (case-insensitive lookup).
-    // Account-slug case-sensitive (§SP-10) — на mismatch backend уже повернув
-    // 404 раніше, тут перевірка не потрібна.
-    if (slug !== view.business.slug) {
-        permanentRedirect(`/${view.business.slug}/${accountSlug}`);
+    // Sprint 15 — canonical-redirect на обох сегментах. business-slug
+    // (case-insensitive) і account-slug (редаговуваний vanity, history-fallback
+    // на backend) можуть бути застарілими у збереженому посиланні; будуємо
+    // повний canonical URL і робимо один permanent redirect, якщо хоч один
+    // сегмент відрізняється від поточного.
+    if (slug !== view.business.slug || accountSlug !== view.slug) {
+        permanentRedirect(`/${view.business.slug}/${view.slug}`);
     }
 
     return (

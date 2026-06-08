@@ -21,9 +21,10 @@ import { formatKopecksAsHryvnia } from '@/entities/invoice';
  * middleware-rewrite. Direct-access на cabinet host блокується middleware
  * Branch C → 404. Defense-in-depth: page-handler сам перевіряє host.
  *
- * **Canonical-redirect лише для business-slug** (Sprint 3 §E1). Account-slug
- * і invoice-slug case-sensitive (§SP-10 / Sprint 4 §SP-8) — exact-match-or-404,
- * без redirect.
+ * **Canonical-redirect на всіх трьох сегментах** (Sprint 15). business-slug
+ * (case-insensitive), account-slug і invoice-slug — editable vanity з
+ * history-fallback на backend; якщо хоч один сегмент застарілий, page будує
+ * повний canonical URL і робить один permanent redirect.
  *
  * **`noindex` для всіх invoice-сторінок** (Sprint 4 §4.7): на відміну від
  * бізнесу та account-вивіски, інвойси завжди out-of-search (одноразові,
@@ -91,11 +92,19 @@ export default async function HostPayInvoicePage({ params }: Props) {
         notFound();
     }
 
-    // Canonical-redirect лише для business-slug (case-insensitive lookup).
-    // Account / invoice slug case-sensitive — backend повертає 404 на mismatch.
-    if (slug !== view.business.slug) {
+    // Sprint 15 — canonical-redirect на всіх трьох сегментах. business-slug
+    // (case-insensitive), account-slug і invoice-slug (редаговувані vanity з
+    // history-fallback на backend) можуть бути застарілими; будуємо повний
+    // canonical URL і робимо один permanent redirect, якщо хоч один сегмент
+    // відрізняється. Композиція history-fallback-ів лагодить і вкладені
+    // посилання після rename рахунку.
+    if (
+        slug !== view.business.slug ||
+        accountSlug !== view.account.slug ||
+        invoiceSlug !== view.slug
+    ) {
         permanentRedirect(
-            `/${view.business.slug}/${accountSlug}/${invoiceSlug}`
+            `/${view.business.slug}/${view.account.slug}/${view.slug}`
         );
     }
 
@@ -107,7 +116,6 @@ export default async function HostPayInvoicePage({ params }: Props) {
     return (
         <InvoicePublicView
             amount={view.amount}
-            amountLocked={view.amountLocked}
             paymentPurpose={view.paymentPurpose}
             validUntil={view.validUntil}
             invoiceSlug={view.slug}

@@ -9,7 +9,7 @@ import {
     invoicePaymentPurposeSchema,
     invoiceSlugSchema,
 } from '../entities/invoice';
-import { slugPresetSchema } from '../enums/slug-preset';
+import { autoSlugModeSchema, slugPresetSchema } from '../enums/slug-preset';
 import { PublicAccountListItemSchema } from './accounts';
 
 /**
@@ -127,15 +127,19 @@ export type CreateInvoiceRequest = z.infer<typeof CreateInvoiceSchema>;
 /**
  * `UpdateInvoiceSchema` — partial по edit-allowed підмножині.
  *
- * **`slug`/`slugPreset`/`businessId` навмисно виключено** (Sprint 4 §"Скоуп.Shared"):
- * slug immutable після створення (одноразова сутність — vanity-edit не у роадмапі);
- * `slugPreset` — analytics-поле "який пресет згенерував", post-factum зміна
- * безглузда; `businessId` — структурна prinвʼязка, не редагується.
+ * **`slug` editable (Sprint 15)** — vanity-string; backend детектить rename,
+ * пише старе значення в `InvoiceSlugHistory` (308-redirect + anti-squatting у
+ * межах рахунку) і оновлює `slug + slugLower`. Колізія → `SLUG_TAKEN`.
+ * `slugPreset` / `slugCounter*` лишаються недоторкані (Q3): пресет-нумерація —
+ * історичний слід, лічильник монотонний незалежно від manual rename.
  *
- * **`.strict()`**: невідомі ключі (`slug`, `slugPreset`, `businessId`,
- * `createdAt`, …) — ZodValidationPipe → 400 `VALIDATION_ERROR`. Service не
- * дублює перевірку: TypeScript `UpdateInvoiceRequest` просто не містить цих
- * ключів.
+ * **`slugPreset`/`businessId` навмисно виключено**: `slugPreset` — analytics-поле
+ * "який пресет згенерував", post-factum зміна безглузда; `businessId` —
+ * структурна прив'язка, не редагується.
+ *
+ * **`.strict()`**: невідомі ключі (`slugPreset`, `businessId`, `createdAt`, …)
+ * — ZodValidationPipe → 400 `VALIDATION_ERROR`. Service не дублює перевірку:
+ * TypeScript `UpdateInvoiceRequest` просто не містить цих ключів.
  *
  * **Coupled-refine** активується лише коли клієнт передав ОБИДВА поля у одному
  * PATCH — щоб inline-edit `amountLocked` без `amount` не падав з помилкою
@@ -151,6 +155,7 @@ export const UpdateInvoiceSchema = z
         amountLocked: z.boolean(),
         paymentPurpose: invoicePaymentPurposeSchema.nullable(),
         validUntil: z.coerce.date().nullable(),
+        slug: invoiceSlugSchema,
     })
     .partial()
     .strict()
@@ -166,6 +171,21 @@ export const UpdateInvoiceSchema = z
     );
 
 export type UpdateInvoiceRequest = z.infer<typeof UpdateInvoiceSchema>;
+
+/**
+ * `ResetInvoiceSlugSchema` — body для `POST .../reset-slug`. `mode` — one-time
+ * формат перевипуску (5 авто-режимів, без `explicit`: ручний rename живе у
+ * `UpdateInvoiceSchema.slug`). `optional`: відсутність → service fallback на
+ * `account.invoiceSlugPresetDefault ?? 'simple'`. Перевипуск НЕ змінює дефолт
+ * рахунку — це разовий вибір (Sprint 17 §billing-design).
+ */
+export const ResetInvoiceSlugSchema = z
+    .object({
+        mode: autoSlugModeSchema.optional(),
+    })
+    .strict();
+
+export type ResetInvoiceSlugRequest = z.infer<typeof ResetInvoiceSlugSchema>;
 
 /**
  * `PublicInvoiceSchema` — view-схема public endpoint

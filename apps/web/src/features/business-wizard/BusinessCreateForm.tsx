@@ -338,9 +338,10 @@ export default function BusinessCreateForm({
             className="space-y-6"
             noValidate
         >
-            <div className="border-border bg-card space-y-6 rounded-xl border p-5 md:p-6">
+            <div className="border-border bg-card space-y-6 rounded-xl border p-6 md:p-8">
                 <UiRadioCardGroup<BusinessType>
-                    label="Тип одержувача"
+                    label="Тип отримувача"
+                    labelSize="md"
                     options={TYPE_OPTIONS}
                     value={type}
                     onChange={handleTypeChange}
@@ -351,6 +352,7 @@ export default function BusinessCreateForm({
                     <>
                         <UiInput
                             label={NAME_LABELS[type]}
+                            labelSize="md"
                             placeholder={NAME_PLACEHOLDERS[type]}
                             description={NAME_HELPERS[type]}
                             {...form.register('name')}
@@ -359,6 +361,7 @@ export default function BusinessCreateForm({
 
                         <UiInput
                             label={taxIdConfig.label}
+                            labelSize="md"
                             placeholder={taxIdConfig.placeholder}
                             description={taxIdConfig.description}
                             inputMode="numeric"
@@ -371,6 +374,7 @@ export default function BusinessCreateForm({
                             <>
                                 <UiSelect
                                     label="Система оподаткування"
+                                    labelSize="md"
                                     placeholder="Оберіть систему"
                                     options={taxationSelectOptions}
                                     value={taxationSystem ?? ''}
@@ -387,6 +391,7 @@ export default function BusinessCreateForm({
                                                 taxationSystem
                                             ]
                                         }
+                                        labelSize="md"
                                         options={vatOptions}
                                         value={vatValue}
                                         onChange={handleVatChange}
@@ -405,6 +410,7 @@ export default function BusinessCreateForm({
                             render={({ field, fieldState }) => (
                                 <UiTextarea
                                     label={purposeConfig.label}
+                                    labelSize="md"
                                     placeholder={purposeConfig.placeholder}
                                     description={purposeConfig.description}
                                     value={field.value}

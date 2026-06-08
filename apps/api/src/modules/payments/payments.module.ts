@@ -5,15 +5,19 @@ import { PaymentsService } from './payments.service';
 import { PaymentsCleanupService } from './payments-cleanup.service';
 import { CatalogService } from './catalog.service';
 import { paymentProviderProvider } from './providers/payment-provider.provider';
-import { StripeService } from './providers/stripe.service';
+import { WayForPayService } from './providers/wayforpay/wayforpay.service';
 import {
     ProcessedWebhookEvent,
     ProcessedWebhookEventSchema,
 } from './schemas/processed-webhook-event.schema';
 import {
-    OrphanedProviderCustomer,
-    OrphanedProviderCustomerSchema,
-} from './schemas/orphaned-provider-customer.schema';
+    FailedRecurringRemoval,
+    FailedRecurringRemovalSchema,
+} from './schemas/failed-recurring-removal.schema';
+import {
+    PaymentRecord,
+    PaymentRecordSchema,
+} from './schemas/payment-record.schema';
 import { UsersModule } from '../users/users.module';
 
 @Module({
@@ -24,8 +28,12 @@ import { UsersModule } from '../users/users.module';
                 schema: ProcessedWebhookEventSchema,
             },
             {
-                name: OrphanedProviderCustomer.name,
-                schema: OrphanedProviderCustomerSchema,
+                name: FailedRecurringRemoval.name,
+                schema: FailedRecurringRemovalSchema,
+            },
+            {
+                name: PaymentRecord.name,
+                schema: PaymentRecordSchema,
             },
         ]),
         UsersModule,
@@ -35,7 +43,7 @@ import { UsersModule } from '../users/users.module';
         PaymentsService,
         PaymentsCleanupService,
         CatalogService,
-        StripeService,
+        WayForPayService,
         paymentProviderProvider,
     ],
     exports: [PaymentsService, CatalogService],

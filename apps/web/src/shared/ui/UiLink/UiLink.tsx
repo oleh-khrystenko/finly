@@ -8,6 +8,9 @@ const variantStyles: Record<UiLinkVariant, string> = {
     'primary-underline': 'text-primary underline hover:no-underline',
     muted: 'text-muted-foreground hover:text-foreground',
     subtle: 'underline decoration-muted-foreground/30 underline-offset-4 hover:text-muted-foreground',
+    // Wrapper-only: no text styling, для card-links де візуал несе вкладений
+    // контейнер. Лишає focus-ring з baseStyles.
+    unstyled: '',
 };
 
 const baseStyles =

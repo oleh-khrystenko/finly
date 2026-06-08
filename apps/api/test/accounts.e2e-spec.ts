@@ -264,7 +264,7 @@ describe('Accounts E2E (Sprint 9 §SP-1..§SP-3)', () => {
     }
 
     describe('POST /businesses/me/:slug/accounts', () => {
-        it('§SP-1 — створює account з auto-name "ПриватБанк •6001" з МФО', async () => {
+        it('§SP-1 — створює account без назви → name null (display деривується)', async () => {
             const user = await createUser();
             const businessSlug = await createBusinessFor(user);
 
@@ -278,21 +278,21 @@ describe('Accounts E2E (Sprint 9 §SP-1..§SP-3)', () => {
                 res.body as {
                     data: {
                         iban: string;
-                        bankCode: string;
-                        name: string;
+                        bankCode: string | null;
+                        name: string | null;
                         slug: string;
                     };
                 }
             ).data;
             expect(data.iban).toBe(VALID_IBAN);
-            // МФО 322313 — поза `BANK_MFO_MAP` (тестовий IBAN з random МФО) →
-            // bankCode null → auto-name "Банк •last4".
+            // МФО 322313 — поза `BANK_MFO_MAP` → bankCode null. Назву не
+            // передали → name null (не матеріалізуємо авто-рядок).
             expect(data.bankCode).toBeNull();
-            expect(data.name).toBe('Банк •6001');
+            expect(data.name).toBeNull();
             expect(data.slug).toMatch(/^[A-Za-z0-9]{8}$/);
         });
 
-        it('§SP-1 — auto-name для розпізнаного МФО (privatbank 305299)', async () => {
+        it('§SP-1 — розпізнає МФО у bankCode, name лишається null без override (privatbank 305299)', async () => {
             const user = await createUser();
             const businessSlug = await createBusinessFor(user);
             const ibanWithPrivatMfo = 'UA273052992990004149497786452';
@@ -304,10 +304,10 @@ describe('Accounts E2E (Sprint 9 §SP-1..§SP-3)', () => {
                 .expect(201);
 
             const data = (
-                res.body as { data: { bankCode: string; name: string } }
+                res.body as { data: { bankCode: string; name: string | null } }
             ).data;
             expect(data.bankCode).toBe('privatbank');
-            expect(data.name).toBe('ПриватБанк •6452');
+            expect(data.name).toBeNull();
         });
 
         it('§SP-1 — приймає кастомне name override', async () => {
@@ -494,6 +494,61 @@ describe('Accounts E2E (Sprint 9 §SP-1..§SP-3)', () => {
                 ).data.invoiceSlugPresetDefault
             ).toBe('with-month');
         });
+
+        it('Sprint 15 — slug editable (vanity) + старе посилання редіректить через history', async () => {
+            const user = await createUser();
+            const { businessSlug, accountSlug } = await seedAccount(user);
+
+            const renamed = await supertest(app.getHttpServer())
+                .patch(
+                    `/api/businesses/me/${businessSlug}/accounts/${accountSlug}`
+                )
+                .set('Authorization', bearerFor(user))
+                .send({ slug: 'mono-cafe' })
+                .expect(200);
+            expect((renamed.body as { data: { slug: string } }).data.slug).toBe(
+                'mono-cafe'
+            );
+
+            // Cabinet (strict) — старий slug більше не резолвиться.
+            await supertest(app.getHttpServer())
+                .get(
+                    `/api/businesses/me/${businessSlug}/accounts/${accountSlug}`
+                )
+                .set('Authorization', bearerFor(user))
+                .expect(404);
+
+            // Public — старий slug резолвиться через history у canonical (новий).
+            const publicOld = await supertest(app.getHttpServer())
+                .get(
+                    `/api/businesses/public/${businessSlug}/account/${accountSlug}`
+                )
+                .expect(200);
+            expect(
+                (publicOld.body as { data: { slug: string } }).data.slug
+            ).toBe('mono-cafe');
+        });
+
+        it('Sprint 15 — slug-rename колізія у межах бізнесу → 409 SLUG_TAKEN', async () => {
+            const user = await createUser();
+            const { businessSlug, accountSlug } = await seedAccount(user);
+            // Другий рахунок під тим самим бізнесом.
+            const second = await supertest(app.getHttpServer())
+                .post(`/api/businesses/me/${businessSlug}/accounts`)
+                .set('Authorization', bearerFor(user))
+                .send({ iban: 'UA273052992990004149497786452' })
+                .expect(201);
+            const secondSlug = (second.body as { data: { slug: string } }).data
+                .slug;
+
+            await supertest(app.getHttpServer())
+                .patch(
+                    `/api/businesses/me/${businessSlug}/accounts/${secondSlug}`
+                )
+                .set('Authorization', bearerFor(user))
+                .send({ slug: accountSlug })
+                .expect(409);
+        });
     });
 
     describe('DELETE /businesses/me/:slug/accounts/:accountSlug (§SP-3)', () => {
@@ -522,29 +577,34 @@ describe('Accounts E2E (Sprint 9 §SP-1..§SP-3)', () => {
             return { businessSlug, accountSlug };
         }
 
-        it('§SP-3 — account з 1 інвойсом → 409 ACCOUNT_HAS_INVOICES', async () => {
+        it('account з 1 інвойсом → 200, cascade видаляє рахунок і його інвойси', async () => {
             const user = await createUser();
             const { businessSlug, accountSlug } =
                 await seedAccountAndInvoice(user);
+            const accountBefore = await accountModel.findOne({
+                slug: accountSlug,
+            });
 
             const res = await supertest(app.getHttpServer())
                 .delete(
                     `/api/businesses/me/${businessSlug}/accounts/${accountSlug}`
                 )
                 .set('Authorization', bearerFor(user))
-                .expect(409);
-            expect((res.body as { error: { code: string } }).error.code).toBe(
-                'ACCOUNT_HAS_INVOICES'
-            );
-            // Account і інвойс — недоторкані (atomic-or-nothing).
+                .expect(200);
+            expect(
+                (res.body as { data: { affectedInvoices: number } }).data
+                    .affectedInvoices
+            ).toBe(1);
+
+            // Account і його інвойси — повністю видалені (atomic-or-nothing).
             const accountStill = await accountModel.findOne({
                 slug: accountSlug,
             });
-            expect(accountStill).not.toBeNull();
+            expect(accountStill).toBeNull();
             const invoicesStill = await invoiceModel.countDocuments({
-                accountId: accountStill!._id,
+                accountId: accountBefore!._id,
             });
-            expect(invoicesStill).toBe(1);
+            expect(invoicesStill).toBe(0);
         });
 
         it('account без інвойсів → 200, документ видалено', async () => {
