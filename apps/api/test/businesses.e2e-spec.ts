@@ -26,6 +26,10 @@ import {
     Business,
     BusinessDocument,
 } from '../src/modules/businesses/schemas/business.schema';
+import {
+    BusinessSlugHistory,
+    BusinessSlugHistoryDocument,
+} from '../src/modules/businesses/schemas/business-slug-history.schema';
 import { CURRENT_TERMS_VERSION } from '@finly/types';
 
 // ─── Mock ENV ───
@@ -184,6 +188,7 @@ describe('Businesses E2E', () => {
     let mongo: Awaited<ReturnType<typeof createReplSetMongo>>;
     let userModel: Model<UserDocument>;
     let businessModel: Model<BusinessDocument>;
+    let historyModel: Model<BusinessSlugHistoryDocument>;
     let jwtService: JwtService;
 
     beforeAll(async () => {
@@ -235,6 +240,9 @@ describe('Businesses E2E', () => {
         businessModel = moduleFixture.get<Model<BusinessDocument>>(
             getModelToken(Business.name)
         );
+        historyModel = moduleFixture.get<Model<BusinessSlugHistoryDocument>>(
+            getModelToken(BusinessSlugHistory.name)
+        );
         jwtService = moduleFixture.get(JwtService);
     }, 60_000);
 
@@ -249,6 +257,28 @@ describe('Businesses E2E', () => {
     });
 
     // ─── Helpers ───
+
+    // Sprint 19 — slug-редагування вимагає рівня не нижче brand. Тести rename
+    // створюють користувача з активною підпискою brand.
+    const ACTIVE_BRAND_BILLING = {
+        provider: 'wayforpay',
+        orderReference: null,
+        recToken: null,
+        cardMask: null,
+        planCode: 'brand',
+        currency: 'UAH',
+        subscriptionStatus: 'ACTIVE',
+        providerSubscriptionStatus: null,
+        currentPeriodEnd: null,
+        cancelAtPeriodEnd: false,
+        hasActiveSubscription: true,
+        lastProviderEventAt: null,
+        scheduledPlanCode: null,
+        scheduledChangeDate: null,
+        rebindPendingAt: null,
+        oneOffLevel: null,
+        oneOffAccessUntil: null,
+    };
 
     async function createUser(
         overrides: Partial<UserDocument> = {}
@@ -842,7 +872,7 @@ describe('Businesses E2E', () => {
         });
 
         it('Sprint 14 — vanity-slug edit через PATCH (200): slug перейменовується, старий slugLower звільняється', async () => {
-            const user = await createUser();
+            const user = await createUser({ billing: ACTIVE_BRAND_BILLING });
             const created = await supertest(app.getHttpServer())
                 .post('/api/businesses/me')
                 .set('Authorization', bearerFor(user))
@@ -1133,6 +1163,53 @@ describe('Businesses E2E', () => {
 
             const body = res.body as { error: { code: string } };
             expect(body.error.code).toBe('BUSINESS_NOT_FOUND');
+        });
+
+        it('Sprint 19 — заблокований бізнес гасне публічно (404)', async () => {
+            const user = await createUser();
+            const created = await supertest(app.getHttpServer())
+                .post('/api/businesses/me')
+                .set('Authorization', bearerFor(user))
+                .send(VALID_CREATE_PAYLOAD);
+            const { slug } = (created.body as { data: { slug: string } }).data;
+
+            await businessModel.updateOne(
+                { slugLower: slug.toLowerCase() },
+                { $set: { accessBlockedAt: new Date() } }
+            );
+
+            await supertest(app.getHttpServer())
+                .get(`/api/businesses/public/${slug}`)
+                .expect(404);
+        });
+
+        it('Sprint 19 — lapse-history (redirect:false) не резолвиться публічно (404)', async () => {
+            const user = await createUser();
+            const created = await supertest(app.getHttpServer())
+                .post('/api/businesses/me')
+                .set('Authorization', bearerFor(user))
+                .send(VALID_CREATE_PAYLOAD);
+            const business = (created.body as { data: { id: string } }).data;
+
+            // Старе ім'я на холді без редіректу (як після lapse-reset).
+            await historyModel.create({
+                businessId: new Types.ObjectId(business.id),
+                slugLower: 'staryj-vanity',
+                redirect: false,
+            });
+            await supertest(app.getHttpServer())
+                .get('/api/businesses/public/staryj-vanity')
+                .expect(404);
+
+            // Контроль: redirect:true (добровільний rename) резолвиться у бізнес.
+            await historyModel.create({
+                businessId: new Types.ObjectId(business.id),
+                slugLower: 'redirect-vanity',
+                redirect: true,
+            });
+            await supertest(app.getHttpServer())
+                .get('/api/businesses/public/redirect-vanity')
+                .expect(200);
         });
 
         it('встановлює Cache-Control: public для shared-CDN', async () => {

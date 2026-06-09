@@ -17,6 +17,7 @@ import {
     ProcessedWebhookEventDocument,
 } from './schemas/processed-webhook-event.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
+import { ReconciliationService } from '../businesses/reconciliation.service';
 
 /** Stop retrying after this many failed attempts. */
 const MAX_ATTEMPTS = 5;
@@ -47,7 +48,9 @@ export class PaymentsCleanupService {
         private readonly webhookEventModel: Model<ProcessedWebhookEventDocument>,
 
         @InjectModel(User.name)
-        private readonly userModel: Model<UserDocument>
+        private readonly userModel: Model<UserDocument>,
+
+        private readonly reconciliation: ReconciliationService
     ) {}
 
     @Cron(CronExpression.EVERY_DAY_AT_4AM)
@@ -56,6 +59,43 @@ export class PaymentsCleanupService {
         await this.expireCanceledSubscriptions();
         await this.expirePastDueSubscriptions();
         await this.expireAbandonedRebinds();
+        await this.expireOneOffAccess();
+    }
+
+    /**
+     * Реконсиляція бізнесів кожного зачепленого користувача — best-effort
+     * (per-user, щоб збій одного не зривав решту батча).
+     */
+    private async reconcileUsers(userIds: string[]): Promise<void> {
+        for (const userId of userIds) {
+            try {
+                await this.reconciliation.reconcile(userId);
+            } catch (error) {
+                this.logger.error(
+                    `Reconciliation failed for user ${userId} (deferred)`,
+                    error instanceof Error ? error.stack : String(error)
+                );
+            }
+        }
+    }
+
+    /**
+     * Знімає доступ у користувачів, що підпадають під `filter`, і реконсилює їх
+     * бізнеси під новий (нижчий) рівень. find→updateMany(той самий filter)
+     * зберігає атомарність флипу (реактивований між кроками юзер не матчиться),
+     * а reconcile читає свіжий per-user стан, тож ідемпотентний навіть на
+     * розбіжності зібраних id зі справді оновленими.
+     */
+    private async expireAndReconcile(
+        filter: Record<string, unknown>,
+        set: Record<string, unknown>,
+        label: string
+    ): Promise<void> {
+        const users = await this.userModel.find(filter, { _id: 1 }).lean();
+        if (users.length === 0) return;
+        await this.userModel.updateMany(filter, { $set: set });
+        this.logger.log(`Expired ${users.length} ${label}`);
+        await this.reconcileUsers(users.map((u) => u._id.toString()));
     }
 
     /**
@@ -115,24 +155,18 @@ export class PaymentsCleanupService {
      * (`hasActiveSubscription`) знімаємо самі, коли межа періоду минула.
      */
     private async expireCanceledSubscriptions(): Promise<void> {
-        const result = await this.userModel.updateMany(
+        await this.expireAndReconcile(
             {
                 'billing.hasActiveSubscription': true,
                 'billing.cancelAtPeriodEnd': true,
                 'billing.currentPeriodEnd': { $lt: new Date() },
             },
             {
-                $set: {
-                    'billing.hasActiveSubscription': false,
-                    'billing.subscriptionStatus': SUBSCRIPTION_STATUS.CANCELED,
-                },
-            }
+                'billing.hasActiveSubscription': false,
+                'billing.subscriptionStatus': SUBSCRIPTION_STATUS.CANCELED,
+            },
+            'canceled-at-period-end subscriptions'
         );
-        if (result.modifiedCount > 0) {
-            this.logger.log(
-                `Expired ${result.modifiedCount} canceled-at-period-end subscriptions`
-            );
-        }
     }
 
     /**
@@ -155,25 +189,19 @@ export class PaymentsCleanupService {
      * повернув би `hasActiveSubscription` у true.
      */
     private async expirePastDueSubscriptions(): Promise<void> {
-        const result = await this.userModel.updateMany(
+        await this.expireAndReconcile(
             {
                 'billing.hasActiveSubscription': true,
                 'billing.subscriptionStatus': SUBSCRIPTION_STATUS.PAST_DUE,
                 'billing.currentPeriodEnd': { $lt: new Date() },
             },
             {
-                $set: {
-                    'billing.hasActiveSubscription': false,
-                    'billing.subscriptionStatus': SUBSCRIPTION_STATUS.UNPAID,
-                    'billing.rebindPendingAt': null,
-                },
-            }
+                'billing.hasActiveSubscription': false,
+                'billing.subscriptionStatus': SUBSCRIPTION_STATUS.UNPAID,
+                'billing.rebindPendingAt': null,
+            },
+            'past-due subscriptions'
         );
-        if (result.modifiedCount > 0) {
-            this.logger.log(
-                `Expired ${result.modifiedCount} past-due subscriptions`
-            );
-        }
     }
 
     /**
@@ -184,25 +212,47 @@ export class PaymentsCleanupService {
      * привʼязка чистить прапорець, тож сюди потрапляють лише кинуті re-bind-и.
      */
     private async expireAbandonedRebinds(): Promise<void> {
-        const result = await this.userModel.updateMany(
+        await this.expireAndReconcile(
             {
                 'billing.hasActiveSubscription': true,
                 'billing.rebindPendingAt': { $ne: null },
                 'billing.currentPeriodEnd': { $lt: new Date() },
             },
             {
-                $set: {
-                    'billing.hasActiveSubscription': false,
-                    'billing.subscriptionStatus': SUBSCRIPTION_STATUS.UNPAID,
-                    'billing.rebindPendingAt': null,
-                },
-            }
+                'billing.hasActiveSubscription': false,
+                'billing.subscriptionStatus': SUBSCRIPTION_STATUS.UNPAID,
+                'billing.rebindPendingAt': null,
+            },
+            'abandoned card re-binds'
         );
-        if (result.modifiedCount > 0) {
-            this.logger.log(
-                `Expired ${result.modifiedCount} abandoned card re-binds`
-            );
-        }
+    }
+
+    /**
+     * Sprint 19 — сплив one-off доступу. Провайдерського вебхука на закінчення
+     * one-off немає (це не рекурент), тож ловить cron. Рівень доступу гасне
+     * ліниво на read (`deriveAccessLevel` звіряє дату), але реконсиляція
+     * (блокування зайвих бізнесів) — активна дія, тож потрібен цей sweep.
+     *
+     * Порядок: реконсилюємо ПЕРШИМ (рівень уже обчислюється з простроченим
+     * one-off як none), ПОТІМ чистимо поля-маркер. Якщо clear упаде — наступний
+     * запуск пере-знайде і пере-реконсилює (ідемпотентно). Якби чистили перед
+     * reconcile і reconcile упав — зайві бізнеси лишились би розблокованими.
+     */
+    private async expireOneOffAccess(): Promise<void> {
+        const filter = {
+            'billing.oneOffLevel': { $ne: null },
+            'billing.oneOffAccessUntil': { $lt: new Date() },
+        };
+        const users = await this.userModel.find(filter, { _id: 1 }).lean();
+        if (users.length === 0) return;
+        await this.reconcileUsers(users.map((u) => u._id.toString()));
+        await this.userModel.updateMany(filter, {
+            $set: {
+                'billing.oneOffLevel': null,
+                'billing.oneOffAccessUntil': null,
+            },
+        });
+        this.logger.log(`Expired ${users.length} one-off access grants`);
     }
 
     /**

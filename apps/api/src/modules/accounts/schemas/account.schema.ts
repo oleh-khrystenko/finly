@@ -77,6 +77,14 @@ export class Account {
     slugLower!: string;
 
     /**
+     * Sprint 19 — чи slug вручну кастомізований (vanity). `false` для авто
+     * (create / reset). Реконсиляція скидає лише кастомні при падінні нижче
+     * brand. Internal-флаг.
+     */
+    @Prop({ type: Boolean, default: false })
+    slugCustomized!: boolean;
+
+    /**
      * §SP-6 — per-account «домашній формат» нумерації нових рахунків. `null` =
      * "не визначено", форма створення fallback-ить на global system default
      * `'simple'`. Тип розширено з 4 пресетів до `AutoSlugMode` (+`random`):

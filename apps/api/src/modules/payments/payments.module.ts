@@ -19,6 +19,7 @@ import {
     PaymentRecordSchema,
 } from './schemas/payment-record.schema';
 import { UsersModule } from '../users/users.module';
+import { BusinessesModule } from '../businesses/businesses.module';
 
 @Module({
     imports: [
@@ -37,6 +38,8 @@ import { UsersModule } from '../users/users.module';
             },
         ]),
         UsersModule,
+        // Sprint 19 — реконсиляція бізнесів при зміні білінг-стану.
+        BusinessesModule,
     ],
     controllers: [PaymentsController],
     providers: [

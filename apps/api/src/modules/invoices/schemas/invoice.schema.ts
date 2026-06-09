@@ -92,6 +92,14 @@ export class Invoice {
     slugLower!: string;
 
     /**
+     * Sprint 19 — чи slug вручну кастомізований (vanity). `false` для авто
+     * (create / reset). Реконсиляція скидає лише кастомні при падінні нижче
+     * brand. Internal-флаг.
+     */
+    @Prop({ type: Boolean, default: false })
+    slugCustomized!: boolean;
+
+    /**
      * `null` — режим "клієнт сам вводить суму" (signage-mode у межах інвойсу).
      * Зберігається у копійках; min(0) на app-layer (Zod-схема контракту).
      */
