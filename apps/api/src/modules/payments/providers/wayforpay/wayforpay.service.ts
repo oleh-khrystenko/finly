@@ -75,7 +75,7 @@ export class WayForPayService implements IPaymentProvider {
     async createOneOffCheckout(
         input: OneOffCheckoutInput
     ): Promise<CheckoutResult> {
-        return this.createInvoice(input, input.packName, {});
+        return this.createInvoice(input, input.productName, {});
     }
 
     private async createInvoice(

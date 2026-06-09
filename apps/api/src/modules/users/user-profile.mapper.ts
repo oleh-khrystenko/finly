@@ -1,9 +1,11 @@
 import {
     DEFAULT_USER_ROLE,
+    type AccessLevel,
     type UserBilling,
     type UserProfile,
 } from '@finly/types';
 
+import { resolveAccessLevel } from '../../common/billing/resolve-access-level';
 import type { UserDocument } from './schemas/user.schema';
 
 /**
@@ -50,6 +52,10 @@ export function mapUserToProfileResponse(user: UserDocument): UserProfile {
                   scheduledPlanCode: user.billing.scheduledPlanCode ?? null,
                   scheduledChangeDate: user.billing.scheduledChangeDate ?? null,
                   cardMask: user.billing.cardMask ?? null,
+                  oneOffLevel:
+                      (user.billing.oneOffLevel as AccessLevel | null) ?? null,
+                  oneOffAccessUntil: user.billing.oneOffAccessUntil ?? null,
+                  accessLevel: resolveAccessLevel(user.billing),
               }
             : null,
     };

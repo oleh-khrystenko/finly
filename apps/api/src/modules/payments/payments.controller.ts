@@ -55,8 +55,8 @@ export class PaymentsController {
                 subscriptionPlans: ENV.PAYMENTS_SUBSCRIPTION_ENABLED
                     ? catalog.subscriptionPlans
                     : [],
-                executionPacks: ENV.PAYMENTS_ONE_OFF_ENABLED
-                    ? catalog.executionPacks
+                oneOffAccesses: ENV.PAYMENTS_ONE_OFF_ENABLED
+                    ? catalog.oneOffAccesses
                     : [],
             },
         };

@@ -18,10 +18,10 @@ import {
     PAYMENT_TYPE,
     RESPONSE_CODE,
     SUBSCRIPTION_STATUS,
-    SUBSCRIPTION_TRIAL_MONTHS,
     WAYFORPAY_TRANSACTION_STATUS,
-    findExecutionPack,
+    findOneOffAccess,
     findSubscriptionPlan,
+    type AccessLevel,
     type BillingInterval,
     type BillingWebhookEvent,
     type CancelSubscription,
@@ -51,10 +51,11 @@ import {
     PaymentRecordLean,
 } from './schemas/payment-record.schema';
 import { UsersService } from '../users/users.service';
+import { ReconciliationService } from '../businesses/reconciliation.service';
 import { REDIS_CLIENT } from '../../common/modules/redis.module';
 import {
     ORDER_KIND,
-    buildPackOrderReference,
+    buildOneOffOrderReference,
     buildSubscriptionOrderReference,
     parseOrderReference,
     type ParsedOrderReference,
@@ -112,7 +113,9 @@ export class PaymentsService {
         @InjectConnection()
         private readonly connection: Connection,
 
-        private readonly usersService: UsersService
+        private readonly usersService: UsersService,
+
+        private readonly reconciliation: ReconciliationService
     ) {}
 
     /**
@@ -175,7 +178,7 @@ export class PaymentsService {
         userId: string,
         dto: CreateCheckoutSession
     ): Promise<{ checkoutUrl: string }> {
-        const { paymentType, planCode, packCode, returnPath } = dto;
+        const { paymentType, planCode, oneOffCode, returnPath } = dto;
 
         if (
             paymentType === PAYMENT_TYPE.SUBSCRIPTION &&
@@ -217,11 +220,16 @@ export class PaymentsService {
             }
 
             const orderReference = buildSubscriptionOrderReference(userId);
-            const trialEnd = addMonths(new Date(), SUBSCRIPTION_TRIAL_MONTHS);
 
-            // Optimistically persist INCOMPLETE billing: access не дається
-            // (hasActiveSubscription=false) поки перший колбек WayForPay не
-            // підтвердить привʼязку картки. trialEnd зберігаємо як межу періоду.
+            // Trial прибрано: підписка списується одразу (firstChargeDate
+            // undefined). Виняток — активний one-off: перше списання
+            // відкладається на дату його закінчення (`oneOffUntil`), доступ
+            // тримає one-off до того. `currentPeriodEnd` сидиться цією датою як
+            // сигнал відкладеного старту для webhook-класифікації; null →
+            // негайний старт. One-off поля переносимо, інакше freshBilling
+            // (повна заміна субдока) стер би вже сплачений one-off.
+            const oneOffUntil = activeOneOffUntil(user.billing, new Date());
+
             await this.userModel.findByIdAndUpdate(userId, {
                 $set: {
                     billing: this.freshBilling({
@@ -229,7 +237,10 @@ export class PaymentsService {
                         planCode: plan.code,
                         currency: plan.currency,
                         subscriptionStatus: SUBSCRIPTION_STATUS.INCOMPLETE,
-                        currentPeriodEnd: trialEnd,
+                        currentPeriodEnd: oneOffUntil,
+                        oneOffLevel: user.billing?.oneOffLevel ?? null,
+                        oneOffAccessUntil:
+                            user.billing?.oneOffAccessUntil ?? null,
                     }),
                 },
             });
@@ -243,28 +254,28 @@ export class PaymentsService {
                     amount: plan.priceAmount,
                     currency: plan.currency,
                     interval: plan.interval,
-                    firstChargeDate: trialEnd,
+                    firstChargeDate: oneOffUntil ?? undefined,
                     serviceUrl,
                     returnUrl,
                 });
             return { checkoutUrl: result.checkoutUrl };
         }
 
-        const pack = findExecutionPack(packCode ?? '');
-        if (!pack) {
+        const access = findOneOffAccess(oneOffCode ?? '');
+        if (!access) {
             throw new BadRequestException({
                 code: RESPONSE_CODE.INVALID_PLAN,
-                message: 'Invalid packCode',
+                message: 'Invalid oneOffCode',
             });
         }
-        const orderReference = buildPackOrderReference(userId, pack.code);
+        const orderReference = buildOneOffOrderReference(userId, access.code);
         const result = await this.paymentProvider.createOneOffCheckout({
             userId,
             userEmail: user.email,
             orderReference,
-            packName: this.packLabel(pack.code),
-            amount: pack.priceAmount,
-            currency: pack.currency,
+            productName: this.oneOffLabel(access.code),
+            amount: access.priceAmount,
+            currency: access.currency,
             serviceUrl,
             returnUrl,
         });
@@ -391,6 +402,9 @@ export class PaymentsService {
             },
         });
 
+        // Доступ міг впасти (до one-off-рівня або none) — блокуємо зайві бізнеси.
+        await this.reconcileSafe(userId);
+
         return { refundedAmount };
     }
 
@@ -487,7 +501,7 @@ export class PaymentsService {
         // повернути доплату. Інакше повторний апгрейд згенерував би новий
         // orderReference і списав різницю вдруге, а користувач лишився б зі
         // сплаченою, але незастосованою доплатою (план/рекурент старі). Тільки
-        // після успішного CHANGE піднімаємо план і нараховуємо executions.
+        // після успішного CHANGE піднімаємо план.
         try {
             if (prorationRef && prorationCharge) {
                 await this.recordPayment({
@@ -517,24 +531,12 @@ export class PaymentsService {
             throw error;
         }
 
-        const executionsDelta = Math.round(
-            ((target.executions ?? 0) - (current?.executions ?? 0)) * ratio
-        );
-
         const update: Record<string, unknown> = {
             'billing.planCode': target.code,
             'billing.scheduledPlanCode': null,
             'billing.scheduledChangeDate': null,
         };
         await this.userModel.findByIdAndUpdate(userId, { $set: update });
-
-        if (executionsDelta > 0) {
-            await this.usersService.addExecutions(
-                userId,
-                executionsDelta,
-                EXECUTION_ACTION.PLAN_CHANGE
-            );
-        }
 
         return { scheduled: false };
     }
@@ -726,7 +728,7 @@ export class PaymentsService {
         const insert = await this.insertWebhookEvent(event, userId);
         if (insert === 'applied') {
             // Подію вже застосовано — звичайний дубль доставки. Підтверджуємо.
-            // НЕ переобробляємо: pack-ефект (`addExecutions`) не ідемпотентний.
+            // НЕ переобробляємо: one-off-грант доступу не ідемпотентний.
             return true;
         }
         if (insert === 'pending') {
@@ -742,20 +744,20 @@ export class PaymentsService {
         }
 
         // Усі side-effects події + перехід webhook-події pending→applied — в
-        // одній транзакції. Flip статусу = атомарний commit-маркер: грант,
-        // billing-update і payment-record комітяться РАЗОМ зі статусом 'applied'
-        // або не комітяться зовсім. Частковий збій (напр. addExecutions кинув
-        // після billing-update) відкочує все, лишає подію 'pending', і catch її
-        // видаляє → передоставка WayForPay переобробляє з нуля. Без транзакції
-        // out-of-order CAS на lastProviderEventAt заблокував би повторний грант,
-        // і оплачені executions губились би назавжди.
+        // одній транзакції. Flip статусу = атомарний commit-маркер: грант
+        // доступу, billing-update і payment-record комітяться РАЗОМ зі статусом
+        // 'applied' або не комітяться зовсім. Частковий збій (напр. billing-write
+        // кинув після payment-record) відкочує все, лишає подію 'pending', і
+        // catch її видаляє → передоставка WayForPay переобробляє з нуля. Без
+        // транзакції out-of-order CAS на lastProviderEventAt заблокував би
+        // повторний грант, і оплачений доступ губився б назавжди.
         const session = await this.connection.startSession();
         try {
             await session.withTransaction(async () => {
-                if (parsed.kind === ORDER_KIND.PACK) {
-                    await this.applyPackTransaction(
+                if (parsed.kind === ORDER_KIND.ONE_OFF) {
+                    await this.applyOneOffTransaction(
                         event,
-                        parsed.packCode,
+                        parsed.oneOffCode,
                         userId,
                         session
                     );
@@ -781,12 +783,16 @@ export class PaymentsService {
         } finally {
             await session.endSession();
         }
+        // Доступ міг піднятись (активація підписки / грант one-off) — знімаємо
+        // блокування з бізнесів у межах нового рівня. Після commit-у TX, тож
+        // reconcile бачить актуальний білінг-стан.
+        await this.reconcileSafe(userId);
         return true;
     }
 
-    private async applyPackTransaction(
+    private async applyOneOffTransaction(
         event: BillingWebhookEvent,
-        packCode: string,
+        oneOffCode: string,
         userId: string,
         session: ClientSession
     ): Promise<void> {
@@ -806,7 +812,7 @@ export class PaymentsService {
                 {
                     userId,
                     orderReference: event.orderReference,
-                    type: PAYMENT_RECORD_TYPE.PACK,
+                    type: PAYMENT_RECORD_TYPE.ONE_OFF,
                     amount: event.amount,
                     currency: event.currency,
                     status: PAYMENT_RECORD_STATUS.DECLINED,
@@ -818,27 +824,55 @@ export class PaymentsService {
             return;
         }
 
-        const pack = findExecutionPack(packCode);
-        if (!pack) {
-            this.logger.warn(`Unknown packCode ${packCode} in webhook`);
+        const access = findOneOffAccess(oneOffCode);
+        if (!access) {
+            this.logger.warn(`Unknown oneOffCode ${oneOffCode} in webhook`);
             return;
         }
 
-        // Грант executions неідемпотентний ($inc), але комітиться в одній
-        // транзакції з flip-ом події pending→applied (`routeTransaction`).
-        // Дубль-доставка ловиться unique-індексом на (provider, providerEventId)
-        // у `insertWebhookEvent` ще до транзакції, тож повторний грант неможливий.
-        await this.usersService.addExecutions(
-            userId,
-            pack.executions,
-            EXECUTION_ACTION.PACK_PURCHASE,
-            session
-        );
+        // One-off дає орендований доступ до рівня з датою закінчення (свіжий
+        // місяць від моменту оплати — перезаписуємо, без додавання залишку,
+        // рішення Q1). Грант неідемпотентний, але комітиться в одній транзакції
+        // з flip-ом події pending→applied; дубль-доставка ловиться unique-
+        // індексом (provider, providerEventId) ще до транзакції. One-off НЕ
+        // використовує lastProviderEventAt-CAS (спільний watermark із підпискою):
+        // це одинична подія, а її ідемпотентність уже гарантує webhook-індекс.
+        const accessUntil = addMonths(event.occurredAt, access.durationMonths);
+        const owner = await this.userModel
+            .findById(userId)
+            .session(session)
+            .lean();
+        if (owner?.billing) {
+            await this.userModel.updateOne(
+                { _id: userId },
+                {
+                    $set: {
+                        'billing.oneOffLevel': access.level,
+                        'billing.oneOffAccessUntil': accessUntil,
+                    },
+                },
+                { session }
+            );
+        } else {
+            await this.userModel.updateOne(
+                { _id: userId },
+                {
+                    $set: {
+                        billing: this.freshOneOffBilling(
+                            access.level,
+                            accessUntil,
+                            event.currency
+                        ),
+                    },
+                },
+                { session }
+            );
+        }
         await this.recordPayment(
             {
                 userId,
                 orderReference: event.orderReference,
-                type: PAYMENT_RECORD_TYPE.PACK,
+                type: PAYMENT_RECORD_TYPE.ONE_OFF,
                 amount: event.amount,
                 currency: event.currency,
                 status: PAYMENT_RECORD_STATUS.APPROVED,
@@ -848,7 +882,8 @@ export class PaymentsService {
             session
         );
         this.logger.log(
-            `Pack ${packCode}: +${pack.executions} executions for user ${userId}`
+            `One-off ${oneOffCode}: access ${access.level} until ` +
+                `${accessUntil.toISOString()} for user ${userId}`
         );
     }
 
@@ -933,11 +968,20 @@ export class PaymentsService {
             return;
         }
 
-        // Approved. Класифікуємо за поточним станом: INCOMPLETE → привʼязка
-        // (trial), інакше → списання (trial-end або renewal). Застосовуємо
-        // запланований downgrade, якщо настала його дата.
+        // Approved. Trial прибрано: за замовчуванням перший Approved (INCOMPLETE)
+        // — це реальне списання → ACTIVE, період = occurredAt + інтервал. Виняток
+        // — відкладений старт поверх one-off: при checkout-і `currentPeriodEnd`
+        // сидиться датою закінчення one-off у майбутньому; такий перший Approved
+        // — лише привʼязка картки (deferred binding) → TRIALING до тієї дати,
+        // реальне списання прийде окремим Approved на межі (тоді status уже не
+        // INCOMPLETE → гілка списання → ACTIVE). Застосовуємо запланований
+        // downgrade, якщо настала його дата.
         const wasBinding =
             billing.subscriptionStatus === SUBSCRIPTION_STATUS.INCOMPLETE;
+        const isDeferredStart =
+            wasBinding &&
+            billing.currentPeriodEnd != null &&
+            billing.currentPeriodEnd.getTime() > event.occurredAt.getTime();
 
         const scheduledDue =
             billing.scheduledPlanCode != null &&
@@ -949,13 +993,12 @@ export class PaymentsService {
         const plan = findSubscriptionPlan(effectivePlanCode ?? '');
         const interval = plan?.interval ?? 'month';
 
-        const periodEnd = wasBinding
-            ? (billing.currentPeriodEnd ??
-              addInterval(event.occurredAt, interval))
+        const periodEnd = isDeferredStart
+            ? billing.currentPeriodEnd!
             : addInterval(event.occurredAt, interval);
 
         const set: Record<string, unknown> = {
-            'billing.subscriptionStatus': wasBinding
+            'billing.subscriptionStatus': isDeferredStart
                 ? SUBSCRIPTION_STATUS.TRIALING
                 : SUBSCRIPTION_STATUS.ACTIVE,
             'billing.hasActiveSubscription': true,
@@ -980,14 +1023,6 @@ export class PaymentsService {
             return;
         }
 
-        if (plan) {
-            await this.usersService.addExecutions(
-                userId,
-                plan.executions,
-                EXECUTION_ACTION.SUBSCRIPTION_ACTIVATION,
-                session
-            );
-        }
         await this.recordPayment(
             {
                 userId,
@@ -1002,7 +1037,7 @@ export class PaymentsService {
             session
         );
         this.logger.log(
-            `Subscription ${wasBinding ? 'trial-binding' : 'charge'} for user ${userId} ` +
+            `Subscription ${isDeferredStart ? 'deferred-binding' : 'charge'} for user ${userId} ` +
                 `(plan ${effectivePlanCode}, event ${event.providerEventId})`
         );
     }
@@ -1106,7 +1141,7 @@ export class PaymentsService {
                 occurredAt: event.occurredAt,
                 type: event.transactionStatus,
                 userId,
-                packCode: null,
+                oneOffCode: null,
                 status: 'pending',
             });
             return 'new';
@@ -1154,6 +1189,24 @@ export class PaymentsService {
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
+
+    /**
+     * Реконсиляція бізнесів під новий рівень доступу — best-effort. Білінг-мутація
+     * вже завершена (гроші пройшли / статус флипнуто), тож збій реконсиляції НЕ
+     * має валити операцію чи un-ack-ати вебхук: наступний білінг-тригер або
+     * cron перерахує. Викликається в межах per-user білінг-локу (без race з
+     * іншими мутаціями того ж користувача).
+     */
+    private async reconcileSafe(userId: string): Promise<void> {
+        try {
+            await this.reconciliation.reconcile(userId);
+        } catch (error) {
+            this.logger.error(
+                `Reconciliation failed for user ${userId} (deferred to next trigger)`,
+                error instanceof Error ? error.stack : String(error)
+            );
+        }
+    }
 
     private async requireActiveSubscription(userId: string) {
         const user = await this.userModel.findById(userId).lean();
@@ -1313,7 +1366,9 @@ export class PaymentsService {
         planCode: string;
         currency: string;
         subscriptionStatus: string;
-        currentPeriodEnd: Date;
+        currentPeriodEnd: Date | null;
+        oneOffLevel: string | null;
+        oneOffAccessUntil: Date | null;
     }): NonNullable<UserDocument['billing']> {
         return {
             provider: PROVIDER,
@@ -1331,6 +1386,39 @@ export class PaymentsService {
             scheduledPlanCode: null,
             scheduledChangeDate: null,
             rebindPendingAt: null,
+            oneOffLevel: partial.oneOffLevel,
+            oneOffAccessUntil: partial.oneOffAccessUntil,
+        };
+    }
+
+    /**
+     * Білінг-субдок для one-off-гранту користувачу без наявного білінгу (ніколи
+     * не підписувався). Підписочні поля null, card не зберігаємо (one-off не
+     * лишає recToken). Лише рівень доступу + дата закінчення.
+     */
+    private freshOneOffBilling(
+        level: AccessLevel,
+        accessUntil: Date,
+        currency: string
+    ): NonNullable<UserDocument['billing']> {
+        return {
+            provider: PROVIDER,
+            orderReference: null,
+            recToken: null,
+            cardMask: null,
+            planCode: null,
+            currency,
+            subscriptionStatus: null,
+            providerSubscriptionStatus: null,
+            currentPeriodEnd: null,
+            cancelAtPeriodEnd: false,
+            hasActiveSubscription: false,
+            lastProviderEventAt: null,
+            scheduledPlanCode: null,
+            scheduledChangeDate: null,
+            rebindPendingAt: null,
+            oneOffLevel: level,
+            oneOffAccessUntil: accessUntil,
         };
     }
 
@@ -1342,8 +1430,8 @@ export class PaymentsService {
         return `Підписка ${findSubscriptionPlan(code)?.name ?? code}`;
     }
 
-    private packLabel(code: string): string {
-        return `Пакет виконань ${findExecutionPack(code)?.name ?? code}`;
+    private oneOffLabel(code: string): string {
+        return findOneOffAccess(code)?.name ?? code;
     }
 
     private serviceUrl(): string {
@@ -1388,6 +1476,19 @@ function addMonths(date: Date, months: number): Date {
     const next = new Date(date);
     next.setMonth(next.getMonth() + months);
     return next;
+}
+
+/**
+ * Дата закінчення активного one-off доступу (у майбутньому відносно `now`), або
+ * null. Використовується для відкладеного старту підписки поверх one-off.
+ */
+function activeOneOffUntil(
+    billing: UserDocument['billing'],
+    now: Date
+): Date | null {
+    const until = billing?.oneOffAccessUntil ?? null;
+    if (until && until.getTime() > now.getTime()) return until;
+    return null;
 }
 
 function addInterval(date: Date, interval: BillingInterval): Date {

@@ -13,13 +13,14 @@ import {
     RESPONSE_CODE,
     SUBSCRIPTION_STATUS,
     WAYFORPAY_TRANSACTION_STATUS,
-    findExecutionPack,
+    findOneOffAccess,
     findSubscriptionPlan,
     type BillingWebhookEvent,
 } from '@finly/types';
 
 import { createReplSetMongo, type InMemoryMongo } from '../../test-utils/mongo';
 import { PaymentsService } from './payments.service';
+import { ReconciliationService } from '../businesses/reconciliation.service';
 import { PAYMENT_PROVIDER } from './interfaces/payment-provider.interface';
 import { REDIS_CLIENT } from '../../common/modules/redis.module';
 import { UsersService } from '../users/users.service';
@@ -43,7 +44,7 @@ import {
     PaymentRecordSchema,
 } from './schemas/payment-record.schema';
 import {
-    buildPackOrderReference,
+    buildOneOffOrderReference,
     buildSubscriptionOrderReference,
 } from './order-reference';
 
@@ -117,6 +118,12 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
             providers: [
                 PaymentsService,
                 UsersService,
+                {
+                    provide: ReconciliationService,
+                    useValue: {
+                        reconcile: jest.fn().mockResolvedValue(undefined),
+                    },
+                },
                 { provide: PAYMENT_PROVIDER, useValue: provider },
                 {
                     // Per-user білінг-лок: за замовчуванням вільний (set → 'OK',
@@ -184,6 +191,9 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
                       lastProviderEventAt: null,
                       scheduledPlanCode: null,
                       scheduledChangeDate: null,
+                      rebindPendingAt: null,
+                      oneOffLevel: null,
+                      oneOffAccessUntil: null,
                       ...billing,
                   }
                 : null,
@@ -218,55 +228,64 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
         return service.handleWebhook(Buffer.from('{}'));
     }
 
-    // ── Pack purchase ────────────────────────────────────────────────────
+    // ── One-off access ────────────────────────────────────────────────────
 
-    it('pack-webhook Approved нараховує executions і пише PaymentRecord', async () => {
+    it('one-off Approved дає тимчасовий доступ до рівня і пише PaymentRecord', async () => {
         const user = await createUser();
-        const ref = buildPackOrderReference(user._id.toString(), 'max');
-        const pack = findExecutionPack('max')!;
+        const ref = buildOneOffOrderReference(
+            user._id.toString(),
+            'bookkeeper'
+        );
+        const access = findOneOffAccess('bookkeeper')!;
 
-        await feed(approvedEvent(ref, { amount: pack.priceAmount }));
+        await feed(approvedEvent(ref, { amount: access.priceAmount }));
 
         const updated = await userModel.findById(user._id).lean();
-        expect(updated!.executions.balance).toBe(pack.executions);
+        expect(updated!.billing!.oneOffLevel).toBe('bookkeeper');
+        expect(updated!.billing!.oneOffAccessUntil).toBeInstanceOf(Date);
+        expect(updated!.billing!.hasActiveSubscription).toBe(false);
+        // Ledger білінг більше не наповнює.
+        expect(updated!.executions.balance).toBe(0);
 
         const records = await paymentRecordModel.find({ userId: user._id });
         expect(records).toHaveLength(1);
         expect(records[0]).toMatchObject({
-            type: PAYMENT_RECORD_TYPE.PACK,
+            type: PAYMENT_RECORD_TYPE.ONE_OFF,
             status: PAYMENT_RECORD_STATUS.APPROVED,
         });
     });
 
-    it('ідемпотентність: дубль події нараховує executions лише раз', async () => {
+    it('ідемпотентність: дубль one-off події дає доступ лише раз', async () => {
         const user = await createUser();
-        const ref = buildPackOrderReference(user._id.toString(), 'basic');
-        const pack = findExecutionPack('basic')!;
-        const event = approvedEvent(ref, { amount: pack.priceAmount });
+        const ref = buildOneOffOrderReference(user._id.toString(), 'brand');
+        const access = findOneOffAccess('brand')!;
+        const event = approvedEvent(ref, { amount: access.priceAmount });
 
         await feed(event);
         await feed(event); // той самий providerEventId
 
+        const records = await paymentRecordModel.find({ userId: user._id });
+        expect(records).toHaveLength(1);
         const updated = await userModel.findById(user._id).lean();
-        expect(updated!.executions.balance).toBe(pack.executions);
+        expect(updated!.billing!.oneOffLevel).toBe('brand');
     });
 
     // ── Subscription activation + out-of-order ───────────────────────────
 
-    it('INCOMPLETE → TRIALING на першому Approved, нараховує план-executions', async () => {
+    it('INCOMPLETE → ACTIVE на першому Approved (негайний старт, без trial)', async () => {
         const ref = buildSubscriptionOrderReference('placeholder');
         const user = await createUser({
             orderReference: ref,
-            planCode: 'pro',
+            planCode: 'bookkeeper',
             subscriptionStatus: SUBSCRIPTION_STATUS.INCOMPLETE,
-            currentPeriodEnd: new Date(Date.now() + 30 * 86_400_000),
+            currentPeriodEnd: null, // негайний старт (немає відкладеної дати)
         });
         const realRef = buildSubscriptionOrderReference(user._id.toString());
         await userModel.findByIdAndUpdate(user._id, {
             $set: { 'billing.orderReference': realRef },
         });
 
-        const plan = findSubscriptionPlan('pro')!;
+        const plan = findSubscriptionPlan('bookkeeper')!;
         await feed(
             approvedEvent(realRef, {
                 amount: plan.priceAmount,
@@ -276,18 +295,48 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
 
         const updated = await userModel.findById(user._id).lean();
         expect(updated!.billing!.subscriptionStatus).toBe(
-            SUBSCRIPTION_STATUS.TRIALING
+            SUBSCRIPTION_STATUS.ACTIVE
         );
         expect(updated!.billing!.hasActiveSubscription).toBe(true);
         expect(updated!.billing!.recToken).toBe('tok_live');
-        expect(updated!.executions.balance).toBe(plan.executions);
+        expect(updated!.billing!.currentPeriodEnd).toBeInstanceOf(Date);
+        // Ledger білінг більше не наповнює.
+        expect(updated!.executions.balance).toBe(0);
+    });
+
+    it('INCOMPLETE → TRIALING на відкладеному старті поверх one-off', async () => {
+        const deferredUntil = new Date(Date.now() + 20 * 86_400_000);
+        const user = await createUser({
+            orderReference: 'placeholder',
+            planCode: 'bookkeeper',
+            subscriptionStatus: SUBSCRIPTION_STATUS.INCOMPLETE,
+            // currentPeriodEnd у майбутньому = сигнал відкладеного першого
+            // списання (one-off ще активний).
+            currentPeriodEnd: deferredUntil,
+        });
+        const realRef = buildSubscriptionOrderReference(user._id.toString());
+        await userModel.findByIdAndUpdate(user._id, {
+            $set: { 'billing.orderReference': realRef },
+        });
+
+        await feed(approvedEvent(realRef, { recToken: 'tok_live' }));
+
+        const updated = await userModel.findById(user._id).lean();
+        expect(updated!.billing!.subscriptionStatus).toBe(
+            SUBSCRIPTION_STATUS.TRIALING
+        );
+        expect(updated!.billing!.hasActiveSubscription).toBe(true);
+        // Період лишається датою відкладеного старту, не occurredAt + інтервал.
+        expect(updated!.billing!.currentPeriodEnd!.getTime()).toBe(
+            deferredUntil.getTime()
+        );
     });
 
     it('out-of-order: застаріла подія (раніший occurredAt) ігнорується', async () => {
         const user = await createUser({
             subscriptionStatus: SUBSCRIPTION_STATUS.INCOMPLETE,
             currentPeriodEnd: new Date(Date.now() + 30 * 86_400_000),
-            planCode: 'starter',
+            planCode: 'brand',
         });
         const ref = buildSubscriptionOrderReference(user._id.toString());
         await userModel.findByIdAndUpdate(user._id, {
@@ -315,10 +364,10 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
 
     // ── Change plan (upgrade proration) ──────────────────────────────────
 
-    it('upgrade: тиха доплата за токеном, зміна плану і нарахування executions', async () => {
+    it('upgrade: тиха доплата за токеном і зміна плану', async () => {
         const user = await createUser({
             orderReference: 'placeholder',
-            planCode: 'starter',
+            planCode: 'brand',
             recToken: 'tok_abc',
             subscriptionStatus: SUBSCRIPTION_STATUS.ACTIVE,
             hasActiveSubscription: true,
@@ -331,14 +380,14 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
 
         provider.chargeByToken.mockResolvedValue({
             success: true,
-            transactionId: 'tx_pro',
+            transactionId: 'tx_bk',
             cardMask: '44****1111',
             reasonCode: 1100,
             reason: 'Ok',
         });
 
         const result = await service.changePlan(user._id.toString(), {
-            planCode: 'pro',
+            planCode: 'bookkeeper',
         });
 
         expect(result.scheduled).toBe(false);
@@ -346,8 +395,7 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
         expect(provider.changeSubscription).toHaveBeenCalled();
 
         const updated = await userModel.findById(user._id).lean();
-        expect(updated!.billing!.planCode).toBe('pro');
-        expect(updated!.executions.balance).toBeGreaterThan(0);
+        expect(updated!.billing!.planCode).toBe('bookkeeper');
 
         const proration = await paymentRecordModel.findOne({
             userId: user._id,
@@ -359,7 +407,7 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
     it('upgrade: невдала доплата — план не змінюється', async () => {
         const user = await createUser({
             orderReference: 'r',
-            planCode: 'starter',
+            planCode: 'brand',
             recToken: 'tok_abc',
             subscriptionStatus: SUBSCRIPTION_STATUS.ACTIVE,
             hasActiveSubscription: true,
@@ -379,18 +427,18 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
         });
 
         await expect(
-            service.changePlan(user._id.toString(), { planCode: 'pro' })
+            service.changePlan(user._id.toString(), { planCode: 'bookkeeper' })
         ).rejects.toThrow();
 
         const updated = await userModel.findById(user._id).lean();
-        expect(updated!.billing!.planCode).toBe('starter');
+        expect(updated!.billing!.planCode).toBe('brand');
         expect(provider.changeSubscription).not.toHaveBeenCalled();
     });
 
     it('upgrade: збій CHANGE рекуренту після доплати кидає, план не застосовано', async () => {
         const user = await createUser({
             orderReference: 'r',
-            planCode: 'starter',
+            planCode: 'brand',
             recToken: 'tok_abc',
             subscriptionStatus: SUBSCRIPTION_STATUS.ACTIVE,
             hasActiveSubscription: true,
@@ -403,7 +451,7 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
 
         provider.chargeByToken.mockResolvedValue({
             success: true,
-            transactionId: 'tx_pro',
+            transactionId: 'tx_bk',
             cardMask: '44****1111',
             reasonCode: 1100,
             reason: 'Ok',
@@ -416,12 +464,12 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
         });
 
         await expect(
-            service.changePlan(user._id.toString(), { planCode: 'pro' })
+            service.changePlan(user._id.toString(), { planCode: 'bookkeeper' })
         ).rejects.toThrow();
 
         // Тихий дрейф білінгу неприпустимий: план НЕ застосовано локально.
         const updated = await userModel.findById(user._id).lean();
-        expect(updated!.billing!.planCode).toBe('starter');
+        expect(updated!.billing!.planCode).toBe('brand');
 
         // Доплату вже списали — мусимо повернути, інакше юзер заплатив за
         // апгрейд, якого не отримав.
@@ -435,7 +483,7 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
     it('cancel withRefund: збій REMOVE ставить orderReference у retry-чергу', async () => {
         const user = await createUser({
             orderReference: 'r',
-            planCode: 'pro',
+            planCode: 'bookkeeper',
             subscriptionStatus: SUBSCRIPTION_STATUS.ACTIVE,
             hasActiveSubscription: true,
             currentPeriodEnd: new Date(Date.now() + 15 * 86_400_000),
@@ -448,7 +496,7 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
             userId: user._id,
             orderReference: ref,
             type: PAYMENT_RECORD_TYPE.SUBSCRIPTION,
-            amount: 14900,
+            amount: 9900,
             currency: 'UAH',
             status: PAYMENT_RECORD_STATUS.APPROVED,
             providerTransactionId: 'tx_1',
@@ -480,7 +528,7 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
     it('downgrade: планується на наступний період', async () => {
         const user = await createUser({
             orderReference: 'r',
-            planCode: 'pro',
+            planCode: 'bookkeeper',
             recToken: 'tok_abc',
             subscriptionStatus: SUBSCRIPTION_STATUS.ACTIVE,
             hasActiveSubscription: true,
@@ -492,14 +540,14 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
         });
 
         const result = await service.changePlan(user._id.toString(), {
-            planCode: 'starter',
+            planCode: 'brand',
         });
 
         expect(result.scheduled).toBe(true);
         expect(provider.chargeByToken).not.toHaveBeenCalled();
         const updated = await userModel.findById(user._id).lean();
-        expect(updated!.billing!.scheduledPlanCode).toBe('starter');
-        expect(updated!.billing!.planCode).toBe('pro');
+        expect(updated!.billing!.scheduledPlanCode).toBe('brand');
+        expect(updated!.billing!.planCode).toBe('bookkeeper');
     });
 
     // ── Cancel with refund ───────────────────────────────────────────────
@@ -507,7 +555,7 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
     it('cancel withRefund: повертає кошти, REMOVE, білінг CANCELED', async () => {
         const user = await createUser({
             orderReference: 'r',
-            planCode: 'pro',
+            planCode: 'bookkeeper',
             subscriptionStatus: SUBSCRIPTION_STATUS.ACTIVE,
             hasActiveSubscription: true,
             currentPeriodEnd: new Date(Date.now() + 15 * 86_400_000),
@@ -520,7 +568,7 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
             userId: user._id,
             orderReference: ref,
             type: PAYMENT_RECORD_TYPE.SUBSCRIPTION,
-            amount: 14900,
+            amount: 9900,
             currency: 'UAH',
             status: PAYMENT_RECORD_STATUS.APPROVED,
             providerTransactionId: 'tx_1',
@@ -635,19 +683,19 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
 
     it('вебхук відкладається (без accept), якщо per-user лок зайнятий', async () => {
         const user = await createUser();
-        const ref = buildPackOrderReference(user._id.toString(), 'basic');
-        const pack = findExecutionPack('basic')!;
+        const ref = buildOneOffOrderReference(user._id.toString(), 'brand');
+        const access = findOneOffAccess('brand')!;
         redisMock.set.mockResolvedValueOnce(null); // лок зайнятий user-мутацією
 
         const accept = await feed(
-            approvedEvent(ref, { amount: pack.priceAmount })
+            approvedEvent(ref, { amount: access.priceAmount })
         );
 
         // Немає accept → WayForPay передоставить подію пізніше.
         expect(accept).toBeNull();
-        // Подія не оброблена: executions не нараховано.
+        // Подія не оброблена: доступ не надано.
         const updated = await userModel.findById(user._id).lean();
-        expect(updated!.executions.balance).toBe(0);
+        expect(updated!.billing).toBeNull();
     });
 
     it('cancel у кінці періоду: cancelAtPeriodEnd=true, доступ лишається', async () => {
@@ -677,7 +725,9 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
         redisMock.set.mockResolvedValueOnce(null);
 
         const error = await service
-            .changePlan(new Types.ObjectId().toString(), { planCode: 'pro' })
+            .changePlan(new Types.ObjectId().toString(), {
+                planCode: 'bookkeeper',
+            })
             .catch((e: unknown) => e);
 
         expect(error).toBeInstanceOf(ConflictException);
@@ -694,7 +744,7 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
         const error = await service
             .createCheckoutSession(new Types.ObjectId().toString(), {
                 paymentType: PAYMENT_TYPE.SUBSCRIPTION,
-                planCode: 'starter',
+                planCode: 'brand',
             })
             .catch((e: unknown) => e);
 

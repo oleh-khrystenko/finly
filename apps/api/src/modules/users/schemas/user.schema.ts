@@ -160,6 +160,8 @@ export class User {
             scheduledPlanCode: { type: String, default: null },
             scheduledChangeDate: { type: Date, default: null },
             rebindPendingAt: { type: Date, default: null },
+            oneOffLevel: { type: String, default: null },
+            oneOffAccessUntil: { type: Date, default: null },
         },
         default: null,
         _id: false,
@@ -187,6 +189,14 @@ export class User {
          * instead of leaving `hasActiveSubscription` true indefinitely.
          */
         rebindPendingAt: Date | null;
+        /**
+         * Sprint 19 — орендований one-off доступ: рівень (`brand`/`bookkeeper`)
+         * + дата закінчення. Не залежить від підписки; гасне ліниво на read
+         * (`deriveAccessLevel` звіряє дату). Підписка і one-off живуть у тому
+         * самому субдоці, рівень доступу = максимум обох.
+         */
+        oneOffLevel: string | null;
+        oneOffAccessUntil: Date | null;
     } | null;
 }
 
@@ -194,3 +204,5 @@ export const UserSchema = SchemaFactory.createForClass(User);
 
 UserSchema.index({ 'provider.id': 1 }, { sparse: true });
 UserSchema.index({ 'billing.orderReference': 1 }, { sparse: true });
+// Sprint 19 — cron сплину one-off шукає активні one-off із датою у минулому.
+UserSchema.index({ 'billing.oneOffAccessUntil': 1 }, { sparse: true });
