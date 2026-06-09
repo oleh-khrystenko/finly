@@ -158,7 +158,7 @@ describe('useClaimLandingDraft — success path (POST1 + POST2)', () => {
                 VALID_FORM
             );
             expect(mockToastSuccess).toHaveBeenCalledWith(
-                'Бізнес і рахунок збережено'
+                'Отримувача і реквізити збережено'
             );
             expect(mockRouterReplace).toHaveBeenCalledWith(
                 '/business/iva-X3kQ/account/acc-aB12cD34'
@@ -364,7 +364,7 @@ describe('useClaimLandingDraft — tab-close mid-flight resumption (SP-7)', () =
 
         await waitFor(() => {
             expect(mockToastSuccess).toHaveBeenCalledWith(
-                'Бізнес і рахунок збережено'
+                'Отримувача і реквізити збережено'
             );
         });
 

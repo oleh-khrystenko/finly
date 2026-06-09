@@ -1,7 +1,18 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import {
+    Body,
+    Controller,
+    Get,
+    Header,
+    HttpCode,
+    HttpStatus,
+    Post,
+    Res,
+} from '@nestjs/common';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
+import { Response } from 'express';
 import { NBU_HOST_PRIMARY, type QrPreviewResponse } from '@finly/types';
 
+import { ENV } from '../../config/env';
 import { SkipOnboarding } from '../../common/decorators/skip-onboarding.decorator';
 import { QrPreviewDto } from './dto/qr-preview.dto';
 import { QrService } from './qr.service';
@@ -42,6 +53,41 @@ import { QrService } from './qr.service';
 @Controller('qr')
 export class QrController {
     constructor(private readonly qrService: QrService) {}
+
+    /**
+     * Меморизований брендований QR (Buffer) на marketing-лендінг. Кодований
+     * текст фіксований (`WEB_URL`) → байти ідентичні щоразу, тож рендеримо sharp
+     * раз на процес.
+     */
+    private cachedLandingQr: Buffer | null = null;
+
+    /**
+     * Брендований QR-код на головний лендінг (`WEB_URL`) для explainer-сторінки
+     * голого pay-host (`pay.finly.com.ua/`). `withSlogan: false` — слоган живе
+     * у футері тієї сторінки, дубль у QR зайвий (лого+назва лишаються).
+     *
+     * **`@SkipThrottle()`** — статична картинка з фіксованим текстом, меморизована
+     * + довгий `Cache-Control`; перебір безпредметний. Override class-level
+     * `qr-preview` bucket-у (10/min), що тут був би занадто строгим (код тягнеться
+     * на кожен перегляд сторінки).
+     */
+    @SkipThrottle()
+    @SkipOnboarding()
+    @Get('landing.png')
+    @Header('Content-Type', 'image/png')
+    @Header(
+        'Cache-Control',
+        'public, max-age=86400, stale-while-revalidate=604800'
+    )
+    async landingQr(@Res() res: Response): Promise<void> {
+        if (!this.cachedLandingQr) {
+            const url = ENV.WEB_URL.replace(/\/$/, '');
+            this.cachedLandingQr = await this.qrService.renderForUrl(url, {
+                withSlogan: false,
+            });
+        }
+        res.send(this.cachedLandingQr);
+    }
 
     @SkipOnboarding()
     @Post('preview')

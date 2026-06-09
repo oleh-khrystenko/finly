@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
+import { getModelToken } from '@nestjs/mongoose';
 
 import { ExecutionTransaction } from './schemas/execution-transaction.schema';
 import { User } from './schemas/user.schema';
@@ -14,7 +14,7 @@ const mockUserDoc = (overrides = {}) => ({
         lastName: 'Doe',
         avatar: 'https://photo.url',
     },
-    executions: { balance: 0, freeReportUsed: false, activeReservation: null },
+    executions: { balance: 0, freeReportUsed: false },
     lastLoginAt: null as Date | null,
     save: jest.fn().mockReturnThis(),
     ...overrides,
@@ -36,15 +36,6 @@ const mockTransactionModel = {
     deleteMany: jest.fn(),
 };
 
-const mockSession = {
-    withTransaction: jest.fn((fn) => fn()),
-    endSession: jest.fn(),
-};
-
-const mockConnection = {
-    startSession: jest.fn().mockResolvedValue(mockSession),
-};
-
 describe('UsersService', () => {
     let service: UsersService;
 
@@ -56,10 +47,6 @@ describe('UsersService', () => {
                 {
                     provide: getModelToken(ExecutionTransaction.name),
                     useValue: mockTransactionModel,
-                },
-                {
-                    provide: getConnectionToken(),
-                    useValue: mockConnection,
                 },
             ],
         }).compile();
@@ -274,7 +261,7 @@ describe('UsersService', () => {
                     executions: { balance: 10, freeReportUsed: false },
                 })
             );
-            mockTransactionModel.create.mockResolvedValue({});
+            mockTransactionModel.create.mockResolvedValue([{}]);
 
             const result = await service.addExecutions(
                 '507f1f77bcf86cd799439011',
@@ -288,19 +275,22 @@ describe('UsersService', () => {
                 { new: true }
             );
             expect(mockTransactionModel.create).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    type: 'credit',
-                    action: 'pack_purchase',
-                    amount: 10,
-                    balanceAfter: 10,
-                })
+                [
+                    expect.objectContaining({
+                        type: 'credit',
+                        action: 'pack_purchase',
+                        amount: 10,
+                        balanceAfter: 10,
+                    }),
+                ],
+                { session: undefined }
             );
             expect(result).toBe(10);
         });
 
         it('should return 0 when user not found', async () => {
             mockModel.findByIdAndUpdate.mockResolvedValue(null);
-            mockTransactionModel.create.mockResolvedValue({});
+            mockTransactionModel.create.mockResolvedValue([{}]);
 
             const result = await service.addExecutions(
                 '507f1f77bcf86cd799439012',
@@ -309,125 +299,6 @@ describe('UsersService', () => {
             );
 
             expect(result).toBe(0);
-        });
-    });
-
-    describe('deductExecution', () => {
-        it('should deduct from balance atomically when balance > 0', async () => {
-            mockModel.findOneAndUpdate.mockResolvedValueOnce(
-                mockUserDoc({
-                    executions: { balance: 2, freeReportUsed: false },
-                })
-            );
-
-            const result = await service.deductExecution(
-                '507f1f77bcf86cd799439011'
-            );
-
-            expect(result).toBe(true);
-            expect(mockModel.findOneAndUpdate).toHaveBeenCalledWith(
-                {
-                    _id: '507f1f77bcf86cd799439011',
-                    'executions.balance': { $gt: 0 },
-                },
-                { $inc: { 'executions.balance': -1 } },
-                { new: true }
-            );
-        });
-
-        it('should use free report atomically when balance is 0 and free report unused', async () => {
-            // First call (paid execution) returns null — no balance
-            mockModel.findOneAndUpdate.mockResolvedValueOnce(null);
-            // Second call (free report) succeeds
-            mockModel.findOneAndUpdate.mockResolvedValueOnce(
-                mockUserDoc({
-                    executions: { balance: 0, freeReportUsed: true },
-                })
-            );
-
-            const result = await service.deductExecution(
-                '507f1f77bcf86cd799439011'
-            );
-
-            expect(result).toBe(true);
-            expect(mockModel.findOneAndUpdate).toHaveBeenCalledTimes(2);
-            expect(mockModel.findOneAndUpdate).toHaveBeenLastCalledWith(
-                {
-                    _id: '507f1f77bcf86cd799439011',
-                    'executions.freeReportUsed': false,
-                },
-                { $set: { 'executions.freeReportUsed': true } },
-                { new: true }
-            );
-        });
-
-        it('should return false when no executions and free report already used', async () => {
-            mockModel.findOneAndUpdate.mockResolvedValueOnce(null);
-            mockModel.findOneAndUpdate.mockResolvedValueOnce(null);
-
-            const result = await service.deductExecution(
-                '507f1f77bcf86cd799439011'
-            );
-
-            expect(result).toBe(false);
-        });
-
-        it('should return false when user not found', async () => {
-            mockModel.findOneAndUpdate.mockResolvedValueOnce(null);
-            mockModel.findOneAndUpdate.mockResolvedValueOnce(null);
-
-            const result = await service.deductExecution('nonexistent');
-
-            expect(result).toBe(false);
-        });
-    });
-
-    describe('hasExecution', () => {
-        it('should return true when balance > 0', async () => {
-            const user = mockUserDoc({
-                executions: { balance: 1, freeReportUsed: true },
-            });
-            mockModel.findById.mockReturnValue({
-                exec: jest.fn().mockResolvedValue(user),
-            });
-
-            expect(await service.hasExecution('507f1f77bcf86cd799439011')).toBe(
-                true
-            );
-        });
-
-        it('should return true when free report available', async () => {
-            const user = mockUserDoc({
-                executions: { balance: 0, freeReportUsed: false },
-            });
-            mockModel.findById.mockReturnValue({
-                exec: jest.fn().mockResolvedValue(user),
-            });
-
-            expect(await service.hasExecution('507f1f77bcf86cd799439011')).toBe(
-                true
-            );
-        });
-
-        it('should return false when no executions and free report used', async () => {
-            const user = mockUserDoc({
-                executions: { balance: 0, freeReportUsed: true },
-            });
-            mockModel.findById.mockReturnValue({
-                exec: jest.fn().mockResolvedValue(user),
-            });
-
-            expect(await service.hasExecution('507f1f77bcf86cd799439011')).toBe(
-                false
-            );
-        });
-
-        it('should return false when user not found', async () => {
-            mockModel.findById.mockReturnValue({
-                exec: jest.fn().mockResolvedValue(null),
-            });
-
-            expect(await service.hasExecution('nonexistent')).toBe(false);
         });
     });
 
@@ -800,279 +671,6 @@ describe('UsersService', () => {
             await expect(
                 service.stampAcceptedTerms('507f1f77bcf86cd799439011', 'v2')
             ).resolves.toBeUndefined();
-        });
-    });
-
-    describe('commitReservation', () => {
-        const userId = '507f1f77bcf86cd799439011';
-        const reservationId = 'test-reservation-uuid';
-        const ledgerEntry = { type: 'debit', action: 'ai_chat', amount: 200 };
-
-        it('should claim reservation, read fresh balance, insert ledger, and return balanceAfter', async () => {
-            mockModel.updateOne.mockResolvedValue({ matchedCount: 1 });
-            mockModel.findOne.mockResolvedValue({
-                executions: { balance: 800 },
-            });
-            mockTransactionModel.create.mockResolvedValue([{}]);
-
-            const result = await service.commitReservation({
-                userId,
-                reservationId,
-                ledgerEntry,
-            });
-
-            expect(result).toEqual({ balanceAfter: 800 });
-
-            // Verify claim-first: updateOne with reservation filter
-            expect(mockModel.updateOne).toHaveBeenCalledWith(
-                {
-                    _id: userId,
-                    'executions.activeReservation.id': reservationId,
-                },
-                { $set: { 'executions.activeReservation': null } },
-                { session: mockSession }
-            );
-
-            // Verify fresh balance read
-            expect(mockModel.findOne).toHaveBeenCalledWith(
-                { _id: userId },
-                { 'executions.balance': 1 },
-                { session: mockSession }
-            );
-
-            // Verify ledger insert with fresh balance and reservationId
-            expect(mockTransactionModel.create).toHaveBeenCalledWith(
-                [
-                    expect.objectContaining({
-                        type: 'debit',
-                        action: 'ai_chat',
-                        amount: 200,
-                        balanceAfter: 800,
-                        reservationId,
-                    }),
-                ],
-                { session: mockSession }
-            );
-
-            expect(mockSession.endSession).toHaveBeenCalled();
-        });
-
-        it('should throw when reservation not found (matchedCount === 0)', async () => {
-            mockModel.updateOne.mockResolvedValue({ matchedCount: 0 });
-
-            await expect(
-                service.commitReservation({
-                    userId,
-                    reservationId,
-                    ledgerEntry,
-                })
-            ).rejects.toThrow('Reservation not found or already closed');
-
-            // No ledger insert should happen
-            expect(mockTransactionModel.create).not.toHaveBeenCalled();
-            expect(mockSession.endSession).toHaveBeenCalled();
-        });
-
-        it('should call sideEffectInTx within the transaction', async () => {
-            mockModel.updateOne.mockResolvedValue({ matchedCount: 1 });
-            mockModel.findOne.mockResolvedValue({
-                executions: { balance: 500 },
-            });
-            mockTransactionModel.create.mockResolvedValue([{}]);
-
-            const sideEffect = jest.fn().mockResolvedValue(undefined);
-
-            await service.commitReservation({
-                userId,
-                reservationId,
-                ledgerEntry,
-                sideEffectInTx: sideEffect,
-            });
-
-            expect(sideEffect).toHaveBeenCalledWith(mockSession);
-        });
-
-        it('should rollback transaction when sideEffectInTx throws', async () => {
-            mockModel.updateOne.mockResolvedValue({ matchedCount: 1 });
-            mockModel.findOne.mockResolvedValue({
-                executions: { balance: 500 },
-            });
-            mockTransactionModel.create.mockResolvedValue([{}]);
-
-            const sideEffect = jest
-                .fn()
-                .mockRejectedValue(new Error('History insert failed'));
-
-            // withTransaction propagates the error from the callback
-            mockSession.withTransaction.mockImplementationOnce(
-                async (fn: () => Promise<void>) => fn()
-            );
-
-            await expect(
-                service.commitReservation({
-                    userId,
-                    reservationId,
-                    ledgerEntry,
-                    sideEffectInTx: sideEffect,
-                })
-            ).rejects.toThrow('History insert failed');
-
-            expect(mockSession.endSession).toHaveBeenCalled();
-        });
-
-        it('should always end session even on error', async () => {
-            mockModel.updateOne.mockRejectedValue(
-                new Error('DB connection lost')
-            );
-            mockSession.withTransaction.mockImplementationOnce(
-                async (fn: () => Promise<void>) => fn()
-            );
-
-            await expect(
-                service.commitReservation({
-                    userId,
-                    reservationId,
-                    ledgerEntry,
-                })
-            ).rejects.toThrow('DB connection lost');
-
-            expect(mockSession.endSession).toHaveBeenCalled();
-        });
-    });
-
-    describe('refundReservation', () => {
-        const userId = '507f1f77bcf86cd799439011';
-        const reservationId = 'test-reservation-uuid';
-
-        it('should restore balance and apply compensationOps atomically', async () => {
-            // Phase A — read reservation
-            mockModel.findOne.mockResolvedValueOnce({
-                executions: {
-                    activeReservation: {
-                        id: reservationId,
-                        amount: 200,
-                        compensationOps: {
-                            inc: { 'ai.requestsUsed': -1 },
-                        },
-                    },
-                },
-            });
-            // Phase B — atomic update
-            mockModel.findOneAndUpdate.mockResolvedValueOnce(mockUserDoc());
-
-            await service.refundReservation(userId, reservationId);
-
-            // Verify merged $inc: balance restore + compensation
-            expect(mockModel.findOneAndUpdate).toHaveBeenCalledWith(
-                {
-                    _id: userId,
-                    'executions.activeReservation.id': reservationId,
-                },
-                {
-                    $inc: {
-                        'executions.balance': 200,
-                        'ai.requestsUsed': -1,
-                    },
-                    $set: { 'executions.activeReservation': null },
-                }
-            );
-        });
-
-        it('should be idempotent — no-op when reservation already closed (phase A returns null)', async () => {
-            mockModel.findOne.mockResolvedValueOnce(null);
-
-            await service.refundReservation(userId, reservationId);
-
-            expect(mockModel.findOneAndUpdate).not.toHaveBeenCalled();
-        });
-
-        it('should be idempotent — no-op when race closes reservation between phase A and B', async () => {
-            // Phase A finds reservation
-            mockModel.findOne.mockResolvedValueOnce({
-                executions: {
-                    activeReservation: {
-                        id: reservationId,
-                        amount: 200,
-                        compensationOps: { inc: {} },
-                    },
-                },
-            });
-            // Phase B — another process closed it
-            mockModel.findOneAndUpdate.mockResolvedValueOnce(null);
-
-            // Should not throw
-            await service.refundReservation(userId, reservationId);
-        });
-
-        it('should handle empty compensationOps gracefully', async () => {
-            mockModel.findOne.mockResolvedValueOnce({
-                executions: {
-                    activeReservation: {
-                        id: reservationId,
-                        amount: 200,
-                        compensationOps: { inc: {} },
-                    },
-                },
-            });
-            mockModel.findOneAndUpdate.mockResolvedValueOnce(mockUserDoc());
-
-            await service.refundReservation(userId, reservationId);
-
-            expect(mockModel.findOneAndUpdate).toHaveBeenCalledWith(
-                {
-                    _id: userId,
-                    'executions.activeReservation.id': reservationId,
-                },
-                {
-                    $inc: { 'executions.balance': 200 },
-                    $set: { 'executions.activeReservation': null },
-                }
-            );
-        });
-
-        it('should handle missing compensationOps (null/undefined)', async () => {
-            mockModel.findOne.mockResolvedValueOnce({
-                executions: {
-                    activeReservation: {
-                        id: reservationId,
-                        amount: 300,
-                        compensationOps: null,
-                    },
-                },
-            });
-            mockModel.findOneAndUpdate.mockResolvedValueOnce(mockUserDoc());
-
-            await service.refundReservation(userId, reservationId);
-
-            expect(mockModel.findOneAndUpdate).toHaveBeenCalledWith(
-                {
-                    _id: userId,
-                    'executions.activeReservation.id': reservationId,
-                },
-                {
-                    $inc: { 'executions.balance': 300 },
-                    $set: { 'executions.activeReservation': null },
-                }
-            );
-        });
-
-        it('should not write to ledger on refund', async () => {
-            mockModel.findOne.mockResolvedValueOnce({
-                executions: {
-                    activeReservation: {
-                        id: reservationId,
-                        amount: 200,
-                        compensationOps: {
-                            inc: { 'ai.requestsUsed': -1 },
-                        },
-                    },
-                },
-            });
-            mockModel.findOneAndUpdate.mockResolvedValueOnce(mockUserDoc());
-
-            await service.refundReservation(userId, reservationId);
-
-            expect(mockTransactionModel.create).not.toHaveBeenCalled();
         });
     });
 });

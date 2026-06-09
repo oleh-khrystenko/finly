@@ -25,10 +25,19 @@ interface CascadeDeleteResult {
     affectedInvoices: number;
 }
 
-export async function listBusinesses(): Promise<BusinessWithCounts[]> {
+/**
+ * Список бізнесів кабінету. `context` робить запит самодостатнім: бекенд
+ * фільтрує власні (`own`) vs клієнтські (`client`) за параметром, а не за
+ * персистентним `worksAsBookkeeper`. Без цього перемикач режиму ловив
+ * read-after-write race з паралельним PATCH профілю. Відсутній context →
+ * бекенд бере персистентний флаг (напр., initial-load до взаємодії).
+ */
+export async function listBusinesses(
+    context?: 'own' | 'client'
+): Promise<BusinessWithCounts[]> {
     const { data } = await apiClient.get<{
         data: BusinessWithCounts[];
-    }>('/businesses/me');
+    }>('/businesses/me', context ? { params: { context } } : undefined);
     return data.data;
 }
 
@@ -58,6 +67,13 @@ export async function updateBusiness(
     const { data } = await apiClient.patch<{ data: Business }>(
         `/businesses/me/${encodeURIComponent(slug)}`,
         dto
+    );
+    return data.data;
+}
+
+export async function resetBusinessSlug(slug: string): Promise<Business> {
+    const { data } = await apiClient.post<{ data: Business }>(
+        `/businesses/me/${encodeURIComponent(slug)}/reset-slug`
     );
     return data.data;
 }

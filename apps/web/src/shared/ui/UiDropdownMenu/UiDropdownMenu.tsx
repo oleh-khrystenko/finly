@@ -37,6 +37,8 @@ const UiDropdownMenu = forwardRef<HTMLDivElement, UiDropdownMenuProps>(
             align = 'end',
             size = 'md',
             className,
+            itemClassName,
+            badgeClassName,
         } = props;
 
         return (
@@ -61,7 +63,7 @@ const UiDropdownMenu = forwardRef<HTMLDivElement, UiDropdownMenuProps>(
                             {header}
                         </div>
                     )}
-                    <div className="p-1">
+                    <div className="space-y-0.5 p-1">
                         {items.map((item) => {
                             const isActive = activeValue === item.value;
                             return (
@@ -75,7 +77,8 @@ const UiDropdownMenu = forwardRef<HTMLDivElement, UiDropdownMenuProps>(
                                             'data-[focus]:bg-accent',
                                             isActive && 'bg-accent',
                                             itemSizeStyles[size],
-                                            iconSizeStyles[size]
+                                            iconSizeStyles[size],
+                                            itemClassName
                                         )}
                                     >
                                         {item.icon && (
@@ -85,7 +88,12 @@ const UiDropdownMenu = forwardRef<HTMLDivElement, UiDropdownMenuProps>(
                                             {item.label}
                                         </span>
                                         {item.badge != null && (
-                                            <span className="bg-muted text-muted-foreground ml-auto rounded-full px-1.5 py-0.5 text-xs leading-none">
+                                            <span
+                                                className={composeClasses(
+                                                    'bg-muted text-muted-foreground ml-auto rounded-full px-2.5 py-1 text-xs leading-none whitespace-nowrap',
+                                                    badgeClassName
+                                                )}
+                                            >
                                                 {item.badge}
                                             </span>
                                         )}

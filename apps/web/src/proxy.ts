@@ -5,7 +5,7 @@ import { isPublicHost } from '@/shared/config/publicHosts';
 // Sprint 3 §3.5 — `/dashboard` видалена (E2: → `/business`); `/pay`
 // видалений як рудимент (E4: піддомен `pay.finly.com.ua` — окрема історія
 // host-aware routing-у §3.9, не protected path).
-const PROTECTED_PATHS = ['/business', '/ai-chat', '/profile', '/billing'];
+const PROTECTED_PATHS = ['/business', '/profile', '/billing'];
 const AUTH_PATHS = ['/auth/signin'];
 const COOKIE_NAME = 'bid_refresh';
 const DELETED_COOKIE = 'bid_account_deleted';
@@ -28,14 +28,29 @@ export default function proxy(request: NextRequest) {
     // контракт; жоден `/business`, `/auth/...`, `/profile` на public host
     // не повинен дати валідну відповідь.
 
-    // Branch C — cabinet host + path under `/host-pay/` → 404.
-    // Захист від direct-URL-input у адресний рядок (`finly.com.ua/host-pay/test`).
+    // Branch C — cabinet host + path під `/host-pay` → 404.
+    // Захист від direct-URL-input у адресний рядок (`finly.com.ua/host-pay/test`
+    // або голий `finly.com.ua/host-pay` — internal rewrite-target Branch A0).
     // Робить `host-pay/...` non-addressable з cabinet domain.
-    if (!isPublicHostReq && pathname.startsWith('/host-pay/')) {
+    if (
+        !isPublicHostReq &&
+        (pathname === '/host-pay' || pathname.startsWith('/host-pay/'))
+    ) {
         return new NextResponse(null, { status: 404 });
     }
 
     if (isPublicHostReq) {
+        // Branch A0 — public host + голий корінь `/` → пояснювальна сторінка
+        // (`app/host-pay/page.tsx`, обгорнута host-pay layout-ом).
+        // Голий pay-host — це випадковий/обрізаний візит: платник загубив повне
+        // посилання `pay.finly.com.ua/{businessSlug}`. Rewrite на host-pay index
+        // дає брендований пояснювач замість 404-dead-end.
+        if (pathname === '/') {
+            return NextResponse.rewrite(
+                new URL('/host-pay', request.url)
+            );
+        }
+
         // Branch A1 — public host + root-рівнева path (`/{businessSlug}`),
         // slug ≠ reserved → rewrite на `/host-pay/{businessSlug}` (Sprint 3 §3.9).
         //

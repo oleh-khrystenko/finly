@@ -76,11 +76,20 @@ export class Invoice {
     accountId!: Types.ObjectId;
 
     /**
-     * Slug per-invoice: `{людська-частина}-{8-char-tail}` або `{tail}`.
-     * Sprint 9 §SP-6 — per-account unique (compound `{accountId, slug}`).
+     * Slug per-invoice. Sprint 15 — редаговуваний vanity-string (раніше
+     * immutable). Display case-preserved; uniqueness/lookup на `slugLower`.
+     * Create генерує `{людська-частина}-{8-char-tail}` / `{tail}`; ФОП може
+     * перейменувати у кабінеті.
      */
     @Prop({ required: true, trim: true })
     slug!: string;
+
+    /**
+     * Sprint 15 — lowercase-нормалізована форма `slug`. Compound-unique
+     * `(accountId, slugLower)` — case-insensitive uniqueness у межах рахунку.
+     */
+    @Prop({ required: true, trim: true, lowercase: true })
+    slugLower!: string;
 
     /**
      * `null` — режим "клієнт сам вводить суму" (signage-mode у межах інвойсу).
@@ -162,12 +171,13 @@ export const InvoiceSchema = SchemaFactory.createForClass(Invoice);
 applyJsonTransform(InvoiceSchema);
 
 /**
- * Sprint 9 §SP-6 — invoice-uniqueness scope-ується per-account (раніше
- * per-business). Два account-и одного business-у можуть мати інвойс з
- * однаковим slug-string-ом (Privat-inv-001 / Mono-inv-001) — per-account
- * counter-namespace.
+ * Sprint 15 — invoice-uniqueness переходить з `(accountId, slug)` на
+ * `(accountId, slugLower)`: case-insensitive у межах рахунку (vanity-slug
+ * редаговуваний). Два account-и одного бізнесу можуть мати інвойс з однаковим
+ * slug-string-ом (per-account namespace). Міграція
+ * `2026-06-03-nested-slug-lower` drop-ає старий `(accountId, slug)` unique.
  */
-InvoiceSchema.index({ accountId: 1, slug: 1 }, { unique: true });
+InvoiceSchema.index({ accountId: 1, slugLower: 1 }, { unique: true });
 
 /**
  * Sprint 9 — primary list-pagination index переходить на `(accountId,

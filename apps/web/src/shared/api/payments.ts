@@ -1,5 +1,10 @@
 import { apiClient } from './client';
-import { PAYMENT_TYPE, type PaymentsCatalog } from '@finly/types';
+import {
+    PAYMENT_TYPE,
+    type ChangePlan,
+    type PaymentRecord,
+    type PaymentsCatalog,
+} from '@finly/types';
 
 export async function getCatalog(): Promise<PaymentsCatalog> {
     const { data } = await apiClient.get<{ data: PaymentsCatalog }>(
@@ -36,12 +41,40 @@ export async function createOneOffCheckout(
     return data.data;
 }
 
-export async function createPortalSession(): Promise<{
-    portalUrl: string;
-}> {
+export async function cancelSubscription(
+    withRefund: boolean
+): Promise<{ refundedAmount: number | null }> {
     const { data } = await apiClient.post<{
-        data: { portalUrl: string };
-    }>('/payments/portal-session');
+        data: { refundedAmount: number | null };
+    }>('/payments/subscription/cancel', { withRefund });
+    return data.data;
+}
+
+export async function changePlan(
+    planCode: ChangePlan['planCode']
+): Promise<{ scheduled: boolean }> {
+    const { data } = await apiClient.post<{
+        data: { scheduled: boolean };
+    }>('/payments/subscription/change-plan', { planCode });
+    return data.data;
+}
+
+export async function updateCard(
+    returnPath?: string
+): Promise<{ checkoutUrl: string }> {
+    const { data } = await apiClient.post<{
+        data: { checkoutUrl: string };
+    }>('/payments/subscription/update-card', {
+        ...(returnPath && { returnPath }),
+    });
+    return data.data;
+}
+
+export async function listPayments(limit?: number): Promise<PaymentRecord[]> {
+    const { data } = await apiClient.get<{ data: PaymentRecord[] }>(
+        '/payments/payments',
+        { params: limit ? { limit } : undefined }
+    );
     return data.data;
 }
 

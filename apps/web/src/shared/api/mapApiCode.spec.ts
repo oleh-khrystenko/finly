@@ -69,7 +69,7 @@ describe('getApiMessage', () => {
             expect(
                 getApiMessage('TAXATION_REQUIRED_FOR_TYPE', 'businesses')
             ).toBe(
-                'Оберіть систему оподаткування — вона обов’язкова для цього типу платника'
+                'Оберіть систему оподаткування: вона обов’язкова для цього типу платника'
             );
         });
 
@@ -85,7 +85,7 @@ describe('getApiMessage', () => {
             expect(
                 getApiMessage('TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE', 'businesses')
             ).toBe(
-                'Ця система оподаткування недоступна для обраного типу бізнесу'
+                'Ця система оподаткування недоступна для обраного типу отримувача'
             );
         });
 

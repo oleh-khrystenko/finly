@@ -3,18 +3,22 @@ import {
     Body,
     Controller,
     Get,
-    Headers,
     HttpCode,
     HttpStatus,
     Param,
     Post,
+    Query,
     Req,
     UseGuards,
 } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { RawBodyRequest } from '@nestjs/common/interfaces';
 import { Request } from 'express';
-import type { PaymentsCatalog } from '@finly/types';
+import {
+    RESPONSE_CODE,
+    type PaymentRecord,
+    type PaymentsCatalog,
+} from '@finly/types';
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { SkipOnboarding } from '../../common/decorators/skip-onboarding.decorator';
@@ -23,6 +27,16 @@ import { ENV } from '../../config/env';
 import { PaymentsService } from './payments.service';
 import { CatalogService } from './catalog.service';
 import { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
+import {
+    CancelSubscriptionDto,
+    ChangePlanDto,
+    UpdateCardDto,
+} from './dto/manage-subscription.dto';
+import type { PaymentRecordLean } from './schemas/payment-record.schema';
+
+const DEFAULT_PAYMENTS_LIMIT = 10;
+const MAX_PAYMENTS_LIMIT = 50;
+const SUPPORTED_PROVIDERS = new Set(['wayforpay']);
 
 @Controller('payments')
 export class PaymentsController {
@@ -34,8 +48,8 @@ export class PaymentsController {
     @SkipThrottle()
     @SkipOnboarding()
     @Get('catalog')
-    async getCatalog(): Promise<{ data: PaymentsCatalog }> {
-        const catalog = await this.catalogService.getCatalog();
+    getCatalog(): { data: PaymentsCatalog } {
+        const catalog = this.catalogService.getCatalog();
         return {
             data: {
                 subscriptionPlans: ENV.PAYMENTS_SUBSCRIPTION_ENABLED
@@ -63,14 +77,58 @@ export class PaymentsController {
     }
 
     @UseGuards(JwtActiveGuard)
-    @Post('portal-session')
-    async createPortalSession(
-        @CurrentUser() user: UserDocument
-    ): Promise<{ data: { portalUrl: string } }> {
-        const result = await this.paymentsService.createPortalSession(
-            user._id.toString()
+    @Post('subscription/cancel')
+    @HttpCode(HttpStatus.OK)
+    async cancelSubscription(
+        @CurrentUser() user: UserDocument,
+        @Body() dto: CancelSubscriptionDto
+    ): Promise<{ data: { refundedAmount: number | null } }> {
+        const result = await this.paymentsService.cancelSubscription(
+            user._id.toString(),
+            dto
         );
-        return { data: { portalUrl: result.portalUrl } };
+        return { data: result };
+    }
+
+    @UseGuards(JwtActiveGuard)
+    @Post('subscription/change-plan')
+    @HttpCode(HttpStatus.OK)
+    async changePlan(
+        @CurrentUser() user: UserDocument,
+        @Body() dto: ChangePlanDto
+    ): Promise<{ data: { scheduled: boolean } }> {
+        const result = await this.paymentsService.changePlan(
+            user._id.toString(),
+            dto
+        );
+        return { data: result };
+    }
+
+    @UseGuards(JwtActiveGuard)
+    @Post('subscription/update-card')
+    async updateCard(
+        @CurrentUser() user: UserDocument,
+        @Body() dto: UpdateCardDto
+    ): Promise<{ data: { checkoutUrl: string } }> {
+        const result = await this.paymentsService.updateCard(
+            user._id.toString(),
+            dto.returnPath
+        );
+        return { data: result };
+    }
+
+    @UseGuards(JwtActiveGuard)
+    @Get('payments')
+    async listPayments(
+        @CurrentUser() user: UserDocument,
+        @Query('limit') limitParam?: string
+    ): Promise<{ data: PaymentRecord[] }> {
+        const limit = clampLimit(limitParam);
+        const records = await this.paymentsService.listPayments(
+            user._id.toString(),
+            limit
+        );
+        return { data: records.map(mapPaymentRecord) };
     }
 
     @UseGuards(JwtActiveGuard)
@@ -83,26 +141,50 @@ export class PaymentsController {
         return { data: null };
     }
 
-    private static readonly SUPPORTED_PROVIDERS = new Set(['stripe']);
-
     @SkipThrottle()
+    @SkipOnboarding()
     @Post('webhook/:provider')
+    @HttpCode(HttpStatus.OK)
     async handleWebhook(
         @Param('provider') provider: string,
-        @Req() req: RawBodyRequest<Request>,
-        @Headers('stripe-signature') signature: string
-    ): Promise<{ received: true }> {
-        if (!PaymentsController.SUPPORTED_PROVIDERS.has(provider)) {
-            throw new BadRequestException(`Unsupported provider: ${provider}`);
-        }
-        if (!signature) {
-            throw new BadRequestException('Missing webhook signature');
+        @Req() req: RawBodyRequest<Request>
+    ): Promise<Record<string, unknown>> {
+        if (!SUPPORTED_PROVIDERS.has(provider)) {
+            throw new BadRequestException({
+                code: RESPONSE_CODE.VALIDATION_ERROR,
+                message: `Unsupported provider: ${provider}`,
+            });
         }
         const rawBody = req.rawBody;
         if (!rawBody) {
-            throw new BadRequestException('Missing raw body');
+            throw new BadRequestException({
+                code: RESPONSE_CODE.VALIDATION_ERROR,
+                message: 'Missing raw body',
+            });
         }
-        await this.paymentsService.handleWebhook(provider, rawBody, signature);
-        return { received: true };
+        const accept = await this.paymentsService.handleWebhook(rawBody);
+        // Невалідний підпис → accept null. Віддаємо порожній об'єкт (200), щоб
+        // не зливати інформацію про причину; валідний колбек отримує підписаний
+        // accept, без якого WayForPay шле повтори.
+        return accept ?? {};
     }
+}
+
+function clampLimit(raw: string | undefined): number {
+    const parsed = raw ? parseInt(raw, 10) : DEFAULT_PAYMENTS_LIMIT;
+    if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_PAYMENTS_LIMIT;
+    return Math.min(parsed, MAX_PAYMENTS_LIMIT);
+}
+
+function mapPaymentRecord(record: PaymentRecordLean): PaymentRecord {
+    return {
+        id: record._id.toString(),
+        type: record.type,
+        amount: record.amount,
+        currency: record.currency,
+        status: record.status,
+        cardMask: record.cardMask,
+        refundAmount: record.refundAmount,
+        createdAt: record.createdAt,
+    };
 }

@@ -8,6 +8,7 @@ const VALID_INVOICE = {
     businessId: '507f1f77bcf86cd799439011',
     accountId: '507f1f77bcf86cd799439031',
     slug: 'zamovlennia-147-aB3xQ9k7',
+    slugLower: 'zamovlennia-147-ab3xq9k7',
     amount: 150000, // 1500.00 грн у копійках
     amountLocked: true,
     paymentPurpose: 'Оплата за замовлення №147',
@@ -161,13 +162,20 @@ describe('InvoiceSchema', () => {
         expect(result.success).toBe(false);
     });
 
+    // Sprint 15 — invoice slug став vanity-string 3-128 chars (дзеркало
+    // businessSlugSchema): uppercase і довільна довжина tail тепер валідні.
+    // Невалідні лише не-alphanumeric символи (крім дефіса-роздільника),
+    // дефіс на краю і вихід за межі довжини.
     it.each([
-        ['short', 'tail-only too short (7 chars)'],
-        ['has space-aB3xQ9k7', 'space in human part'],
-        ['UPPER-aB3xQ9k7', 'uppercase human part'],
-        ['order-aB3xQ9k', 'tail too short (7 chars)'],
-        ['order-aB3xQ9k7q', 'tail too long (9 chars)'],
+        ['ab', 'too short (2 chars)'],
         ['', 'empty string'],
+        ['a'.repeat(129), 'too long (129 chars)'],
+        ['has space-aB3xQ9k7', 'space in human part'],
+        ['order_aB3xQ9k7', 'underscore'],
+        ['order.aB3xQ9k7', 'dot'],
+        ['order-aB3xQ9к7', 'cyrillic char'],
+        ['-order-aB3xQ9k7', 'leading dash'],
+        ['order-aB3xQ9k7-', 'trailing dash'],
     ])('rejects malformed slug %s (%s)', (slug) => {
         const result = InvoiceSchema.safeParse({ ...VALID_INVOICE, slug });
         expect(result.success).toBe(false);

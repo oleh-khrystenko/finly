@@ -66,7 +66,7 @@ export default function EditableBusinessName({ name, onSave }: Props) {
                     error={error}
                     size="lg"
                     autoFocus
-                    aria-label="Назва бізнесу"
+                    aria-label="Назва отримувача"
                 />
                 <div className="flex justify-end gap-2">
                     <UiButton

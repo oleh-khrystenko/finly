@@ -15,9 +15,11 @@ import type { UserDocument } from './schemas/user.schema';
  * Mongoose `default` працює лише на insert, тож legacy documents без полів
  * отримують sane defaults на read-time без міграції БД.
  *
- * Billing шейп — повний `UserBillingSchema`: усі 14 полів. Раніше API скорочувало
- * до 8, але це розходилось з shared контрактом (`packages/types/src/contracts/
- * payments.ts:UserBillingSchema`); тепер shape симетричний.
+ * Billing шейп — `UserBillingSchema` (public). Свідомо НЕ містить
+ * provider-secret поля `recToken` і внутрішніх ordering-полів
+ * (`orderReference`, `lastProviderEventAt`, `providerSubscriptionStatus`):
+ * вони лишаються тільки на боці API. Кожне поле — explicit pick, тож секрети
+ * не протікають за замовчуванням.
  */
 export function mapUserToProfileResponse(user: UserDocument): UserProfile {
     return {
@@ -38,20 +40,16 @@ export function mapUserToProfileResponse(user: UserDocument): UserProfile {
         billing: user.billing
             ? {
                   provider: user.billing.provider,
-                  providerCustomerId: user.billing.providerCustomerId,
-                  providerSubscriptionId: user.billing.providerSubscriptionId,
                   planCode: user.billing.planCode,
                   currency: user.billing.currency,
                   subscriptionStatus: user.billing
                       .subscriptionStatus as UserBilling['subscriptionStatus'],
-                  providerSubscriptionStatus:
-                      user.billing.providerSubscriptionStatus,
                   currentPeriodEnd: user.billing.currentPeriodEnd,
                   cancelAtPeriodEnd: user.billing.cancelAtPeriodEnd,
                   hasActiveSubscription: user.billing.hasActiveSubscription,
-                  lastProviderEventAt: user.billing.lastProviderEventAt,
                   scheduledPlanCode: user.billing.scheduledPlanCode ?? null,
                   scheduledChangeDate: user.billing.scheduledChangeDate ?? null,
+                  cardMask: user.billing.cardMask ?? null,
               }
             : null,
     };

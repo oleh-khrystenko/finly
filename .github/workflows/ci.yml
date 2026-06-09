@@ -18,6 +18,7 @@ jobs:
             NEXT_PUBLIC_PAYMENTS_SUBSCRIPTION_ENABLED: 'true'
             NEXT_PUBLIC_PAYMENTS_ONE_OFF_ENABLED: 'true'
             NEXT_PUBLIC_STORAGE_HOSTNAME: media.finly.com.ua
+            NEXT_PUBLIC_BILLING_DEMO_MODE: 'false'
 
         steps:
             - uses: actions/checkout@v4

@@ -32,16 +32,51 @@ function mod97(rearranged: string): number {
     return remainder;
 }
 
-export function isValidIban(value: string): boolean {
+/**
+ * Прибирає всі пробіли і приводить до верхнього регістру. IBAN усюди (банк-
+ * додаток, договори, виписки) показується групами по 4 з пробілами, тому
+ * скопійоване значення майже завжди приходить як `UA21 3223 …`. Нормалізуємо
+ * на вводі — інакше `UA_IBAN_PATTERN` відхиляє пробіли, а помилка про це не
+ * натякає.
+ */
+export function normalizeIban(value: string): string {
+    return value.replace(/\s+/g, '').toUpperCase();
+}
+
+/** Структурна перевірка: рівно 29 символів — `UA` + 27 цифр. */
+export function hasValidIbanFormat(value: string): boolean {
     if (typeof value !== 'string') return false;
     if (value.length !== UA_IBAN_LENGTH) return false;
-    if (!UA_IBAN_PATTERN.test(value)) return false;
+    return UA_IBAN_PATTERN.test(value);
+}
+
+/** Перевірка контрольної суми MOD-97 (передбачає валідний формат). */
+export function hasValidIbanChecksum(value: string): boolean {
     const rearranged = value.slice(4) + value.slice(0, 4);
     return mod97(rearranged) === 1;
 }
 
+export function isValidIban(value: string): boolean {
+    return hasValidIbanFormat(value) && hasValidIbanChecksum(value);
+}
+
+/**
+ * Два окремі коди замість одного `INVALID_IBAN`, бо причини помилки різні і
+ * повідомлення для них мусять бути різні:
+ *  - `INVALID_IBAN_FORMAT` — не той розмір/символи (користувач недовів номер);
+ *  - `INVALID_IBAN_CHECKSUM` — формат правильний, але контрольна сума не
+ *    зійшлася (описка в одній цифрі). Тут «29 символів, починається з UA»
+ *    було б брехнею — людина це виконала, помилка глибша.
+ *
+ * Порядок refine важливий: checksum-refine пропускає невалідний-за-форматом
+ * вхід (`!hasValidIbanFormat → true`), щоб не дублювати помилку — RHF показує
+ * лише перший issue, тож format-помилка має йти першою.
+ */
 export const ibanZod = z
     .string()
-    .refine(isValidIban, { message: 'INVALID_IBAN' });
+    .refine(hasValidIbanFormat, { message: 'INVALID_IBAN_FORMAT' })
+    .refine((v) => !hasValidIbanFormat(v) || hasValidIbanChecksum(v), {
+        message: 'INVALID_IBAN_CHECKSUM',
+    });
 
 export type Iban = z.infer<typeof ibanZod>;

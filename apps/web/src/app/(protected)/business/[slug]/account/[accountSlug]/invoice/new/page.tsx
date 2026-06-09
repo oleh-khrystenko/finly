@@ -103,7 +103,7 @@ export default function NewInvoicePage() {
             <UiPageContainer className="space-y-6 py-12">
                 <UiSectionCard title={error.message}>
                     <p className="text-muted-foreground mt-2 text-sm">
-                        Поверніться до рахунку і повторіть.
+                        Поверніться до реквізитів і повторіть.
                     </p>
                     <div className="mt-4">
                         <UiButton
@@ -113,7 +113,7 @@ export default function NewInvoicePage() {
                             size="md"
                             IconLeft={<ArrowLeft />}
                         >
-                            До списку бізнесів
+                            До списку отримувачів
                         </UiButton>
                     </div>
                 </UiSectionCard>
@@ -125,7 +125,7 @@ export default function NewInvoicePage() {
     const { business, account } = data;
 
     return (
-        <UiPageContainer className="space-y-6 py-8 md:py-12">
+        <UiPageContainer className="space-y-10 py-12 md:py-16">
             <UiButton
                 as="link"
                 href={`/business/${business.slug}/account/${account.slug}#invoices`}
@@ -134,9 +134,11 @@ export default function NewInvoicePage() {
                 IconLeft={<ArrowLeft />}
                 className="self-start px-0"
             >
-                Назад до рахунку
+                Назад до реквізитів
             </UiButton>
-            <UiPageHeading>Виставити інвойс</UiPageHeading>
+            <UiPageHeading className="md:text-4xl">
+                Новий рахунок
+            </UiPageHeading>
             {/*
              * `key={account.slug}` — force-remount RHF на account change.
              * Без цього `useForm.defaultValues` ініціалізується раз, і

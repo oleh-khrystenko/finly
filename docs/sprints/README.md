@@ -2,7 +2,7 @@
 
 > Короткий tree-overview спринтів MVP. Кожен спринт планується далі окремим документом у цій папці.
 >
-> **Статус:** оновлено 2026-05-11. Sprint 1, 2 закриті; Sprint 3 — функціональний flow закритий, **залишається 1 deliverable + UAT-прогон**; **Sprint 4 — функціональний flow закритий, залишається UAT-прогон INV-1..7**; **Sprint 7 — функціональний flow закритий, UAT pending**; **Sprint 8 — функціональний flow закритий, UAT pending LAND-1..8** (раніше згаданий 8.5 follow-up CTA superseded by Sprint 10 SP-7); Sprint 5 — research-spike заплановано (паралельно з закриттям). **Sprint 9 розщеплено 2026-05-11 на 4 окремі спринти (9, 10, 11, 12)** через надмірний обсяг оригінального плану — деталі у відповідних README.
+> **Статус:** оновлено 2026-06-05. Sprint 1, 2 закриті; Sprint 3, 4, 7, 8 — функціональний flow закритий, UAT-прогон pending (раніше згаданий 8.5 follow-up CTA superseded by Sprint 10 SP-7); **Sprint 5, 9–16 — реалізовано (код у `main`)**; Sprint 17 (білінг на WayForPay) — дослідження зроблено, план переписується. **Sprint 9 розщеплено 2026-05-11 на 4 окремі спринти (9, 10, 11, 12)** через надмірний обсяг оригінального плану — деталі у відповідних README. Білінг отримав порядковий номер 17 у дереві, але живе в теці `06-billing` (слот 06 звільнився від оригінального плейсхолдера "Монетизація + лонч").
 
 ---
 
@@ -67,16 +67,19 @@
 
 > Status summary: backend (api unit 575 + e2e 81), frontend (web 302), middleware spec (33), build 3/3 — все зелене. Sprint вважається закритим після UAT-прогону INV-1..7.
 
-## 5. Per-bank deep links (research-driven)
+## [5. Per-bank deep links (research-driven)](05-per-bank/README.md)
 
-- [ ] Research-spike по 11 банках (iOS+Android, payload, fallback)
-- [ ] Імплементація per-bank кнопок + policy для непокритих банків
+- [x] Research-spike по банках (iOS+Android, payload, fallback) — AASA-дослідження deep-link-ів
+- [x] Імплементація per-bank кнопок + policy для непокритих банків
+
+> Реалізовано (код у `main`): per-bank deep-link grid на публічних сторінках + реальні App Store логотипи через примітив `UiBankLogo`.
 
 ## 6. Монетизація + лонч
 
 - [ ] Free vs Paid гейти (ліміт бізнесів)
-- [ ] Paid-фічі (vanity slug, custom logo у QR)
 - [ ] Preview-режим у кабінеті + onboarding (2 landing)
+
+> Плейсхолдер майбутньої роботи; окремої теки не має (слот `06-` зайнятий білінгом, див. Sprint 17). Частини оригінального скоупу вже від'єдналися в окремі спринти: vanity-slug — Sprint 15, каркас custom-logo у QR (шар C) — Sprint 14, білінг-провайдер — Sprint 17.
 
 ## [7. QR-код не тільки для бізнесу](07-payer-types/README.md)
 
@@ -113,37 +116,61 @@
 
 Поточна модель плутає юр-особу (тип, ІПН, оподаткування) і банківський рахунок (IBAN). ФОП з двома рахунками (Privat + Mono) мусить дублювати юр-особу як два бізнеси з ідентичним ІПН — некоректно. Sprint 9 розщеплює `Business` на дві сутності: `Business` (юр-особа) + `Account` (банківський рахунок). `Invoice` отримує `accountId`. Public URL стає матрьошковим (`/{biz}/{accountSlug}/{invoiceSlug}`); cabinet-навігація — теж nested. Інвойсна нумерація — per-account. IBAN immutable; account можна видалити тільки з 0 інвойсів. **CTA "Зберегти у кабінет" на лендінгу тимчасово вимикається** на час між Sprint 9 і Sprint 10 deploy (anon-claim flow ламається на schema-change). Production-міграція не потрібна — даних ще немає, dropDatabase + чистий старт.
 
-**Status:** заплановано (2026-05-11), не стартував. Передумови — Sprint 1, 3, 4, 7, 8 функціонально закриті.
+**Status:** реалізовано (код у `main`). Розщеплення Business → Business + Account, nested public URL і per-account нумерація — у проді.
 
 ## [10. Anon-claim refactor під Business + Account модель](10-anon-claim-refactor/README.md)
 
 Sprint 9 schema-change ламає Sprint 8 anon-claim flow на backend-рівні (чинний body `{ requisites.iban }` reject-ається). Sprint 10 повертає CTA "Зберегти у кабінет" з новою архітектурою: 2 sequential POST (Business → Account) з granular state-machine + form-recovery patern на failure; magic-link через Redis-draft sub-поле для cross-device flow з KEEPTTL-overwrite на anti-spam dedup-hit; idempotency-key захист від duplicate-Business на retry-after-tab-close через partial-unique-index; terms-pre-stamp на backend (закриває acceptTerms ordering window). Новий `LandingClaimModule` як separation of concerns від `AuthService`. Verify-page-handler resolve-ить `claimState`-discriminator (success / business-failed / account-failed) і робить router.replace на канонічний target.
 
-**Status:** заплановано (2026-05-11), не стартував. Передумова — Sprint 9 функціонально закритий.
+**Status:** реалізовано (код у `main`). CTA "Зберегти у кабінет" повернуто на новій архітектурі (2 sequential POST + form-recovery), `LandingClaimModule` виділено.
 
 ## [11. Deep-link UX-recovery після abandoned magic-link claim](11-deep-link-recovery/README.md)
 
 Phone-юзер відкрив magic-link → backend створив Business+Account і виставив session-credentials, але юзер закрив таб ДО `router.replace` claim-target-у (network drop, accident). Без mitigation на наступному cold-login (день/тиждень пізніше) юзер потрапляє на дефолтний cabinet-root і втрачає inструкцію "Перевірте список банків" (banner `?completed-from=landing` не показується). Sprint 11 додає `User.pendingPostLoginTarget`-stamp на success-claim (LandingClaimService extension); same-device flow clear-ить через verify-page-handler; cold-login flow resume-ить через AuthInitializer. Двошарова open-redirect-protection через shared `validateSameOriginPath`-helper.
 
-**Status:** заплановано (2026-05-11), не стартував. Передумова — Sprint 10 функціонально закритий.
+**Status:** реалізовано (код у `main`). `User.pendingPostLoginTarget` stamp/consume на success-claim + cold-login resume, open-redirect-protection через `validateSameOriginPath`.
 
 ## [12. Orphan-Business cleanup: email-pipeline + cron-deletion](12-orphan-cleanup/README.md)
 
 Phone-юзер міг закрити таб і так не дозаповнити firstName/lastName — orphan-Business+Account накопичуються у БД. Sprint 12 додає cron-сервіс з 3-stage email-pipeline (1-й день: soft-reminder; 6-й день: final-warning; 7-й день: cascade-delete). Prereq-guards гарантують cron-downtime resilience: навіть на multi-day-downtime юзер отримує обидва листи перед deletion. Stamping через `User.profileCompletionReminders`-sub-doc; claim-first-pattern race-protection проти double-fire-paralleled-crons. Email templates на classic-polite tone, multi-business pluralization. Cross-field env-invariant `first < final < deletion`.
 
-**Status:** заплановано (2026-05-11), не стартував. Передумови — Sprint 9, 10, 11 функціонально закриті.
+**Status:** реалізовано (код у `main`). Cron `OrphanProfileCleanupService` з 3-stage email-pipeline + stamping через `User.profileCompletionReminders`.
 
 ## [13. Dependency Inversion](13-dependency-inversion/README.md)
 
 Розв'язуємо дві реальні петлі модульних залежностей (`AuthModule` ↔ `LandingClaimModule` ↔ `UsersModule` і `StorageModule` ↔ `UsersModule` ↔ `AuthModule`) інверсією на рівні класів, а не косметичним `forwardRef`. `AuthService` стає механічним (validate token, find/create user, generate tokens), terms-stamp і landing-claim переїздять у оркестрацію `AuthController`. `StorageService` стає pure file-ops, новий `AvatarService` всередині `UsersModule` володіє оркестрацією аватарки. `LandingClaimResult` виноситься у `packages/types` як shared Zod discriminated union; контракт `POST /auth/magic-link/verify` отримує вкладений `claim` замість плоских claim-полів (breaking change у API-shape, mono-repo міграція атомарно). Першим коміттом закомічується tactical unblocker для docker dev (`forwardRef` у StorageModule), останнім — видаляється разом з імпортом UsersModule.
 
-**Status:** заплановано (2026-05-15), не стартував. Передумова — Sprint 8 функціонально закритий (петлі утворились саме там).
+**Status:** реалізовано (код у `main`). Петлі розв'язано інверсією: `AvatarService` у `UsersModule`, `MagicLinkVerifyController` у `LandingClaimModule`, `LandingClaimResult` у `@finly/types`.
 
 ## [14. QR-брендинг](14-qr-branding/README.md)
 
 Робимо два типи QR візуально різними і перетворюємо QR на брендований носій для друку. Зараз обидва типи виходять однаковими, а URL-QR (тип-2) узагалі не показується в UI. НБУ-QR (тип-1) лишається строго нормативним (центр зі знаком гривні недоторканний) і отримує підпис "за стандартами НБУ"; URL-QR отримує Finly-брендинг у центрі і слоган. Колір обох лишається чорно-білим, розрізнення несуть центр і рамки навколо коду. Тип-2 виводиться у видимий UI на всіх трьох рівнях (бізнес, рахунок, інвойс) з новим endpoint на рівні бізнесу. Додається завантаження для друку через параметр розміру на тому самому endpoint. Каркас рендеру параметризований під майбутній клієнтський брендинг (шар C, монетизація) без його реалізації.
 
-**Status:** заплановано (2026-05-30), не стартував.
+**Status:** реалізовано (код у `main`). Два візуально різні типи QR, тип-2 виведено в UI на всіх трьох рівнях, download для друку, параметризований рендер-каркас.
+
+## [15. Редаговувані nested-slug-и](15-editable-nested-slugs/README.md)
+
+Account і Invoice отримують редаговуваний красивий slug, як у Business. Знімаємо immutability, переходимо на case-insensitive унікальність у межах батька (бізнес для рахунку, рахунок для інвойсу) і дзеркалимо Sprint 14: окремі history-collection, public lookup з history-fallback, постійний redirect на канонічний URL і anti-squatting на grace-вікно, щоб надруковані QR і збережені посилання на старий slug не ламались. Редагування доступне власнику і менеджерам; flow створення не змінюється; пресет-нумерація інвойсу при rename лишається недоторканою.
+
+**Status:** реалізовано (код у `main`). Account і Invoice отримали редаговувані vanity-slug-и з history-fallback, 308-redirect і кнопкою "Згенерувати нове посилання".
+
+## [16. Публічна довідка + заземлений AI-чат](16-public-help-docs/README.md)
+
+Публічна сторінка довідки `finly.com.ua/help` для ФОП і бухгалтерів: багаторозділовий help-center з окремими статтями за власними URL. Поверх статичних статей живе публічний AI-чат, заземлений на той самий контент. Архітектурний стрижень, один набір markdown-статей у репозиторії як єдине джерело правди: Web рендерить їх у SEO-сторінки, API згодовує той самий текст AI як базу знань, тому документація не дрейфує від продукту. AI скоупиться строго на "як користуватись Finly" і відмовляє у податкових/юридичних/off-topic питаннях. Гаманець захищений двошарово (per-IP ліміт для аноніма + глобальний денний бюджет-circuit-breaker); статична довідка ніколи не залежить від доступності AI. Anon-чат ефемерний, нічого не пише в БД. Переюз існуючого SSE-стріму і чат-UI з кабінету.
+
+**Status:** реалізовано (код у `main`). Публічний help-center `finly.com.ua/help` + заземлений на ті самі статті AI-чат, sitemap/robots.
+
+## [17. Міграція білінгу на WayForPay](06-billing/README.md)
+
+Замінюємо Stripe на WayForPay, бо Stripe офіційно не працює з українськими ФОП. Білінг обслуговує лише оплату самого сервісу (підписка + разові пакети виконань), прийом платежів клієнтами лишається QR/НБУ. Підписників ще немає, тому це чиста заміна (hard cutover) без двопровайдерного співіснування: Stripe видаляється повністю. Спайк виявив дві моделі рекурентності у WayForPay (нативні Regular payments з провайдерським шедулером проти токенізації recToken+Charge з нашим шедулером), вибір A чи B фіналізується у sandbox. Зовнішній блокер: активація рекурентів/токенізації може потребувати запиту в підтримку WayForPay, подати найпершим; паралельно договір (Дія.Підпис). Каталог планів переїжджає зі Stripe Products у статичний типізований конфіг з інваріантом єдиного джерела істини. Власний кабінет керування підпискою замінює готовий Stripe-портал (скасування, зміна плану, оновлення картки через re-bind, список останніх списань) і це реальний фронт-обсяг, а не косметика. Рекуренти гібридні: розклад веде провайдер (Regular payments), а recToken тримаємо для негайної proration-доплати при апгрейді (активація токенізації, як і рекурентів, блокер дня один). У скоупі також trial 1 місяць, скасування з поверненням за невикористаний період (refund) і нова легка колекція платежів як джерело історії й повернень.
+
+**Status:** заплановано з чистого листа (2026-06-05), не стартував. Дослідження `research-spike.md` + план `README.md` готові. Зовнішній блокер дня один: запит у підтримку WayForPay на активацію рекурентів/токенізації + укладання договору (Дія.Підпис).
+
+## [18. Демонтаж cabinet AI-chat і внутрішньої валюти з UI](18-remove-ai-chat-currency/README.md)
+
+AI стає підкапотним, а монетизація йде через підписку і одноразові продажі без user-facing валюти «виконань». Спринт прибирає cabinet AI-chat (`/ai-chat`) як фічу і ховає внутрішню валюту з усіх екранів, ріжучи по чистому шву: споживання (cabinet-чат плюс резерваційна машинерія) зноситься начисто, а нарахування (білінг через ledger) лишається фізично недоторканим до редизайну у WayForPay-спринті. Публічний help-chat не чіпається і стає самодостатнім (власні типи, контролер, сервіс), AI-модуль розриває залежність від Users-модуля. Колекція історії чату дропається без міграції. Відкрите питання, делеговане у Sprint 17: чим стають одноразові продажі без «пакетів виконань».
+
+**Status:** заплановано (2026-06-07), не стартував.
 
 ---
 

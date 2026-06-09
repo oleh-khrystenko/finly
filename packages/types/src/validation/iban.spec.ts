@@ -45,11 +45,22 @@ describe('isValidIban — golden vectors', () => {
         expect(isValidIban(123 as unknown as string)).toBe(false);
     });
 
-    it('emits the contract error code on schema rejection', () => {
+    it('emits INVALID_IBAN_FORMAT on structural rejection', () => {
         const result = ibanZod.safeParse('UA00');
         expect(result.success).toBe(false);
         if (!result.success) {
-            expect(result.error.issues[0]?.message).toBe('INVALID_IBAN');
+            expect(result.error.issues[0]?.message).toBe('INVALID_IBAN_FORMAT');
+        }
+    });
+
+    it('emits INVALID_IBAN_CHECKSUM when format is valid but check digits are wrong', () => {
+        // 29 символів, UA + 27 цифр — формат валідний, але MOD-97 не зійдеться.
+        const result = ibanZod.safeParse('UA223223130000026007233566001');
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            const codes = result.error.issues.map((i) => i.message);
+            expect(codes).toContain('INVALID_IBAN_CHECKSUM');
+            expect(codes).not.toContain('INVALID_IBAN_FORMAT');
         }
     });
 });

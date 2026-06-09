@@ -19,4 +19,8 @@ export interface UiDropdownMenuProps {
     align?: UiDropdownMenuAlign;
     size?: UiDropdownMenuSize;
     className?: string;
+    /** Додаткові класи на кожен пункт меню (напр. responsive size-override). */
+    itemClassName?: string;
+    /** Додаткові класи на бейдж пункту (напр. responsive font-size). */
+    badgeClassName?: string;
 }

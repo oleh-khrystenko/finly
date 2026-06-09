@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { Check, Copy, ExternalLink, Pencil } from 'lucide-react';
+import { Check, Copy, ExternalLink, Pencil, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import {
+    buildQrDownloadFilename,
     businessSlugSchema,
     type Business,
     type UpdateBusinessRequest,
@@ -11,15 +12,20 @@ import {
 import UiButton from '@/shared/ui/UiButton';
 import UiEditableField from '@/shared/ui/UiEditableField';
 import UiPrefixInput from '@/shared/ui/UiPrefixInput';
+import UiQrPanel from '@/shared/ui/UiQrPanel';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSwitch from '@/shared/ui/UiSwitch';
 import { mapValidationCode } from '@/shared/lib';
+import { useResetBusinessSlugConfirmStore } from './resetBusinessSlugConfirmStore';
 
 interface Props {
     business: Business;
     /** Public payment-page origin (NEXT_PUBLIC_PAY_PUBLIC_URL чи аналог). */
     payPublicOrigin: string;
+    apiBase?: string;
     onSave: (patch: UpdateBusinessRequest) => Promise<void>;
+    /** Скидання slug-у на свіже випадкове посилання (через confirm-dialog). */
+    onResetSlug: () => Promise<void>;
 }
 
 /**
@@ -35,19 +41,30 @@ interface Props {
  *
  * Підписковий gate (free-tier — slug random, paid — vanity-edit) приходить
  * разом з білінгом окремим спринтом; зараз slug відкритий для всіх.
+ *
+ * QR-код тут — не окрема секція, а друге кодування тієї самої адреси
+ * (URL — для людини, QR — для камери телефона), тому живе в одній картці
+ * під дією-посиланнями. На бізнес-рівні можливий лише тип-2 (URL на вітрину):
+ * тип-1 (НБУ-payload) потребує IBAN, а IBAN живе на рахунку, не на бізнесі.
  */
 export default function PublicSection({
     business,
     payPublicOrigin,
+    apiBase = '/api',
     onSave,
+    onResetSlug,
 }: Props) {
     const [copied, setCopied] = useState(false);
     const [seoSaving, setSeoSaving] = useState(false);
+    const openResetConfirm = useResetBusinessSlugConfirmStore((s) => s.open);
 
     const hostnamePrefix = `${payPublicOrigin
         .replace(/^https?:\/\//, '')
         .replace(/\/$/, '')}/`;
     const publicUrl = `${payPublicOrigin.replace(/\/$/, '')}/${business.slug}`;
+    const qrEndpoint = `${apiBase}/businesses/public/${encodeURIComponent(
+        business.slug
+    )}/qr/business.png`;
 
     const handleCopy = async () => {
         try {
@@ -105,14 +122,10 @@ export default function PublicSection({
                                         variant="outline"
                                         size="md"
                                         onClick={() => void handleCopy()}
-                                        IconLeft={
-                                            copied ? <Check /> : <Copy />
-                                        }
+                                        IconLeft={copied ? <Check /> : <Copy />}
                                         className="w-full sm:w-auto"
                                     >
-                                        {copied
-                                            ? 'Скопійовано'
-                                            : 'Копіювати'}
+                                        {copied ? 'Скопійовано' : 'Копіювати'}
                                     </UiButton>
                                     <UiButton
                                         type="button"
@@ -123,6 +136,20 @@ export default function PublicSection({
                                         className="w-full sm:w-auto"
                                     >
                                         Редагувати
+                                    </UiButton>
+                                    <UiButton
+                                        type="button"
+                                        variant="outline"
+                                        size="md"
+                                        onClick={() =>
+                                            openResetConfirm(() => {
+                                                void onResetSlug();
+                                            })
+                                        }
+                                        IconLeft={<RefreshCw />}
+                                        className="w-full sm:w-auto"
+                                    >
+                                        Згенерувати нове посилання
                                     </UiButton>
                                 </div>
                             </div>
@@ -149,6 +176,16 @@ export default function PublicSection({
                                   ) ?? null);
                         }}
                         onSave={(slug) => onSave({ slug })}
+                    />
+                </div>
+                <div className="py-6">
+                    <UiQrPanel
+                        endpoint={qrEndpoint}
+                        description="Роздрукуйте код на вивісці, чеку чи візитці. Клієнт наведе камеру й одразу опиниться на вашій сторінці."
+                        alt="QR на публічну сторінку отримувача"
+                        downloadFilename={buildQrDownloadFilename('page', {
+                            businessSlug: business.slug,
+                        })}
                     />
                 </div>
                 <label
@@ -179,4 +216,3 @@ export default function PublicSection({
         </UiSectionCard>
     );
 }
-

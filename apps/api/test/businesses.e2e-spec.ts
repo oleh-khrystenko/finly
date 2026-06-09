@@ -648,6 +648,54 @@ describe('Businesses E2E', () => {
             const body = res.body as { data: unknown[] };
             expect(body.data).toHaveLength(0); // owned бізнеси приховані
         });
+
+        it('?context=client фільтрує клієнтські навіть коли worksAsBookkeeper=false (фікс read-after-write race)', async () => {
+            // User з персистентним флагом OFF + один owned-бізнес.
+            const user = await createUser();
+            await supertest(app.getHttpServer())
+                .post('/api/businesses/me')
+                .set('Authorization', bearerFor(user))
+                .send(VALID_CREATE_PAYLOAD)
+                .expect(201);
+
+            // GET з явним context=client має повернути клієнтський контекст
+            // (0 owned бізнесів) — НЕ чекаючи, поки PATCH флага закомітиться.
+            const clientRes = await supertest(app.getHttpServer())
+                .get('/api/businesses/me?context=client')
+                .set('Authorization', bearerFor(user))
+                .expect(200);
+            expect((clientRes.body as { data: unknown[] }).data).toHaveLength(
+                0
+            );
+
+            // А context=own — власний (1), при тому ж незмінному флазі.
+            const ownRes = await supertest(app.getHttpServer())
+                .get('/api/businesses/me?context=own')
+                .set('Authorization', bearerFor(user))
+                .expect(200);
+            expect((ownRes.body as { data: unknown[] }).data).toHaveLength(1);
+        });
+
+        it('?context=own показує власні навіть коли worksAsBookkeeper=true (зворотний override)', async () => {
+            const user = await createUser();
+            await supertest(app.getHttpServer())
+                .post('/api/businesses/me')
+                .set('Authorization', bearerFor(user))
+                .send(VALID_CREATE_PAYLOAD)
+                .expect(201);
+            await supertest(app.getHttpServer())
+                .patch('/api/users/me')
+                .set('Authorization', bearerFor(user))
+                .send({ worksAsBookkeeper: true })
+                .expect(200);
+            const refreshed = await userModel.findById(user._id);
+
+            const res = await supertest(app.getHttpServer())
+                .get('/api/businesses/me?context=own')
+                .set('Authorization', bearerFor(refreshed!))
+                .expect(200);
+            expect((res.body as { data: unknown[] }).data).toHaveLength(1);
+        });
     });
 
     // ─── Cabinet: GET /businesses/me/:slug ───

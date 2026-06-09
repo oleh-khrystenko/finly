@@ -25,6 +25,7 @@ import {
 } from '../businesses/business-access.guard';
 import type { BusinessDocument } from '../businesses/schemas/business.schema';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
+import { ResetInvoiceSlugDto } from './dto/reset-invoice-slug.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { CurrentInvoice, InvoiceAccessGuard } from './invoice-access.guard';
 import { InvoicesService, type PaginatedInvoices } from './invoices.service';
@@ -91,8 +92,26 @@ export class InvoicesController {
         const updated = await this.invoicesService.update(
             business,
             account,
-            invoice.slug,
+            invoice,
             dto
+        );
+        return { data: updated };
+    }
+
+    @Post(':invoiceSlug/reset-slug')
+    @UseGuards(InvoiceAccessGuard)
+    @HttpCode(HttpStatus.OK)
+    async resetSlug(
+        @CurrentBusiness() business: BusinessDocument,
+        @CurrentAccount() account: AccountDocument,
+        @CurrentInvoice() invoice: InvoiceDocument,
+        @Body() dto: ResetInvoiceSlugDto
+    ): Promise<{ data: InvoiceDocument }> {
+        const updated = await this.invoicesService.resetSlug(
+            business,
+            account,
+            invoice,
+            dto.mode
         );
         return { data: updated };
     }
@@ -101,10 +120,9 @@ export class InvoicesController {
     @UseGuards(InvoiceAccessGuard)
     @HttpCode(HttpStatus.OK)
     async delete(
-        @CurrentAccount() account: AccountDocument,
         @CurrentInvoice() invoice: InvoiceDocument
     ): Promise<{ data: null }> {
-        await this.invoicesService.delete(account._id, invoice.slug);
+        await this.invoicesService.delete(invoice);
         return { data: null };
     }
 }

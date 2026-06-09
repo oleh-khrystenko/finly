@@ -45,7 +45,7 @@ describe('mapValidationCode', () => {
             expect(
                 mapValidationCode('TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE')
             ).toBe(
-                'Ця система оподаткування недоступна для обраного типу бізнесу'
+                'Ця система оподаткування недоступна для обраного типу отримувача'
             );
         });
 
@@ -94,7 +94,14 @@ describe('mapValidationCode', () => {
 
     describe('Sprint 1+3 — baseline-коди (regression guard)', () => {
         it.each([
-            ['INVALID_IBAN', 'Перевірте IBAN: 29 символів, починається з UA'],
+            [
+                'INVALID_IBAN_FORMAT',
+                'Здається, номер IBAN неповний або введений з помилкою. Перевірте його',
+            ],
+            [
+                'INVALID_IBAN_CHECKSUM',
+                'Номер IBAN недійсний. Звірте кожну цифру з реквізитами: найчастіше це описка в одній цифрі',
+            ],
             ['INVALID_NAME_REQUIRED', 'Введіть назву'],
             ['INVALID_PURPOSE_REQUIRED', 'Введіть призначення платежу'],
             [

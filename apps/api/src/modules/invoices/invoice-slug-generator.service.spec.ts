@@ -19,6 +19,10 @@ import {
     InvoiceDocument,
     InvoiceSchema,
 } from './schemas/invoice.schema';
+import {
+    InvoiceSlugHistory,
+    InvoiceSlugHistorySchema,
+} from './schemas/invoice-slug-history.schema';
 
 /**
  * Sprint 4 §4.1 — повний integration-spec для генератора. Використовує
@@ -45,6 +49,10 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                     {
                         name: InvoiceSlugCounter.name,
                         schema: InvoiceSlugCounterSchema,
+                    },
+                    {
+                        name: InvoiceSlugHistory.name,
+                        schema: InvoiceSlugHistorySchema,
                     },
                 ]),
             ],
@@ -97,10 +105,12 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
     async function insertInvoice(
         overrides: Partial<Invoice> = {}
     ): Promise<void> {
+        const slug = overrides.slug ?? 'placeholder';
         await invoiceModel.create({
             businessId,
             accountId,
-            slug: 'placeholder',
+            slug,
+            slugLower: slug.toLowerCase(),
             amount: null,
             amountLocked: false,
             paymentPurpose: null,
@@ -215,6 +225,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                 businessId,
                 accountId: otherAccountId,
                 slug: 'inv-555-aaaaaaaa',
+                slugLower: 'inv-555-aaaaaaaa',
                 slugPreset: 'simple',
                 slugCounterScope: 'simple',
                 slugCounter: 555,
@@ -259,6 +270,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                     businessId,
                     accountId,
                     slug: 'inv-001-bbbbbbbb',
+                    slugLower: 'inv-001-bbbbbbbb',
                     slugPreset: 'simple',
                     slugCounterScope: 'simple',
                     slugCounter: 1,
@@ -381,6 +393,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                     businessId,
                     accountId,
                     slug: 'bbbbbbbb',
+                    slugLower: 'bbbbbbbb',
                     slugPreset: null,
                     slugCounterScope: null,
                     slugCounter: null,

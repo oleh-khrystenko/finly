@@ -9,6 +9,14 @@ import {
     AccountSchema,
 } from '../accounts/schemas/account.schema';
 import {
+    AccountSlugHistory,
+    AccountSlugHistorySchema,
+} from '../accounts/schemas/account-slug-history.schema';
+import {
+    InvoiceSlugHistory,
+    InvoiceSlugHistorySchema,
+} from '../invoices/schemas/invoice-slug-history.schema';
+import {
     BusinessSlugHistory,
     BusinessSlugHistorySchema,
 } from '../businesses/schemas/business-slug-history.schema';
@@ -85,7 +93,15 @@ describe('OrphanProfileCleanupService (Sprint 12 §12.1c, MongoMemoryReplSet)', 
                         schema: BusinessSlugHistorySchema,
                     },
                     { name: Account.name, schema: AccountSchema },
+                    {
+                        name: AccountSlugHistory.name,
+                        schema: AccountSlugHistorySchema,
+                    },
                     { name: Invoice.name, schema: InvoiceSchema },
+                    {
+                        name: InvoiceSlugHistory.name,
+                        schema: InvoiceSlugHistorySchema,
+                    },
                     {
                         name: InvoiceSlugCounter.name,
                         schema: InvoiceSlugCounterSchema,
@@ -198,11 +214,13 @@ describe('OrphanProfileCleanupService (Sprint 12 §12.1c, MongoMemoryReplSet)', 
             bankCode: 'privatbank',
             name: 'Privat',
             slug: `acc${ibanSuffix.slice(-6)}`,
+            slugLower: `acc${ibanSuffix.slice(-6)}`.toLowerCase(),
         });
         const invoice = await invoiceModel.create({
             businessId: business._id,
             accountId: account._id,
             slug: `inv-${ibanSuffix}`,
+            slugLower: `inv-${ibanSuffix}`.toLowerCase(),
             slugPreset: 'simple',
             slugCounterScope: 'simple',
             slugCounter: 1,

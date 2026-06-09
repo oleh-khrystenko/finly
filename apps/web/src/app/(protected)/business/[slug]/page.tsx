@@ -12,11 +12,15 @@ import {
     extractApiErrorCode,
     getApiMessage,
     getBusinessBySlug,
+    resetBusinessSlug,
     updateBusiness,
 } from '@/shared/api';
 import type { BusinessWithCounts } from '@finly/types';
+import { OwnershipBadge } from '@/entities/business';
+import { useAuthStore } from '@/entities/user';
 import { ENV } from '@/shared/config/env';
 import UiButton from '@/shared/ui/UiButton';
+import UiBreadcrumb from '@/shared/ui/UiBreadcrumb';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
@@ -24,7 +28,6 @@ import {
     AccountsSection,
     EditableBusinessName,
     PublicSection,
-    QrSection,
     RequisitesCard,
     scheduleDeleteWithUndo,
     useDeleteBusinessConfirmStore,
@@ -50,6 +53,7 @@ import {
 export default function BusinessSlugPage() {
     const router = useRouter();
     const params = useParams<{ slug: string }>();
+    const userId = useAuthStore((s) => s.user?.id);
     const openDeleteConfirm = useDeleteBusinessConfirmStore((s) => s.open);
 
     const [business, setBusiness] = useState<BusinessWithCounts | null>(null);
@@ -105,21 +109,42 @@ export default function BusinessSlugPage() {
         [business, router]
     );
 
+    const handleResetSlug = useCallback(async () => {
+        if (!business) return;
+        const currentSlug = business.slug;
+        try {
+            const updated = await resetBusinessSlug(currentSlug);
+            setBusiness({
+                ...updated,
+                accountsCount: business.accountsCount,
+                invoicesCount: business.invoicesCount,
+            });
+            router.replace(`/business/${updated.slug}`);
+            toast.success('Згенеровано нове посилання');
+        } catch (err) {
+            toast.error(getApiMessage(extractApiErrorCode(err), 'businesses'));
+        }
+    }, [business, router]);
+
     const handleDelete = useCallback(() => {
         if (!business) return;
         const slug = business.slug;
         const name = business.name;
-        // Sprint 4 §SP-5 + Sprint 9: cascade видаляє Account + Invoice +
-        // InvoiceSlugCounter. `invoicesCount` — total за бізнес (всі рахунки),
-        // показуємо у confirm-dialog як cascade-warning.
-        openDeleteConfirm(business, business.invoicesCount, () => {
-            scheduleDeleteWithUndo({
-                slug,
-                name,
-                onScheduled: () => router.replace('/business'),
-                onCancelled: () => router.replace(`/business/${slug}`),
-            });
-        });
+        // Cascade видаляє Account + Invoice + counters/history. Обидва
+        // лічильники (total за бізнес) йдуть у confirm-dialog як cascade-gate.
+        openDeleteConfirm(
+            business,
+            business.accountsCount,
+            business.invoicesCount,
+            () => {
+                scheduleDeleteWithUndo({
+                    slug,
+                    name,
+                    onScheduled: () => router.replace('/business'),
+                    onCancelled: () => router.replace(`/business/${slug}`),
+                });
+            }
+        );
     }, [business, openDeleteConfirm, router]);
 
     if (business === null && !error) {
@@ -141,19 +166,20 @@ export default function BusinessSlugPage() {
     const typeLabel = BUSINESS_TYPE_LABEL[business.type];
 
     return (
-        <UiPageContainer className="space-y-6 py-8 md:py-12">
-            {/* Top toolbar: back-link + identity heading. */}
+        <UiPageContainer className="space-y-6 py-10 md:py-14">
+            {/* Top toolbar: breadcrumb + identity heading. */}
             <div className="flex flex-col gap-4">
-                <UiButton
-                    as="link"
-                    href="/business"
-                    variant="text"
-                    size="sm"
-                    IconLeft={<ArrowLeft />}
-                    className="self-start px-0"
-                >
-                    Назад до списку
-                </UiButton>
+                <div className="flex items-center justify-between gap-3">
+                    <UiBreadcrumb
+                        items={[
+                            { label: 'Усі отримувачі', href: '/business' },
+                            { label: 'Отримувач' },
+                        ]}
+                    />
+                    {userId && (
+                        <OwnershipBadge isOwner={business.ownerId === userId} />
+                    )}
+                </div>
                 <div className="flex min-w-0 flex-col gap-1">
                     <p className="text-muted-foreground text-xl font-semibold tracking-wide uppercase">
                         {typeLabel}
@@ -165,36 +191,34 @@ export default function BusinessSlugPage() {
                 </div>
             </div>
 
-            <div className="space-y-4">
-                <PublicSection
-                    business={business}
-                    payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
-                    onSave={handlePatch}
-                />
-                <QrSection business={business} />
-                <AccountsSection businessSlug={business.slug} />
-                <RequisitesCard business={business} onSave={handlePatch} />
+            <PublicSection
+                business={business}
+                payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
+                onSave={handlePatch}
+                onResetSlug={handleResetSlug}
+            />
+            <AccountsSection businessSlug={business.slug} />
+            <RequisitesCard business={business} onSave={handlePatch} />
 
-                {/* Danger zone */}
-                <UiSectionCard title="Небезпечна зона" variant="destructive">
-                    <p className="text-muted-foreground mt-2 text-base">
-                        Видалення повне і незворотне. Усі рахунки і виставлені
-                        інвойси цього бізнесу будуть видалені. Клієнти, які
-                        мають збережене посилання, не зможуть оплатити.
-                    </p>
-                    <div className="mt-4">
-                        <UiButton
-                            type="button"
-                            variant="destructive-outline"
-                            size="md"
-                            onClick={handleDelete}
-                            IconLeft={<Trash2 />}
-                        >
-                            Видалити бізнес
-                        </UiButton>
-                    </div>
-                </UiSectionCard>
-            </div>
+            {/* Danger zone */}
+            <UiSectionCard title="Небезпечна зона" variant="destructive">
+                <p className="text-muted-foreground mt-2 text-base">
+                    Видалення повне і незворотне. Усі реквізити і виставлені
+                    рахунки цього отримувача будуть видалені. Клієнти, які мають
+                    збережене посилання, не зможуть оплатити.
+                </p>
+                <div className="mt-4">
+                    <UiButton
+                        type="button"
+                        variant="destructive-outline"
+                        size="md"
+                        onClick={handleDelete}
+                        IconLeft={<Trash2 />}
+                    >
+                        Видалити отримувача
+                    </UiButton>
+                </div>
+            </UiSectionCard>
         </UiPageContainer>
     );
 }
@@ -202,16 +226,16 @@ export default function BusinessSlugPage() {
 function ErrorPage({ code }: { code: string }) {
     const message =
         code === 'BUSINESS_NOT_FOUND' || code === 'NOT_FOUND'
-            ? 'Бізнес не знайдено'
+            ? 'Отримувача не знайдено'
             : code === 'BUSINESS_ACCESS_DENIED'
-              ? 'У вас немає доступу до цього бізнесу'
+              ? 'У вас немає доступу до цього отримувача'
               : getApiMessage(code, 'businesses');
 
     return (
         <UiPageContainer className="space-y-6 py-12">
             <UiSectionCard title={message}>
                 <p className="text-muted-foreground mt-2 text-sm">
-                    Поверніться до списку бізнесів і оберіть інший.
+                    Поверніться до списку отримувачів і оберіть іншого.
                 </p>
                 <div className="mt-4">
                     <UiButton
@@ -221,7 +245,7 @@ function ErrorPage({ code }: { code: string }) {
                         size="md"
                         IconLeft={<ArrowLeft />}
                     >
-                        Повернутись до моїх бізнесів
+                        Повернутись до моїх отримувачів
                     </UiButton>
                 </div>
             </UiSectionCard>

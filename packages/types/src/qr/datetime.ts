@@ -119,3 +119,30 @@ export function getKyivYearMonth(date: Date): {
     const monthStr = lookupPart(parts, 'month', 'getKyivYearMonth');
     return { year: parseInt(yearStr, 10), month: parseInt(monthStr, 10) };
 }
+
+/**
+ * Kyiv-локальні `{ year, month, day }` календарного дня instant-а. Той самий
+ * `Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv' })`-патерн, що й решта
+ * хелперів цього файлу — єдине джерело Kyiv-tz-семантики для дат у проєкті
+ * (напр. WayForPay regular-дати `DD.MM.YYYY`, які норматив трактує як локальний
+ * український час). `month` у людському range `[1, 12]`.
+ */
+const KYIV_YMD_FORMATTER = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Kyiv',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+});
+
+export function getKyivYmd(date: Date): {
+    year: number;
+    month: number;
+    day: number;
+} {
+    const parts = KYIV_YMD_FORMATTER.formatToParts(date);
+    return {
+        year: parseInt(lookupPart(parts, 'year', 'getKyivYmd'), 10),
+        month: parseInt(lookupPart(parts, 'month', 'getKyivYmd'), 10),
+        day: parseInt(lookupPart(parts, 'day', 'getKyivYmd'), 10),
+    };
+}

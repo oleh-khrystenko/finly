@@ -279,11 +279,13 @@ describe('EmailService', () => {
             const html = getRenderedHtml();
             expect(html).toContain('3 бізнеси');
             expect(html).toContain('«BizA», «BizB», «BizC»');
-            expect(html).toContain('рахунки');
-            expect(html).not.toContain('рахунків');
+            // Naming-конвенція (рахунок→реквізити): копія вживає інваріантне
+            // «реквізити», старе «рахунок/рахунки/рахунків» не повертається.
+            expect(html).toContain('реквізити');
+            expect(html).not.toContain('рахун');
         });
 
-        it('multi-business (5) render uses many-form "бізнесів" and "рахунків"', async () => {
+        it('multi-business (5) render uses many-form "бізнесів"', async () => {
             await emailService.sendProfileCompletionReminder({
                 user,
                 businesses: [
@@ -297,7 +299,8 @@ describe('EmailService', () => {
 
             const html = getRenderedHtml();
             expect(html).toContain('5 бізнесів');
-            expect(html).toContain('рахунків');
+            expect(html).toContain('реквізити');
+            expect(html).not.toContain('рахун');
         });
 
         it('throws InternalServerErrorException when Resend fails', async () => {

@@ -1,3 +1,5 @@
+export { formatPayeeName } from './formatPayeeName';
+export { OwnershipBadge } from './OwnershipBadge';
 export {
     paymentPurposeTemplateFieldConfig,
     type PaymentPurposeTemplateFieldConfig,

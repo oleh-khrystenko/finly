@@ -14,19 +14,21 @@ import type { Business } from '@finly/types';
  *  4. На таймер — фактичний `deleteBusiness(slug)` API call.
  *  5. На cancel — повернути бізнес у UI (немає request взагалі).
  *
- * **Sprint 4 §SP-5 — `invoicesCount`** показується у dialog-warning, якщо
- * `> 0`: "У бізнесу N активних рахунків — вони теж зникнуть". ФОП знає
- * цифру **до** натискання "Видалити" (cascade-delete видалить усі invoices
- * разом з business у одній transaction). Counter вже у `BusinessWithInvoicesCount`-
- * type після §4.4 розширення `getBySlug` response.
+ * **`accountsCount` + `invoicesCount`** керують cascade-gate у dialog-і: коли
+ * є вкладене, кнопка "Видалити" розблоковується лише після того, як ФОП вписав
+ * відповідні цифри (ненульові з пари). Cascade-delete зносить усі реквізити і
+ * рахунки разом з бізнесом у одній transaction; gate робить масштаб втрати
+ * усвідомленим. Лічильники у `BusinessWithCounts` (single aggregation list).
  */
 interface State {
     isOpen: boolean;
     business: Business | null;
+    accountsCount: number;
     invoicesCount: number;
     onConfirm: (() => void) | null;
     open: (
         business: Business,
+        accountsCount: number,
         invoicesCount: number,
         onConfirm: () => void
     ) => void;
@@ -36,14 +38,16 @@ interface State {
 export const useDeleteBusinessConfirmStore = create<State>((set) => ({
     isOpen: false,
     business: null,
+    accountsCount: 0,
     invoicesCount: 0,
     onConfirm: null,
-    open: (business, invoicesCount, onConfirm) =>
-        set({ isOpen: true, business, invoicesCount, onConfirm }),
+    open: (business, accountsCount, invoicesCount, onConfirm) =>
+        set({ isOpen: true, business, accountsCount, invoicesCount, onConfirm }),
     close: () =>
         set({
             isOpen: false,
             business: null,
+            accountsCount: 0,
             invoicesCount: 0,
             onConfirm: null,
         }),

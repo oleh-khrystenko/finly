@@ -1,36 +1,23 @@
 'use client';
 
 import { type ReactNode, useEffect, useState } from 'react';
-import {
-    ArrowRight,
-    Briefcase,
-    CreditCard,
-    ExternalLink,
-    FileText,
-    Plus,
-} from 'lucide-react';
+import { Briefcase, Plus } from 'lucide-react';
 import { AxiosError } from 'axios';
 import {
     BUSINESS_TYPE_LABEL,
     type BusinessWithCounts,
 } from '@finly/types';
 import { getApiMessage, listBusinesses } from '@/shared/api';
-import { ENV } from '@/shared/config/env';
-import { useAuthStore } from '@/entities/user';
+import { taxIdFieldConfig } from '@/entities/business';
+import { useBookkeeperMode } from '@/entities/user';
 import { usePendingDeletesStore } from '@/features/business-edit/pendingDeletesStore';
-import { pluralizeUa } from '@/shared/lib';
 import UiButton from '@/shared/ui/UiButton';
-import UiLink from '@/shared/ui/UiLink';
+import UiChipGroup from '@/shared/ui/UiChipGroup';
+import UiNavCard from '@/shared/ui/UiNavCard';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
 import UiPageHeading from '@/shared/ui/UiPageHeading';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
-
-// `PAY_ORIGIN` — повний `https://pay.finly.com.ua` для href справжнього посилання.
-// `PAY_HOST` — той самий host без схеми для display ("чистий" вигляд). Обчислюємо
-// один раз на module-load (ENV frozen).
-const PAY_ORIGIN = ENV.NEXT_PUBLIC_PAY_PUBLIC_URL.replace(/\/$/, '');
-const PAY_HOST = PAY_ORIGIN.replace(/^https?:\/\//, '');
 
 function extractApiErrorCode(err: unknown): string {
     if (!(err instanceof AxiosError)) return 'unknown';
@@ -48,11 +35,27 @@ function extractApiErrorCode(err: unknown): string {
  *
  * Empty/filled states з різним текстом для bookkeeper-режиму, щоб ФОП не
  * плутався, чому "його" бізнес не видно.
+ *
+ * Контекст «власні / клієнтські» перемикається segmented-control-ом
+ * (`UiChipGroup`) над списком — `useBookkeeperMode` робить optimistic-flip
+ * `worksAsBookkeeper` + PATCH. Прапор персистентний, тож вибір лишається
+ * дефолтним контекстом на наступний логін.
  */
+// Роль-фреймінг замість «Власні/Клієнтські»: новачок не мусить розуміти
+// модель «отримувачів», він просто відповідає «хто я зараз». Рядок-підказка
+// під табами пояснює активний контекст звичайною мовою (і ненав'язливо
+// вчить, що «отримувач» = бізнес).
+const CONTEXT_OPTIONS = [
+    { value: 'own', label: 'Я власник' },
+    { value: 'client', label: 'Я бухгалтер' },
+];
+const CONTEXT_HINT: Record<'own' | 'client', string> = {
+    own: 'Бізнеси, якими ви володієте.',
+    client: 'Бізнеси клієнтів, для яких ви ведете облік.',
+};
+
 export default function BusinessListPage() {
-    const isBookkeeper = useAuthStore(
-        (s) => s.user?.worksAsBookkeeper ?? false
-    );
+    const { isBookkeeper, setBookkeeper } = useBookkeeperMode();
     const [items, setItems] = useState<BusinessWithCounts[] | null>(null);
     const [error, setError] = useState<string | null>(null);
     // Optimistic delete-removal (Sprint 3 §3.8 §C2). pendingDeletes-store
@@ -60,16 +63,21 @@ export default function BusinessListPage() {
     // фактичний DELETE спрацює.
     const pendingDeleteSlugs = usePendingDeletesStore((s) => s.slugs);
 
-    // Re-fetch при перемиканні toggle — backend filter залежить від
-    // `worksAsBookkeeper` стану user-а. State-mutation тільки в async-callback-ах
-    // (.then/.catch) — синхронний reset перед fetch порушує react-hooks/
-    // set-state-in-effect (React 19) і без нього UX навіть кращий: items
-    // залишаються видимими під час фонового re-fetch (stale-while-revalidate),
-    // без flash спінера. Initial mount — `items === null` показує спінер до
-    // першої відповіді.
+    // Re-fetch при зміні контексту. Передаємо `context` явно у запит, щоб
+    // GET не залежав від того, чи встиг паралельний PATCH `worksAsBookkeeper`
+    // закомітитись — інакше read-after-write race лишав список у старому
+    // контексті. `cancelled`-guard відкидає out-of-order відповіді при швидких
+    // перемиканнях (застосовується лише результат останнього effect-у).
+    //
+    // State-mutation тільки в async-callback-ах (.then/.catch) — синхронний
+    // reset перед fetch порушує react-hooks/set-state-in-effect (React 19) і
+    // без нього UX кращий: items лишаються видимими під час фонового re-fetch
+    // (stale-while-revalidate), без flash спінера. Initial mount —
+    // `items === null` показує спінер до першої відповіді.
+    const context = isBookkeeper ? 'client' : 'own';
     useEffect(() => {
         let cancelled = false;
-        listBusinesses()
+        listBusinesses(context)
             .then((res) => {
                 if (cancelled) return;
                 setItems(res);
@@ -82,7 +90,7 @@ export default function BusinessListPage() {
         return () => {
             cancelled = true;
         };
-    }, [isBookkeeper]);
+    }, [context]);
 
     if (items === null && !error) {
         return (
@@ -100,12 +108,28 @@ export default function BusinessListPage() {
     const isEmpty = visibleItems.length === 0;
 
     return (
-        <UiPageContainer className="space-y-8 py-12 md:py-16">
+        <UiPageContainer className="space-y-6 py-10 md:py-14">
             <div className="flex flex-wrap items-start justify-between gap-4">
-                <UiPageHeading>Бізнеси</UiPageHeading>
+                <UiPageHeading>Отримувачі</UiPageHeading>
                 {!isEmpty && (
-                    <CreateBusinessButton>Створити бізнес</CreateBusinessButton>
+                    <CreateBusinessButton>Створити отримувача</CreateBusinessButton>
                 )}
+            </div>
+
+            {/* Контекст списку: власні бізнеси (ownerId=я) проти клієнтських
+                (ownerless, я в managers). Зміна сегмента = optimistic-flip
+                worksAsBookkeeper + PATCH; backend фільтрує за прапором, тож
+                цей же вибір персиститься як дефолтний контекст. */}
+            <div className="space-y-2">
+                <UiChipGroup
+                    size="sm"
+                    options={CONTEXT_OPTIONS}
+                    value={context}
+                    onChange={(value) => void setBookkeeper(value === 'client')}
+                />
+                <p className="text-muted-foreground text-sm" aria-live="polite">
+                    {CONTEXT_HINT[context]}
+                </p>
             </div>
 
             {error && (
@@ -118,23 +142,21 @@ export default function BusinessListPage() {
 
             {isEmpty && !error && <EmptyState isBookkeeper={isBookkeeper} />}
 
-            {!isEmpty && (
-                <BusinessGrid items={visibleItems} isBookkeeper={isBookkeeper} />
-            )}
+            {!isEmpty && <BusinessGrid items={visibleItems} />}
         </UiPageContainer>
     );
 }
 
 function EmptyState({ isBookkeeper }: { isBookkeeper: boolean }) {
     const title = isBookkeeper
-        ? 'У вас поки немає клієнтських бізнесів'
-        : 'У вас поки немає бізнесів';
+        ? 'У вас поки немає отримувачів клієнтів'
+        : 'У вас поки немає отримувачів';
     const description = isBookkeeper
-        ? 'Додайте бізнес клієнта, щоб згенерувати посилання на оплату для нього'
-        : 'Створіть перший бізнес, щоб згенерувати посилання на оплату';
+        ? 'Додайте отримувача клієнта, щоб згенерувати посилання на оплату для нього'
+        : 'Створіть першого отримувача, щоб згенерувати посилання на оплату';
     const ctaLabel = isBookkeeper
-        ? 'Додати бізнес клієнта'
-        : 'Створити перший бізнес';
+        ? 'Додати отримувача клієнта'
+        : 'Створити першого отримувача';
 
     return (
         <div className="border-border bg-card flex flex-col items-center gap-4 rounded-xl border p-10 text-center md:p-16">
@@ -174,115 +196,61 @@ function CreateBusinessButton({ children }: { children: ReactNode }) {
     );
 }
 
-function BusinessGrid({
-    items,
-    isBookkeeper,
-}: {
-    items: BusinessWithCounts[];
-    isBookkeeper: boolean;
-}) {
+function BusinessGrid({ items }: { items: BusinessWithCounts[] }) {
     return (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2">
             {items.map((business) => (
-                <BusinessCard
-                    key={business.id}
-                    business={business}
-                    isBookkeeper={isBookkeeper}
-                />
+                <BusinessCard key={business.id} business={business} />
             ))}
         </div>
     );
 }
 
-function BusinessCard({
-    business,
-    isBookkeeper,
-}: {
-    business: BusinessWithCounts;
-    isBookkeeper: boolean;
-}) {
+function BusinessCard({ business }: { business: BusinessWithCounts }) {
     const typeLabel = BUSINESS_TYPE_LABEL[business.type];
     const { accountsCount, invoicesCount } = business;
-    const publicHref = `${PAY_ORIGIN}/${business.slug}`;
-    // Sprint 9 §Risk #7 mitigation — два counter-и (рахунки + інвойси усього)
-    // на business-картці, щоб ФОП з 1 рахунком розумів обсяг без drill-down-у
-    // у per-account-page.
+    // Type-aware податковий код: «РНОКПП» для individual/fop, «ЄДРПОУ» для
+    // tov/organization — той самий single-source label, що у формі створення
+    // та cabinet-edit (`taxIdFieldConfig`), щоб копія не дрейфувала.
+    const taxIdLabel = taxIdFieldConfig(business.type).label;
+    // Sprint 9 §Risk #7 mitigation — два counter-и (реквізити + рахунки усього)
+    // на business-картці, щоб ФОП розумів обсяг без drill-down-у у per-account-page.
     return (
-        <article className="border-border bg-card hover:border-foreground/15 flex flex-col gap-3 rounded-xl border p-5 transition-colors md:p-6">
-            <div className="flex items-center justify-between gap-2">
-                <p className="text-muted-foreground truncate text-xs font-medium">
-                    {typeLabel}
-                </p>
-                {isBookkeeper && (
-                    <span className="bg-muted text-muted-foreground shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium">
-                        Клієнтський
-                    </span>
-                )}
-            </div>
-
-            <h2
-                className="text-foreground line-clamp-2 text-base leading-snug font-semibold break-words"
-                title={business.name}
-            >
-                {business.name}
-            </h2>
-
-            <UiLink
-                href={publicHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                variant="muted"
-                aria-label={`Відкрити публічну сторінку ${business.name} у новій вкладці`}
-                className="group inline-flex min-w-0 items-center gap-1.5 text-xs"
-            >
-                <span className="truncate">
-                    {PAY_HOST}/
-                    <span className="text-foreground font-mono">
-                        {business.slug}
-                    </span>
-                </span>
-                <ExternalLink
-                    aria-hidden
-                    className="size-3.5 shrink-0 opacity-60 transition-opacity group-hover:opacity-100"
-                />
-            </UiLink>
-
-            <div className="mt-auto flex flex-col gap-3 pt-2">
-                <div className="flex flex-wrap gap-x-3 gap-y-1">
-                    <p className="text-muted-foreground inline-flex items-center gap-1 text-xs">
-                        <CreditCard className="size-3.5" aria-hidden />
-                        {pluralizeUa(
-                            accountsCount,
-                            'рахунок',
-                            'рахунки',
-                            'рахунків'
-                        )}
+        <UiNavCard
+            href={`/business/${business.slug}${accountsCount > 0 ? '#accounts' : ''}`}
+            ariaLabel={`Відкрити отримувача ${business.name}`}
+            eyebrow={typeLabel}
+            title={business.name}
+            titleAttr={business.name}
+            meta={
+                <>
+                    <p>
+                        {taxIdLabel}:{' '}
+                        <span className="text-foreground font-mono">
+                            {business.taxId}
+                        </span>
                     </p>
-                    {invoicesCount > 0 && (
-                        <p className="text-muted-foreground inline-flex items-center gap-1 text-xs">
-                            <FileText className="size-3.5" aria-hidden />
-                            {pluralizeUa(
-                                invoicesCount,
-                                'інвойс',
-                                'інвойси',
-                                'інвойсів'
-                            )}
-                        </p>
-                    )}
-                </div>
-                <UiButton
-                    as="link"
-                    href={`/business/${business.slug}${
-                        accountsCount > 0 ? '#accounts' : ''
-                    }`}
-                    variant="outline"
-                    size="sm"
-                    IconRight={<ArrowRight />}
-                    className="w-full justify-center"
-                >
-                    Відкрити
-                </UiButton>
-            </div>
-        </article>
+                    <p>
+                        Реквізити:{' '}
+                        <CountValue count={accountsCount} />
+                    </p>
+                    <p>
+                        Рахунки: <CountValue count={invoicesCount} />
+                    </p>
+                </>
+            }
+        />
+    );
+}
+
+/**
+ * Значення лічильника: біле (`text-foreground`) коли є що показати, сіре
+ * (успадковане muted) на нулі — порожнє не підсвічуємо.
+ */
+function CountValue({ count }: { count: number }) {
+    return (
+        <span className={count > 0 ? 'text-foreground' : undefined}>
+            {count} шт
+        </span>
     );
 }

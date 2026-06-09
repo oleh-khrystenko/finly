@@ -41,6 +41,13 @@ export type QrUrlCenterFormat = 'rect' | 'square';
 export interface QrUrlRenderOptions extends QrRenderOptions {
     /** Дефолт `'rect'` (лого + назва). `'square'` — лише лого (під шар C). */
     centerFormat?: QrUrlCenterFormat;
+    /**
+     * Дефолт `true` — нижня band-смуга зі слоганом. `false` прибирає смугу
+     * (центр лого+назва лишається): для контекстів, де слоган уже присутній
+     * на сторінці й дубль у QR зайвий (напр. explainer-сторінка pay-host —
+     * слоган живе у футері).
+     */
+    withSlogan?: boolean;
 }
 
 /**
@@ -185,10 +192,16 @@ export class QrService {
         url: string,
         options?: QrUrlRenderOptions
     ): Promise<Buffer> {
-        const brand =
+        const base =
             options?.centerFormat === 'square'
                 ? BRAND_URL_SQUARE
                 : BRAND_URL_RECT;
+        // `withSlogan: false` зрізає нижню смугу зі слоганом, лишаючи центр
+        // (лого+назву). Решта бренд-дескриптора без змін.
+        const brand =
+            options?.withSlogan === false
+                ? { ...base, bottomBandFile: undefined }
+                : base;
         return this.renderBranded(url, brand, options);
     }
 
@@ -269,7 +282,8 @@ export class QrService {
         const opts = { ...DEFAULT_RENDER_OPTIONS, ...options };
         // Корекція береться з бренд-дескриптора (тип-1 `Q` за нормативом, тип-2
         // `H`), але явна опція callsite має пріоритет (тестова гнучкість).
-        const errorCorrection = options?.errorCorrection ?? brand.errorCorrection;
+        const errorCorrection =
+            options?.errorCorrection ?? brand.errorCorrection;
         const qrPng = await this.imageRenderer.render(text, {
             sizePx: opts.sizePx,
             errorCorrection,

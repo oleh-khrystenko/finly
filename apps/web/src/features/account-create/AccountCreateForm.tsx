@@ -10,6 +10,7 @@ import {
     CreateAccountSchema,
     accountNameSchema,
     ibanZod,
+    normalizeIban,
     type CreateAccountRequest,
 } from '@finly/types';
 import { z } from 'zod';
@@ -85,6 +86,10 @@ export default function AccountCreateForm({
     const { register, handleSubmit, formState } = form;
     const { errors, isValid } = formState;
 
+    // IBAN усюди показується групами по 4 з пробілами — нормалізуємо на вводі,
+    // щоб скопійоване `UA21 3223 …` не падало на pattern-валідації.
+    const ibanField = register('iban');
+
     const onSubmit = async (values: FormValues): Promise<void> => {
         const name = values.name?.trim();
         const dto: CreateAccountRequest = {
@@ -105,12 +110,12 @@ export default function AccountCreateForm({
             const created = await createAccount(businessSlug, parsed.data);
             if (landingRecovery) {
                 useQrLandingDraftStore.getState().clearAll();
-                toast.success('Бізнес і рахунок збережено');
+                toast.success('Отримувача і реквізити збережено');
                 router.replace(
                     `/business/${businessSlug}/account/${created.slug}`
                 );
             } else {
-                toast.success('Рахунок створено');
+                toast.success('Реквізити створено');
                 router.replace(
                     `/business/${businessSlug}/account/${created.slug}`
                 );
@@ -137,20 +142,26 @@ export default function AccountCreateForm({
             className="space-y-6"
             noValidate
         >
-            <div className="border-border bg-card space-y-6 rounded-xl border p-5 md:p-6">
+            <div className="border-border bg-card space-y-6 rounded-xl border p-6 md:p-8">
                 <UiInput
                     label="IBAN"
+                    labelSize="md"
                     placeholder="UA213223130000026007233566001"
-                    description="IBAN неможливо буде змінити після створення. Якщо помилитеся — видаліть рахунок і створіть новий."
+                    description="Після створення IBAN не можна змінити."
                     inputMode="text"
-                    {...register('iban')}
+                    {...ibanField}
+                    onChange={(e) => {
+                        e.target.value = normalizeIban(e.target.value);
+                        return ibanField.onChange(e);
+                    }}
                     error={getZodFieldError(errors.iban)}
                 />
 
                 <UiInput
                     label="Назва"
+                    labelSize="md"
                     placeholder="За замовчуванням підтягнеться з банку"
-                    description="Залиште порожнім — назва підтягнеться автоматично з МФО (наприклад, «ПриватБанк •2580»)."
+                    description="Можна не заповнювати: назва підтягнеться з банку (наприклад, «ПриватБанк •2580»)."
                     {...register('name')}
                     error={getZodFieldError(errors.name)}
                     maxLength={60}
@@ -173,7 +184,7 @@ export default function AccountCreateForm({
                     size="md"
                     disabled={submitting || !isValid}
                 >
-                    {submitting ? 'Створюю...' : 'Створити рахунок'}
+                    {submitting ? 'Створюю...' : 'Створити реквізити'}
                 </UiButton>
             </div>
         </form>

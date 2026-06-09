@@ -15,7 +15,8 @@ import {
 import type { BusinessDocument } from '../businesses/schemas/business.schema';
 import { InvoiceSlugGeneratorService } from './invoice-slug-generator.service';
 import { InvoicesService } from './invoices.service';
-import { Invoice } from './schemas/invoice.schema';
+import { InvoiceSlugHistory } from './schemas/invoice-slug-history.schema';
+import { Invoice, type InvoiceDocument } from './schemas/invoice.schema';
 
 describe('InvoicesService (Sprint 9 §SP-6)', () => {
     let service: InvoicesService;
@@ -26,6 +27,12 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
         findOneAndUpdate: jest.Mock;
         countDocuments: jest.Mock;
         deleteOne: jest.Mock;
+        exists: jest.Mock;
+    }>;
+    let historyModel: jest.Mocked<{
+        create: jest.Mock;
+        deleteMany: jest.Mock;
+        findOne: jest.Mock;
         exists: jest.Mock;
     }>;
     let accountModel: jest.Mocked<{ updateOne: jest.Mock }>;
@@ -60,6 +67,16 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
         invoiceModel.create.mockResolvedValue([doc]);
     };
 
+    // Sprint 15 — update/delete тепер приймають invoice-документ (не slug-string).
+    const invoiceDoc = (slug: string): InvoiceDocument =>
+        ({
+            _id: new Types.ObjectId(),
+            businessId,
+            accountId,
+            slug,
+            slugLower: slug.toLowerCase(),
+        }) as unknown as InvoiceDocument;
+
     beforeEach(async () => {
         invoiceModel = {
             create: jest.fn(),
@@ -70,6 +87,14 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
             deleteOne: jest.fn(),
             exists: jest.fn(),
         };
+        historyModel = {
+            create: jest.fn().mockResolvedValue([{}]),
+            deleteMany: jest
+                .fn()
+                .mockReturnValue({ exec: jest.fn().mockResolvedValue({}) }),
+            findOne: jest.fn(),
+            exists: jest.fn().mockResolvedValue(null),
+        };
         accountModel = {
             updateOne: jest.fn().mockReturnValue({
                 exec: jest.fn().mockResolvedValue({ matchedCount: 1 }),
@@ -78,6 +103,7 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
         slugGenerator = {
             generateInvoiceSlug: jest.fn().mockResolvedValue({
                 slug: 'inv-001-aaaaaaaa',
+                slugLower: 'inv-001-aaaaaaaa',
                 slugPreset: 'simple',
                 slugCounterScope: 'simple',
                 slugCounter: 1,
@@ -99,6 +125,10 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                 {
                     provide: getModelToken(Invoice.name),
                     useValue: invoiceModel,
+                },
+                {
+                    provide: getModelToken(InvoiceSlugHistory.name),
+                    useValue: historyModel,
                 },
                 {
                     provide: getModelToken(Account.name),
@@ -302,13 +332,13 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
     });
 
     describe('getBySlug', () => {
-        it('Sprint 9 §SP-6 — compound `(accountId, slug)` case-sensitive', async () => {
+        it('Sprint 15 — compound `(accountId, slugLower)` case-insensitive', async () => {
             const exec = jest.fn().mockResolvedValue(null);
             invoiceModel.findOne.mockReturnValue({ exec });
             await service.getBySlug(accountId, 'INV-001-XYZ');
             expect(invoiceModel.findOne).toHaveBeenCalledWith({
                 accountId,
-                slug: 'INV-001-XYZ',
+                slugLower: 'inv-001-xyz',
             });
         });
     });
@@ -322,7 +352,7 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
 
         it('без coupled-полів — filter без $expr (lookup `accountId, slug`)', async () => {
             mockUpdateReturn({ paymentPurpose: 'New' });
-            await service.update(business, account, 'inv-001-x', {
+            await service.update(business, account, invoiceDoc('inv-001-x'), {
                 paymentPurpose: 'New',
             });
             const filter = invoiceModel.findOneAndUpdate.mock.calls[0]![0];
@@ -333,7 +363,7 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
 
         it('coupled (тільки amountLocked): vat-літерал, amount — field-ref', async () => {
             mockUpdateReturn({});
-            await service.update(business, account, 'inv-001-x', {
+            await service.update(business, account, invoiceDoc('inv-001-x'), {
                 amountLocked: true,
             });
             const filter = invoiceModel.findOneAndUpdate.mock.calls[0]![0];
@@ -344,7 +374,7 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
 
         it('coupled (тільки amount=null): amount-літерал, locked — field-ref', async () => {
             mockUpdateReturn({});
-            await service.update(business, account, 'inv-001-x', {
+            await service.update(business, account, invoiceDoc('inv-001-x'), {
                 amount: null,
             });
             const filter = invoiceModel.findOneAndUpdate.mock.calls[0]![0];
@@ -359,7 +389,7 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                 _id: new Types.ObjectId(),
             });
             await expect(
-                service.update(business, account, 'inv-001-x', {
+                service.update(business, account, invoiceDoc('inv-001-x'), {
                     amountLocked: true,
                 })
             ).rejects.toBeInstanceOf(BadRequestException);
@@ -368,7 +398,7 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
         it('NotFound (no coupled fields): findOneAndUpdate→null → 404', async () => {
             mockUpdateReturn(null);
             await expect(
-                service.update(business, account, 'gone', {
+                service.update(business, account, invoiceDoc('gone'), {
                     paymentPurpose: 'X',
                 })
             ).rejects.toBeInstanceOf(NotFoundException);
@@ -379,7 +409,7 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
             mockUpdateReturn(null);
             invoiceModel.exists.mockResolvedValue(null);
             await expect(
-                service.update(business, account, 'gone', {
+                service.update(business, account, invoiceDoc('gone'), {
                     amountLocked: true,
                 })
             ).rejects.toBeInstanceOf(NotFoundException);
@@ -388,7 +418,7 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
         it('validUntil у минулому на PATCH → 400 INVOICE_VALID_UNTIL_IN_PAST', async () => {
             const past = new Date(Date.now() - 60_000);
             await expect(
-                service.update(business, account, 'inv-001', {
+                service.update(business, account, invoiceDoc('inv-001'), {
                     validUntil: past,
                 })
             ).rejects.toBeInstanceOf(BadRequestException);
@@ -398,9 +428,14 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
         describe('payeeSnapshot.paymentPurpose mirror', () => {
             it('PATCH paymentPurpose → resolved + dual update top-level + snapshot via $cond pipeline', async () => {
                 mockUpdateReturn({ paymentPurpose: 'Updated' });
-                await service.update(business, account, 'inv-001-x', {
-                    paymentPurpose: 'Updated',
-                });
+                await service.update(
+                    business,
+                    account,
+                    invoiceDoc('inv-001-x'),
+                    {
+                        paymentPurpose: 'Updated',
+                    }
+                );
                 const updateArg =
                     invoiceModel.findOneAndUpdate.mock.calls[0]![1];
                 expect(Array.isArray(updateArg)).toBe(true);
@@ -424,9 +459,14 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
 
             it('PATCH paymentPurpose=null → resolve через business.template + mirror', async () => {
                 mockUpdateReturn({ paymentPurpose: null });
-                await service.update(business, account, 'inv-001-x', {
-                    paymentPurpose: null,
-                });
+                await service.update(
+                    business,
+                    account,
+                    invoiceDoc('inv-001-x'),
+                    {
+                        paymentPurpose: null,
+                    }
+                );
                 const updateArg =
                     invoiceModel.findOneAndUpdate.mock.calls[0]![1];
                 const setStage = (
@@ -451,9 +491,14 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
 
             it('PATCH без paymentPurpose → не торкає snapshot', async () => {
                 mockUpdateReturn({ amount: 200000 });
-                await service.update(business, account, 'inv-001-x', {
-                    amount: 200000,
-                });
+                await service.update(
+                    business,
+                    account,
+                    invoiceDoc('inv-001-x'),
+                    {
+                        amount: 200000,
+                    }
+                );
                 const updateArg =
                     invoiceModel.findOneAndUpdate.mock.calls[0]![1];
                 const setStage = (
@@ -467,15 +512,20 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
     });
 
     describe('delete', () => {
-        it('Sprint 9 §SP-6 — hard-delete по compound (accountId, slug)', async () => {
+        it('Sprint 15 — hard-delete по `_id` + cleanup slug-history у TX', async () => {
             invoiceModel.deleteOne.mockReturnValue({
                 exec: jest.fn().mockResolvedValue({ deletedCount: 1 }),
             });
-            await service.delete(accountId, 'inv-001-x');
-            expect(invoiceModel.deleteOne).toHaveBeenCalledWith({
-                accountId,
-                slug: 'inv-001-x',
-            });
+            const doc = invoiceDoc('inv-001-x');
+            await service.delete(doc);
+            expect(invoiceModel.deleteOne).toHaveBeenCalledWith(
+                { _id: doc._id },
+                expect.objectContaining({})
+            );
+            expect(historyModel.deleteMany).toHaveBeenCalledWith(
+                { invoiceId: doc._id },
+                expect.objectContaining({})
+            );
         });
 
         it('кидає NotFound якщо нічого не видалено', async () => {
@@ -483,7 +533,7 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                 exec: jest.fn().mockResolvedValue({ deletedCount: 0 }),
             });
             await expect(
-                service.delete(accountId, 'gone')
+                service.delete(invoiceDoc('gone'))
             ).rejects.toBeInstanceOf(NotFoundException);
         });
     });

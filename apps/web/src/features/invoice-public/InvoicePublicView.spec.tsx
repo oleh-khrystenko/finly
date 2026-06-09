@@ -1,11 +1,10 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import type { BankCode } from '@finly/types';
 import InvoicePublicView from './InvoicePublicView';
 
 const baseProps = {
     amount: 150000,
-    amountLocked: true,
     paymentPurpose: 'Оплата за консультацію',
     validUntil: null as Date | null,
     invoiceSlug: 'inv-001-aB3xQ9k7',
@@ -27,11 +26,11 @@ const baseProps = {
 };
 
 describe('InvoicePublicView (Sprint 4 §4.7 + Sprint 9 §SP-6)', () => {
-    describe('Heading (Plan: "Рахунок на {amount} ₴" або "Рахунок на оплату")', () => {
-        it('amount=number → "Рахунок на 1 500,00 ₴"', () => {
+    describe('Heading (Plan: "Рахунок на {amount} грн" або "Рахунок на оплату")', () => {
+        it('amount=number → "Рахунок на 1 500,00 грн"', () => {
             render(<InvoicePublicView {...baseProps} />);
             expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
-                /Рахунок на.*1\s500,00\s?₴/
+                /Рахунок на.*1\s500,00\sгрн/
             );
         });
 
@@ -43,17 +42,17 @@ describe('InvoicePublicView (Sprint 4 §4.7 + Sprint 9 §SP-6)', () => {
         });
     });
 
-    describe('Sprint 9 §SP-6 — account-sub-info під heading', () => {
-        it('bankCode != null → "{BUSINESS_TYPE_LABEL} {business.name} через {account.name} ({BANK_LABEL} {ibanMask})"', () => {
+    describe('UiPayeeCard — Отримувач + Реквізити (§SP-6 / §SP-9)', () => {
+        it('bankCode != null → Отримувач="ФОП {name}", Реквізити=банк + маска', () => {
             render(<InvoicePublicView {...baseProps} />);
-            expect(
-                screen.getByText(
-                    'ФОП Іваненко через ПриватБанк •2580 (ПриватБанк •2580)'
-                )
-            ).toBeInTheDocument();
+            const recipient = screen.getByText('Отримувач').closest('div')!;
+            expect(recipient).toHaveTextContent('ФОП Іваненко');
+            const requisites = screen.getByText('Реквізити').closest('div')!;
+            expect(requisites).toHaveTextContent('ПриватБанк');
+            expect(requisites).toHaveTextContent('•2580');
         });
 
-        it('§SP-9 null-fallback — bankCode === null → drop BANK_LABEL-prefix, але `•{last4}` лишається unconditional', () => {
+        it('§SP-9 null-fallback — bankCode === null → банк drop-ається, маска лишається', () => {
             render(
                 <InvoicePublicView
                     {...baseProps}
@@ -64,14 +63,14 @@ describe('InvoicePublicView (Sprint 4 §4.7 + Sprint 9 §SP-6)', () => {
                     }}
                 />
             );
-            // Heading-sub-line: "ФОП Іваненко через Основний (•2580)".
-            expect(
-                screen.getByText('ФОП Іваненко через Основний (•2580)')
-            ).toBeInTheDocument();
+            const requisites = screen.getByText('Реквізити').closest('div')!;
+            expect(requisites).not.toHaveTextContent('ПриватБанк');
+            expect(requisites).toHaveTextContent('•2580');
+            expect(requisites).toHaveTextContent('Основний');
         });
     });
 
-    describe('Sub-info (Plan: "Призначення: {purpose}" + "Дійсний до: {date|без терміну}")', () => {
+    describe('Sub-info (Призначення + майбутній «Дійсний до»)', () => {
         it('завжди рендерить Призначення (resolved-string з backend)', () => {
             render(<InvoicePublicView {...baseProps} />);
             expect(screen.getByText('Призначення')).toBeInTheDocument();
@@ -80,57 +79,54 @@ describe('InvoicePublicView (Sprint 4 §4.7 + Sprint 9 §SP-6)', () => {
             ).toBeInTheDocument();
         });
 
-        it('validUntil=null → "Без терміну"', () => {
+        it('validUntil=null → рядок «Дійсний до» відсутній (без обмеження)', () => {
             render(<InvoicePublicView {...baseProps} />);
-            expect(screen.getByText('Без терміну')).toBeInTheDocument();
+            expect(screen.queryByText('Дійсний до')).not.toBeInTheDocument();
+            expect(screen.queryByText('Без терміну')).not.toBeInTheDocument();
         });
 
-        it('validUntil=Date → форматована дата (uk-UA)', () => {
+        it('validUntil=Date (активний) → форматована дата (uk-UA) у sub-info', () => {
             const future = new Date('2026-12-31T23:59:59');
             render(<InvoicePublicView {...baseProps} validUntil={future} />);
+            expect(screen.getByText('Дійсний до')).toBeInTheDocument();
             expect(
                 screen.getByText(future.toLocaleDateString('uk-UA'))
-            ).toBeInTheDocument();
-        });
-
-        it('amountLocked=true + amount=number → italic-tip про фіксовану суму', () => {
-            render(<InvoicePublicView {...baseProps} />);
-            expect(screen.getByText(/Сума зафіксована/)).toBeInTheDocument();
-        });
-
-        it('amountLocked=false + amount=number → italic-tip про можливість редагування', () => {
-            render(<InvoicePublicView {...baseProps} amountLocked={false} />);
-            expect(
-                screen.getByText(/Можна змінити суму у банк-додатку/)
             ).toBeInTheDocument();
         });
     });
 
     describe('Expired-banner — server-driven через nbuLinks=null (review fix)', () => {
-        it('nbuLinks=null → "Термін рахунку минув" banner', () => {
+        it('nbuLinks=null → "Термін оплати минув" banner з поясненням + дією', () => {
             render(<InvoicePublicView {...baseProps} nbuLinks={null} />);
             expect(
-                screen.getByText('Термін рахунку минув')
+                screen.getByText('Термін оплати минув')
+            ).toBeInTheDocument();
+            expect(
+                screen.getByText(/недоступний для оплати/)
             ).toBeInTheDocument();
             expect(
                 screen.getByText(/Зверніться до отримувача/)
             ).toBeInTheDocument();
         });
 
-        it('nbuLinks=null → CTAs + QR ВІДСУТНІ', () => {
+        it('nbuLinks=null → платіжна секція ВІДСУТНЯ (ні сітки банків, ні disclosure)', () => {
             render(<InvoicePublicView {...baseProps} nbuLinks={null} />);
             expect(
-                screen.queryByRole('link', { name: 'Відкрити в банку' })
+                screen.queryByText('Оберіть банк для оплати')
             ).not.toBeInTheDocument();
             expect(
-                screen.queryByRole('link', { name: 'Запасний варіант' })
+                screen.queryByRole('button', {
+                    name: /Мого банку немає у списку/,
+                })
             ).not.toBeInTheDocument();
             expect(
-                screen.queryByAltText(/QR на основну адресу/)
+                screen.queryByRole('button', {
+                    name: /Показати QR для іншого пристрою/,
+                })
             ).not.toBeInTheDocument();
         });
 
-        it('nbuLinks=null + validUntil у минулому → дата у sub-info все одно показується', () => {
+        it('nbuLinks=null + validUntil у минулому → дата у банері, нейтрального sub-info рядка немає', () => {
             const past = new Date('2024-01-01');
             render(
                 <InvoicePublicView
@@ -139,24 +135,49 @@ describe('InvoicePublicView (Sprint 4 §4.7 + Sprint 9 §SP-6)', () => {
                     validUntil={past}
                 />
             );
+            const dateLabel = past.toLocaleDateString('uk-UA');
+            // Дата — у банері минулого терміну (з причиною), не в sub-info.
             expect(
-                screen.getByText(past.toLocaleDateString('uk-UA'))
+                screen.getByText(
+                    new RegExp(`Цей рахунок був дійсний до ${dateLabel}`)
+                )
             ).toBeInTheDocument();
+            expect(screen.queryByText('Дійсний до')).not.toBeInTheDocument();
         });
 
-        it('active (nbuLinks={primary,legacy}) → 2 CTAs + 2 QRs РЕНДЕРЯТЬСЯ', () => {
+        it('active (nbuLinks={primary,legacy}) → сітка банків видима; CTA + QR доступні через disclosure', () => {
             render(<InvoicePublicView {...baseProps} />);
+            // Сітка банків — головна дія, видима одразу.
             expect(
-                screen.getByRole('link', { name: 'Відкрити в банку' })
+                screen.getByText('Оберіть банк для оплати')
             ).toBeInTheDocument();
+
+            // App-link сховані під disclosure — розкриваємо.
+            fireEvent.click(
+                screen.getByRole('button', {
+                    name: /Мого банку немає у списку/,
+                })
+            );
             expect(
-                screen.getByRole('link', { name: 'Запасний варіант' })
+                screen.getByRole('link', { name: 'Відкрити банк-додаток' })
             ).toBeInTheDocument();
+
+            // QR під окремим disclosure (+ вкладений запасний код).
+            fireEvent.click(
+                screen.getByRole('button', {
+                    name: /Показати QR для іншого пристрою/,
+                })
+            );
             expect(
-                screen.getByAltText('QR на основну адресу')
+                screen.getByAltText('QR для оплати в банку')
             ).toBeInTheDocument();
+            fireEvent.click(
+                screen.getByRole('button', {
+                    name: /Запасний код, якщо не зчитався/,
+                })
+            );
             expect(
-                screen.getByAltText('QR на запасну адресу')
+                screen.getByAltText('Запасний QR для оплати в банку')
             ).toBeInTheDocument();
         });
 
@@ -166,7 +187,7 @@ describe('InvoicePublicView (Sprint 4 §4.7 + Sprint 9 §SP-6)', () => {
                 screen.queryByText('Термін рахунку минув')
             ).not.toBeInTheDocument();
             expect(
-                screen.getByRole('link', { name: 'Відкрити в банку' })
+                screen.getByText('Оберіть банк для оплати')
             ).toBeInTheDocument();
         });
     });
@@ -174,11 +195,16 @@ describe('InvoicePublicView (Sprint 4 §4.7 + Sprint 9 §SP-6)', () => {
     describe('NBU CTA / QR URLs', () => {
         it('CTAs мають правильні NBU URLs з payload', () => {
             render(<InvoicePublicView {...baseProps} />);
+            fireEvent.click(
+                screen.getByRole('button', {
+                    name: /Мого банку немає у списку/,
+                })
+            );
             const primary = screen.getByRole('link', {
-                name: 'Відкрити в банку',
+                name: 'Відкрити банк-додаток',
             });
             const legacy = screen.getByRole('link', {
-                name: 'Запасний варіант',
+                name: 'Інший спосіб, якщо не відкрилось',
             });
             expect(primary).toHaveAttribute(
                 'href',
@@ -192,10 +218,22 @@ describe('InvoicePublicView (Sprint 4 §4.7 + Sprint 9 §SP-6)', () => {
 
         it('Sprint 9 §SP-6 — QR URL 3-сегментний: business + account + invoice slug + host param', () => {
             render(<InvoicePublicView {...baseProps} />);
-            const primaryQr = screen.getByAltText('QR на основну адресу');
-            const legacyQr = screen.getByAltText('QR на запасну адресу');
+            fireEvent.click(
+                screen.getByRole('button', {
+                    name: /Показати QR для іншого пристрою/,
+                })
+            );
+            const primaryQr = screen.getByAltText('QR для оплати в банку');
             expect(primaryQr.getAttribute('src')).toMatch(
                 /\/IvanEnko\/account\/aBc12345\/invoices\/inv-001-aB3xQ9k7\/qr\/nbu\.png\?host=primary$/
+            );
+            fireEvent.click(
+                screen.getByRole('button', {
+                    name: /Запасний код, якщо не зчитався/,
+                })
+            );
+            const legacyQr = screen.getByAltText(
+                'Запасний QR для оплати в банку'
             );
             expect(legacyQr.getAttribute('src')).toMatch(
                 /\/IvanEnko\/account\/aBc12345\/invoices\/inv-001-aB3xQ9k7\/qr\/nbu\.png\?host=legacy$/

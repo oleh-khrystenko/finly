@@ -10,13 +10,13 @@
 export const MVP_BANKS = [
     'privatbank',
     'monobank',
-    'pumb',
-    'oschadbank',
-    'sense',
-    'ukrgazbank',
-    'izibank',
-    'raiffeisen',
     'abank',
+    'pumb',
+    'sense',
+    'raiffeisen',
+    'izibank',
+    'oschadbank',
+    'ukrgazbank',
     'credit_dnipro',
 ] as const;
 

@@ -26,42 +26,12 @@ class UserProfileData {
 }
 
 @Schema({ _id: false })
-class CompensationOps {
-    @Prop({ type: Object, default: {} })
-    inc!: Record<string, number>;
-}
-
-@Schema({ _id: false })
-class ActiveReservation {
-    @Prop({ required: true })
-    id!: string;
-
-    @Prop({ required: true, min: 1 })
-    amount!: number;
-
-    @Prop({ required: true })
-    reservedAt!: Date;
-
-    @Prop({ required: true })
-    expiresAt!: Date;
-
-    @Prop({ required: true })
-    feature!: string;
-
-    @Prop({ type: CompensationOps, required: true })
-    compensationOps!: CompensationOps;
-}
-
-@Schema({ _id: false })
 class UserExecutions {
     @Prop({ required: true, default: 0, min: 0 })
     balance!: number;
 
     @Prop({ required: true, default: false })
     freeReportUsed!: boolean;
-
-    @Prop({ type: ActiveReservation, default: null })
-    activeReservation!: ActiveReservation | null;
 }
 
 @Schema({ _id: false })
@@ -109,7 +79,6 @@ export class User {
         default: () => ({
             balance: 0,
             freeReportUsed: false,
-            activeReservation: null,
         }),
     })
     executions!: UserExecutions;
@@ -166,11 +135,20 @@ export class User {
     @Prop()
     lastLoginAt?: Date;
 
+    /**
+     * Sprint 17 — WayForPay білінг. WayForPay не має customer-обʼєкта: підписку
+     * ідентифікуємо власним `orderReference`. `recToken` — secret-токен картки
+     * для ad-hoc `Charge` (proration-доплата при апгрейді); НІКОЛИ не
+     * серіалізується у frontend (mapper явно його не вибирає). `cardMask` —
+     * останні цифри картки для відображення. `providerSubscriptionStatus`
+     * тримає raw lifecycle WayForPay (Active/Suspended/Removed/...).
+     */
     @Prop({
         type: {
             provider: { type: String, default: null },
-            providerCustomerId: { type: String, default: null },
-            providerSubscriptionId: { type: String, default: null },
+            orderReference: { type: String, default: null },
+            recToken: { type: String, default: null },
+            cardMask: { type: String, default: null },
             planCode: { type: String, default: null },
             currency: { type: String, default: null },
             subscriptionStatus: { type: String, default: null },
@@ -181,14 +159,16 @@ export class User {
             lastProviderEventAt: { type: Date, default: null },
             scheduledPlanCode: { type: String, default: null },
             scheduledChangeDate: { type: Date, default: null },
+            rebindPendingAt: { type: Date, default: null },
         },
         default: null,
         _id: false,
     })
     billing!: {
         provider: string | null;
-        providerCustomerId: string | null;
-        providerSubscriptionId: string | null;
+        orderReference: string | null;
+        recToken: string | null;
+        cardMask: string | null;
         planCode: string | null;
         currency: string | null;
         subscriptionStatus: string | null;
@@ -199,15 +179,18 @@ export class User {
         lastProviderEventAt: Date | null;
         scheduledPlanCode: string | null;
         scheduledChangeDate: Date | null;
+        /**
+         * Set when `updateCard` tears down the old recurring and awaits a new
+         * card binding; cleared by the first approved webhook on the new
+         * orderReference. Lets the cleanup cron expire abandoned re-binds whose
+         * period already lapsed (old recurring gone, new one never confirmed),
+         * instead of leaving `hasActiveSubscription` true indefinitely.
+         */
+        rebindPendingAt: Date | null;
     } | null;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
 
 UserSchema.index({ 'provider.id': 1 }, { sparse: true });
-UserSchema.index({ 'billing.providerCustomerId': 1 }, { sparse: true });
-UserSchema.index({ 'billing.providerSubscriptionId': 1 }, { sparse: true });
-UserSchema.index(
-    { 'executions.activeReservation.expiresAt': 1 },
-    { sparse: true }
-);
+UserSchema.index({ 'billing.orderReference': 1 }, { sparse: true });

@@ -3,17 +3,24 @@ import mongoose, { Model, Types } from 'mongoose';
 
 import { Invoice, InvoiceSchema } from './invoice.schema';
 
-const buildFixture = (overrides: Partial<Invoice> = {}) => ({
-    businessId: new Types.ObjectId(),
-    accountId: new Types.ObjectId(),
-    slug: 'zamovlennia-147-aB3xQ9k7',
-    amount: 150000, // 1500.00 грн у копійках
-    amountLocked: true,
-    paymentPurpose: 'Оплата за замовлення №147',
-    validUntil: null,
-    slugPreset: null,
-    ...overrides,
-});
+const buildFixture = (overrides: Partial<Invoice> = {}) => {
+    // Sprint 15 — `slugLower` required і несе compound-unique
+    // `(accountId, slugLower)`. Деривуємо з `slug`, щоб тести з кількома
+    // інвойсами під одним рахунком (різні slug) не колізіонували хибно.
+    const slug = overrides.slug ?? 'zamovlennia-147-aB3xQ9k7';
+    return {
+        businessId: new Types.ObjectId(),
+        accountId: new Types.ObjectId(),
+        slug,
+        slugLower: slug.toLowerCase(),
+        amount: 150000, // 1500.00 грн у копійках
+        amountLocked: true,
+        paymentPurpose: 'Оплата за замовлення №147',
+        validUntil: null,
+        slugPreset: null,
+        ...overrides,
+    };
+};
 
 describe('Invoice schema (Mongoose integration) — Sprint 9 §SP-6', () => {
     let mongoServer: MongoMemoryServer;
@@ -73,12 +80,12 @@ describe('Invoice schema (Mongoose integration) — Sprint 9 §SP-6', () => {
         }
     );
 
-    it('Sprint 9 §SP-6 — creates expected indexes ((accountId,slug) unique, (accountId,createdAt,_id), (businessId,createdAt), validUntil sparse, partial counter-unique)', async () => {
+    it('Sprint 15 — creates expected indexes ((accountId,slugLower) unique, (accountId,createdAt,_id), (businessId,createdAt), validUntil sparse, partial counter-unique)', async () => {
         const indexes = await InvoiceModel.collection.indexes();
 
-        // primary unique compound moved to (accountId, slug)
+        // Sprint 15 — primary unique compound переїхав на (accountId, slugLower)
         const compoundUnique = indexes.find(
-            (i) => i.key.accountId === 1 && i.key.slug === 1
+            (i) => i.key.accountId === 1 && i.key.slugLower === 1
         );
         expect(compoundUnique?.unique).toBe(true);
 

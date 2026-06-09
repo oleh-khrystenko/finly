@@ -9,6 +9,8 @@ export interface UiTextareaProps extends Omit<
 > {
     variant?: UiTextareaVariant;
     size?: UiTextareaSize;
+    /** Розмір лейбла: `sm` (14px, default) або `md` (16px — ритм еталона). */
+    labelSize?: 'sm' | 'md';
     label?: string;
     description?: string;
     error?: string;

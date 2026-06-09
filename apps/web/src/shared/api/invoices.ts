@@ -2,9 +2,11 @@ import { apiClient, publicFetchJson } from './client';
 import {
     InvoiceSchema,
     PublicInvoiceSchema,
+    type AutoSlugMode,
     type CreateInvoiceRequest,
     type Invoice,
     type PublicInvoiceView,
+    type ResetInvoiceSlugRequest,
     type UpdateInvoiceRequest,
 } from '@finly/types';
 
@@ -91,6 +93,20 @@ export async function updateInvoice(
     const { data } = await apiClient.patch<{ data: unknown }>(
         `${invoicesBase(businessSlug, accountSlug)}/${encodeURIComponent(invoiceSlug)}`,
         dto
+    );
+    return InvoiceSchema.parse(data.data);
+}
+
+export async function resetInvoiceSlug(
+    businessSlug: string,
+    accountSlug: string,
+    invoiceSlug: string,
+    mode: AutoSlugMode
+): Promise<Invoice> {
+    const body: ResetInvoiceSlugRequest = { mode };
+    const { data } = await apiClient.post<{ data: unknown }>(
+        `${invoicesBase(businessSlug, accountSlug)}/${encodeURIComponent(invoiceSlug)}/reset-slug`,
+        body
     );
     return InvoiceSchema.parse(data.data);
 }

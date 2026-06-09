@@ -51,6 +51,12 @@ import { AiModule } from './modules/ai/ai.module';
                 { name: 'default', ttl: 60000, limit: 60 },
                 { name: 'public-payment', ttl: 60000, limit: 600 },
                 { name: 'qr-preview', ttl: 60000, limit: 10 },
+                // Sprint 16 — anon help assistant (`POST /ai/help/chat`).
+                // Coarse per-minute burst guard; the real wallet caps are the
+                // per-IP 24h limit and global daily budget in
+                // HelpChatRateLimitGuard. Apply via `@Throttle({ 'help-chat' })`
+                // + `@SkipThrottle({ default: true })`.
+                { name: 'help-chat', ttl: 60000, limit: 20 },
             ],
         }),
         ScheduleModule.forRoot(),

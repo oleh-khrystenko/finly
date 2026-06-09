@@ -3,20 +3,15 @@ import {
     Body,
     Controller,
     Get,
-    HttpCode,
-    HttpStatus,
     Patch,
     Post,
-    Query,
     Res,
     UnauthorizedException,
     UseGuards,
 } from '@nestjs/common';
 import {
-    EXECUTION_ACTION_COST,
     MAGIC_LINK_PURPOSE,
     RESPONSE_CODE,
-    type ExecutionTransactionItem,
     type ApiMessageResponse,
 } from '@finly/types';
 import { Response } from 'express';
@@ -28,12 +23,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { AuthService } from '../auth/auth.service';
 import { VerifyPasswordDto } from '../auth/dto/verify-password.dto';
 import { AcceptTermsDto } from './dto/accept-terms.dto';
-import { SpendExecutionsDto } from './dto/spend-executions.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
-import type {
-    ExecutionTransactionDocument,
-    ExecutionTransactionLean,
-} from './schemas/execution-transaction.schema';
 import { UserDocument } from './schemas/user.schema';
 import { mapUserToProfileResponse } from './user-profile.mapper';
 import { UsersService } from './users.service';
@@ -92,83 +82,6 @@ export class UsersController {
                 code: RESPONSE_CODE.TERMS_ACCEPTED,
                 message: 'Terms accepted',
             },
-        };
-    }
-
-    @Post('me/executions/spend')
-    @UseGuards(JwtActiveGuard)
-    @HttpCode(HttpStatus.OK)
-    async spendExecutions(
-        @CurrentUser() user: UserDocument,
-        @Body() dto: SpendExecutionsDto
-    ): Promise<{
-        data: { balance: number; transaction: ExecutionTransactionItem };
-    }> {
-        const cost = EXECUTION_ACTION_COST[dto.action];
-        const result = await this.usersService.spendExecutions(
-            user._id.toString(),
-            cost,
-            dto.action
-        );
-
-        if (!result) {
-            throw new BadRequestException({
-                code: RESPONSE_CODE.INSUFFICIENT_EXECUTIONS,
-                message: 'Insufficient executions',
-            });
-        }
-
-        return {
-            data: {
-                balance: result.balanceAfter,
-                transaction: this.mapTransaction(result.transaction),
-            },
-        };
-    }
-
-    @Get('me/executions/transactions')
-    @UseGuards(JwtActiveGuard)
-    async getExecutionTransactions(
-        @CurrentUser() user: UserDocument,
-        @Query('limit') limitParam?: string,
-        @Query('before') beforeParam?: string
-    ): Promise<{
-        data: { items: ExecutionTransactionItem[]; hasMore: boolean };
-    }> {
-        const limit = Math.min(
-            Math.max(parseInt(limitParam || '10', 10) || 10, 1),
-            50
-        );
-        const before = beforeParam ? new Date(beforeParam) : undefined;
-        if (before && isNaN(before.getTime())) {
-            return { data: { items: [], hasMore: false } };
-        }
-
-        const { items, hasMore } =
-            await this.usersService.getRecentTransactions(
-                user._id.toString(),
-                limit,
-                before
-            );
-
-        return {
-            data: {
-                items: items.map((t) => this.mapTransaction(t)),
-                hasMore,
-            },
-        };
-    }
-
-    private mapTransaction(
-        t: ExecutionTransactionLean | ExecutionTransactionDocument
-    ): ExecutionTransactionItem {
-        return {
-            id: t._id.toString(),
-            type: t.type as 'credit' | 'debit',
-            action: t.action,
-            amount: t.amount,
-            balanceAfter: t.balanceAfter,
-            createdAt: t.createdAt,
         };
     }
 

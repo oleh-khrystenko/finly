@@ -19,3 +19,21 @@ export const OUTLINED_FIELD_STYLES = {
     borderError:
         'border-destructive hover:border-destructive focus-within:border-destructive',
 } as const;
+
+export type FieldLabelSize = 'sm' | 'md';
+
+/**
+ * Спільні label-стилі для field-примітивів (`UiInput` / `UiSelect` /
+ * `UiTextarea` / `UiRadioCardGroup`). До цього кожен примітив хардкодив
+ * `mb-1 text-sm` — дрібніше за еталонну сторінку `/business/{slug}`, де поля
+ * рендеряться через `UiEditableField` з `text-base` + `space-y-2`.
+ *
+ *  - `sm` (default): floor-розмір 14px, mb-1 — лишається на всіх існуючих
+ *    формах застосунку без візуальної зміни.
+ *  - `md`: 16px + mb-2 — матчить ритм еталона; opt-in на create-формах
+ *    (отримувач / реквізити / рахунок).
+ */
+export const FIELD_LABEL_STYLES: Record<FieldLabelSize, string> = {
+    sm: 'mb-1 block text-sm font-medium',
+    md: 'mb-2 block text-base font-medium',
+} as const;

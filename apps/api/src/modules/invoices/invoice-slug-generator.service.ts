@@ -18,6 +18,10 @@ import {
     InvoiceSlugCounter,
     InvoiceSlugCounterDocument,
 } from './schemas/invoice-slug-counter.schema';
+import {
+    InvoiceSlugHistory,
+    InvoiceSlugHistoryDocument,
+} from './schemas/invoice-slug-history.schema';
 import { Invoice, InvoiceDocument } from './schemas/invoice.schema';
 import { slugifyPurpose } from './transliterate';
 
@@ -100,6 +104,8 @@ export interface GenerateInvoiceSlugInput {
 
 export interface GenerateInvoiceSlugResult {
     slug: string;
+    /** Sprint 15 — lowercase-нормалізована форма slug (uniqueness/lookup-ключ). */
+    slugLower: string;
     slugPreset: SlugPreset | null;
     /**
      * Sprint 4 §4.1 — counter-namespace string для preset-режимів з лічильником
@@ -121,7 +127,9 @@ export class InvoiceSlugGeneratorService {
         @InjectModel(Invoice.name)
         private readonly invoiceModel: Model<InvoiceDocument>,
         @InjectModel(InvoiceSlugCounter.name)
-        private readonly counterModel: Model<InvoiceSlugCounterDocument>
+        private readonly counterModel: Model<InvoiceSlugCounterDocument>,
+        @InjectModel(InvoiceSlugHistory.name)
+        private readonly historyModel: Model<InvoiceSlugHistoryDocument>
     ) {}
 
     /**
@@ -149,14 +157,22 @@ export class InvoiceSlugGeneratorService {
             attempt++
         ) {
             const candidate = await this.composeCandidate(input, session);
-            // Sprint 9 §SP-6 — compound lookup переходить на `(accountId, slug)`
-            // (per-account invoice-uniqueness scope).
-            const exists = await this.invoiceModel.exists({
-                accountId: input.accountId,
-                slug: candidate.slug,
-            });
-            if (!exists) {
-                return candidate;
+            const slugLower = candidate.slug.toLowerCase();
+            // Sprint 15 — uniqueness на `(accountId, slugLower)` + anti-squatting
+            // проти `InvoiceSlugHistory` у межах рахунку (recently-renamed invoice
+            // тримає старий slug до TTL).
+            const [liveTaken, historyTaken] = await Promise.all([
+                this.invoiceModel.exists({
+                    accountId: input.accountId,
+                    slugLower,
+                }),
+                this.historyModel.exists({
+                    accountId: input.accountId,
+                    slugLower,
+                }),
+            ]);
+            if (!liveTaken && !historyTaken) {
+                return { ...candidate, slugLower };
             }
         }
         this.logger.error(
@@ -176,7 +192,7 @@ export class InvoiceSlugGeneratorService {
     private async composeCandidate(
         input: GenerateInvoiceSlugInput,
         session: ClientSession | null
-    ): Promise<GenerateInvoiceSlugResult> {
+    ): Promise<Omit<GenerateInvoiceSlugResult, 'slugLower'>> {
         const tail = generateRandomTail();
         switch (input.slugInput.kind) {
             case 'explicit':
@@ -215,7 +231,7 @@ export class InvoiceSlugGeneratorService {
         effectivePurpose: string,
         tail: string,
         session: ClientSession | null
-    ): Promise<GenerateInvoiceSlugResult> {
+    ): Promise<Omit<GenerateInvoiceSlugResult, 'slugLower'>> {
         switch (preset) {
             case 'simple': {
                 const scope = 'simple';

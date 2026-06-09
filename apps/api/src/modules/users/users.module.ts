@@ -6,7 +6,6 @@ import { StorageModule } from '../storage/storage.module';
 import { AvatarController } from './avatar.controller';
 import { AvatarService } from './avatar.service';
 import { CleanupService } from './cleanup.service';
-import { ReservationReconcileService } from './reservation-reconcile.service';
 import {
     ExecutionTransaction,
     ExecutionTransactionSchema,
@@ -31,12 +30,7 @@ import { UsersService } from './users.service';
         StorageModule,
     ],
     controllers: [UsersController, AvatarController],
-    providers: [
-        UsersService,
-        AvatarService,
-        CleanupService,
-        ReservationReconcileService,
-    ],
+    providers: [UsersService, AvatarService, CleanupService],
     exports: [UsersService, AvatarService, MongooseModule],
 })
 export class UsersModule {}

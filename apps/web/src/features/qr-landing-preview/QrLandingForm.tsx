@@ -1,7 +1,7 @@
 'use client';
 
 import { toast } from 'sonner';
-import type { QrPreviewInput } from '@finly/types';
+import { normalizeIban, type QrPreviewInput } from '@finly/types';
 
 import { useQrLandingDraftStore } from '@/entities/qr-landing-draft';
 import { getApiMessage } from '@/shared/api/mapApiCode';
@@ -52,6 +52,10 @@ export function QrLandingForm({ form }: QrLandingFormProps) {
         formState: { errors, isValid, isSubmitting },
     } = form;
 
+    // IBAN усюди показується групами по 4 з пробілами — нормалізуємо на вводі,
+    // щоб скопійоване `UA21 3223 …` не падало на pattern-валідації.
+    const ibanField = register('iban');
+
     const onSubmit = async (data: QrPreviewInput): Promise<void> => {
         try {
             const response = await fetchQrPreview(data);
@@ -97,7 +101,11 @@ export function QrLandingForm({ form }: QrLandingFormProps) {
                 placeholder="UA213223130000026007233566001"
                 autoComplete="off"
                 spellCheck={false}
-                {...register('iban')}
+                {...ibanField}
+                onChange={(e) => {
+                    e.target.value = normalizeIban(e.target.value);
+                    return ibanField.onChange(e);
+                }}
                 error={getZodFieldError(errors.iban)}
             />
 

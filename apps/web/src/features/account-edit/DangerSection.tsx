@@ -9,21 +9,17 @@ interface Props {
 }
 
 /**
- * Sprint 9 §9.2 §6 — небезпечна зона account-cabinet-page. Тонкий рендер +
- * `onDelete` callback. Pre-check (`invoicesCount > 0`), confirm-dialog open,
- * 5s-undo, redirect — усе живе у callsite (cabinet account-page), щоб
- * `onDelete` працював як з frontend-pre-check, так і без нього.
+ * Небезпечна зона account-cabinet-page. Тонкий рендер + `onDelete` callback.
+ * Confirm-dialog (з cascade-gate, якщо є рахунки), 5s-undo, redirect — усе
+ * живе у callsite (cabinet account-page).
  */
 export default function DangerSection({ onDelete }: Props) {
     return (
         <UiSectionCard title="Небезпечна зона" variant="destructive">
-            <p className="text-muted-foreground mt-2 text-sm">
-                Видалення повне і незворотне. Клієнти, які мають збережене
-                посилання, не зможуть оплатити.
-            </p>
-            <p className="text-muted-foreground mt-2 text-sm">
-                Якщо рахунок має виставлені інвойси — спочатку видаліть їх або
-                видаліть весь бізнес.
+            <p className="text-muted-foreground mt-2 text-base">
+                Видалення повне і незворотне. Реквізити зникнуть разом з усіма
+                виставленими рахунками. Клієнти, які мають збережене посилання,
+                не зможуть оплатити.
             </p>
             <div className="mt-4">
                 <UiButton
@@ -33,7 +29,7 @@ export default function DangerSection({ onDelete }: Props) {
                     onClick={onDelete}
                     IconLeft={<Trash2 />}
                 >
-                    Видалити рахунок
+                    Видалити реквізити
                 </UiButton>
             </div>
         </UiSectionCard>
