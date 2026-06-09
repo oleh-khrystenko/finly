@@ -1,6 +1,7 @@
 import {
     BadRequestException,
     ConflictException,
+    ForbiddenException,
     Injectable,
     InternalServerErrorException,
     NotFoundException,
@@ -17,14 +18,18 @@ import {
 import {
     RESPONSE_CODE,
     VAT_ALLOWED_TAXATION_SYSTEMS,
+    isAccessLevelAtLeast,
     isTaxIdValidForType,
     isTaxationAllowedForType,
     requiresTaxation,
+    type AccessLevel,
+    type BusinessType,
     type BusinessWithCounts,
     type CreateBusinessRequest,
     type UpdateBusinessRequest,
 } from '@finly/types';
 
+import { assertSlugEditAllowed } from '../../common/billing/assert-access';
 import { isTransactionsUnsupportedError } from '../../common/mongoose/transactions-unsupported';
 import {
     AccountSlugHistory,
@@ -52,6 +57,11 @@ import {
 } from './schemas/business-slug-history.schema';
 import { Business, BusinessDocument } from './schemas/business.schema';
 import { SlugGeneratorService } from './slug-generator.service';
+
+// Sprint 19 — ліміти створення бізнесів (див. `assertWithinBusinessLimit`).
+const FOUNDATIONAL_TYPE_LIMIT = 1; // власні фізособа / ФОП — інваріант
+const SCALE_TYPE_LIMIT_BELOW_BOOKKEEPER = 1; // власні ТОВ / організація до bookkeeper
+const CLIENT_BUSINESS_LIMIT = 10; // клієнтські бізнеси до bookkeeper
 
 /**
  * Sprint 3 §3.2 — primary CRUD service для бізнесів cabinet-зони.
@@ -110,7 +120,8 @@ export class BusinessesService {
     async create(
         userId: string,
         dto: CreateBusinessRequest,
-        isBookkeeperMode: boolean
+        isBookkeeperMode: boolean,
+        actorLevel: AccessLevel
     ): Promise<BusinessDocument> {
         const userObjectId = new Types.ObjectId(userId);
 
@@ -141,6 +152,17 @@ export class BusinessesService {
                 return existing;
             }
         }
+
+        // Sprint 19 — ліміти на кількість бізнесів за рівнем доступу і власністю.
+        // Перевірка після anon-claim replay (replay повертає наявний, не створює
+        // новий) і перед генерацією slug. claimIdempotencyKey-replay сам по собі
+        // не платний — ліміт стосується нового бізнесу.
+        await this.assertWithinBusinessLimit(
+            userObjectId,
+            dto.type,
+            isBookkeeperMode,
+            actorLevel
+        );
 
         const slug = await this.slugGenerator.generateRandomSlug();
 
@@ -217,6 +239,63 @@ export class BusinessesService {
                   claimIdempotencyKey,
               }
             : { ownerId: userObjectId, claimIdempotencyKey };
+    }
+
+    /**
+     * Sprint 19 — ліміти створення бізнесів. Дві осі:
+     *  - **Клієнтські** (bookkeeper-режим, ownerless): усі типи разом, до
+     *    `CLIENT_LIMIT` на none/brand, без ліміту на bookkeeper.
+     *  - **Власні** (ownerId=userId), per-тип:
+     *    - фізособа / ФОП: завжди максимум 1 (доменний інваріант, не апсел) —
+     *      `BUSINESS_TYPE_LIMIT_REACHED`;
+     *    - ТОВ / організація: 1 на none/brand, без ліміту на bookkeeper —
+     *      `BUSINESS_LIMIT_REQUIRES_PLAN` (апсел).
+     */
+    private async assertWithinBusinessLimit(
+        userObjectId: Types.ObjectId,
+        type: BusinessType,
+        isBookkeeperMode: boolean,
+        actorLevel: AccessLevel
+    ): Promise<void> {
+        if (isBookkeeperMode) {
+            if (isAccessLevelAtLeast(actorLevel, 'bookkeeper')) return;
+            const clientCount = await this.businessModel.countDocuments({
+                ownerId: null,
+                managers: userObjectId,
+            });
+            if (clientCount >= CLIENT_BUSINESS_LIMIT) {
+                throw new ForbiddenException({
+                    code: RESPONSE_CODE.BUSINESS_LIMIT_REQUIRES_PLAN,
+                    message:
+                        'Client business limit reached for the current plan',
+                });
+            }
+            return;
+        }
+
+        const ownedOfType = await this.businessModel.countDocuments({
+            ownerId: userObjectId,
+            type,
+        });
+
+        if (type === 'individual' || type === 'fop') {
+            if (ownedOfType >= FOUNDATIONAL_TYPE_LIMIT) {
+                throw new ForbiddenException({
+                    code: RESPONSE_CODE.BUSINESS_TYPE_LIMIT_REACHED,
+                    message: `Only ${FOUNDATIONAL_TYPE_LIMIT} business of this type is allowed`,
+                });
+            }
+            return;
+        }
+
+        // tov / organization
+        if (isAccessLevelAtLeast(actorLevel, 'bookkeeper')) return;
+        if (ownedOfType >= SCALE_TYPE_LIMIT_BELOW_BOOKKEEPER) {
+            throw new ForbiddenException({
+                code: RESPONSE_CODE.BUSINESS_LIMIT_REQUIRES_PLAN,
+                message: 'Business limit reached for the current plan',
+            });
+        }
     }
 
     async getOwnedAndManaged(
@@ -353,18 +432,34 @@ export class BusinessesService {
     ): Promise<BusinessDocument | null> {
         const slugLower = slug.toLowerCase();
         const business = await this.businessModel.findOne({ slugLower }).exec();
-        if (business) return business;
+        if (business) {
+            // Sprint 19 — заблокований реконсиляцією бізнес гасне публічно:
+            // повертаємо null, публічний контролер віддає 404. Єдина точка
+            // резолву для всіх трьох публічних контролерів (business/account/
+            // invoice), тож гасіння централізоване тут.
+            return business.accessBlockedAt ? null : business;
+        }
+        // Sprint 19 — lapse-записи (redirect:false) НЕ редіректять: ім'я лише
+        // зарезервоване на холд, публічний хіт неактивний. `$ne: false` ловить і
+        // legacy-записи без поля (redirect зберігається, як було).
         const historyEntry = await this.historyModel
-            .findOne({ slugLower })
+            .findOne({ slugLower, redirect: { $ne: false } })
             .lean<{ businessId: Types.ObjectId }>()
             .exec();
         if (!historyEntry) return null;
-        return this.businessModel.findById(historyEntry.businessId).exec();
+        const current = await this.businessModel
+            .findById(historyEntry.businessId)
+            .exec();
+        return current && !current.accessBlockedAt ? current : null;
     }
 
     async update(
         slug: string,
-        dto: UpdateBusinessRequest
+        dto: UpdateBusinessRequest,
+        actorLevel: AccessLevel,
+        // Sprint 19 — чи позначати новий slug як кастомний. true для user-PATCH
+        // (vanity), false для reset-slug (авто). Впливає лише при rename.
+        markSlugCustomized = true
     ): Promise<BusinessDocument> {
         const slugLower = slug.toLowerCase();
 
@@ -377,6 +472,8 @@ export class BusinessesService {
             newSlugLower !== undefined && newSlugLower !== slugLower;
         let renameOwnerId: Types.ObjectId | null = null;
         if (slugRenaming) {
+            // Sprint 19 — slug як платна фіча (brand+). Cheap-reject до DB-роботи.
+            assertSlugEditAllowed(actorLevel);
             renameOwnerId = await this.resolveSlugRenameContext(
                 newSlugLower,
                 slugLower
@@ -495,6 +592,7 @@ export class BusinessesService {
         const setPayload: Record<string, unknown> = { ...dto };
         if (slugRenaming) {
             setPayload.slugLower = newSlugLower!;
+            setPayload.slugCustomized = markSlugCustomized;
             return this.executeSlugRenameUpdate(
                 filter,
                 setPayload,
@@ -715,9 +813,13 @@ export class BusinessesService {
      * зроблені генератором; повторні у `update` — cheap defense-in-depth, не
      * дублювання логіки.
      */
-    async resetSlug(business: BusinessDocument): Promise<BusinessDocument> {
+    async resetSlug(
+        business: BusinessDocument,
+        actorLevel: AccessLevel
+    ): Promise<BusinessDocument> {
         const newSlug = await this.slugGenerator.generateRandomSlug();
-        return this.update(business.slug, { slug: newSlug });
+        // markSlugCustomized=false — reset повертає до авто, не vanity.
+        return this.update(business.slug, { slug: newSlug }, actorLevel, false);
     }
 
     /**

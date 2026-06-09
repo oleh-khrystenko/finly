@@ -9,8 +9,9 @@ import {
     Post,
     UseGuards,
 } from '@nestjs/common';
-import type { AccountWithCounts } from '@finly/types';
+import type { AccessLevel, AccountWithCounts } from '@finly/types';
 
+import { CurrentAccessLevel } from '../../common/decorators/current-access-level.decorator';
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
 import {
     BusinessAccessGuard,
@@ -76,9 +77,14 @@ export class AccountsController {
     @UseGuards(AccountAccessGuard)
     async update(
         @CurrentAccount() account: AccountDocument,
+        @CurrentAccessLevel() actorLevel: AccessLevel,
         @Body() dto: UpdateAccountDto
     ): Promise<{ data: AccountDocument }> {
-        const updated = await this.accountsService.update(account, dto);
+        const updated = await this.accountsService.update(
+            account,
+            dto,
+            actorLevel
+        );
         return { data: updated };
     }
 
@@ -86,9 +92,13 @@ export class AccountsController {
     @UseGuards(AccountAccessGuard)
     @HttpCode(HttpStatus.OK)
     async resetSlug(
-        @CurrentAccount() account: AccountDocument
+        @CurrentAccount() account: AccountDocument,
+        @CurrentAccessLevel() actorLevel: AccessLevel
     ): Promise<{ data: AccountDocument }> {
-        const updated = await this.accountsService.resetSlug(account);
+        const updated = await this.accountsService.resetSlug(
+            account,
+            actorLevel
+        );
         return { data: updated };
     }
 

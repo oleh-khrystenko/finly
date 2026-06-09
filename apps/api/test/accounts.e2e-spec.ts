@@ -235,7 +235,30 @@ describe('Accounts E2E (Sprint 9 §SP-1..§SP-3)', () => {
         await invoiceModel.deleteMany({});
     });
 
-    async function createUser(): Promise<UserDocument> {
+    // Sprint 19 — slug-редагування вимагає рівня не нижче brand.
+    const ACTIVE_BRAND_BILLING = {
+        provider: 'wayforpay',
+        orderReference: null,
+        recToken: null,
+        cardMask: null,
+        planCode: 'brand',
+        currency: 'UAH',
+        subscriptionStatus: 'ACTIVE',
+        providerSubscriptionStatus: null,
+        currentPeriodEnd: null,
+        cancelAtPeriodEnd: false,
+        hasActiveSubscription: true,
+        lastProviderEventAt: null,
+        scheduledPlanCode: null,
+        scheduledChangeDate: null,
+        rebindPendingAt: null,
+        oneOffLevel: null,
+        oneOffAccessUntil: null,
+    };
+
+    async function createUser(
+        overrides: Partial<UserDocument> = {}
+    ): Promise<UserDocument> {
         return userModel.create({
             email: `user-${new Types.ObjectId().toString()}@test.com`,
             profile: {
@@ -245,6 +268,7 @@ describe('Accounts E2E (Sprint 9 §SP-1..§SP-3)', () => {
             },
             executions: { balance: 0, freeReportUsed: false },
             worksAsBookkeeper: false,
+            ...overrides,
         });
     }
 
@@ -496,7 +520,7 @@ describe('Accounts E2E (Sprint 9 §SP-1..§SP-3)', () => {
         });
 
         it('Sprint 15 — slug editable (vanity) + старе посилання редіректить через history', async () => {
-            const user = await createUser();
+            const user = await createUser({ billing: ACTIVE_BRAND_BILLING });
             const { businessSlug, accountSlug } = await seedAccount(user);
 
             const renamed = await supertest(app.getHttpServer())
@@ -530,7 +554,7 @@ describe('Accounts E2E (Sprint 9 §SP-1..§SP-3)', () => {
         });
 
         it('Sprint 15 — slug-rename колізія у межах бізнесу → 409 SLUG_TAKEN', async () => {
-            const user = await createUser();
+            const user = await createUser({ billing: ACTIVE_BRAND_BILLING });
             const { businessSlug, accountSlug } = await seedAccount(user);
             // Другий рахунок під тим самим бізнесом.
             const second = await supertest(app.getHttpServer())

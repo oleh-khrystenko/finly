@@ -352,9 +352,15 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
 
         it('без coupled-полів — filter без $expr (lookup `accountId, slug`)', async () => {
             mockUpdateReturn({ paymentPurpose: 'New' });
-            await service.update(business, account, invoiceDoc('inv-001-x'), {
-                paymentPurpose: 'New',
-            });
+            await service.update(
+                business,
+                account,
+                invoiceDoc('inv-001-x'),
+                {
+                    paymentPurpose: 'New',
+                },
+                'bookkeeper'
+            );
             const filter = invoiceModel.findOneAndUpdate.mock.calls[0]![0];
             expect(filter).toEqual({ accountId, slug: 'inv-001-x' });
             expect(filter.$expr).toBeUndefined();
@@ -363,9 +369,15 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
 
         it('coupled (тільки amountLocked): vat-літерал, amount — field-ref', async () => {
             mockUpdateReturn({});
-            await service.update(business, account, invoiceDoc('inv-001-x'), {
-                amountLocked: true,
-            });
+            await service.update(
+                business,
+                account,
+                invoiceDoc('inv-001-x'),
+                {
+                    amountLocked: true,
+                },
+                'bookkeeper'
+            );
             const filter = invoiceModel.findOneAndUpdate.mock.calls[0]![0];
             expect(filter.$expr).toEqual({
                 $or: [{ $ne: ['$amount', null] }, { $ne: [true, true] }],
@@ -374,9 +386,15 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
 
         it('coupled (тільки amount=null): amount-літерал, locked — field-ref', async () => {
             mockUpdateReturn({});
-            await service.update(business, account, invoiceDoc('inv-001-x'), {
-                amount: null,
-            });
+            await service.update(
+                business,
+                account,
+                invoiceDoc('inv-001-x'),
+                {
+                    amount: null,
+                },
+                'bookkeeper'
+            );
             const filter = invoiceModel.findOneAndUpdate.mock.calls[0]![0];
             expect(filter.$expr).toEqual({
                 $or: [{ $ne: [null, null] }, { $ne: ['$amountLocked', true] }],
@@ -389,18 +407,30 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                 _id: new Types.ObjectId(),
             });
             await expect(
-                service.update(business, account, invoiceDoc('inv-001-x'), {
-                    amountLocked: true,
-                })
+                service.update(
+                    business,
+                    account,
+                    invoiceDoc('inv-001-x'),
+                    {
+                        amountLocked: true,
+                    },
+                    'bookkeeper'
+                )
             ).rejects.toBeInstanceOf(BadRequestException);
         });
 
         it('NotFound (no coupled fields): findOneAndUpdate→null → 404', async () => {
             mockUpdateReturn(null);
             await expect(
-                service.update(business, account, invoiceDoc('gone'), {
-                    paymentPurpose: 'X',
-                })
+                service.update(
+                    business,
+                    account,
+                    invoiceDoc('gone'),
+                    {
+                        paymentPurpose: 'X',
+                    },
+                    'bookkeeper'
+                )
             ).rejects.toBeInstanceOf(NotFoundException);
             expect(invoiceModel.exists).not.toHaveBeenCalled();
         });
@@ -409,18 +439,30 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
             mockUpdateReturn(null);
             invoiceModel.exists.mockResolvedValue(null);
             await expect(
-                service.update(business, account, invoiceDoc('gone'), {
-                    amountLocked: true,
-                })
+                service.update(
+                    business,
+                    account,
+                    invoiceDoc('gone'),
+                    {
+                        amountLocked: true,
+                    },
+                    'bookkeeper'
+                )
             ).rejects.toBeInstanceOf(NotFoundException);
         });
 
         it('validUntil у минулому на PATCH → 400 INVOICE_VALID_UNTIL_IN_PAST', async () => {
             const past = new Date(Date.now() - 60_000);
             await expect(
-                service.update(business, account, invoiceDoc('inv-001'), {
-                    validUntil: past,
-                })
+                service.update(
+                    business,
+                    account,
+                    invoiceDoc('inv-001'),
+                    {
+                        validUntil: past,
+                    },
+                    'bookkeeper'
+                )
             ).rejects.toBeInstanceOf(BadRequestException);
             expect(invoiceModel.findOneAndUpdate).not.toHaveBeenCalled();
         });
@@ -434,7 +476,8 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                     invoiceDoc('inv-001-x'),
                     {
                         paymentPurpose: 'Updated',
-                    }
+                    },
+                    'bookkeeper'
                 );
                 const updateArg =
                     invoiceModel.findOneAndUpdate.mock.calls[0]![1];
@@ -465,7 +508,8 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                     invoiceDoc('inv-001-x'),
                     {
                         paymentPurpose: null,
-                    }
+                    },
+                    'bookkeeper'
                 );
                 const updateArg =
                     invoiceModel.findOneAndUpdate.mock.calls[0]![1];
@@ -497,7 +541,8 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                     invoiceDoc('inv-001-x'),
                     {
                         amount: 200000,
-                    }
+                    },
+                    'bookkeeper'
                 );
                 const updateArg =
                     invoiceModel.findOneAndUpdate.mock.calls[0]![1];

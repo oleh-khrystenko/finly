@@ -10,12 +10,14 @@ import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Connection, Model, Types, type FilterQuery } from 'mongoose';
 import {
     RESPONSE_CODE,
+    type AccessLevel,
     type AutoSlugMode,
     type CreateInvoiceRequest,
     type SlugInput,
     type UpdateInvoiceRequest,
 } from '@finly/types';
 
+import { assertSlugEditAllowed } from '../../common/billing/assert-access';
 import { isTransactionsUnsupportedError } from '../../common/mongoose/transactions-unsupported';
 import {
     Account,
@@ -334,8 +336,10 @@ export class InvoicesService {
             .findOne({ accountId, slugLower })
             .exec();
         if (invoice) return invoice;
+        // Sprint 19 — lapse-записи (redirect:false) не редіректять (ім'я на
+        // холді). `$ne: false` зберігає поведінку для legacy-записів без поля.
         const historyEntry = await this.historyModel
-            .findOne({ accountId, slugLower })
+            .findOne({ accountId, slugLower, redirect: { $ne: false } })
             .lean<{ invoiceId: Types.ObjectId }>()
             .exec();
         if (!historyEntry) return null;
@@ -378,7 +382,9 @@ export class InvoicesService {
         business: BusinessDocument,
         account: AccountDocument,
         invoice: InvoiceDocument,
-        dto: UpdateInvoiceRequest
+        dto: UpdateInvoiceRequest,
+        actorLevel: AccessLevel,
+        markSlugCustomized = true
     ): Promise<InvoiceDocument> {
         if (dto.validUntil !== undefined) {
             assertValidUntilNotInPast(dto.validUntil);
@@ -389,6 +395,10 @@ export class InvoicesService {
         const renaming =
             dto.slug !== undefined &&
             dto.slug.toLowerCase() !== invoice.slugLower;
+        // Sprint 19 — slug як платна фіча (brand+).
+        if (renaming) {
+            assertSlugEditAllowed(actorLevel);
+        }
 
         const filter: FilterQuery<InvoiceDocument> = {
             accountId,
@@ -449,6 +459,7 @@ export class InvoicesService {
         if (dto.slug !== undefined) {
             setStage.slug = dto.slug;
             setStage.slugLower = dto.slug.toLowerCase();
+            setStage.slugCustomized = markSlugCustomized;
         }
 
         if (renaming) {
@@ -618,8 +629,12 @@ export class InvoicesService {
         business: BusinessDocument,
         account: AccountDocument,
         invoice: InvoiceDocument,
+        actorLevel: AccessLevel,
         mode?: AutoSlugMode
     ): Promise<InvoiceDocument> {
+        // Sprint 19 — slug як платна фіча (brand+). resetSlug не йде через
+        // update(), тож гейт явний тут.
+        assertSlugEditAllowed(actorLevel);
         const effectiveMode: AutoSlugMode =
             mode ?? account.invoiceSlugPresetDefault ?? 'simple';
         const slugInput: SlugInput =
@@ -717,6 +732,8 @@ export class InvoicesService {
                                 slugPreset: slugInfo.slugPreset,
                                 slugCounterScope: slugInfo.slugCounterScope,
                                 slugCounter: slugInfo.slugCounter,
+                                // Sprint 19 — reset повертає до авто.
+                                slugCustomized: false,
                             },
                         },
                         { new: true, runValidators: true, session }

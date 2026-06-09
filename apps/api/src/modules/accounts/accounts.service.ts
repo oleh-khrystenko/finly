@@ -10,11 +10,13 @@ import { ClientSession, Connection, Model, Types } from 'mongoose';
 import {
     RESPONSE_CODE,
     bankCodeFromIban,
+    type AccessLevel,
     type AccountWithCounts,
     type CreateAccountRequest,
     type UpdateAccountRequest,
 } from '@finly/types';
 
+import { assertSlugEditAllowed } from '../../common/billing/assert-access';
 import { isTransactionsUnsupportedError } from '../../common/mongoose/transactions-unsupported';
 import {
     Business,
@@ -260,8 +262,10 @@ export class AccountsService {
             .findOne({ businessId, slugLower })
             .exec();
         if (account) return account;
+        // Sprint 19 — lapse-записи (redirect:false) не редіректять (ім'я на
+        // холді). `$ne: false` зберігає поведінку для legacy-записів без поля.
         const historyEntry = await this.historyModel
-            .findOne({ businessId, slugLower })
+            .findOne({ businessId, slugLower, redirect: { $ne: false } })
             .lean<{ accountId: Types.ObjectId }>()
             .exec();
         if (!historyEntry) return null;
@@ -290,7 +294,9 @@ export class AccountsService {
 
     async update(
         account: AccountDocument,
-        dto: UpdateAccountRequest
+        dto: UpdateAccountRequest,
+        actorLevel: AccessLevel,
+        markSlugCustomized = true
     ): Promise<AccountDocument> {
         if (Object.keys(dto).length === 0) {
             return account;
@@ -303,7 +309,9 @@ export class AccountsService {
             dto.slug !== undefined &&
             dto.slug.toLowerCase() !== account.slugLower;
         if (renaming) {
-            return this.renameAndUpdate(account, dto);
+            // Sprint 19 — slug як платна фіча (brand+).
+            assertSlugEditAllowed(actorLevel);
+            return this.renameAndUpdate(account, dto, markSlugCustomized);
         }
 
         const setPayload: Record<string, unknown> = { ...dto };
@@ -343,7 +351,8 @@ export class AccountsService {
      */
     private async renameAndUpdate(
         account: AccountDocument,
-        dto: UpdateAccountRequest
+        dto: UpdateAccountRequest,
+        markSlugCustomized: boolean
     ): Promise<AccountDocument> {
         const businessId = account.businessId;
         const oldLower = account.slugLower;
@@ -354,6 +363,7 @@ export class AccountsService {
         const setPayload: Record<string, unknown> = {
             ...dto,
             slugLower: newLower,
+            slugCustomized: markSlugCustomized,
         };
 
         const session = await this.connection.startSession();
@@ -431,11 +441,15 @@ export class AccountsService {
      * `update`, що заходить у rename-TX (history + anti-squatting). Reserved-
      * check рахунку не потрібен (вкладений сегмент, §account-slug-generator).
      */
-    async resetSlug(account: AccountDocument): Promise<AccountDocument> {
+    async resetSlug(
+        account: AccountDocument,
+        actorLevel: AccessLevel
+    ): Promise<AccountDocument> {
         const newSlug = await this.slugGenerator.generateUnique(
             account.businessId
         );
-        return this.update(account, { slug: newSlug });
+        // markSlugCustomized=false — reset повертає до авто.
+        return this.update(account, { slug: newSlug }, actorLevel, false);
     }
 
     private async assertSlugAvailable(

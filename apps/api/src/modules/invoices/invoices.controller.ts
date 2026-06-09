@@ -13,6 +13,9 @@ import {
     UseGuards,
 } from '@nestjs/common';
 
+import type { AccessLevel } from '@finly/types';
+
+import { CurrentAccessLevel } from '../../common/decorators/current-access-level.decorator';
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
 import {
     AccountAccessGuard,
@@ -87,13 +90,15 @@ export class InvoicesController {
         @CurrentBusiness() business: BusinessDocument,
         @CurrentAccount() account: AccountDocument,
         @CurrentInvoice() invoice: InvoiceDocument,
+        @CurrentAccessLevel() actorLevel: AccessLevel,
         @Body() dto: UpdateInvoiceDto
     ): Promise<{ data: InvoiceDocument }> {
         const updated = await this.invoicesService.update(
             business,
             account,
             invoice,
-            dto
+            dto,
+            actorLevel
         );
         return { data: updated };
     }
@@ -105,12 +110,14 @@ export class InvoicesController {
         @CurrentBusiness() business: BusinessDocument,
         @CurrentAccount() account: AccountDocument,
         @CurrentInvoice() invoice: InvoiceDocument,
+        @CurrentAccessLevel() actorLevel: AccessLevel,
         @Body() dto: ResetInvoiceSlugDto
     ): Promise<{ data: InvoiceDocument }> {
         const updated = await this.invoicesService.resetSlug(
             business,
             account,
             invoice,
+            actorLevel,
             dto.mode
         );
         return { data: updated };

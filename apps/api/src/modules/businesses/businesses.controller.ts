@@ -15,10 +15,12 @@ import { Model } from 'mongoose';
 import { ZodValidationPipe } from 'nestjs-zod';
 import {
     CreateBusinessSchema,
+    type AccessLevel,
     type BusinessWithCounts,
     type CreateBusinessRequest,
 } from '@finly/types';
 
+import { CurrentAccessLevel } from '../../common/decorators/current-access-level.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
 import {
@@ -97,6 +99,7 @@ export class BusinessesController {
     @HttpCode(HttpStatus.CREATED)
     async create(
         @CurrentUser() user: UserDocument,
+        @CurrentAccessLevel() actorLevel: AccessLevel,
         @Body(new ZodValidationPipe(CreateBusinessSchema))
         dto: CreateBusinessRequest
     ): Promise<{ data: BusinessDocument }> {
@@ -109,7 +112,8 @@ export class BusinessesController {
         const business = await this.businessesService.create(
             user._id.toString(),
             dto,
-            user.worksAsBookkeeper
+            user.worksAsBookkeeper,
+            actorLevel
         );
         return { data: business };
     }
@@ -140,9 +144,14 @@ export class BusinessesController {
     @UseGuards(BusinessAccessGuard)
     async update(
         @CurrentBusiness() business: BusinessDocument,
+        @CurrentAccessLevel() actorLevel: AccessLevel,
         @Body() dto: UpdateBusinessDto
     ): Promise<{ data: BusinessDocument }> {
-        const updated = await this.businessesService.update(business.slug, dto);
+        const updated = await this.businessesService.update(
+            business.slug,
+            dto,
+            actorLevel
+        );
         return { data: updated };
     }
 
@@ -150,9 +159,13 @@ export class BusinessesController {
     @UseGuards(BusinessAccessGuard)
     @HttpCode(HttpStatus.OK)
     async resetSlug(
-        @CurrentBusiness() business: BusinessDocument
+        @CurrentBusiness() business: BusinessDocument,
+        @CurrentAccessLevel() actorLevel: AccessLevel
     ): Promise<{ data: BusinessDocument }> {
-        const updated = await this.businessesService.resetSlug(business);
+        const updated = await this.businessesService.resetSlug(
+            business,
+            actorLevel
+        );
         return { data: updated };
     }
 

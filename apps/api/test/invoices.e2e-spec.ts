@@ -268,7 +268,30 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
     // ─── Helpers ───
 
-    async function createUser(): Promise<UserDocument> {
+    // Sprint 19 — slug-редагування вимагає рівня не нижче brand.
+    const ACTIVE_BRAND_BILLING = {
+        provider: 'wayforpay',
+        orderReference: null,
+        recToken: null,
+        cardMask: null,
+        planCode: 'brand',
+        currency: 'UAH',
+        subscriptionStatus: 'ACTIVE',
+        providerSubscriptionStatus: null,
+        currentPeriodEnd: null,
+        cancelAtPeriodEnd: false,
+        hasActiveSubscription: true,
+        lastProviderEventAt: null,
+        scheduledPlanCode: null,
+        scheduledChangeDate: null,
+        rebindPendingAt: null,
+        oneOffLevel: null,
+        oneOffAccessUntil: null,
+    };
+
+    async function createUser(
+        overrides: Partial<UserDocument> = {}
+    ): Promise<UserDocument> {
         return userModel.create({
             email: `user-${new Types.ObjectId().toString()}@test.com`,
             profile: {
@@ -278,6 +301,7 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             },
             executions: { balance: 0, freeReportUsed: false },
             worksAsBookkeeper: false,
+            ...overrides,
         });
     }
 
@@ -852,7 +876,7 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
         });
 
         it('Sprint 15 — PATCH slug перейменовує інвойс (vanity) + старе посилання редіректить', async () => {
-            const user = await createUser();
+            const user = await createUser({ billing: ACTIVE_BRAND_BILLING });
             const { slug, accountSlug } = await createBusinessFor(user);
             const create = await supertest(app.getHttpServer())
                 .post(
