@@ -15,7 +15,9 @@ import UiPrefixInput from '@/shared/ui/UiPrefixInput';
 import UiQrPanel from '@/shared/ui/UiQrPanel';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSwitch from '@/shared/ui/UiSwitch';
+import UiUpsellNote from '@/shared/ui/UiUpsellNote';
 import { mapValidationCode } from '@/shared/lib';
+import { useCanEditSlug } from '@/entities/user';
 import { useResetBusinessSlugConfirmStore } from './resetBusinessSlugConfirmStore';
 
 interface Props {
@@ -57,6 +59,7 @@ export default function PublicSection({
     const [copied, setCopied] = useState(false);
     const [seoSaving, setSeoSaving] = useState(false);
     const openResetConfirm = useResetBusinessSlugConfirmStore((s) => s.open);
+    const canEditSlug = useCanEditSlug();
 
     const hostnamePrefix = `${payPublicOrigin
         .replace(/^https?:\/\//, '')
@@ -127,31 +130,38 @@ export default function PublicSection({
                                     >
                                         {copied ? 'Скопійовано' : 'Копіювати'}
                                     </UiButton>
-                                    <UiButton
-                                        type="button"
-                                        variant="outline"
-                                        size="md"
-                                        onClick={startEdit}
-                                        IconLeft={<Pencil />}
-                                        className="w-full sm:w-auto"
-                                    >
-                                        Редагувати
-                                    </UiButton>
-                                    <UiButton
-                                        type="button"
-                                        variant="outline"
-                                        size="md"
-                                        onClick={() =>
-                                            openResetConfirm(() => {
-                                                void onResetSlug();
-                                            })
-                                        }
-                                        IconLeft={<RefreshCw />}
-                                        className="w-full sm:w-auto"
-                                    >
-                                        Згенерувати нове посилання
-                                    </UiButton>
+                                    {canEditSlug && (
+                                        <>
+                                            <UiButton
+                                                type="button"
+                                                variant="outline"
+                                                size="md"
+                                                onClick={startEdit}
+                                                IconLeft={<Pencil />}
+                                                className="w-full sm:w-auto"
+                                            >
+                                                Редагувати
+                                            </UiButton>
+                                            <UiButton
+                                                type="button"
+                                                variant="outline"
+                                                size="md"
+                                                onClick={() =>
+                                                    openResetConfirm(() => {
+                                                        void onResetSlug();
+                                                    })
+                                                }
+                                                IconLeft={<RefreshCw />}
+                                                className="w-full sm:w-auto"
+                                            >
+                                                Згенерувати нове посилання
+                                            </UiButton>
+                                        </>
+                                    )}
                                 </div>
+                                {!canEditSlug && (
+                                    <UiUpsellNote message="Власне посилання (slug) доступне на тарифі «Свій бренд»" />
+                                )}
                             </div>
                         )}
                         renderEdit={({ value, setValue, error }) => (

@@ -12,10 +12,11 @@ import { useAuthStore } from '@/entities/user';
 import { updateCard } from '@/shared/api/payments';
 import { getApiMessage } from '@/shared/api/mapApiCode';
 import { extractApiErrorCode } from '@/shared/api';
-import { formatLocalDate, INTL_LOCALE } from '@/shared/lib';
+import { formatLocalDate } from '@/shared/lib';
 import UiButton from '@/shared/ui/UiButton';
 import { useChangePlanDialogStore } from './changePlanDialogStore';
 import { useCancelSubscriptionDialogStore } from './cancelSubscriptionDialogStore';
+import { PLAN_COPY } from './catalogCopy';
 import RecentPayments from './RecentPayments';
 
 function statusBadge(billing: UserBilling): { label: string; cls: string } {
@@ -114,10 +115,9 @@ export default function ManageSubscription({
                           : `Наступне списання ${formatLocalDate(billing.currentPeriodEnd)}`}
                 </p>
 
-                {activePlan && (
+                {activePlan && PLAN_COPY[activePlan.code]?.tagline && (
                     <p className="text-muted-foreground mt-0.5 text-sm">
-                        {activePlan.executions.toLocaleString(INTL_LOCALE)}{' '}
-                        виконань за період
+                        {PLAN_COPY[activePlan.code].tagline}
                     </p>
                 )}
 

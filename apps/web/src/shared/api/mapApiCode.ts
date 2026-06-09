@@ -55,6 +55,11 @@ const ERRORS: Record<string, MessageDict> = {
     },
     generic: {
         validation_error: 'Перевірте введені дані',
+        // Sprint 19 — редагування vanity-slug (бізнес/реквізити/рахунок) і
+        // скидання посилання доступні від тарифу «Свій бренд». Спільне для
+        // трьох модулів, тож у generic-fallback.
+        slug_edit_requires_plan:
+            'Власні посилання доступні на тарифі «Свій бренд». Оформіть підписку у розділі «Білінг»',
         rate_limit_exceeded:
             'Забагато запитів. Спробуйте через {minutes} хвилин',
         email_send_failed: 'Не вдалося надіслати лист. Спробуйте пізніше',
@@ -123,6 +128,14 @@ const ERRORS: Record<string, MessageDict> = {
         // Sprint 14 — vanity-slug edit. Slug уже зайнятий іншим бізнесом
         // (поточний slug або в історії перейменувань 90-денного вікна).
         slug_taken: 'Це посилання вже зайняте. Оберіть інше',
+        // Sprint 19 — доменний інваріант: максимум один бізнес типу «фізособа»
+        // і один «ФОП». Не апсел — радимо редагувати наявний.
+        business_type_limit_reached:
+            'Можна мати лише один бізнес цього типу. Відредагуйте наявний',
+        // Sprint 19 — перевищено ліміт бізнесів поточного рівня (власні ТОВ/
+        // організації або клієнтські). Знімається тарифом «Бухгалтер».
+        business_limit_requires_plan:
+            'Ліміт бізнесів вичерпано. Тариф «Бухгалтер» знімає обмеження',
         // Placeholder-free копія `default`-throttler 429 (60/min/IP на cabinet).
         // Generic `rate_limit_exceeded` має `{minutes}`-placeholder, а cabinet-
         // callsite-и не мають джерела TTL для interpolate-у → literal `{minutes}`

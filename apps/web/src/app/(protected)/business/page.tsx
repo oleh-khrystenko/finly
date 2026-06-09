@@ -3,10 +3,7 @@
 import { type ReactNode, useEffect, useState } from 'react';
 import { Briefcase, Plus } from 'lucide-react';
 import { AxiosError } from 'axios';
-import {
-    BUSINESS_TYPE_LABEL,
-    type BusinessWithCounts,
-} from '@finly/types';
+import { BUSINESS_TYPE_LABEL, type BusinessWithCounts } from '@finly/types';
 import { getApiMessage, listBusinesses } from '@/shared/api';
 import { taxIdFieldConfig } from '@/entities/business';
 import { useBookkeeperMode } from '@/entities/user';
@@ -21,7 +18,9 @@ import UiSpinner from '@/shared/ui/UiSpinner';
 
 function extractApiErrorCode(err: unknown): string {
     if (!(err instanceof AxiosError)) return 'unknown';
-    const data = err.response?.data as { error?: { code?: string } } | undefined;
+    const data = err.response?.data as
+        | { error?: { code?: string } }
+        | undefined;
     return data?.error?.code ?? 'unknown';
 }
 
@@ -112,7 +111,9 @@ export default function BusinessListPage() {
             <div className="flex flex-wrap items-start justify-between gap-4">
                 <UiPageHeading>Отримувачі</UiPageHeading>
                 {!isEmpty && (
-                    <CreateBusinessButton>Створити отримувача</CreateBusinessButton>
+                    <CreateBusinessButton>
+                        Створити отримувача
+                    </CreateBusinessButton>
                 )}
             </div>
 
@@ -213,6 +214,10 @@ function BusinessCard({ business }: { business: BusinessWithCounts }) {
     // tov/organization — той самий single-source label, що у формі створення
     // та cabinet-edit (`taxIdFieldConfig`), щоб копія не дрейфувала.
     const taxIdLabel = taxIdFieldConfig(business.type).label;
+    // Sprint 19 — заблокований реконсиляцією бізнес: публічна сторінка і QR
+    // погашені (backend), у кабінеті показуємо окремим станом «доступ
+    // призупинено». Користувач може відкрити, щоб видалити, або поновити доступ.
+    const blocked = business.accessBlockedAt != null;
     // Sprint 9 §Risk #7 mitigation — два counter-и (реквізити + рахунки усього)
     // на business-картці, щоб ФОП розумів обсяг без drill-down-у у per-account-page.
     return (
@@ -222,8 +227,22 @@ function BusinessCard({ business }: { business: BusinessWithCounts }) {
             eyebrow={typeLabel}
             title={business.name}
             titleAttr={business.name}
+            surface={blocked ? 'muted' : 'card'}
+            badge={
+                blocked ? (
+                    <span className="bg-warning/15 text-warning shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium">
+                        Доступ призупинено
+                    </span>
+                ) : undefined
+            }
             meta={
                 <>
+                    {blocked && (
+                        <p className="text-warning">
+                            Публічна сторінка неактивна. Поновіть доступ або
+                            видаліть отримувача.
+                        </p>
+                    )}
                     <p>
                         {taxIdLabel}:{' '}
                         <span className="text-foreground font-mono">
@@ -231,8 +250,7 @@ function BusinessCard({ business }: { business: BusinessWithCounts }) {
                         </span>
                     </p>
                     <p>
-                        Реквізити:{' '}
-                        <CountValue count={accountsCount} />
+                        Реквізити: <CountValue count={accountsCount} />
                     </p>
                     <p>
                         Рахунки: <CountValue count={invoicesCount} />

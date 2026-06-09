@@ -28,14 +28,14 @@ export async function createSubscriptionCheckout(
 }
 
 export async function createOneOffCheckout(
-    packCode: string,
+    oneOffCode: string,
     returnPath?: string
 ): Promise<{ checkoutUrl: string }> {
     const { data } = await apiClient.post<{
         data: { checkoutUrl: string };
     }>('/payments/checkout-session', {
         paymentType: PAYMENT_TYPE.ONE_OFF,
-        packCode,
+        oneOffCode,
         ...(returnPath && { returnPath }),
     });
     return data.data;
