@@ -7,6 +7,7 @@ import {
     act,
 } from '@testing-library/react';
 import type { Invoice } from '@finly/types';
+import { formatKyivDate } from '@/shared/lib';
 import ValidUntilSection from './ValidUntilSection';
 
 /** UiSelect — кастомний trigger-button + options-popover (не нативний select). */
@@ -53,7 +54,7 @@ describe('ValidUntilSection (read-mode + ручний ввід дати)', () =>
         expect(screen.getByText('Без терміну')).toBeInTheDocument();
     });
 
-    it('read-mode: validUntil!=null показує форматовану дату (uk-UA locale)', () => {
+    it('read-mode: validUntil!=null показує форматовану дату (Kyiv-tz)', () => {
         const date = new Date('2026-12-31T23:59:59');
         render(
             <ValidUntilSection
@@ -61,9 +62,9 @@ describe('ValidUntilSection (read-mode + ручний ввід дати)', () =>
                 onSave={jest.fn()}
             />
         );
-        expect(
-            screen.getByText(date.toLocaleDateString('uk-UA'))
-        ).toBeInTheDocument();
+        // Звіряємо тим самим Kyiv-tz форматером, що й компонент: інакше асерція
+        // залежить від TZ раннера (UTC на CI зсуває дату біля півночі на добу).
+        expect(screen.getByText(formatKyivDate(date))).toBeInTheDocument();
     });
 
     it('edit + ручний ввід дати → onSave з validUntil (23:59:59 Kyiv того дня)', async () => {
