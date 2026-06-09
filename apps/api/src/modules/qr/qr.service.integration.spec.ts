@@ -25,6 +25,12 @@ import { QrLogoCompositor } from './renderers/qr-logo.compositor';
  * payload (round-trip integrity).
  */
 
+// Real-stack suite (sharp + qrcode + jsqr) — CPU-важка. Перший виклик sharp
+// тягне холодну ініціалізацію нативних біндингів; на повільному/холодному CI-
+// раннері це перевищує дефолтні 5 с Jest. Піднімаємо таймаут для всієї suite,
+// щоб round-trip-тести не флапали (важкі print-розмір кейси й так мали 20 с).
+jest.setTimeout(30_000);
+
 const VALID_INPUT: PayloadInput = {
     receiverName: 'ФОП Тестовий',
     iban: 'UA213223130000026007233566001',
