@@ -327,6 +327,7 @@ pnpm --filter api migration:slug-lower              # 2026-05-03 Business slugLo
 pnpm --filter api migration:invoices-payee-snapshot # 2026-05-08
 pnpm --filter api migration:accounts-null-auto-name # 2026-06-02
 pnpm --filter api migration:nested-slug-lower       # 2026-06-03 Account/Invoice slugLower (Sprint 15)
+pnpm --filter api migration:slug-customized         # 2026-06-10 slugCustomized backfill (Sprint 19)
 pnpm --filter api migration:all                     # all migrations in order
 
 pnpm --filter api -- jest path/to/file.spec.ts      # один API тест

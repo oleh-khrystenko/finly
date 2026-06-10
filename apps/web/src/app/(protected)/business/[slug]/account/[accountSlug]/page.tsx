@@ -272,6 +272,7 @@ export default function AccountCabinetPage() {
                 account={account}
                 businessSlug={business.slug}
                 payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
+                accessSuspended={business.accessBlockedAt != null}
                 onSave={onSaveAccount}
                 onResetSlug={handleResetSlug}
             />

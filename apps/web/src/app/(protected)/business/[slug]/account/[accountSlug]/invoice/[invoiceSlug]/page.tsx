@@ -288,6 +288,7 @@ export default function InvoiceCabinetPage() {
                     businessSlug={business.slug}
                     accountSlug={accountSlug}
                     payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
+                    accessSuspended={business.accessBlockedAt != null}
                     defaultMode={account.invoiceSlugPresetDefault}
                     onSave={onSave}
                     onResetSlug={handleResetSlug}

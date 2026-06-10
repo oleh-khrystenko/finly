@@ -23,6 +23,12 @@ interface Props {
     businessSlug: string;
     /** Public payment-page origin (NEXT_PUBLIC_PAY_PUBLIC_URL). */
     payPublicOrigin: string;
+    /**
+     * Sprint 19 — отримувача заблоковано реконсиляцією (`business.
+     * accessBlockedAt`): публічні ендпоінти віддають 404, тож адреса/QR тут
+     * були б мертвими — рендеримо стан «доступ призупинено».
+     */
+    accessSuspended: boolean;
     onSave: (patch: UpdateAccountRequest) => Promise<void>;
     /** Скидання slug-у на свіже випадкове посилання (через confirm-dialog). */
     onResetSlug: () => Promise<void>;
@@ -46,12 +52,26 @@ export default function PublicSection({
     account,
     businessSlug,
     payPublicOrigin,
+    accessSuspended,
     onSave,
     onResetSlug,
 }: Props) {
     const [copied, setCopied] = useState(false);
     const openResetConfirm = useResetAccountSlugConfirmStore((s) => s.open);
     const canEditSlug = useCanEditSlug();
+
+    if (accessSuspended) {
+        return (
+            <UiSectionCard title="Публічна сторінка">
+                <div className="mt-4">
+                    <UiUpsellNote
+                        message="Доступ до отримувача призупинено, публічна сторінка і QR-коди неактивні. Поновіть доступ або видаліть отримувача."
+                        ctaLabel="Поновити доступ"
+                    />
+                </div>
+            </UiSectionCard>
+        );
+    }
 
     const hostnamePrefix = `${payPublicOrigin
         .replace(/^https?:\/\//, '')

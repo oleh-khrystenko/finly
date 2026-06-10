@@ -18,22 +18,10 @@ import {
 } from './schemas/processed-webhook-event.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { ReconciliationService } from '../businesses/reconciliation.service';
+import { DEFERRED_START_FIRST_CHARGE_GRACE_MS } from '../../common/billing/deferred-start';
 
 /** Stop retrying after this many failed attempts. */
 const MAX_ATTEMPTS = 5;
-
-/**
- * Sprint 19 — grace для deferred-старту підписки поверх one-off. Поки підписка
- * у TRIALING чекає Approved першого списання (WayForPay списує у день
- * `currentPeriodEnd`, ретраї declined можуть зсунути на години-дні), сплив
- * one-off НЕ обробляємо: реконсиляція у цьому вікні бачила б рівень none
- * (TRIALING свідомо не зараховується у `deriveAccessLevel`) і незворотно
- * скинула б кастомні slug-и користувача, що вже оплатив продовження. Approved →
- * ACTIVE → наступний прогін підбирає; Declined → PAST_DUE → теж виходить
- * з-під виключення. Якщо за grace списання так і не сталося (кинутий
- * deferred-checkout) — обробляємо як звичайний сплив.
- */
-const DEFERRED_START_FIRST_CHARGE_GRACE_MS = 3 * 24 * 60 * 60 * 1000;
 
 /**
  * `pending` webhook-подія, старша за цей поріг, — crash-orphan (нормальна

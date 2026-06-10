@@ -446,6 +446,88 @@ describe('ReconciliationService (MongoMemoryReplSet)', () => {
         expect(after!.slugCustomized).toBe(false);
     });
 
+    // ── Deferred-старт підписки поверх one-off ───────────────────────────
+
+    /**
+     * Білінг у вікні «one-off сплив, перше deferred-списання ще не прийшло»:
+     * TRIALING + currentPeriodEnd у межах grace, one-off-поля ще стоять з датою
+     * у минулому (cron їх у вікні не чистить).
+     */
+    function deferredStartBilling(periodEndOffsetMs: number) {
+        const periodEnd = new Date(Date.now() + periodEndOffsetMs);
+        return {
+            planCode: 'brand',
+            hasActiveSubscription: true,
+            subscriptionStatus: 'TRIALING',
+            currentPeriodEnd: periodEnd,
+            oneOffLevel: 'brand',
+            oneOffAccessUntil: periodEnd,
+        };
+    }
+
+    it('вікно deferred-старту: reconcile відкладається зі стемпом, нічого не блокує і не скидає', async () => {
+        // one-off сплив годину тому, перше списання підписки ще не прийшло.
+        usersService.findById.mockResolvedValue({
+            billing: deferredStartBilling(-60 * 60 * 1000),
+        });
+        const oldest = await seedBusiness({
+            type: 'tov',
+            owned: true,
+            slugCustomized: true,
+        });
+        const newer = await seedBusiness({ type: 'tov', owned: true });
+
+        await service.reconcile(userId.toString());
+
+        expect(await isBlocked(oldest)).toBe(false);
+        expect(await isBlocked(newer)).toBe(false);
+        const doc = await businessModel.findById(oldest).lean();
+        expect(doc!.slugCustomized).toBe(true);
+        expect(usersService.stampBillingReconcileRequired).toHaveBeenCalledWith(
+            userId.toString()
+        );
+        expect(
+            usersService.clearBillingReconcileRequired
+        ).not.toHaveBeenCalled();
+    });
+
+    it('кинутий deferred-checkout (grace минув): reconcile проходить як звичайний сплив', async () => {
+        // currentPeriodEnd старіший за 3-денний grace → вікно закрите.
+        usersService.findById.mockResolvedValue({
+            billing: deferredStartBilling(-4 * 24 * 60 * 60 * 1000),
+        });
+        const oldest = await seedBusiness({
+            type: 'tov',
+            owned: true,
+            slugCustomized: true,
+        });
+        const newer = await seedBusiness({ type: 'tov', owned: true });
+
+        await service.reconcile(userId.toString());
+
+        expect(await isBlocked(newer)).toBe(true);
+        const doc = await businessModel.findById(oldest).lean();
+        expect(doc!.slugCustomized).toBe(false);
+    });
+
+    it('refund one-off під час TRIALING (one-off-поля зачищені): reconcile проходить на none', async () => {
+        // Refund-вебхук чистить one-off-поля — рівень none легітимний.
+        usersService.findById.mockResolvedValue({
+            billing: {
+                ...deferredStartBilling(60 * 60 * 1000),
+                oneOffLevel: null,
+                oneOffAccessUntil: null,
+            },
+        });
+        const oldest = await seedBusiness({ type: 'tov', owned: true });
+        const newer = await seedBusiness({ type: 'tov', owned: true });
+
+        await service.reconcile(userId.toString());
+
+        expect(await isBlocked(oldest)).toBe(false);
+        expect(await isBlocked(newer)).toBe(true);
+    });
+
     // ── Durable-retry маркер ──────────────────────────────────────────────
 
     it('повний прогін знімає durable-маркер умовним clear-ом (notAfter ≤ старт прогону)', async () => {

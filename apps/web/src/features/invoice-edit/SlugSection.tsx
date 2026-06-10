@@ -26,6 +26,12 @@ interface Props {
     accountSlug: string;
     /** Public payment-page origin (NEXT_PUBLIC_PAY_PUBLIC_URL). */
     payPublicOrigin: string;
+    /**
+     * Sprint 19 — отримувача заблоковано реконсиляцією (`business.
+     * accessBlockedAt`): публічні ендпоінти віддають 404, тож адреса/QR тут
+     * були б мертвими — рендеримо стан «доступ призупинено».
+     */
+    accessSuspended: boolean;
     onSave: (patch: UpdateInvoiceRequest) => Promise<void>;
     /** «Домашній формат» рахунку — picker перевипуску відкривається на ньому. */
     defaultMode: AutoSlugMode | null;
@@ -49,6 +55,7 @@ export default function SlugSection({
     businessSlug,
     accountSlug,
     payPublicOrigin,
+    accessSuspended,
     defaultMode,
     onSave,
     onResetSlug,
@@ -56,6 +63,19 @@ export default function SlugSection({
     const [copied, setCopied] = useState(false);
     const openResetConfirm = useResetInvoiceSlugConfirmStore((s) => s.open);
     const canEditSlug = useCanEditSlug();
+
+    if (accessSuspended) {
+        return (
+            <UiSectionCard title="Публічна сторінка">
+                <div className="mt-4">
+                    <UiUpsellNote
+                        message="Доступ до отримувача призупинено, публічна сторінка і QR-коди неактивні. Поновіть доступ або видаліть отримувача."
+                        ctaLabel="Поновити доступ"
+                    />
+                </div>
+            </UiSectionCard>
+        );
+    }
 
     const hostnamePrefix = `${payPublicOrigin
         .replace(/^https?:\/\//, '')

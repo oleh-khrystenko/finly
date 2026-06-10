@@ -11,6 +11,7 @@ import {
     BILLING_LOCK_TTL_MS,
     billingLockKey,
 } from '../../common/billing/billing-lock';
+import { isAwaitingDeferredFirstCharge } from '../../common/billing/deferred-start';
 import { resolveAccessLevel } from '../../common/billing/resolve-access-level';
 import {
     RedisLockBusyError,
@@ -189,6 +190,22 @@ export class ReconciliationService {
         const startedAt = new Date();
         const user = await this.usersService.findById(userId);
         if (!user) return;
+        // Вікно deferred-старту: one-off уже сплив, а перше списання підписки
+        // ще не прийшло — рівень тут рахувався б як none (TRIALING свідомо не
+        // зараховується у deriveAccessLevel) і прогін незворотно скинув би
+        // slug-и користувача, що вже оплатив продовження. Cron-сплин one-off
+        // має цей guard у своєму $nor-фільтрі, але reconcile тригериться і поза
+        // ним (видалення бізнесу, retryPendingReconciles, webhook-шлях) — тому
+        // дзеркальний предикат тут, на єдиній точці входу. Відкладаємо зі
+        // стемпом: daily-sweep добʼє, щойно вікно закриється (Approved → ACTIVE,
+        // Declined → PAST_DUE, кинутий checkout → сплив grace).
+        if (isAwaitingDeferredFirstCharge(user.billing, startedAt)) {
+            await this.usersService.stampBillingReconcileRequired(userId);
+            this.logger.log(
+                `Reconcile deferred for user ${userId}: awaiting deferred first subscription charge`
+            );
+            return;
+        }
         const level = resolveAccessLevel(user.billing);
         const userObjectId = new Types.ObjectId(userId);
 

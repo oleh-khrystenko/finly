@@ -48,6 +48,10 @@ interface Props {
  * (URL — для людини, QR — для камери телефона), тому живе в одній картці
  * під дією-посиланнями. На бізнес-рівні можливий лише тип-2 (URL на вітрину):
  * тип-1 (НБУ-payload) потребує IBAN, а IBAN живе на рахунку, не на бізнесі.
+ *
+ * Sprint 19: заблокований реконсиляцією отримувач (`accessBlockedAt`) рендерить
+ * замість адреси/QR/SEO стан «доступ призупинено» — публічні ендпоінти для
+ * нього віддають 404, тож посилання і QR тут були б мертвими артефактами.
  */
 export default function PublicSection({
     business,
@@ -60,6 +64,19 @@ export default function PublicSection({
     const [seoSaving, setSeoSaving] = useState(false);
     const openResetConfirm = useResetBusinessSlugConfirmStore((s) => s.open);
     const canEditSlug = useCanEditSlug();
+
+    if (business.accessBlockedAt != null) {
+        return (
+            <UiSectionCard title="Публічна сторінка">
+                <div className="mt-4">
+                    <UiUpsellNote
+                        message="Доступ призупинено, публічна сторінка і QR-коди неактивні. Поновіть доступ або видаліть отримувача."
+                        ctaLabel="Поновити доступ"
+                    />
+                </div>
+            </UiSectionCard>
+        );
+    }
 
     const hostnamePrefix = `${payPublicOrigin
         .replace(/^https?:\/\//, '')
