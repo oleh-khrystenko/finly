@@ -267,7 +267,7 @@ function EmptyState({ createHref }: { createHref: string }) {
                     Поки немає виставлених рахунків
                 </p>
                 <p className="text-muted-foreground max-w-sm text-base">
-                    Натисніть «Виставити рахунок» — клієнт отримає посилання з
+                    Натисніть «Виставити рахунок», і клієнт отримає посилання з
                     сумою і призначенням, готове для оплати.
                 </p>
             </div>

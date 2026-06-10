@@ -27,7 +27,7 @@ const STATUS_LABELS: Record<PaymentRecord['status'], string> = {
 
 const STATUS_CLASSES: Record<PaymentRecord['status'], string> = {
     [PAYMENT_RECORD_STATUS.APPROVED]: 'bg-success/15 text-success',
-    [PAYMENT_RECORD_STATUS.DECLINED]: 'bg-error/15 text-error',
+    [PAYMENT_RECORD_STATUS.DECLINED]: 'bg-destructive/15 text-destructive',
     [PAYMENT_RECORD_STATUS.REFUNDED]: 'bg-warning/15 text-warning',
     [PAYMENT_RECORD_STATUS.PENDING]: 'bg-muted text-muted-foreground',
 };

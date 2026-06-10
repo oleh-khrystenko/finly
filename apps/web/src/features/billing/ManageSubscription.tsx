@@ -21,7 +21,10 @@ import RecentPayments from './RecentPayments';
 
 function statusBadge(billing: UserBilling): { label: string; cls: string } {
     if (billing.subscriptionStatus === SUBSCRIPTION_STATUS.PAST_DUE) {
-        return { label: 'Прострочено', cls: 'bg-error/15 text-error' };
+        return {
+            label: 'Прострочено',
+            cls: 'bg-destructive/15 text-destructive',
+        };
     }
     if (billing.cancelAtPeriodEnd) {
         return { label: 'Скасовується', cls: 'bg-warning/15 text-warning' };
@@ -91,7 +94,7 @@ export default function ManageSubscription({
             </h2>
 
             {isPastDue && (
-                <div className="border-error/30 bg-error/10 text-error rounded-lg border p-4 text-sm">
+                <div className="border-destructive/30 bg-destructive/10 text-destructive rounded-lg border p-4 text-sm">
                     Останнє списання не пройшло. Оновіть картку, щоб зберегти
                     доступ після завершення поточного періоду.
                 </div>

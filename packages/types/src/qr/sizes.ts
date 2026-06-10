@@ -24,7 +24,10 @@ export const DEFAULT_QR_SIZE_NAME: QrSizeName = 'screen';
 export const PRINT_QR_SIZE_NAME: QrSizeName = 'print';
 
 export function isQrSizeName(value: string): value is QrSizeName {
-    return value in QR_SIZE_PX;
+    // НЕ `value in QR_SIZE_PX`: оператор `in` бачить і прототипний ланцюг
+    // (`'toString' in {...}` === true), тож user-controlled `?size=toString`
+    // проходив би whitelist, а resolveQrSizePx повертав би успадковану функцію.
+    return (QR_SIZE_NAMES as readonly string[]).includes(value);
 }
 
 export function resolveQrSizePx(name: QrSizeName): number {

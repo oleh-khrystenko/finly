@@ -47,13 +47,13 @@ const Header = () => {
     const [canAnimate, setCanAnimate] = useState(false);
 
     const { visibleItems, handleSelect, initials } = useUserMenu({
-            // Sprint 3 рішення E2: Dashboard → Бізнеси (`/business`).
-            // `Briefcase` як іконка бізнес-сегмента (заміна LayoutDashboard).
-            businesses: <Briefcase />,
-            profile: <User />,
-            billing: <CreditCard />,
-            logout: <LogOut />,
-        });
+        // Sprint 3 рішення E2: Dashboard → Бізнеси (`/business`).
+        // `Briefcase` як іконка бізнес-сегмента (заміна LayoutDashboard).
+        businesses: <Briefcase />,
+        profile: <User />,
+        billing: <CreditCard />,
+        logout: <LogOut />,
+    });
 
     useEffect(() => {
         const id = requestAnimationFrame(() => setCanAnimate(true));
@@ -77,7 +77,7 @@ const Header = () => {
                         as="button"
                         variant="text"
                         size="md"
-                        aria-label="Go to home page"
+                        aria-label="На головну"
                         className="p-0"
                         onClick={() => {
                             window.scrollTo({
@@ -99,7 +99,7 @@ const Header = () => {
                         href="/"
                         variant="text"
                         size="md"
-                        aria-label="Go to home page"
+                        aria-label="На головну"
                         className="p-0"
                     >
                         <Logo />
@@ -167,9 +167,11 @@ const Header = () => {
                                 </div>
                             }
                             trigger={
-                                <button
-                                    type="button"
-                                    className="cursor-pointer rounded-full transition-opacity hover:opacity-80"
+                                <UiButton
+                                    variant="icon"
+                                    size="sm"
+                                    aria-label="Меню користувача"
+                                    className="rounded-full transition-opacity hover:opacity-80"
                                 >
                                     <UiAvatar
                                         size="sm"
@@ -183,7 +185,7 @@ const Header = () => {
                                         fallback={initials}
                                         priority
                                     />
-                                </button>
+                                </UiButton>
                             }
                         />
                     ) : (

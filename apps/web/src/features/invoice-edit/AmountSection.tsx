@@ -227,7 +227,7 @@ function MoneyEditableField({
                         // (HTML5 `number` interpret-ується locale-dependent).
                         type="text"
                         inputMode="decimal"
-                        placeholder="1500,50 — порожнє для signage-mode"
+                        placeholder="1500,50 (порожнє: суму вводить клієнт)"
                         value={raw}
                         onChange={(e) => handleChange(e.target.value)}
                         error={errorMessage}

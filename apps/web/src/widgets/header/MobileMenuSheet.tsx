@@ -26,7 +26,13 @@ import { useUserMenu } from './useUserMenu';
 
 const menuItemBase =
     '-mx-2 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors';
-const menuItemStyles = `${menuItemBase} text-muted-foreground hover:bg-muted/50 hover:text-foreground`;
+// Пункти меню на UiButton (ui-primitives.md §1): variant text/destructive-text
+// дає кольори, size="sm" — px-3 + text-sm, min-h-11 — touch-target ≥44px
+// (responsive.md §2; старі py-2.5 давали ~40px). UiButton загортає children в
+// один span — `[&>span]`-селектор робить його full-width flex-рядком, щоб
+// ml-auto всередині притискав правий край.
+const menuItemButtonStyles =
+    '-mx-2 w-full min-h-11 rounded-lg px-3 font-medium hover:bg-muted/50 [&>span]:flex [&>span]:w-full [&>span]:items-center [&>span]:gap-3';
 
 export default function MobileMenuSheet() {
     const pathname = usePathname();
@@ -45,13 +51,13 @@ export default function MobileMenuSheet() {
     const activeSection = useHeaderNavStore((s) => s.activeSection);
 
     const { visibleItems, handleSelect, initials } = useUserMenu({
-            // Sprint 3 §3.5 — Dashboard → Бізнеси (E2). Briefcase replaces
-            // LayoutDashboard як іконка бізнес-сегмента.
-            businesses: <Briefcase />,
-            profile: <User />,
-            billing: <CreditCard />,
-            logout: <LogOut />,
-        });
+        // Sprint 3 §3.5 — Dashboard → Бізнеси (E2). Briefcase replaces
+        // LayoutDashboard як іконка бізнес-сегмента.
+        businesses: <Briefcase />,
+        profile: <User />,
+        billing: <CreditCard />,
+        logout: <LogOut />,
+    });
 
     const activeTheme: Theme = (theme as Theme) ?? THEME.SYSTEM;
     const ThemeIcon = THEME_ICONS[activeTheme];
@@ -132,10 +138,12 @@ export default function MobileMenuSheet() {
                             {visibleItems
                                 .filter((item) => item.value !== 'logout')
                                 .map((item) => (
-                                    <button
+                                    <UiButton
                                         key={item.value}
                                         type="button"
-                                        className={menuItemStyles}
+                                        variant="text"
+                                        size="sm"
+                                        className={menuItemButtonStyles}
                                         onClick={() =>
                                             handleSelect(item.value, close)
                                         }
@@ -149,7 +157,7 @@ export default function MobileMenuSheet() {
                                                 {item.badge}
                                             </span>
                                         )}
-                                    </button>
+                                    </UiButton>
                                 ))}
 
                             <div className="bg-border mx-1 my-2 h-px" />
@@ -157,9 +165,11 @@ export default function MobileMenuSheet() {
                             <ChangeTheme
                                 align="start"
                                 trigger={
-                                    <button
+                                    <UiButton
                                         type="button"
-                                        className={menuItemStyles}
+                                        variant="text"
+                                        size="sm"
+                                        className={menuItemButtonStyles}
                                     >
                                         <span className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4">
                                             <ThemeIcon />
@@ -168,31 +178,35 @@ export default function MobileMenuSheet() {
                                         <span className="text-muted-foreground ml-auto text-xs">
                                             {themeLabel}
                                         </span>
-                                    </button>
+                                    </UiButton>
                                 }
                             />
 
                             <div className="bg-border mx-1 my-2 h-px" />
 
-                            <button
+                            <UiButton
                                 type="button"
-                                className="text-destructive hover:bg-destructive/10 -mx-2 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors"
+                                variant="destructive-text"
+                                size="sm"
+                                className={`${menuItemButtonStyles} hover:bg-destructive/10`}
                                 onClick={() => handleSelect('logout', close)}
                             >
                                 <span className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4">
                                     <LogOut />
                                 </span>
                                 <span>Вийти</span>
-                            </button>
+                            </UiButton>
                         </div>
                     ) : (
                         <div className="flex flex-col gap-1">
                             <ChangeTheme
                                 align="start"
                                 trigger={
-                                    <button
+                                    <UiButton
                                         type="button"
-                                        className={menuItemStyles}
+                                        variant="text"
+                                        size="sm"
+                                        className={menuItemButtonStyles}
                                     >
                                         <span className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4">
                                             <ThemeIcon />
@@ -201,7 +215,7 @@ export default function MobileMenuSheet() {
                                         <span className="text-muted-foreground ml-auto text-xs">
                                             {themeLabel}
                                         </span>
-                                    </button>
+                                    </UiButton>
                                 }
                             />
 

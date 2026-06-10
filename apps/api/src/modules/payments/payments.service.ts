@@ -193,6 +193,24 @@ export class PaymentsService {
 
             const orderReference = buildSubscriptionOrderReference(userId);
 
+            // Попередня підписка (UNPAID після past-due sweep, CANCELED) могла
+            // лишити живий рекурент у WayForPay: past-due sweep свідомо НЕ робить
+            // REMOVE (живі ретраї лишаються провайдеру). Новий checkout
+            // перезаписує billing.orderReference, тож пізніше успішне списання
+            // старого рекуренту прийшло б вебхуком зі stale-reference і було б
+            // проігнороване — гроші списані, доступ не зарахований. Тому перед
+            // перезаписом знімаємо старий рекурент (симетрично updateCard).
+            // Guard на recToken: рекурент існує лише після Approved-привʼязки;
+            // без нього (кинутий INCOMPLETE-checkout) REMOVE гарантовано падав
+            // би і засмічував retry-чергу.
+            const previousOrderReference = user.billing?.orderReference ?? null;
+            if (previousOrderReference && user.billing?.recToken) {
+                await this.removeRecurringWithRetry(
+                    previousOrderReference,
+                    'superseded_by_new_checkout'
+                );
+            }
+
             // Trial прибрано: підписка списується одразу (firstChargeDate
             // undefined). Виняток — активний one-off: перше списання
             // відкладається на дату його закінчення (`oneOffUntil`), доступ
@@ -339,14 +357,36 @@ export class PaymentsService {
                     { new: true }
                 );
                 if (claimed) {
-                    const result = await this.paymentProvider.refund({
-                        orderReference,
-                        amount: refundAmount,
-                        currency: billing.currency ?? BILLING_CURRENCY,
-                        comment:
-                            'Скасування підписки з поверненням за невикористаний період',
-                    });
+                    let result;
+                    try {
+                        result = await this.paymentProvider.refund({
+                            orderReference,
+                            amount: refundAmount,
+                            currency: billing.currency ?? BILLING_CURRENCY,
+                            comment:
+                                'Скасування підписки з поверненням за невикористаний період',
+                        });
+                    } catch (error) {
+                        // Транспортний збій (timeout/network/HTTP): результат
+                        // refund-а НЕВІДОМИЙ — на timeout гроші могли рухатись.
+                        // Мітку НЕ відкочуємо (повтор не сміє списати refund
+                        // удруге), але це означає, що повторний cancel пропустить
+                        // refund назавжди — тому гучний ERROR на ручний розбір,
+                        // а користувачу мапована помилка замість success-тоста.
+                        this.logger.error(
+                            `Refund transport failure for ${orderReference} ` +
+                                `(record ${String(lastCharge._id)} kept REFUNDED), ` +
+                                `manual review required`,
+                            error instanceof Error ? error.stack : String(error)
+                        );
+                        throw new BadRequestException({
+                            code: RESPONSE_CODE.REFUND_FAILED,
+                            message: 'Refund failed',
+                        });
+                    }
                     if (!result.success) {
+                        // Провайдер явно відхилив: гроші не рухались — безпечно
+                        // відкотити мітку, повтор спробує знову.
                         await this.paymentRecordModel.updateOne(
                             { _id: lastCharge._id },
                             {

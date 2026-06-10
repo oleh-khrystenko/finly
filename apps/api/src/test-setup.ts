@@ -2,6 +2,7 @@
 // but not needed for unit tests (mocked at service level).
 process.env.NODE_ENV ??= 'test';
 process.env.PORT ??= '4000';
+process.env.TRUST_PROXY_HOPS ??= '0';
 process.env.WEB_URL ??= 'http://localhost:3000';
 process.env.PAY_PUBLIC_URL ??= 'http://pay.finly.local:3000';
 process.env.MONGODB_URI ??= 'mongodb://localhost:27017/test';

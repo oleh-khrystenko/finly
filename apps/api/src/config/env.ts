@@ -35,6 +35,16 @@ export const ENV = {
     NODE_ENV: getEnvVar('NODE_ENV'),
     PORT: getEnvVar('PORT'),
     /**
+     * Кількість довірених reverse-proxy перед API (Express `trust proxy`).
+     * 0 — API дивиться у світ напряму: X-Forwarded-For ігнорується,
+     * `request.ip` = socket-адреса (спуфінг неможливий). N>0 — за N проксі:
+     * `request.ip` береться з XFF з довірою до останніх N hop-ів. Критично для
+     * per-IP rate-limit-ів (help-chat guard, throttler): хибний 0 за проксі
+     * злив би всіх відвідувачів в один IP проксі, хибний N>0 без проксі
+     * дозволив би клієнту підробляти IP заголовком.
+     */
+    TRUST_PROXY_HOPS: parseInt(getEnvVar('TRUST_PROXY_HOPS'), 10),
+    /**
      * Cabinet origin (`finly.com.ua` prod, `localhost:3000` dev). Використовується
      * для CORS, OAuth callback, magic-link redirect, WayForPay return/service
      * URL, email-template посилань на кабінет — усі шляхи, що ведуть

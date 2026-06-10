@@ -9,7 +9,6 @@ import {
 } from 'react';
 import { toast } from 'sonner';
 import Cropper, { type Area } from 'react-easy-crop';
-import { AxiosError } from 'axios';
 import { AVATAR, RESPONSE_CODE } from '@finly/types';
 
 import {
@@ -22,6 +21,7 @@ import UiButton from '@/shared/ui/UiButton';
 import { composeClasses } from '@/shared/lib';
 import {
     commitAvatarUpload,
+    extractApiErrorCode,
     requestAvatarUploadUrl,
     uploadToR2,
 } from '@/shared/api';
@@ -55,14 +55,6 @@ function mapUploadErrorMessage(code?: string): string {
         default:
             return UPLOAD_ERROR_MESSAGES.avatar_upload_failed;
     }
-}
-
-function extractApiErrorCode(err: unknown): string | undefined {
-    if (!(err instanceof AxiosError)) return undefined;
-    const data = err.response?.data as
-        | { error?: { code?: string } }
-        | undefined;
-    return data?.error?.code;
 }
 
 export default function AvatarUploadDialog() {

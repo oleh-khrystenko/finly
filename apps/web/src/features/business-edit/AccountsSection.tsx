@@ -200,8 +200,8 @@ function EmptyState({ createHref }: { createHref: string }) {
                     Поки немає жодних реквізитів
                 </p>
                 <p className="text-muted-foreground max-w-sm text-base">
-                    Додайте перші реквізити — клієнт зможе оплатити через QR-код
-                    або посилання.
+                    Додайте перші реквізити, і клієнт зможе оплатити через
+                    QR-код або посилання.
                 </p>
             </div>
             <UiButton
@@ -216,4 +216,3 @@ function EmptyState({ createHref }: { createHref: string }) {
         </div>
     );
 }
-

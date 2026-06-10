@@ -676,6 +676,104 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
         expect(refunded).not.toBeNull();
     });
 
+    it('cancel withRefund: транспортний збій refund кидає, claim лишається REFUNDED, білінг не флипнуто', async () => {
+        const user = await createUser({
+            orderReference: 'r',
+            planCode: 'bookkeeper',
+            subscriptionStatus: SUBSCRIPTION_STATUS.ACTIVE,
+            hasActiveSubscription: true,
+            currentPeriodEnd: new Date(Date.now() + 15 * 86_400_000),
+        });
+        const ref = buildSubscriptionOrderReference(user._id.toString());
+        await userModel.findByIdAndUpdate(user._id, {
+            $set: { 'billing.orderReference': ref },
+        });
+        await paymentRecordModel.create({
+            userId: user._id,
+            orderReference: ref,
+            type: PAYMENT_RECORD_TYPE.SUBSCRIPTION,
+            amount: 9900,
+            currency: 'UAH',
+            status: PAYMENT_RECORD_STATUS.APPROVED,
+            providerTransactionId: 'tx_1',
+            cardMask: '44****1111',
+            refundAmount: null,
+        });
+
+        // Транспортний збій (timeout/network) — результат refund-а невідомий,
+        // на відміну від явного `success: false`.
+        provider.refund.mockRejectedValueOnce(new Error('WFP timeout'));
+
+        await expect(
+            service.cancelSubscription(user._id.toString(), {
+                withRefund: true,
+            })
+        ).rejects.toThrow();
+
+        // Claim-first: мітка НЕ відкочується (гроші могли рухатись — повтор не
+        // сміє списати refund удруге; ручний розбір за ERROR-логом).
+        const record = await paymentRecordModel
+            .findOne({ orderReference: ref })
+            .lean();
+        expect(record!.status).toBe(PAYMENT_RECORD_STATUS.REFUNDED);
+
+        // Операція НЕ завершилась успіхом: REMOVE не викликано, доступ живий.
+        expect(provider.removeSubscription).not.toHaveBeenCalled();
+        const updated = await userModel.findById(user._id).lean();
+        expect(updated!.billing!.hasActiveSubscription).toBe(true);
+    });
+
+    // ── Checkout після попередньої підписки ──────────────────────────────
+
+    it('новий subscription-checkout зносить старий рекурент (UNPAID з recToken), без recToken не чіпає', async () => {
+        // UNPAID після past-due sweep: рекурент свідомо лишився живим у
+        // WayForPay. Новий checkout перезаписує orderReference — без REMOVE
+        // пізніше списання старого рекуренту прийшло б зі stale-reference і
+        // було б проігнороване (гроші списані, доступ не зарахований).
+        const lapsed = await createUser({
+            planCode: 'brand',
+            recToken: 'tok_old',
+            subscriptionStatus: SUBSCRIPTION_STATUS.UNPAID,
+            hasActiveSubscription: false,
+        });
+        const oldRef = buildSubscriptionOrderReference(lapsed._id.toString());
+        await userModel.findByIdAndUpdate(lapsed._id, {
+            $set: { 'billing.orderReference': oldRef },
+        });
+        provider.createSubscriptionCheckout.mockResolvedValue({
+            checkoutUrl: 'https://pay.example/checkout',
+            orderReference: 'irrelevant',
+        });
+
+        await service.createCheckoutSession(lapsed._id.toString(), {
+            paymentType: PAYMENT_TYPE.SUBSCRIPTION,
+            planCode: 'brand',
+        });
+        expect(provider.removeSubscription).toHaveBeenCalledWith(oldRef);
+        expect(provider.removeSubscription).toHaveBeenCalledTimes(1);
+
+        // Кинутий INCOMPLETE-checkout (без recToken — привʼязки не було):
+        // рекурент не існує, REMOVE не викликається (не засмічуємо retry-чергу).
+        const abandoned = await createUser({
+            planCode: 'brand',
+            recToken: null,
+            subscriptionStatus: SUBSCRIPTION_STATUS.INCOMPLETE,
+            hasActiveSubscription: false,
+        });
+        const abandonedRef = buildSubscriptionOrderReference(
+            abandoned._id.toString()
+        );
+        await userModel.findByIdAndUpdate(abandoned._id, {
+            $set: { 'billing.orderReference': abandonedRef },
+        });
+
+        await service.createCheckoutSession(abandoned._id.toString(), {
+            paymentType: PAYMENT_TYPE.SUBSCRIPTION,
+            planCode: 'brand',
+        });
+        expect(provider.removeSubscription).toHaveBeenCalledTimes(1);
+    });
+
     // ── Refund webhook (markRefunded) ────────────────────────────────────
 
     it('refund-webhook не псує стороннє APPROVED-списання (партіальний refund)', async () => {

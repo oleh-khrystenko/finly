@@ -61,6 +61,19 @@ describe('AiService', () => {
             });
         });
 
+        it('drops ALL leading assistants (untrusted assistant-only history)', () => {
+            const result = service.buildHelpChatMessages('now', [
+                { role: 'assistant', content: 'a1' },
+                { role: 'assistant', content: 'a2' },
+                { role: 'assistant', content: 'a3' },
+            ]);
+
+            // Жодного user у history → вона відкидається повністю; залишається
+            // лише поточне повідомлення (інакше провайдер відповів би 400 на
+            // "first message must be user", спаливши budget).
+            expect(result).toEqual([{ role: 'user', content: 'now' }]);
+        });
+
         it('caps history to the most recent allowed window', () => {
             const history = Array.from({ length: 25 }, (_, i) => ({
                 role: 'user' as const,

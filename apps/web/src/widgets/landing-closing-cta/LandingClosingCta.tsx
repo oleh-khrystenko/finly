@@ -20,7 +20,7 @@ export function LandingClosingCta() {
                             Не кожен клієнт допише до кінця
                         </h2>
                         <p className="text-muted-foreground mx-auto mt-4 max-w-xl text-base sm:text-lg">
-                            29 цифр IBAN — це 29 шансів передумати.
+                            29 цифр IBAN: це 29 шансів передумати.
                         </p>
                         <div className="mt-8 flex justify-center">
                             <UiButton

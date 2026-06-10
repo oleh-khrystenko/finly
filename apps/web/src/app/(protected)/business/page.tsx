@@ -2,9 +2,12 @@
 
 import { type ReactNode, useEffect, useState } from 'react';
 import { Briefcase, Plus } from 'lucide-react';
-import { AxiosError } from 'axios';
 import { BUSINESS_TYPE_LABEL, type BusinessWithCounts } from '@finly/types';
-import { getApiMessage, listBusinesses } from '@/shared/api';
+import {
+    extractApiErrorCode,
+    getApiMessage,
+    listBusinesses,
+} from '@/shared/api';
 import { taxIdFieldConfig } from '@/entities/business';
 import { useBookkeeperMode } from '@/entities/user';
 import { usePendingDeletesStore } from '@/features/business-edit/pendingDeletesStore';
@@ -15,14 +18,6 @@ import UiPageContainer from '@/shared/ui/UiPageContainer';
 import UiPageHeading from '@/shared/ui/UiPageHeading';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
-
-function extractApiErrorCode(err: unknown): string {
-    if (!(err instanceof AxiosError)) return 'unknown';
-    const data = err.response?.data as
-        | { error?: { code?: string } }
-        | undefined;
-    return data?.error?.code ?? 'unknown';
-}
 
 /**
  * Sprint 3 §3.6 — список бізнесів.

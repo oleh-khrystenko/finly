@@ -4,20 +4,20 @@
 
 ## Tech Stack
 
-| Шар        | Технологія                                                | Версія                                 |
-| ---------- | --------------------------------------------------------- | -------------------------------------- |
-| Core       | TypeScript, Node.js, pnpm, Turborepo                      | TS 5.9, Node 20, pnpm 10.30            |
-| Frontend   | Next.js (App Router + Turbopack), React, Zustand, Tailwind | Next 16, React 19.2, Zustand 5, Tw 4   |
-| Forms      | React Hook Form + Zod resolver                            | RHF 7.72                               |
-| Backend    | NestJS, Mongoose, ioredis, Passport, nestjs-zod            | NestJS 11.1, Mongoose 8                |
-| Validation | Zod (shared contracts у `packages/types`)                 | Zod 4.3                                |
-| AI         | Anthropic SDK (Claude Haiku 4.5) — лише публічний help-assistant | SDK 0.80                          |
-| Payments   | WayForPay (Regular Payments — підписка + one-off; абстракція `IPaymentProvider`) | —              |
-| Email      | Resend + React Email                                      | 6.9                                    |
-| Storage    | Cloudflare R2 (S3 SDK + presigner), `sharp`               | SDK 3, sharp 0.34                      |
-| Content    | `react-markdown` (help-center статті)                      | 10.1                                   |
-| QR         | `qrcode`, `sharp` (logo overlay), `jsqr` (test round-trip) | qrcode 1.5                             |
-| Тести      | Jest, Supertest, MongoMemoryServer / MongoMemoryReplSet, @testing-library/react | Jest 30.2 |
+| Шар        | Технологія                                                                       | Версія                               |
+| ---------- | -------------------------------------------------------------------------------- | ------------------------------------ |
+| Core       | TypeScript, Node.js, pnpm, Turborepo                                             | TS 5.9, Node 20, pnpm 10.30          |
+| Frontend   | Next.js (App Router + Turbopack), React, Zustand, Tailwind                       | Next 16, React 19.2, Zustand 5, Tw 4 |
+| Forms      | React Hook Form + Zod resolver                                                   | RHF 7.72                             |
+| Backend    | NestJS, Mongoose, ioredis, Passport, nestjs-zod                                  | NestJS 11.1, Mongoose 8              |
+| Validation | Zod (shared contracts у `packages/types`)                                        | Zod 4.3                              |
+| AI         | Anthropic SDK (Claude Haiku 4.5) — лише публічний help-assistant                 | SDK 0.80                             |
+| Payments   | WayForPay (Regular Payments — підписка + one-off; абстракція `IPaymentProvider`) | —                                    |
+| Email      | Resend + React Email                                                             | 6.9                                  |
+| Storage    | Cloudflare R2 (S3 SDK + presigner), `sharp`                                      | SDK 3, sharp 0.34                    |
+| Content    | `react-markdown` (help-center статті)                                            | 10.1                                 |
+| QR         | `qrcode`, `sharp` (logo overlay), `jsqr` (test round-trip)                       | qrcode 1.5                           |
+| Тести      | Jest, Supertest, MongoMemoryServer / MongoMemoryReplSet, @testing-library/react  | Jest 30.2                            |
 
 ## Architecture Overview
 
@@ -125,12 +125,12 @@ docs/
 - `AuthModule` ↔ `UsersModule` (`forwardRef`, circular)
 - `UsersModule` → `StorageModule` (avatar — `AvatarController` живе у Users після Sprint 13); Google avatar re-upload через `StorageService`
 - `EmailModule`, `RedisModule` — `@Global()`; `RedisModule` exports `REDIS_CLIENT` + `RedisCounterService` (Lua-based atomic counters)
-- `PaymentsModule` → `UsersModule`; `PAYMENT_PROVIDER` (`WayForPayService` за `IPaymentProvider`) + окремий `CatalogService` (статичний типізований конфіг, Redis-кеш як coherence-bus)
+- `PaymentsModule` → `UsersModule` + `BusinessesModule` (реконсиляція); `PAYMENT_PROVIDER` (`WayForPayService` за `IPaymentProvider`) + окремий `CatalogService` (статичний типізований конфіг, без Redis після Sprint 17)
 - `AiModule` — **standalone** (Sprint 18 розірвав залежність від `UsersModule`); `AI_PROVIDER` (AnthropicService) + public `HelpChatRateLimitGuard`
 - **One-way DAG**: `Users ← Businesses ← Accounts ← Invoices`
-  - `BusinessesModule` → registers `Business, Account, Invoice, InvoiceSlugCounter, *SlugHistory` schemas (для cascade)
-  - `AccountsModule` → `BusinessesModule` + `QrModule`; registers `Invoice/Counter/InvoiceSlugHistory` (cascade-delete)
-  - `InvoicesModule` → `BusinessesModule` + `AccountsModule` + `QrModule`
+    - `BusinessesModule` → registers `Business, Account, Invoice, InvoiceSlugCounter, *SlugHistory` schemas (для cascade)
+    - `AccountsModule` → `BusinessesModule` + `QrModule`; registers `Invoice/Counter/InvoiceSlugHistory` (cascade-delete)
+    - `InvoicesModule` → `BusinessesModule` + `AccountsModule` + `QrModule`
 - `LandingClaimModule` → `BusinessesModule` + `AccountsModule` + `UsersModule`; містить `MagicLinkVerifyController` (Sprint 13 separation — verify делегує anon-claim)
 - `OrphanCleanupModule` → `UsersModule` + `BusinessesModule` (Sprint 12 separation; cascade-delete orphan businesses)
 - `QrModule` — exports `QrService`; consumed by 3 public controllers + cabinet/landing
@@ -174,7 +174,7 @@ Access JWT in-memory (web), refresh JWT в `bid_refresh` httpOnly cookie, Redis 
 
 ### Catalog (статичний конфіг)
 
-`CatalogService` тягне Products/Prices зі статичного типізованого конфігу (Sprint 17 переїхав зі Stripe). Public `GET /payments/catalog`. Plan codes — TS union; ціни/executions/featured — у конфізі.
+`CatalogService` тягне Products/Prices зі статичного типізованого конфігу (Sprint 17 переїхав зі Stripe; Sprint 19 — каталог по цінності: 2 підписки + 2 one-off, без «виконань» і без Redis-кешу — дані compile-time константа). Public `GET /payments/catalog`. Plan codes — TS union; ціни/рівень/featured — у конфізі.
 
 ### Public help-assistant (AI)
 
@@ -280,13 +280,13 @@ Public (`'public-payment'` 600/min) — `/businesses/public/:slug` → `/account
 
 **API — required (crash if missing, no defaults)**
 
-- `NODE_ENV`, `PORT`, `WEB_URL` (cabinet origin), `PAY_PUBLIC_URL` (public payment-page origin)
+- `NODE_ENV`, `PORT`, `WEB_URL` (cabinet origin), `PAY_PUBLIC_URL` (public payment-page origin), `TRUST_PROXY_HOPS` (Express `trust proxy`; 0 без проксі — критично для per-IP rate-limit-ів)
 - `MONGODB_URI` (mandatory replica-set), `REDIS_URL`
 - `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL`
 - `WAYFORPAY_MERCHANT_ACCOUNT`, `WAYFORPAY_MERCHANT_SECRET_KEY`, `WAYFORPAY_MERCHANT_DOMAIN`
 - `RESEND_API_KEY`, `RESEND_FROM_EMAIL`
-- `PAYMENTS_SUBSCRIPTION_ENABLED`, `PAYMENTS_ONE_OFF_ENABLED` (хоча б один `true`)
+- `PAYMENTS_SUBSCRIPTION_ENABLED`, `PAYMENTS_ONE_OFF_ENABLED` (хоча б один `true`), `BILLING_DEMO_MODE` (на проді з живими грошима — `false`)
 - Auth tuning: `AUTH_PASSWORD_MIN_LENGTH`, `AUTH_LOCKOUT_THRESHOLDS`, `AUTH_LOGIN_ATTEMPTS_TTL_MIN`, `AUTH_MAGIC_LINK_TTL_MIN`, `AUTH_MAGIC_LINK_RATE_LIMIT`, `AUTH_MAGIC_LINK_RATE_WINDOW_MIN`, `AUTH_MAGIC_LINK_DEDUP_SEC`, `ACCOUNT_DELETION_GRACE_DAYS`
 - Orphan-cleanup (Sprint 12): `ORPHAN_REMINDER_FIRST_DAYS`, `ORPHAN_REMINDER_FINAL_DAYS`, `ORPHAN_CLEANUP_DELETION_DAYS`
 - AI (Anthropic): `ANTHROPIC_API_KEY`
@@ -381,7 +381,7 @@ Full index: [docs/conventions/README.md](docs/conventions/README.md)
 - **`packages/types` build order**: ДО `apps/api`/`apps/web`. Turborepo `dependsOn: ["^build"]` гарантує — manual build без turbo зламається.
 - **`test-setup.ts` fallback env**: без нього fail-fast крашить Jest до запуску (`??=`).
 - **Single-locale uk only**: продукт українською без перемикача. Email-копії інлайн; URL без locale-префіксу.
-- **CatalogService Redis-кеш як coherence-bus**: дані — compile-time константа (статичний конфіг), Redis тримає coherence між інстансами, не source-of-truth.
+- **CatalogService без кешу**: дані — compile-time константа (статичний конфіг у `@finly/types`), жодного Redis/warm-fetch; «оновлення каталогу» = деплой нового коду.
 - **AI help-chat SSE errors after headers**: після `flushHeaders()` помилки йдуть як SSE `ERROR`-event. Rate-limit/budget-check робиться ДО SSE headers — будь-яка 4xx — звичайний HTTP error.
 - **R2 public URL ↔ web hostname invariant**: `R2_PUBLIC_URL` hostname МУСИТЬ дорівнювати `NEXT_PUBLIC_STORAGE_HOSTNAME` — інакше `next/image` блокує фото. `next.config.ts` fail-fast.
 - **Presigned PUT signs Content-Type only**: `Content-Length` НЕ підписується (forbidden Fetch header). Клієнт мусить надіслати `Content-Type: image/webp` exact-match — інакше R2 → 403.

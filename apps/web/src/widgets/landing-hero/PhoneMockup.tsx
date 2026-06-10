@@ -70,7 +70,7 @@ export function PhoneMockup() {
                                     Готово до оплати
                                 </p>
                                 <p className="text-muted-foreground mt-0.5">
-                                    Banking-app відкрив форму з реквізитами
+                                    Банк-додаток відкрив форму з реквізитами
                                 </p>
                             </div>
                         </div>
