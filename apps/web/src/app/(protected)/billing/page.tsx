@@ -336,8 +336,9 @@ export default function BillingPage() {
                     </section>
                 )}
 
-            {/* ── Reset Billing ── */}
-            {hasBillingData && (
+            {/* ── Reset Billing (демо-інструмент; API-ендпоінт теж загейчено
+                BILLING_DEMO_MODE — на проді з живими грошима секції немає) ── */}
+            {BILLING_DEMO_MODE && hasBillingData && (
                 <section className="border-border border-t pt-8">
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                         <div className="min-w-0">

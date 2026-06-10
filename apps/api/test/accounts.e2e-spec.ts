@@ -15,6 +15,7 @@ import { createReplSetMongo } from '../src/test-utils/mongo';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 import { REDIS_CLIENT } from '../src/common/modules/redis.module';
 import { RedisCounterService } from '../src/common/services/redis-counter.service';
+import { RedisLockService } from '../src/common/services/redis-lock.service';
 // Import order matters: AuthModule ↔ UsersModule ↔ StorageModule —
 // pre-existing JS-cycle (`CLAUDE.md` Known Complexities). AuthModule першим:
 // повністю eval-ить циклічну трійку перед business/account-graph.
@@ -94,8 +95,20 @@ jest.mock('../src/config/env', () => ({
                 incrementSliding: jest.fn(async () => 1),
             },
         },
+        {
+            provide: RedisLockService,
+            // Pass-through: e2e — один процес без конкурентних create;
+            // fake-Redis не має eval для compare-and-delete release.
+            useValue: {
+                withLock: async (
+                    _key: string,
+                    _ttlMs: number,
+                    fn: () => Promise<unknown>
+                ) => fn(),
+            },
+        },
     ],
-    exports: [REDIS_CLIENT, RedisCounterService],
+    exports: [REDIS_CLIENT, RedisCounterService, RedisLockService],
 })
 class TestRedisModule {}
 
@@ -254,6 +267,7 @@ describe('Accounts E2E (Sprint 9 §SP-1..§SP-3)', () => {
         rebindPendingAt: null,
         oneOffLevel: null,
         oneOffAccessUntil: null,
+        oneOffOrderReference: null,
     };
 
     async function createUser(

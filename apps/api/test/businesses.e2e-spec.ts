@@ -14,6 +14,7 @@ import { createReplSetMongo } from '../src/test-utils/mongo';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 import { REDIS_CLIENT } from '../src/common/modules/redis.module';
 import { RedisCounterService } from '../src/common/services/redis-counter.service';
+import { RedisLockService } from '../src/common/services/redis-lock.service';
 import { AuthModule } from '../src/modules/auth/auth.module';
 import { BusinessesModule } from '../src/modules/businesses/businesses.module';
 import { EmailModule } from '../src/modules/email/email.module';
@@ -101,8 +102,20 @@ jest.mock('../src/config/env', () => ({
                 incrementSliding: jest.fn(async () => 1),
             },
         },
+        {
+            provide: RedisLockService,
+            // Pass-through: e2e — один процес без конкурентних create;
+            // fake-Redis не має eval для compare-and-delete release.
+            useValue: {
+                withLock: async (
+                    _key: string,
+                    _ttlMs: number,
+                    fn: () => Promise<unknown>
+                ) => fn(),
+            },
+        },
     ],
-    exports: [REDIS_CLIENT, RedisCounterService],
+    exports: [REDIS_CLIENT, RedisCounterService, RedisLockService],
 })
 class TestRedisModule {}
 
@@ -278,6 +291,7 @@ describe('Businesses E2E', () => {
         rebindPendingAt: null,
         oneOffLevel: null,
         oneOffAccessUntil: null,
+        oneOffOrderReference: null,
     };
 
     async function createUser(
@@ -1225,7 +1239,13 @@ describe('Businesses E2E', () => {
                 .expect(200);
 
             expect(res.headers['cache-control']).toMatch(/public/);
-            expect(res.headers['cache-control']).toMatch(/max-age=3600/);
+            // Sprint 19 — короткий TTL без stale-while-revalidate: сторінка
+            // revocable через accessBlockedAt, тож CDN не має віддавати погашену
+            // сторінку після спливу max-age.
+            expect(res.headers['cache-control']).toMatch(/max-age=300/);
+            expect(res.headers['cache-control']).not.toMatch(
+                /stale-while-revalidate/
+            );
         });
 
         it('не вимагає auth (public)', async () => {

@@ -71,6 +71,14 @@ const PROVIDER = 'wayforpay';
 const BILLING_LOCK_TTL_MS = 60_000;
 const BILLING_LOCK_PREFIX = 'billing_op:';
 
+// Cron-реконсиляція бере той самий per-user лок, що й білінг-мутації. Лок
+// звільняється за десятки мс (критична секція — кілька Mongo-write-ів), тож
+// кілька спроб з коротким бекофом перекривають типову контенцію; якщо холдер
+// усе ще тримає лок (рідкісний non-reconciling — активний one-off checkout) —
+// відкладаємо до наступного тригера.
+const RECONCILE_LOCK_MAX_ATTEMPTS = 5;
+const RECONCILE_LOCK_RETRY_DELAY_MS = 200;
+
 // Звільнення локу — compare-and-delete: знімаємо лише власний токен, інакше
 // операція, що перевищила TTL, видалила б lock, уже захоплений іншим запитом.
 const BILLING_LOCK_RELEASE_SCRIPT = `
@@ -241,6 +249,8 @@ export class PaymentsService {
                         oneOffLevel: user.billing?.oneOffLevel ?? null,
                         oneOffAccessUntil:
                             user.billing?.oneOffAccessUntil ?? null,
+                        oneOffOrderReference:
+                            user.billing?.oneOffOrderReference ?? null,
                     }),
                 },
             });
@@ -808,14 +818,21 @@ export class PaymentsService {
         if (event.transactionStatus === WAYFORPAY_TRANSACTION_STATUS.REFUNDED) {
             await this.markRefunded(event, session);
             // Повернення one-off знімає орендований доступ; post-TX reconcile
-            // (routeTransaction) заблокує зайві бізнеси за новим рівнем. Чистимо
-            // активний слот (overwrite-модель: лише один one-off одночасно).
+            // (routeTransaction) заблокує зайві бізнеси за новим рівнем. Гасимо
+            // слот ЛИШЕ якщо його тримає саме ця покупка (overwrite-модель:
+            // слот один, новіша покупка перезаписує): refund старішої покупки,
+            // чий грант уже перезаписано, не має зачіпати чинний оплачений
+            // доступ — guard у filter-і робить це atomically.
             await this.userModel.updateOne(
-                { _id: userId },
+                {
+                    _id: userId,
+                    'billing.oneOffOrderReference': event.orderReference,
+                },
                 {
                     $set: {
                         'billing.oneOffLevel': null,
                         'billing.oneOffAccessUntil': null,
+                        'billing.oneOffOrderReference': null,
                     },
                 },
                 { session }
@@ -871,6 +888,7 @@ export class PaymentsService {
                     $set: {
                         'billing.oneOffLevel': access.level,
                         'billing.oneOffAccessUntil': accessUntil,
+                        'billing.oneOffOrderReference': event.orderReference,
                     },
                 },
                 { session }
@@ -883,7 +901,8 @@ export class PaymentsService {
                         billing: this.freshOneOffBilling(
                             access.level,
                             accessUntil,
-                            event.currency
+                            event.currency,
+                            event.orderReference
                         ),
                     },
                 },
@@ -1230,6 +1249,52 @@ export class PaymentsService {
         }
     }
 
+    /**
+     * Реконсиляція бізнесів користувача, серіалізована тим самим per-user
+     * білінг-локом, що й білінг-мутації. Для cron-шляхів (сплив підписки /
+     * one-off / abandoned re-bind), які інакше йшли б повз лок і конкурували б
+     * за `accessBlockedAt` з grant-вебхуком того ж користувача (lost-update:
+     * cron блокує бізнес під рівень none, тоді як вебхук щойно підняв доступ —
+     * без re-тригера бізнес лишився б хибно заблокованим). Reconcile re-читає
+     * свіжий білінг-стан, тож серіалізований порядок не важить — останній
+     * виконавець бачить фінальний стан. Лок зайнятий → bounded-retry; якщо так і
+     * не звільнився — лог і відкладання (наступний білінг-тригер добʼє).
+     * Reconcile-помилки best-effort, як `reconcileSafe`. **Внутрішні мутації
+     * НЕ викликають цей метод** — вони вже тримають лок, тож ідуть через
+     * `reconcileSafe` (повторне взяття non-reentrant локу кинуло б busy).
+     */
+    async reconcileUserUnderLock(userId: string): Promise<void> {
+        for (
+            let attempt = 1;
+            attempt <= RECONCILE_LOCK_MAX_ATTEMPTS;
+            attempt++
+        ) {
+            try {
+                await this.withBillingLock(userId, () =>
+                    this.reconciliation.reconcile(userId)
+                );
+                return;
+            } catch (error) {
+                if (isBillingLockBusy(error)) {
+                    if (attempt < RECONCILE_LOCK_MAX_ATTEMPTS) {
+                        await delay(RECONCILE_LOCK_RETRY_DELAY_MS);
+                        continue;
+                    }
+                    this.logger.warn(
+                        `Reconcile deferred for user ${userId}: billing lock busy ` +
+                            `after ${RECONCILE_LOCK_MAX_ATTEMPTS} attempts`
+                    );
+                    return;
+                }
+                this.logger.error(
+                    `Reconciliation failed for user ${userId} (deferred to next trigger)`,
+                    error instanceof Error ? error.stack : String(error)
+                );
+                return;
+            }
+        }
+    }
+
     private async requireActiveSubscription(userId: string) {
         const user = await this.userModel.findById(userId).lean();
         if (
@@ -1391,6 +1456,7 @@ export class PaymentsService {
         currentPeriodEnd: Date | null;
         oneOffLevel: string | null;
         oneOffAccessUntil: Date | null;
+        oneOffOrderReference: string | null;
     }): NonNullable<UserDocument['billing']> {
         return {
             provider: PROVIDER,
@@ -1410,6 +1476,7 @@ export class PaymentsService {
             rebindPendingAt: null,
             oneOffLevel: partial.oneOffLevel,
             oneOffAccessUntil: partial.oneOffAccessUntil,
+            oneOffOrderReference: partial.oneOffOrderReference,
         };
     }
 
@@ -1421,7 +1488,8 @@ export class PaymentsService {
     private freshOneOffBilling(
         level: AccessLevel,
         accessUntil: Date,
-        currency: string
+        currency: string,
+        oneOffOrderReference: string
     ): NonNullable<UserDocument['billing']> {
         return {
             provider: PROVIDER,
@@ -1441,6 +1509,7 @@ export class PaymentsService {
             rebindPendingAt: null,
             oneOffLevel: level,
             oneOffAccessUntil: accessUntil,
+            oneOffOrderReference,
         };
     }
 
@@ -1476,6 +1545,10 @@ export class PaymentsService {
 }
 
 // ── Module-level pure helpers ────────────────────────────────────────────
+
+function delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function isDuplicateKeyError(error: unknown): boolean {
     return (

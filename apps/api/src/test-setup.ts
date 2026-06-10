@@ -19,6 +19,7 @@ process.env.WAYFORPAY_MERCHANT_SECRET_KEY ??= 'flk3409refn54t54t*FNJRET';
 process.env.WAYFORPAY_MERCHANT_DOMAIN ??= 'finly.com.ua';
 process.env.PAYMENTS_SUBSCRIPTION_ENABLED ??= 'true';
 process.env.PAYMENTS_ONE_OFF_ENABLED ??= 'true';
+process.env.BILLING_DEMO_MODE ??= 'true';
 process.env.AUTH_PASSWORD_MIN_LENGTH ??= '8';
 process.env.AUTH_LOCKOUT_THRESHOLDS ??= '5:1,10:5,20:15';
 process.env.AUTH_LOGIN_ATTEMPTS_TTL_MIN ??= '15';

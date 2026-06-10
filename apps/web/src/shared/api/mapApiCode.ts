@@ -136,6 +136,10 @@ const ERRORS: Record<string, MessageDict> = {
         // організації або клієнтські). Знімається тарифом «Бухгалтер».
         business_limit_requires_plan:
             'Ліміт бізнесів вичерпано. Тариф «Бухгалтер» знімає обмеження',
+        // Sprint 19 — create серіалізується per-user локом (захист count-лімітів
+        // від double-submit); лок не звільнився за відведені ретраї.
+        business_create_in_progress:
+            'Створення вже виконується. Спробуйте за кілька секунд',
         // Placeholder-free копія `default`-throttler 429 (60/min/IP на cabinet).
         // Generic `rate_limit_exceeded` має `{minutes}`-placeholder, а cabinet-
         // callsite-и не мають джерела TTL для interpolate-у → literal `{minutes}`

@@ -17,7 +17,7 @@ import {
     ProcessedWebhookEventDocument,
 } from './schemas/processed-webhook-event.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
-import { ReconciliationService } from '../businesses/reconciliation.service';
+import { PaymentsService } from './payments.service';
 
 /** Stop retrying after this many failed attempts. */
 const MAX_ATTEMPTS = 5;
@@ -50,7 +50,7 @@ export class PaymentsCleanupService {
         @InjectModel(User.name)
         private readonly userModel: Model<UserDocument>,
 
-        private readonly reconciliation: ReconciliationService
+        private readonly paymentsService: PaymentsService
     ) {}
 
     @Cron(CronExpression.EVERY_DAY_AT_4AM)
@@ -64,18 +64,15 @@ export class PaymentsCleanupService {
 
     /**
      * Реконсиляція бізнесів кожного зачепленого користувача — best-effort
-     * (per-user, щоб збій одного не зривав решту батча).
+     * (per-user, щоб збій одного не зривав решту батча). Через
+     * `reconcileUserUnderLock` бере той самий per-user білінг-лок, що й
+     * вебхуки/мутації: інакше cron-реконсиляція конкурувала б за `accessBlockedAt`
+     * з grant-вебхуком того ж користувача (lost-update). Метод сам ловить
+     * лок-контенцію і reconcile-помилки, тож тут без додаткового try/catch.
      */
     private async reconcileUsers(userIds: string[]): Promise<void> {
         for (const userId of userIds) {
-            try {
-                await this.reconciliation.reconcile(userId);
-            } catch (error) {
-                this.logger.error(
-                    `Reconciliation failed for user ${userId} (deferred)`,
-                    error instanceof Error ? error.stack : String(error)
-                );
-            }
+            await this.paymentsService.reconcileUserUnderLock(userId);
         }
     }
 
@@ -250,6 +247,7 @@ export class PaymentsCleanupService {
             $set: {
                 'billing.oneOffLevel': null,
                 'billing.oneOffAccessUntil': null,
+                'billing.oneOffOrderReference': null,
             },
         });
         this.logger.log(`Expired ${users.length} one-off access grants`);

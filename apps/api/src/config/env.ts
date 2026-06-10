@@ -24,6 +24,12 @@ const getEnvVar = (name: string): string => {
 const subscriptionEnabled =
     getEnvVar('PAYMENTS_SUBSCRIPTION_ENABLED') === 'true';
 const oneOffEnabled = getEnvVar('PAYMENTS_ONE_OFF_ENABLED') === 'true';
+// Демо-інструменти білінгу (POST /payments/reset: повне видалення підписки,
+// історії платежів і webhook-маркерів користувача). На проді з живими грошима
+// МУСИТЬ бути false — інакше користувач одним кліком знищує фінансову історію
+// і знімає idempotency-захист обробки вебхуків. Web-аналог:
+// NEXT_PUBLIC_BILLING_DEMO_MODE (ховає секцію «Скинути білінг»).
+const billingDemoMode = getEnvVar('BILLING_DEMO_MODE') === 'true';
 
 export const ENV = {
     NODE_ENV: getEnvVar('NODE_ENV'),
@@ -66,6 +72,7 @@ export const ENV = {
 
     PAYMENTS_SUBSCRIPTION_ENABLED: subscriptionEnabled,
     PAYMENTS_ONE_OFF_ENABLED: oneOffEnabled,
+    BILLING_DEMO_MODE: billingDemoMode,
 
     AUTH_PASSWORD_MIN_LENGTH: parseInt(
         getEnvVar('AUTH_PASSWORD_MIN_LENGTH'),

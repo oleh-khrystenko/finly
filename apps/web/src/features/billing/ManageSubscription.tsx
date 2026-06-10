@@ -26,8 +26,11 @@ function statusBadge(billing: UserBilling): { label: string; cls: string } {
     if (billing.cancelAtPeriodEnd) {
         return { label: 'Скасовується', cls: 'bg-warning/15 text-warning' };
     }
+    // TRIALING після Sprint 19 — не trial (його прибрано), а відкладений старт
+    // поверх активного one-off: картка привʼязана, перше списання на даті
+    // закінчення one-off доступу.
     if (billing.subscriptionStatus === SUBSCRIPTION_STATUS.TRIALING) {
-        return { label: 'Пробний період', cls: 'bg-primary/15 text-primary' };
+        return { label: 'Очікує старту', cls: 'bg-primary/15 text-primary' };
     }
     return { label: 'Активна', cls: 'bg-success/15 text-success' };
 }

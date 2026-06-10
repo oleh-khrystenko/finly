@@ -308,15 +308,27 @@ export class AccountsService {
         const renaming =
             dto.slug !== undefined &&
             dto.slug.toLowerCase() !== account.slugLower;
-        if (renaming) {
+        // Case-only зміна display-форми — теж платне редагування (display slug
+        // рендериться у QR/URL; без гейта Free обходив би SLUG_EDIT_REQUIRES_PLAN
+        // зміною регістру).
+        const slugCaseOnlyChange =
+            dto.slug !== undefined && !renaming && dto.slug !== account.slug;
+        if (renaming || slugCaseOnlyChange) {
             // Sprint 19 — slug як платна фіча (brand+).
             assertSlugEditAllowed(actorLevel);
+        }
+        if (renaming) {
             return this.renameAndUpdate(account, dto, markSlugCustomized);
         }
 
         const setPayload: Record<string, unknown> = { ...dto };
         if (dto.slug !== undefined) {
             setPayload.slugLower = dto.slug.toLowerCase();
+        }
+        if (slugCaseOnlyChange) {
+            // Симетрично rename-гілці: ручна зміна display-форми = кастомний
+            // slug, slug-rent reconcile має його скидати.
+            setPayload.slugCustomized = markSlugCustomized;
         }
         const updated = await this.accountModel
             .findOneAndUpdate(

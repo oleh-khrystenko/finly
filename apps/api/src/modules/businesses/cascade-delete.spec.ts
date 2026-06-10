@@ -3,6 +3,7 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import { Model, Types } from 'mongoose';
 
 import { createReplSetMongo } from '../../test-utils/mongo';
+import { RedisLockService } from '../../common/services/redis-lock.service';
 import {
     AccountSlugHistory,
     AccountSlugHistorySchema,
@@ -91,6 +92,17 @@ describe('BusinessesService cascade-delete (Sprint 4 §SP-5, MongoMemoryReplSet)
                 {
                     provide: SlugGeneratorService,
                     useValue: { generateRandomSlug: jest.fn() },
+                },
+                {
+                    // Cascade-delete лок не використовує — pass-through stub.
+                    provide: RedisLockService,
+                    useValue: {
+                        withLock: async (
+                            _key: string,
+                            _ttlMs: number,
+                            fn: () => Promise<unknown>
+                        ) => fn(),
+                    },
                 },
             ],
         }).compile();

@@ -395,8 +395,13 @@ export class InvoicesService {
         const renaming =
             dto.slug !== undefined &&
             dto.slug.toLowerCase() !== invoice.slugLower;
-        // Sprint 19 — slug як платна фіча (brand+).
-        if (renaming) {
+        // Sprint 19 — slug як платна фіча (brand+). Гейт на будь-яку зміну,
+        // включно з case-only display-форми (вона рендериться у QR/URL — без
+        // гейта Free обходив би SLUG_EDIT_REQUIRES_PLAN зміною регістру).
+        // Ідентичний slug у PATCH — no-op, не платний.
+        const slugChanging =
+            dto.slug !== undefined && dto.slug !== invoice.slug;
+        if (slugChanging) {
             assertSlugEditAllowed(actorLevel);
         }
 
@@ -455,11 +460,15 @@ export class InvoicesService {
         }
         // Sprint 15 — slug у setStage. Plain-string literal у aggregation `$set`
         // (не починається з `$` → не field-path). Case-only зміна йде сюди ж
-        // (renaming=false); реальний rename — TX-гілка нижче.
+        // (renaming=false); реальний rename — TX-гілка нижче. `slugCustomized`
+        // лише на реальну зміну: ідентичний slug у PATCH не «кастомізує»,
+        // інакше slug-rent reconcile скидав би авто-slug безпідставно.
         if (dto.slug !== undefined) {
             setStage.slug = dto.slug;
             setStage.slugLower = dto.slug.toLowerCase();
-            setStage.slugCustomized = markSlugCustomized;
+            if (slugChanging) {
+                setStage.slugCustomized = markSlugCustomized;
+            }
         }
 
         if (renaming) {

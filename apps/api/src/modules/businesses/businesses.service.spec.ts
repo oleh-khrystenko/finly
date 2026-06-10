@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import {
     BadRequestException,
+    ConflictException,
     ForbiddenException,
     InternalServerErrorException,
     NotFoundException,
@@ -13,6 +14,10 @@ import type {
     UpdateBusinessRequest,
 } from '@finly/types';
 
+import {
+    RedisLockBusyError,
+    RedisLockService,
+} from '../../common/services/redis-lock.service';
 import { Account } from '../accounts/schemas/account.schema';
 import { AccountSlugHistory } from '../accounts/schemas/account-slug-history.schema';
 import { InvoiceSlugCounter } from '../invoices/schemas/invoice-slug-counter.schema';
@@ -68,6 +73,9 @@ describe('BusinessesService', () => {
         generateRandomSlug: jest.Mock;
         isReserved: jest.Mock;
     }>;
+    // Sprint 19 — per-user лок на create. Default — pass-through (лок вільний);
+    // окремий it-блок форсує RedisLockBusyError для 409-кейсу.
+    let lockService: { withLock: jest.Mock };
 
     const userId = new Types.ObjectId();
 
@@ -136,6 +144,16 @@ describe('BusinessesService', () => {
             }),
         };
 
+        lockService = {
+            withLock: jest.fn(
+                async (
+                    _key: string,
+                    _ttlMs: number,
+                    fn: () => Promise<unknown>
+                ) => fn()
+            ),
+        };
+
         const module = await Test.createTestingModule({
             providers: [
                 BusinessesService,
@@ -181,6 +199,7 @@ describe('BusinessesService', () => {
                     useValue: connection,
                 },
                 { provide: SlugGeneratorService, useValue: slugGenerator },
+                { provide: RedisLockService, useValue: lockService },
             ],
         }).compile();
         service = module.get(BusinessesService);
@@ -1201,6 +1220,51 @@ describe('BusinessesService', () => {
             expect(businessModel.create).toHaveBeenCalled();
         });
 
+        // ── Create serialization (per-user lock) ──────────────────────────
+
+        it('create йде під per-user локом (count+insert у критичній секції)', async () => {
+            businessModel.create.mockResolvedValue({} as never);
+            await service.create(
+                userId.toString(),
+                VALID_CREATE,
+                false,
+                'bookkeeper'
+            );
+            expect(lockService.withLock).toHaveBeenCalledTimes(1);
+            expect(lockService.withLock.mock.calls[0]![0]).toBe(
+                `business_create:${userId.toString()}`
+            );
+        });
+
+        it('лок зайнятий після всіх ретраїв → 409 BUSINESS_CREATE_IN_PROGRESS', async () => {
+            lockService.withLock.mockRejectedValue(
+                new RedisLockBusyError('business_create:x')
+            );
+            const err = await service
+                .create(userId.toString(), VALID_CREATE, false, 'bookkeeper')
+                .catch((e: unknown) => e);
+            expect(err).toBeInstanceOf(ConflictException);
+            expect((err as ConflictException).getResponse()).toMatchObject({
+                code: RESPONSE_CODE.BUSINESS_CREATE_IN_PROGRESS,
+            });
+            expect(businessModel.create).not.toHaveBeenCalled();
+        }, 10_000);
+
+        it('лок звільнився на ретраї → create проходить', async () => {
+            businessModel.create.mockResolvedValue({} as never);
+            lockService.withLock.mockRejectedValueOnce(
+                new RedisLockBusyError('business_create:x')
+            );
+            await service.create(
+                userId.toString(),
+                VALID_CREATE,
+                false,
+                'bookkeeper'
+            );
+            expect(lockService.withLock).toHaveBeenCalledTimes(2);
+            expect(businessModel.create).toHaveBeenCalled();
+        });
+
         // ── Slug-edit gate ────────────────────────────────────────────────
 
         it('slug-rename на none → SLUG_EDIT_REQUIRES_PLAN, до DB-роботи', async () => {
@@ -1210,6 +1274,42 @@ describe('BusinessesService', () => {
             );
             // Cheap-reject: resolveSlugRenameContext (findOne) не викликано.
             expect(businessModel.findOne).not.toHaveBeenCalled();
+        });
+
+        it('case-only зміна slug на none → SLUG_EDIT_REQUIRES_PLAN (display-форма теж платна)', async () => {
+            await expectForbidden(
+                service.update('IvanEnko', { slug: 'IVANENKO' }, 'none'),
+                RESPONSE_CODE.SLUG_EDIT_REQUIRES_PLAN
+            );
+            expect(businessModel.findOneAndUpdate).not.toHaveBeenCalled();
+        });
+
+        it('case-only зміна slug на brand → проходить + позначає slugCustomized', async () => {
+            businessModel.findOneAndUpdate.mockReturnValue({
+                exec: jest
+                    .fn()
+                    .mockResolvedValue({ slug: 'IVANENKO' } as never),
+            });
+            await service.update('IvanEnko', { slug: 'IVANENKO' }, 'brand');
+            const setArg = businessModel.findOneAndUpdate.mock.calls[0]![1] as {
+                $set: Record<string, unknown>;
+            };
+            expect(setArg.$set.slugCustomized).toBe(true);
+            // slugLower незмінний → history не зачіпається.
+            expect(historyModel.create).not.toHaveBeenCalled();
+        });
+
+        it('PATCH з ідентичним slug — без гейта (no-op, не платний)', async () => {
+            businessModel.findOneAndUpdate.mockReturnValue({
+                exec: jest
+                    .fn()
+                    .mockResolvedValue({ slug: 'IvanEnko' } as never),
+            });
+            await service.update('IvanEnko', { slug: 'IvanEnko' }, 'none');
+            const setArg = businessModel.findOneAndUpdate.mock.calls[0]![1] as {
+                $set: Record<string, unknown>;
+            };
+            expect(setArg.$set.slugCustomized).toBeUndefined();
         });
 
         it('slug-rename на brand → гейт пропускає (йде у rename-flow)', async () => {

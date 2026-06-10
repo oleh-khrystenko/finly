@@ -162,6 +162,7 @@ export class User {
             rebindPendingAt: { type: Date, default: null },
             oneOffLevel: { type: String, default: null },
             oneOffAccessUntil: { type: Date, default: null },
+            oneOffOrderReference: { type: String, default: null },
         },
         default: null,
         _id: false,
@@ -197,6 +198,12 @@ export class User {
          */
         oneOffLevel: string | null;
         oneOffAccessUntil: Date | null;
+        /**
+         * orderReference покупки, що тримає чинний one-off-слот. Refund-вебхук
+         * гасить доступ лише при збігу — повернення грошей за старішу покупку
+         * (слот уже перезаписано новішою) не зачіпає чинний оплачений доступ.
+         */
+        oneOffOrderReference: string | null;
     } | null;
 }
 

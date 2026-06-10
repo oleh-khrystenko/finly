@@ -26,6 +26,7 @@ import {
     BusinessSchema,
 } from '../businesses/schemas/business.schema';
 import { BusinessesService } from '../businesses/businesses.service';
+import { RedisLockService } from '../../common/services/redis-lock.service';
 import { SlugGeneratorService } from '../businesses/slug-generator.service';
 import { EmailService } from '../email/email.service';
 import {
@@ -115,6 +116,17 @@ describe('OrphanProfileCleanupService (Sprint 12 §12.1c, MongoMemoryReplSet)', 
                 {
                     provide: SlugGeneratorService,
                     useValue: { generateRandomSlug: jest.fn() },
+                },
+                {
+                    // Orphan-cleanup лок не використовує — pass-through stub.
+                    provide: RedisLockService,
+                    useValue: {
+                        withLock: async (
+                            _key: string,
+                            _ttlMs: number,
+                            fn: () => Promise<unknown>
+                        ) => fn(),
+                    },
                 },
                 { provide: EmailService, useValue: emailMock },
             ],

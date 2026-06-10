@@ -32,6 +32,10 @@ import {
 import { assertSlugEditAllowed } from '../../common/billing/assert-access';
 import { isTransactionsUnsupportedError } from '../../common/mongoose/transactions-unsupported';
 import {
+    RedisLockBusyError,
+    RedisLockService,
+} from '../../common/services/redis-lock.service';
+import {
     AccountSlugHistory,
     type AccountSlugHistoryDocument,
 } from '../accounts/schemas/account-slug-history.schema';
@@ -62,6 +66,17 @@ import { SlugGeneratorService } from './slug-generator.service';
 const FOUNDATIONAL_TYPE_LIMIT = 1; // власні фізособа / ФОП — інваріант
 const SCALE_TYPE_LIMIT_BELOW_BOOKKEEPER = 1; // власні ТОВ / організація до bookkeeper
 const CLIENT_BUSINESS_LIMIT = 10; // клієнтські бізнеси до bookkeeper
+
+// Ліміти рахуються count-ом (per-тип, per-власність) — unique-індекс їх не
+// виразить, тож конкурентний double-submit обходив би перевірку. Створення
+// бізнесів одного користувача серіалізуємо per-user Redis-локом: критична
+// секція — count + insert (десятки мс), TTL з великим запасом. Лок зайнятий →
+// короткий bounded-retry (попередній create встигає завершитись), після
+// вичерпання — 409 BUSINESS_CREATE_IN_PROGRESS.
+const CREATE_LOCK_PREFIX = 'business_create:';
+const CREATE_LOCK_TTL_MS = 10_000;
+const CREATE_LOCK_MAX_ATTEMPTS = 5;
+const CREATE_LOCK_RETRY_DELAY_MS = 150;
 
 /**
  * Sprint 3 §3.2 — primary CRUD service для бізнесів cabinet-зони.
@@ -114,7 +129,8 @@ export class BusinessesService {
         private readonly counterModel: Model<InvoiceSlugCounterDocument>,
         @InjectConnection()
         private readonly connection: Connection,
-        private readonly slugGenerator: SlugGeneratorService
+        private readonly slugGenerator: SlugGeneratorService,
+        private readonly locks: RedisLockService
     ) {}
 
     async create(
@@ -153,6 +169,52 @@ export class BusinessesService {
             }
         }
 
+        // Sprint 19 — count-based ліміти всередині per-user локу: між
+        // countDocuments і insert немає вікна для конкурентного create того ж
+        // користувача (double-submit / повторений запит). Replay-гілка вище —
+        // поза локом (read-only, повертає наявний документ).
+        const lockKey = `${CREATE_LOCK_PREFIX}${userObjectId.toString()}`;
+        for (let attempt = 1; attempt <= CREATE_LOCK_MAX_ATTEMPTS; attempt++) {
+            try {
+                return await this.locks.withLock(
+                    lockKey,
+                    CREATE_LOCK_TTL_MS,
+                    () =>
+                        this.createLocked(
+                            userObjectId,
+                            dto,
+                            isBookkeeperMode,
+                            actorLevel,
+                            ownership,
+                            replayFilter
+                        )
+                );
+            } catch (err) {
+                if (!(err instanceof RedisLockBusyError)) {
+                    throw err;
+                }
+                if (attempt < CREATE_LOCK_MAX_ATTEMPTS) {
+                    await delay(CREATE_LOCK_RETRY_DELAY_MS);
+                }
+            }
+        }
+        throw new ConflictException({
+            code: RESPONSE_CODE.BUSINESS_CREATE_IN_PROGRESS,
+            message: 'Business creation already in progress',
+        });
+    }
+
+    private async createLocked(
+        userObjectId: Types.ObjectId,
+        dto: CreateBusinessRequest,
+        isBookkeeperMode: boolean,
+        actorLevel: AccessLevel,
+        ownership: {
+            ownerId: Types.ObjectId | null;
+            managers: Types.ObjectId[];
+        },
+        replayFilter: FilterQuery<BusinessDocument> | null
+    ): Promise<BusinessDocument> {
         // Sprint 19 — ліміти на кількість бізнесів за рівнем доступу і власністю.
         // Перевірка після anon-claim replay (replay повертає наявний, не створює
         // новий) і перед генерацією slug. claimIdempotencyKey-replay сам по собі
@@ -470,10 +532,17 @@ export class BusinessesService {
         const newSlugLower = newSlug?.toLowerCase();
         const slugRenaming =
             newSlugLower !== undefined && newSlugLower !== slugLower;
-        let renameOwnerId: Types.ObjectId | null = null;
-        if (slugRenaming) {
+        // Case-only зміна display-форми (`slugLower` той самий) — теж платне
+        // редагування: display `slug` рендериться у QR/URL, без гейта Free
+        // обходив би SLUG_EDIT_REQUIRES_PLAN через зміну регістру.
+        const slugCaseOnlyChange =
+            newSlug !== undefined && !slugRenaming && newSlug !== slug;
+        if (slugRenaming || slugCaseOnlyChange) {
             // Sprint 19 — slug як платна фіча (brand+). Cheap-reject до DB-роботи.
             assertSlugEditAllowed(actorLevel);
+        }
+        let renameOwnerId: Types.ObjectId | null = null;
+        if (slugRenaming) {
             renameOwnerId = await this.resolveSlugRenameContext(
                 newSlugLower,
                 slugLower
@@ -601,6 +670,11 @@ export class BusinessesService {
                 newSlugLower,
                 hasCoupledFields
             );
+        }
+        if (slugCaseOnlyChange) {
+            // Display-форма змінена вручну — позначаємо як кастомну (симетрично
+            // rename-гілці), щоб slug-rent reconcile скидав і її.
+            setPayload.slugCustomized = markSlugCustomized;
         }
 
         const updated = await this.businessModel
@@ -932,6 +1006,10 @@ export class BusinessesService {
 
         return { affectedAccounts, affectedInvoices };
     }
+}
+
+function delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function isDuplicateKeyError(err: unknown): err is Error & { code: number } {

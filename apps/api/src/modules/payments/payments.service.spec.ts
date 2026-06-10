@@ -194,6 +194,7 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
                       rebindPendingAt: null,
                       oneOffLevel: null,
                       oneOffAccessUntil: null,
+                      oneOffOrderReference: null,
                       ...billing,
                   }
                 : null,
@@ -243,6 +244,8 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
         const updated = await userModel.findById(user._id).lean();
         expect(updated!.billing!.oneOffLevel).toBe('bookkeeper');
         expect(updated!.billing!.oneOffAccessUntil).toBeInstanceOf(Date);
+        // Слот привʼязаний до покупки — refund гасить доступ лише при збігу.
+        expect(updated!.billing!.oneOffOrderReference).toBe(ref);
         expect(updated!.billing!.hasActiveSubscription).toBe(false);
         // Ledger білінг більше не наповнює.
         expect(updated!.executions.balance).toBe(0);
@@ -261,6 +264,10 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
             oneOffAccessUntil: new Date(Date.now() + 20 * 86_400_000),
         });
         const ref = buildOneOffOrderReference(user._id.toString(), 'brand');
+        // Слот тримає саме ця покупка — guard у refund-гілці має збіг.
+        await userModel.findByIdAndUpdate(user._id, {
+            $set: { 'billing.oneOffOrderReference': ref },
+        });
 
         await feed(
             approvedEvent(ref, {
@@ -272,10 +279,44 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
         const updated = await userModel.findById(user._id).lean();
         expect(updated!.billing!.oneOffLevel).toBeNull();
         expect(updated!.billing!.oneOffAccessUntil).toBeNull();
+        expect(updated!.billing!.oneOffOrderReference).toBeNull();
         const reconcile = moduleRef.get<{ reconcile: jest.Mock }>(
             ReconciliationService
         ).reconcile;
         expect(reconcile).toHaveBeenCalledWith(user._id.toString());
+    });
+
+    it('REFUNDED старішої покупки (слот перезаписано новішою) НЕ гасить чинний доступ', async () => {
+        // createUser({}) → білінг-субдок існує (dotted $set нижче потребує
+        // non-null billing).
+        const user = await createUser({});
+        const userId = user._id.toString();
+        const oldRef = buildOneOffOrderReference(userId, 'brand');
+        const newRef = buildOneOffOrderReference(userId, 'bookkeeper');
+
+        // Слот тримає новіша bookkeeper-покупка (overwrite-модель).
+        await userModel.findByIdAndUpdate(user._id, {
+            $set: {
+                'billing.oneOffLevel': 'bookkeeper',
+                'billing.oneOffAccessUntil': new Date(
+                    Date.now() + 25 * 86_400_000
+                ),
+                'billing.oneOffOrderReference': newRef,
+            },
+        });
+
+        // Support повертає гроші за стару brand-покупку.
+        await feed(
+            approvedEvent(oldRef, {
+                transactionStatus: WAYFORPAY_TRANSACTION_STATUS.REFUNDED,
+                amount: findOneOffAccess('brand')!.priceAmount,
+            })
+        );
+
+        const updated = await userModel.findById(user._id).lean();
+        expect(updated!.billing!.oneOffLevel).toBe('bookkeeper');
+        expect(updated!.billing!.oneOffAccessUntil).toBeInstanceOf(Date);
+        expect(updated!.billing!.oneOffOrderReference).toBe(newRef);
     });
 
     it('ідемпотентність: дубль one-off події дає доступ лише раз', async () => {

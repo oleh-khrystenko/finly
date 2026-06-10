@@ -173,6 +173,12 @@ export const RESPONSE_CODE = {
      * none/brand). Знімається підпискою «Бухгалтер». Upsell на bookkeeper.
      */
     BUSINESS_LIMIT_REQUIRES_PLAN: 'BUSINESS_LIMIT_REQUIRES_PLAN',
+    /**
+     * Sprint 19 — створення бізнесів одного користувача серіалізується per-user
+     * Redis-локом (ліміт рахується count-ом, без локу конкурентний double-submit
+     * обходив би його). Лок не звільнився за відведені ретраї — повторити пізніше.
+     */
+    BUSINESS_CREATE_IN_PROGRESS: 'BUSINESS_CREATE_IN_PROGRESS',
 
     // --- invoices error (Sprint 4 §4.2 §4.8) ---
     /** Invoice не знайдено в межах business-у. `InvoiceAccessGuard` / `InvoicesService.getBySlug`. UA: "Рахунок не знайдено". */
@@ -326,6 +332,7 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.SLUG_EDIT_REQUIRES_PLAN]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.BUSINESS_TYPE_LIMIT_REACHED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.BUSINESS_LIMIT_REQUIRES_PLAN]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BUSINESS_CREATE_IN_PROGRESS]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVOICE_NOT_FOUND]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVOICE_SLUG_GENERATION_FAILED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVOICE_AMOUNT_LOCKED_REQUIRES_AMOUNT]: RESPONSE_TYPE.ERROR,

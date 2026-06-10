@@ -21,6 +21,7 @@ import {
 } from '@finly/types';
 
 import { SkipOnboarding } from '../../common/decorators/skip-onboarding.decorator';
+import { PUBLIC_PAGE_CACHE_CONTROL } from '../../common/http/public-cache';
 import { ENV } from '../../config/env';
 import { BusinessesService } from '../businesses/businesses.service';
 import type { BusinessDocument } from '../businesses/schemas/business.schema';
@@ -38,7 +39,8 @@ import type { AccountDocument } from './schemas/account.schema';
  * Sprint 9 §9.1 — public endpoints для зони `pay.finly.com.ua/{businessSlug}/
  * {accountSlug}`. Той самий patern, що Sprint 3 `PublicBusinessesController`:
  *  - без guard-ів, без cookie / Authorization.
- *  - агресивний CDN-cache (`public, max-age=3600, stale-while-revalidate=86400`).
+ *  - короткий CDN-cache `PUBLIC_PAGE_CACHE_CONTROL` (сторінка revocable через
+ *    `accessBlockedAt`, тож без stale-while-revalidate — гасіння у межах TTL).
  *  - whitelist `PublicAccountViewSchema` strip-ить leak-кандидати.
  *  - реквізити leak-vector лише через `nbuLinks` Base64URL payload.
  *
@@ -57,10 +59,7 @@ export class PublicAccountsController {
 
     @SkipOnboarding()
     @Get(':accountSlug')
-    @Header(
-        'Cache-Control',
-        'public, max-age=3600, stale-while-revalidate=86400'
-    )
+    @Header('Cache-Control', PUBLIC_PAGE_CACHE_CONTROL)
     async getPublic(
         @Param('slug') slug: string,
         @Param('accountSlug') accountSlug: string
@@ -103,10 +102,7 @@ export class PublicAccountsController {
     @SkipOnboarding()
     @Get(':accountSlug/qr/business.png')
     @Header('Content-Type', 'image/png')
-    @Header(
-        'Cache-Control',
-        'public, max-age=3600, stale-while-revalidate=86400'
-    )
+    @Header('Cache-Control', PUBLIC_PAGE_CACHE_CONTROL)
     async getBusinessQr(
         @Param('slug') slug: string,
         @Param('accountSlug') accountSlug: string,
@@ -139,10 +135,7 @@ export class PublicAccountsController {
     @SkipOnboarding()
     @Get(':accountSlug/qr/nbu.png')
     @Header('Content-Type', 'image/png')
-    @Header(
-        'Cache-Control',
-        'public, max-age=3600, stale-while-revalidate=86400'
-    )
+    @Header('Cache-Control', PUBLIC_PAGE_CACHE_CONTROL)
     async getNbuQr(
         @Param('slug') slug: string,
         @Param('accountSlug') accountSlug: string,
