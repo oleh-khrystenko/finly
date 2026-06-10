@@ -13,6 +13,7 @@ import {
     createSubscriptionCheckout,
     createOneOffCheckout,
 } from '@/shared/api/payments';
+import { extractApiErrorCode, getApiMessage } from '@/shared/api';
 import { useAuthStore } from '@/entities/user';
 import {
     useBillingResetDialogStore,
@@ -74,8 +75,8 @@ export default function BillingPage() {
         try {
             const { checkoutUrl } = await createSubscriptionCheckout(planCode);
             window.location.assign(checkoutUrl);
-        } catch {
-            toast.error('Не вдалося створити сесію оплати');
+        } catch (err) {
+            toast.error(getApiMessage(extractApiErrorCode(err), 'payments'));
             setLoadingAction(null);
         }
     };
@@ -85,8 +86,8 @@ export default function BillingPage() {
         try {
             const { checkoutUrl } = await createOneOffCheckout(oneOffCode);
             window.location.assign(checkoutUrl);
-        } catch {
-            toast.error('Не вдалося створити сесію оплати');
+        } catch (err) {
+            toast.error(getApiMessage(extractApiErrorCode(err), 'payments'));
             setLoadingAction(null);
         }
     };
@@ -131,8 +132,9 @@ export default function BillingPage() {
                         Активний доступ: {ACCESS_LEVEL_LABEL[oneOffLevel]}
                     </p>
                     <p className="text-muted-foreground mt-1 text-sm">
-                        Діє до {formatLocalDate(oneOffUntil)}. Оформлення
-                        підписки нижче перенесе перше списання на цю дату.
+                        Діє до {formatLocalDate(oneOffUntil)}.
+                        {PAYMENTS_SUBSCRIPTION_ENABLED &&
+                            ' Оформлення підписки нижче перенесе перше списання на цю дату.'}
                     </p>
                 </div>
             )}

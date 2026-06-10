@@ -2,9 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { CreditCard, Plus } from 'lucide-react';
-import { AxiosError } from 'axios';
 import { BANK_LABEL, type AccountWithCounts } from '@finly/types';
-import { getApiMessage, listAccounts } from '@/shared/api';
+import { extractApiErrorCode, getApiMessage, listAccounts } from '@/shared/api';
 import UiButton from '@/shared/ui/UiButton';
 import UiNavCard from '@/shared/ui/UiNavCard';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
@@ -29,12 +28,7 @@ interface SectionError {
 }
 
 function extractMessage(err: unknown): string {
-    const code =
-        err instanceof AxiosError
-            ? ((err.response?.data as { error?: { code?: string } } | undefined)
-                  ?.error?.code ?? 'unknown')
-            : 'unknown';
-    return getApiMessage(code, 'accounts');
+    return getApiMessage(extractApiErrorCode(err), 'accounts');
 }
 
 /**

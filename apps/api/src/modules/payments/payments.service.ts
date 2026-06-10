@@ -631,6 +631,17 @@ export class PaymentsService {
             });
         }
 
+        // Маркер незавершеного re-bind ДО зняття старого рекуренту: збій
+        // будь-якого з наступних кроків (REMOVE, checkout-виклик, фінальний
+        // $set) інакше лишав би hasActiveSubscription=true без рекуренту і поза
+        // всіма sweep-ами назавжди — `expireAbandonedRebinds` ловить лише
+        // rebindPendingAt ≠ null. Конкурентний вебхук не вклиниться: handleWebhook
+        // тримає той самий білінг-лок. Успішна привʼязка (Approved на новому
+        // orderReference) чистить маркер.
+        await this.userModel.findByIdAndUpdate(userId, {
+            $set: { 'billing.rebindPendingAt': new Date() },
+        });
+
         // Re-bind = cancel old + create new зі збереженням плану і дати
         // наступного списання (без негайної повторної оплати поточного періоду).
         await this.removeRecurringWithRetry(oldOrderReference, 'card_rebind');
@@ -795,7 +806,11 @@ export class PaymentsService {
         parsed: ParsedOrderReference
     ): Promise<boolean> {
         const userId = parsed.userId;
-        const insert = await this.insertWebhookEvent(event, userId);
+        const insert = await this.insertWebhookEvent(
+            event,
+            userId,
+            parsed.kind === ORDER_KIND.ONE_OFF ? parsed.oneOffCode : null
+        );
         if (insert === 'applied') {
             // Подію вже застосовано — звичайний дубль доставки. Підтверджуємо.
             // НЕ переобробляємо: one-off-грант доступу не ідемпотентний.
@@ -1223,7 +1238,8 @@ export class PaymentsService {
 
     private async insertWebhookEvent(
         event: BillingWebhookEvent,
-        userId: string
+        userId: string,
+        oneOffCode: string | null
     ): Promise<'new' | 'applied' | 'pending'> {
         try {
             await this.webhookEventModel.create({
@@ -1233,7 +1249,7 @@ export class PaymentsService {
                 occurredAt: event.occurredAt,
                 type: event.transactionStatus,
                 userId,
-                oneOffCode: null,
+                oneOffCode,
                 status: 'pending',
             });
             return 'new';
@@ -1285,16 +1301,28 @@ export class PaymentsService {
     /**
      * Реконсиляція бізнесів під новий рівень доступу — best-effort. Білінг-мутація
      * вже завершена (гроші пройшли / статус флипнуто), тож збій реконсиляції НЕ
-     * має валити операцію чи un-ack-ати вебхук: наступний білінг-тригер або
-     * cron перерахує. Викликається в межах per-user білінг-локу (без race з
+     * має валити операцію чи un-ack-ати вебхук. Durable-маркер
+     * `reconcileRequiredAt` ставиться ДО спроби (симетрично
+     * `reconcileUnderLock`): без нього transient-збій усередині `reconcile` не
+     * мав би наступного тригера — daily-sweep `retryPendingReconciles` добиває
+     * лише стемпнутих. Повний успішний прогін знімає маркер сам (clear умовний
+     * за startedAt). Викликається в межах per-user білінг-локу (без race з
      * іншими мутаціями того ж користувача).
      */
     private async reconcileSafe(userId: string): Promise<void> {
         try {
+            await this.usersService.stampBillingReconcileRequired(userId);
+        } catch (error) {
+            this.logger.error(
+                `Failed to stamp reconcileRequiredAt for user ${userId}`,
+                error instanceof Error ? error.stack : String(error)
+            );
+        }
+        try {
             await this.reconciliation.reconcile(userId);
         } catch (error) {
             this.logger.error(
-                `Reconciliation failed for user ${userId} (deferred to next trigger)`,
+                `Reconciliation failed for user ${userId} (deferred to daily retry)`,
                 error instanceof Error ? error.stack : String(error)
             );
         }
