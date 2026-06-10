@@ -4,7 +4,10 @@ import { Model, Types } from 'mongoose';
 import type { BusinessType } from '@finly/types';
 
 import { createReplSetMongo, type InMemoryMongo } from '../../test-utils/mongo';
-import { RedisLockService } from '../../common/services/redis-lock.service';
+import {
+    RedisLockBusyError,
+    RedisLockService,
+} from '../../common/services/redis-lock.service';
 import { ReconciliationService } from './reconciliation.service';
 import {
     AccountSlugHistory,
@@ -70,7 +73,8 @@ describe('ReconciliationService (MongoMemoryReplSet)', () => {
     let invoiceHistoryModel: Model<InvoiceSlugHistoryDocument>;
     const usersService = {
         findById: jest.fn(),
-        setBillingReconcileRequired: jest.fn().mockResolvedValue(undefined),
+        stampBillingReconcileRequired: jest.fn().mockResolvedValue(undefined),
+        clearBillingReconcileRequired: jest.fn().mockResolvedValue(undefined),
     };
     // reconcile() у тестах викликається напряму (без локу); withLock —
     // pass-through для reconcileUnderLock-шляхів.
@@ -441,4 +445,60 @@ describe('ReconciliationService (MongoMemoryReplSet)', () => {
         expect(after!.slugLower).toBe(before!.slugLower);
         expect(after!.slugCustomized).toBe(false);
     });
+
+    // ── Durable-retry маркер ──────────────────────────────────────────────
+
+    it('повний прогін знімає durable-маркер умовним clear-ом (notAfter ≤ старт прогону)', async () => {
+        setLevel('brand');
+        await seedBusiness({ type: 'tov', owned: true });
+        const before = new Date();
+
+        await service.reconcile(userId.toString());
+
+        expect(
+            usersService.clearBillingReconcileRequired
+        ).toHaveBeenCalledTimes(1);
+        const [uid, notAfter] = usersService.clearBillingReconcileRequired.mock
+            .calls[0] as [string, Date];
+        expect(uid).toBe(userId.toString());
+        // Конкурентний стемп, поставлений ПІСЛЯ старту прогону, мусить
+        // пережити clear — межа не може бути новішою за момент виклику.
+        expect(notAfter.getTime()).toBeGreaterThanOrEqual(before.getTime());
+        expect(notAfter.getTime()).toBeLessThanOrEqual(Date.now());
+        expect(
+            usersService.stampBillingReconcileRequired
+        ).not.toHaveBeenCalled();
+    });
+
+    it('reconcileUnderLock стемпить durable-маркер ДО спроби локу (busy-лок не губить retry)', async () => {
+        setLevel('brand');
+        const order: string[] = [];
+        usersService.stampBillingReconcileRequired.mockImplementationOnce(
+            async () => {
+                order.push('stamp');
+            }
+        );
+        // Лок зайнятий на всі ретраї — reconcile так і не виконується.
+        locks.withLock.mockImplementation(async () => {
+            order.push('lock');
+            throw new RedisLockBusyError('billing_op:test');
+        });
+
+        await service.reconcileUnderLock(userId.toString());
+
+        expect(usersService.stampBillingReconcileRequired).toHaveBeenCalledWith(
+            userId.toString()
+        );
+        expect(order[0]).toBe('stamp');
+        // Маркер НЕ знято — відкладений reconcile добʼє daily-sweep.
+        expect(
+            usersService.clearBillingReconcileRequired
+        ).not.toHaveBeenCalled();
+
+        // Повертаємо pass-through дефолт для решти тестів (clearAllMocks не
+        // скидає implementations).
+        locks.withLock.mockImplementation(
+            (_key: string, _ttl: number, fn: () => Promise<unknown>) => fn()
+        );
+    }, 15_000);
 });

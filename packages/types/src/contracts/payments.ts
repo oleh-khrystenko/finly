@@ -53,12 +53,6 @@ export function maxAccessLevel(a: AccessLevel, b: AccessLevel): AccessLevel {
 // Один продукт = одна валюта (гривня). WayForPay multi-currency поза скоупом.
 export const BILLING_CURRENCY = 'UAH';
 
-// Відкладений старт першого списання (dateBegin = now + N місяців). Sprint 17
-// використовував це для пробного місяця; Sprint 19 trial прибирає, але механізм
-// лишається для активації підписки поверх активного one-off (перше списання
-// відкладається на дату закінчення one-off).
-export const SUBSCRIPTION_TRIAL_MONTHS = 1;
-
 export type BillingInterval = 'month' | 'year';
 
 // --- Catalog Types (статичний конфіг, не runtime-fetch) ---

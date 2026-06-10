@@ -623,6 +623,44 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
         expect(updated!.billing!.planCode).toBe('bookkeeper');
     });
 
+    it('зміна плану під час відкладеного старту (TRIALING): без proration, лише CHANGE + planCode', async () => {
+        const user = await createUser({
+            orderReference: 'placeholder',
+            planCode: 'brand',
+            recToken: 'tok_abc',
+            subscriptionStatus: SUBSCRIPTION_STATUS.TRIALING,
+            hasActiveSubscription: true,
+            currentPeriodEnd: new Date(Date.now() + 20 * 86_400_000),
+            oneOffLevel: 'brand',
+            oneOffAccessUntil: new Date(Date.now() + 20 * 86_400_000),
+        });
+        const ref = buildSubscriptionOrderReference(user._id.toString());
+        await userModel.findByIdAndUpdate(user._id, {
+            $set: { 'billing.orderReference': ref },
+        });
+
+        const result = await service.changePlan(user._id.toString(), {
+            planCode: 'bookkeeper',
+        });
+
+        expect(result.scheduled).toBe(false);
+        // Першого списання ще не було, а TRIALING не дає доступу
+        // (deriveAccessLevel) — доплата була б грошима за ніщо.
+        expect(provider.chargeByToken).not.toHaveBeenCalled();
+        expect(provider.changeSubscription).toHaveBeenCalled();
+
+        const updated = await userModel.findById(user._id).lean();
+        expect(updated!.billing!.planCode).toBe('bookkeeper');
+        expect(updated!.billing!.subscriptionStatus).toBe(
+            SUBSCRIPTION_STATUS.TRIALING
+        );
+
+        const proration = await paymentRecordModel.findOne({
+            type: PAYMENT_RECORD_TYPE.PRORATION,
+        });
+        expect(proration).toBeNull();
+    });
+
     // ── Cancel with refund ───────────────────────────────────────────────
 
     it('cancel withRefund: повертає кошти, REMOVE, білінг CANCELED', async () => {
@@ -721,6 +759,97 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
         expect(provider.removeSubscription).not.toHaveBeenCalled();
         const updated = await userModel.findById(user._id).lean();
         expect(updated!.billing!.hasActiveSubscription).toBe(true);
+    });
+
+    it('cancel withRefund під час відкладеного старту: списання попередньої підписки не повертається', async () => {
+        const user = await createUser({
+            orderReference: 'placeholder',
+            planCode: 'bookkeeper',
+            subscriptionStatus: SUBSCRIPTION_STATUS.TRIALING,
+            hasActiveSubscription: true,
+            currentPeriodEnd: new Date(Date.now() + 10 * 86_400_000),
+        });
+        const ref = buildSubscriptionOrderReference(user._id.toString());
+        await userModel.findByIdAndUpdate(user._id, {
+            $set: { 'billing.orderReference': ref },
+        });
+        // Списання ПОПЕРЕДНЬОЇ підписки — старіше за початок поточного періоду
+        // (periodEnd - інтервал). collection.insertOne обходить timestamps,
+        // щоб createdAt був у минулому.
+        await paymentRecordModel.collection.insertOne({
+            userId: user._id,
+            orderReference: 'fin-sub-old-ref',
+            type: PAYMENT_RECORD_TYPE.SUBSCRIPTION,
+            amount: 9900,
+            currency: 'UAH',
+            status: PAYMENT_RECORD_STATUS.APPROVED,
+            providerTransactionId: 'tx_old',
+            cardMask: '44****1111',
+            refundAmount: null,
+            createdAt: new Date(Date.now() - 40 * 86_400_000),
+            updatedAt: new Date(Date.now() - 40 * 86_400_000),
+        });
+
+        const result = await service.cancelSubscription(user._id.toString(), {
+            withRefund: true,
+        });
+
+        // У поточному періоді нічого не списувалось → нічого не повертаємо.
+        expect(result.refundedAmount).toBeNull();
+        expect(provider.refund).not.toHaveBeenCalled();
+
+        // Старе списання не зачеплено, скасування завершено.
+        const oldRecord = await paymentRecordModel
+            .findOne({ orderReference: 'fin-sub-old-ref' })
+            .lean();
+        expect(oldRecord!.status).toBe(PAYMENT_RECORD_STATUS.APPROVED);
+        const updated = await userModel.findById(user._id).lean();
+        expect(updated!.billing!.hasActiveSubscription).toBe(false);
+    });
+
+    it('cancel withRefund після re-bind: refund адресується orderReference самого списання', async () => {
+        const user = await createUser({
+            orderReference: 'placeholder',
+            planCode: 'bookkeeper',
+            subscriptionStatus: SUBSCRIPTION_STATUS.ACTIVE,
+            hasActiveSubscription: true,
+            currentPeriodEnd: new Date(Date.now() + 15 * 86_400_000),
+        });
+        // Після re-bind поточний billing.orderReference новий, а чинне
+        // списання періоду живе на попередньому orderReference.
+        const newRef = buildSubscriptionOrderReference(user._id.toString());
+        await userModel.findByIdAndUpdate(user._id, {
+            $set: { 'billing.orderReference': newRef },
+        });
+        await paymentRecordModel.create({
+            userId: user._id,
+            orderReference: 'fin-sub-prev-ref',
+            type: PAYMENT_RECORD_TYPE.SUBSCRIPTION,
+            amount: 9900,
+            currency: 'UAH',
+            status: PAYMENT_RECORD_STATUS.APPROVED,
+            providerTransactionId: 'tx_prev',
+            cardMask: '44****1111',
+            refundAmount: null,
+        });
+
+        provider.refund.mockResolvedValue({
+            success: true,
+            reasonCode: 1100,
+            reason: 'Ok',
+        });
+
+        const result = await service.cancelSubscription(user._id.toString(), {
+            withRefund: true,
+        });
+
+        expect(result.refundedAmount).toBeGreaterThan(0);
+        // Гроші рухались на order-і списання, не на новому (порожньому).
+        expect(provider.refund).toHaveBeenCalledWith(
+            expect.objectContaining({ orderReference: 'fin-sub-prev-ref' })
+        );
+        // REMOVE рекуренту — на чинному (новому) orderReference.
+        expect(provider.removeSubscription).toHaveBeenCalledWith(newRef);
     });
 
     // ── Checkout після попередньої підписки ──────────────────────────────

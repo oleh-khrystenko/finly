@@ -166,22 +166,35 @@ export class UsersService {
 
     /**
      * Sprint 19 — durable-маркер незавершеної реконсиляції бізнесів
-     * (`billing.reconcileRequiredAt`). `required=true` стемпить, `false` знімає.
-     * Guard `billing: { $ne: null }` — `$set` крізь null-субдок падає на
-     * Mongo-рівні; без білінгу маркер і не потрібен (немає cron-тригерів, які
-     * могли б загубитись).
+     * (`billing.reconcileRequiredAt`). Guard `billing: { $ne: null }` — `$set`
+     * крізь null-субдок падає на Mongo-рівні; без білінгу маркер і не потрібен
+     * (немає cron-тригерів, які могли б загубитись).
      */
-    async setBillingReconcileRequired(
-        userId: string,
-        required: boolean
-    ): Promise<void> {
+    async stampBillingReconcileRequired(userId: string): Promise<void> {
         await this.userModel.updateOne(
             { _id: userId, billing: { $ne: null } },
+            { $set: { 'billing.reconcileRequiredAt': new Date() } }
+        );
+    }
+
+    /**
+     * Знімає durable-маркер реконсиляції, але ЛИШЕ якщо він не новіший за
+     * `notAfter` (момент старту reconcile-прогону). Конкурентний cron-стемп,
+     * поставлений ПІСЛЯ того, як reconcile прочитав білінг-стан (cron-овий
+     * updateMany флипу доступу йде поза білінг-локом), мусить пережити зняття —
+     * безумовний clear загубив би єдиний durable-тригер того флипу.
+     * `$lte`-фільтр заразом виключає null-маркер і null-білінг (no-op).
+     */
+    async clearBillingReconcileRequired(
+        userId: string,
+        notAfter: Date
+    ): Promise<void> {
+        await this.userModel.updateOne(
             {
-                $set: {
-                    'billing.reconcileRequiredAt': required ? new Date() : null,
-                },
-            }
+                _id: userId,
+                'billing.reconcileRequiredAt': { $lte: notAfter },
+            },
+            { $set: { 'billing.reconcileRequiredAt': null } }
         );
     }
 

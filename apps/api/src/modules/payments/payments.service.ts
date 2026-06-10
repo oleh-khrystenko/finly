@@ -312,20 +312,40 @@ export class PaymentsService {
         // З поверненням за невикористаний період. Останнє списання беремо як
         // APPROVED або вже REFUNDED: повторний виклик після часткового збою
         // (refund пройшов, локальний flip не завершився) має впізнати завершене
-        // повернення і не списати refund удруге.
-        const lastCharge = await this.paymentRecordModel
-            .findOne({
-                userId: new Types.ObjectId(userId),
-                type: PAYMENT_RECORD_TYPE.SUBSCRIPTION,
-                status: {
-                    $in: [
-                        PAYMENT_RECORD_STATUS.APPROVED,
-                        PAYMENT_RECORD_STATUS.REFUNDED,
-                    ],
-                },
-            })
-            .sort({ createdAt: -1 })
-            .lean();
+        // повернення і не списати refund удруге. Звужуємо до списань ПОТОЧНОГО
+        // періоду (createdAt ≥ межа періоду): без цього cancel підхопив би
+        // списання попередньої підписки і повертав би чужі кошти. Звуження по
+        // даті, а не по orderReference: після re-bind картки чинне списання
+        // періоду живе на старому orderReference.
+        //
+        // Під час відкладеного старту (TRIALING) реального списання на цій
+        // підписці ще не було (binding-вебхук не рухав коштів) — повертати
+        // нічого: refund лишається null, нижче відпрацьовують лише REMOVE + flip.
+        // Симетрично спец-гілці TRIALING у `changePlanLocked`.
+        const interval = this.planInterval(billing.planCode);
+        const lastCharge =
+            billing.subscriptionStatus !== SUBSCRIPTION_STATUS.TRIALING &&
+            billing.currentPeriodEnd
+                ? await this.paymentRecordModel
+                      .findOne({
+                          userId: new Types.ObjectId(userId),
+                          type: PAYMENT_RECORD_TYPE.SUBSCRIPTION,
+                          status: {
+                              $in: [
+                                  PAYMENT_RECORD_STATUS.APPROVED,
+                                  PAYMENT_RECORD_STATUS.REFUNDED,
+                              ],
+                          },
+                          createdAt: {
+                              $gte: periodLookbackStart(
+                                  billing.currentPeriodEnd,
+                                  interval
+                              ),
+                          },
+                      })
+                      .sort({ createdAt: -1 })
+                      .lean()
+                : null;
 
         let refundedAmount: number | null = null;
 
@@ -333,7 +353,6 @@ export class PaymentsService {
             // Уже повернуто попередньою спробою — лишилось добити REMOVE + flip.
             refundedAmount = lastCharge.refundAmount;
         } else if (lastCharge) {
-            const interval = this.planInterval(billing.planCode);
             const refundAmount = Math.round(
                 lastCharge.amount *
                     remainingRatio(billing.currentPeriodEnd, interval)
@@ -359,8 +378,12 @@ export class PaymentsService {
                 if (claimed) {
                     let result;
                     try {
+                        // Refund адресуємо order-у самого списання: після
+                        // re-bind поточний billing.orderReference ще не має
+                        // жодної транзакції, повертати можна лише з того
+                        // order-а, де гроші реально рухались.
                         result = await this.paymentProvider.refund({
-                            orderReference,
+                            orderReference: lastCharge.orderReference,
                             amount: refundAmount,
                             currency: billing.currency ?? BILLING_CURRENCY,
                             comment:
@@ -374,7 +397,7 @@ export class PaymentsService {
                         // refund назавжди — тому гучний ERROR на ручний розбір,
                         // а користувачу мапована помилка замість success-тоста.
                         this.logger.error(
-                            `Refund transport failure for ${orderReference} ` +
+                            `Refund transport failure for ${lastCharge.orderReference} ` +
                                 `(record ${String(lastCharge._id)} kept REFUNDED), ` +
                                 `manual review required`,
                             error instanceof Error ? error.stack : String(error)
@@ -453,6 +476,28 @@ export class PaymentsService {
                 code: RESPONSE_CODE.SAME_PLAN,
                 message: 'Already on this plan',
             });
+        }
+
+        // Відкладений старт поверх one-off (TRIALING): першого списання ще не
+        // було, тож proration нема за що рахувати, а доплата не підняла б
+        // доступ (deriveAccessLevel свідомо не зараховує TRIALING — рівень до
+        // межі тримає one-off). Будь-яка зміна плану тут — лише заміна того,
+        // що почне списуватись на межі: CHANGE суми рекурента + локальний
+        // planCode, без списання і без reconcile (рівень не змінився).
+        if (billing.subscriptionStatus === SUBSCRIPTION_STATUS.TRIALING) {
+            await this.changeRecurringOrThrow(orderReference, {
+                amount: target.priceAmount,
+                currency: target.currency,
+                interval: target.interval,
+            });
+            await this.userModel.findByIdAndUpdate(userId, {
+                $set: {
+                    'billing.planCode': target.code,
+                    'billing.scheduledPlanCode': null,
+                    'billing.scheduledChangeDate': null,
+                },
+            });
+            return { scheduled: false };
         }
 
         const currentPrice = current?.priceAmount ?? 0;
@@ -1575,6 +1620,28 @@ function remainingRatio(
     const total = end - start;
     if (total <= 0) return 0;
     return Math.max(0, Math.min(1, (end - now) / total));
+}
+
+// Максимально можлива довжина інтервалу в днях. Місяць ≤ 31 дня, рік ≤ 366
+// (високосний). Використовується як консервативна нижня межа refund-вікна.
+const MAX_INTERVAL_DAYS: Record<BillingInterval, number> = {
+    month: 31,
+    year: 366,
+};
+
+/**
+ * Найраніша межа списань поточного періоду: `periodEnd` мінус максимально
+ * можлива довжина інтервалу В ДНЯХ. День-орієнтований відлік (а не календарний
+ * `setMonth(-1)`) критичний: календарне віднімання місяця на кінцях місяця
+ * (31 травня → клемпінг) зсуває межу ВПЕРЕД за реальну дату списання і виключає
+ * легітимне списання поточного періоду з refund-вікна. Денна межа гарантовано
+ * не пізніша за реальне списання; запас у кілька днів нешкідливий — попереднє
+ * списання щонайменше на повний інтервал старіше і у вікно не потрапляє.
+ */
+function periodLookbackStart(periodEnd: Date, interval: BillingInterval): Date {
+    const d = new Date(periodEnd);
+    d.setDate(d.getDate() - MAX_INTERVAL_DAYS[interval]);
+    return d;
 }
 
 function subMonths(date: Date): Date {

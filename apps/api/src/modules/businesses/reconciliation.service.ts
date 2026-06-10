@@ -67,8 +67,8 @@ const SLUG_RENT_MAX_RESETS_PER_RUN = 200;
 // Cron-реконсиляція бере той самий per-user білінг-лок, що й білінг-мутації.
 // Лок звільняється швидко (критична секція обмежена батч-лімітом вище), тож
 // кілька спроб з коротким бекофом перекривають типову контенцію; якщо холдер
-// усе ще тримає лок — стемп `reconcileRequiredAt` (ставиться cron-тригером ДО
-// виклику) гарантує retry наступним daily-sweep-ом.
+// усе ще тримає лок — стемп `reconcileRequiredAt` (ставиться самим
+// `reconcileUnderLock` ДО спроби локу) гарантує retry наступним daily-sweep-ом.
 const RECONCILE_LOCK_MAX_ATTEMPTS = 5;
 const RECONCILE_LOCK_RETRY_DELAY_MS = 200;
 
@@ -127,13 +127,28 @@ export class ReconciliationService {
      * важить — останній виконавець бачить фінальний стан.
      *
      * Ніколи не кидає: lock-контенція після ретраїв і reconcile-помилки —
-     * best-effort лог; durable-retry гарантує `reconcileRequiredAt`-стемп
-     * (ставиться cron-тригером або самим `reconcile` при неповному slug-rent),
-     * який добиває daily-sweep. Холдери білінг-локу цей метод НЕ викликають —
-     * вони йдуть напряму у `reconcile` (повторне взяття non-reentrant локу
-     * кинуло б busy).
+     * best-effort лог; durable-retry гарантує `reconcileRequiredAt`-стемп,
+     * який цей метод ставить САМ до спроби локу (див. нижче) і який добиває
+     * daily-sweep. Холдери білінг-локу цей метод НЕ викликають — вони йдуть
+     * напряму у `reconcile` (повторне взяття non-reentrant локу кинуло б busy).
      */
     async reconcileUnderLock(userId: string): Promise<void> {
+        // Durable-маркер ДО спроби взяти лок: якщо всі ретраї впруться у
+        // зайнятий лок або процес впаде, daily-sweep знайде стемп і добʼє
+        // reconcile. Для cron-тригерів це дубль їхнього стемпа (нешкідливо),
+        // для delete-тригера (`BusinessesController.delete`) — єдина
+        // durable-гарантія. Повний reconcile знімає маркер сам (clear умовний
+        // за startedAt, тож пізніший конкурентний стемп переживає). Для
+        // користувача без білінг-субдока стемп no-op — durable-retry там
+        // неможливий за схемою. Best-effort: збій стемпа не блокує саму спробу.
+        try {
+            await this.usersService.stampBillingReconcileRequired(userId);
+        } catch (error) {
+            this.logger.error(
+                `Failed to stamp reconcileRequiredAt for user ${userId}`,
+                error instanceof Error ? error.stack : String(error)
+            );
+        }
         for (
             let attempt = 1;
             attempt <= RECONCILE_LOCK_MAX_ATTEMPTS;
@@ -168,6 +183,10 @@ export class ReconciliationService {
     }
 
     async reconcile(userId: string): Promise<void> {
+        // Момент старту прогону — межа для умовного clear-у durable-маркера:
+        // стемп, поставлений конкурентним cron-флипом ПІСЛЯ читання білінг-стану
+        // нижче, мусить пережити зняття (цей прогін його флипу ще не бачив).
+        const startedAt = new Date();
         const user = await this.usersService.findById(userId);
         if (!user) return;
         const level = resolveAccessLevel(user.billing);
@@ -241,16 +260,21 @@ export class ReconciliationService {
 
         // Durable-маркер на білінгу: неповний прогін (батч-ліміт / збої
         // окремих reset-ів) → стемп, daily-sweep `PaymentsCleanupService`
-        // доганяє; повний → знімаємо (включно зі стемпами cron-тригерів, що
-        // ставляться ДО реконсиляції). Для користувача без білінг-субдока
-        // стемп неможливий ($set крізь null) і не потрібен — у нього немає
-        // cron-тригерів, які могли б загубитись.
+        // доганяє; повний → знімаємо стемпи, поставлені ДО старту цього прогону
+        // (cron-тригери, reconcileUnderLock). Clear умовний за `startedAt`:
+        // стемп конкурентного cron-флипу, що приземлився після нашого читання
+        // білінг-стану, переживає зняття — інакше той флип лишився б без
+        // durable-retry. Для користувача без білінг-субдока стемп неможливий
+        // ($set крізь null) і не потрібен — у нього немає cron-тригерів, які
+        // могли б загубитись.
         if (user.billing) {
-            await this.usersService.setBillingReconcileRequired(
-                userId,
-                !slugRentComplete
-            );
-            if (!slugRentComplete) {
+            if (slugRentComplete) {
+                await this.usersService.clearBillingReconcileRequired(
+                    userId,
+                    startedAt
+                );
+            } else {
+                await this.usersService.stampBillingReconcileRequired(userId);
                 this.logger.warn(
                     `Slug-rent for user ${userId} incomplete (batch limit or ` +
                         `per-entity failures), stamped for daily retry`
