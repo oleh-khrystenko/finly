@@ -538,6 +538,11 @@ export class PaymentsService {
         };
         await this.userModel.findByIdAndUpdate(userId, { $set: update });
 
+        // Рівень міг зрости (brand→bookkeeper) — знімаємо блокування з бізнесів
+        // у межах нового рівня. Downgrade scheduled-шлях reconcile не потребує:
+        // план перемкнеться на межі через renewal-вебхук, який reconcile сам.
+        await this.reconcileSafe(userId);
+
         return { scheduled: false };
     }
 
@@ -661,6 +666,10 @@ export class PaymentsService {
                 'billing_reset'
             );
         }
+
+        // Білінг обнулено → рівень доступу none: блокуємо зайві бізнеси і
+        // скидаємо кастомні slug (як при втраті доступу).
+        await this.reconcileSafe(userId);
 
         this.logger.log(`Billing reset for user ${userId}`);
     }
@@ -798,6 +807,19 @@ export class PaymentsService {
     ): Promise<void> {
         if (event.transactionStatus === WAYFORPAY_TRANSACTION_STATUS.REFUNDED) {
             await this.markRefunded(event, session);
+            // Повернення one-off знімає орендований доступ; post-TX reconcile
+            // (routeTransaction) заблокує зайві бізнеси за новим рівнем. Чистимо
+            // активний слот (overwrite-модель: лише один one-off одночасно).
+            await this.userModel.updateOne(
+                { _id: userId },
+                {
+                    $set: {
+                        'billing.oneOffLevel': null,
+                        'billing.oneOffAccessUntil': null,
+                    },
+                },
+                { session }
+            );
             return;
         }
         // Проміжний колбек (InProcessing/Pending) не пишемо у історію — інакше

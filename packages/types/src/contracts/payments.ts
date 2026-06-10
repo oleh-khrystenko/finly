@@ -174,22 +174,28 @@ export function levelOfOneOffAccess(
 
 /**
  * Реальний рівень доступу користувача = максимум активної підписки і активного
- * one-off. Підписка зараховується лише при `hasActiveSubscription`; one-off —
- * поки `oneOffAccessUntil` у майбутньому. Спив one-off гасне ліниво на read
- * (без cron), тож гард і UI бачать актуальний рівень одразу. Єдине джерело для
- * API-замків і web-гейтингу.
+ * one-off. Підписка зараховується при `hasActiveSubscription`, АЛЕ не у статусі
+ * `TRIALING`: trial прибрано, тож єдиний TRIALING — це відкладений старт поверх
+ * one-off (підписка ще не списана). Під час defer доступ дає лише оплачений
+ * one-off, не майбутній (можливо вищий) тариф підписки. one-off зараховується
+ * поки `oneOffAccessUntil` у майбутньому (гасне ліниво на read, без cron). Єдине
+ * джерело для API-замків і web-гейтингу.
  */
 export function deriveAccessLevel(
     billing: {
         planCode: string | null;
         hasActiveSubscription: boolean;
+        subscriptionStatus: string | null;
         oneOffLevel: AccessLevel | null;
         oneOffAccessUntil: Date | null;
     } | null,
     now: Date
 ): AccessLevel {
     if (!billing) return 'none';
-    const subLevel = billing.hasActiveSubscription
+    const subscriptionCounts =
+        billing.hasActiveSubscription &&
+        billing.subscriptionStatus !== SUBSCRIPTION_STATUS.TRIALING;
+    const subLevel = subscriptionCounts
         ? levelOfSubscriptionPlan(billing.planCode)
         : 'none';
     const oneOffActive =

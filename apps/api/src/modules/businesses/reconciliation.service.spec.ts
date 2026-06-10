@@ -41,6 +41,7 @@ import { UsersService } from '../users/users.service';
 type BillingLike = {
     planCode: string | null;
     hasActiveSubscription: boolean;
+    subscriptionStatus: string | null;
     oneOffLevel: string | null;
     oneOffAccessUntil: Date | null;
 } | null;
@@ -50,6 +51,7 @@ function billingFor(level: 'none' | 'brand' | 'bookkeeper'): BillingLike {
     return {
         planCode: level,
         hasActiveSubscription: true,
+        subscriptionStatus: 'ACTIVE',
         oneOffLevel: null,
         oneOffAccessUntil: null,
     };

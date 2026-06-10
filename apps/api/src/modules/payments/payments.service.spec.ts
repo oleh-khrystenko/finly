@@ -255,6 +255,29 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
         });
     });
 
+    it('one-off REFUNDED знімає орендований доступ + тригерить reconcile', async () => {
+        const user = await createUser({
+            oneOffLevel: 'brand',
+            oneOffAccessUntil: new Date(Date.now() + 20 * 86_400_000),
+        });
+        const ref = buildOneOffOrderReference(user._id.toString(), 'brand');
+
+        await feed(
+            approvedEvent(ref, {
+                transactionStatus: WAYFORPAY_TRANSACTION_STATUS.REFUNDED,
+                amount: findOneOffAccess('brand')!.priceAmount,
+            })
+        );
+
+        const updated = await userModel.findById(user._id).lean();
+        expect(updated!.billing!.oneOffLevel).toBeNull();
+        expect(updated!.billing!.oneOffAccessUntil).toBeNull();
+        const reconcile = moduleRef.get<{ reconcile: jest.Mock }>(
+            ReconciliationService
+        ).reconcile;
+        expect(reconcile).toHaveBeenCalledWith(user._id.toString());
+    });
+
     it('ідемпотентність: дубль one-off події дає доступ лише раз', async () => {
         const user = await createUser();
         const ref = buildOneOffOrderReference(user._id.toString(), 'brand');
@@ -402,6 +425,12 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
             type: PAYMENT_RECORD_TYPE.PRORATION,
         });
         expect(proration).not.toBeNull();
+
+        // Рівень зріс → reconcile знімає блокування у межах нового тарифу.
+        const reconcile = moduleRef.get<{ reconcile: jest.Mock }>(
+            ReconciliationService
+        ).reconcile;
+        expect(reconcile).toHaveBeenCalledWith(user._id.toString());
     });
 
     it('upgrade: невдала доплата — план не змінюється', async () => {

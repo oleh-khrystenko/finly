@@ -1,4 +1,5 @@
 import {
+    SUBSCRIPTION_STATUS,
     deriveAccessLevel,
     isAccessLevelAtLeast,
     maxAccessLevel,
@@ -44,6 +45,7 @@ describe('deriveAccessLevel', () => {
             {
                 planCode: 'bookkeeper',
                 hasActiveSubscription: true,
+                subscriptionStatus: null,
                 oneOffLevel: null,
                 oneOffAccessUntil: null,
             },
@@ -57,6 +59,7 @@ describe('deriveAccessLevel', () => {
             {
                 planCode: 'bookkeeper',
                 hasActiveSubscription: false,
+                subscriptionStatus: null,
                 oneOffLevel: null,
                 oneOffAccessUntil: null,
             },
@@ -70,6 +73,7 @@ describe('deriveAccessLevel', () => {
             {
                 planCode: null,
                 hasActiveSubscription: false,
+                subscriptionStatus: null,
                 oneOffLevel: 'brand',
                 oneOffAccessUntil: FUTURE,
             },
@@ -83,6 +87,7 @@ describe('deriveAccessLevel', () => {
             {
                 planCode: null,
                 hasActiveSubscription: false,
+                subscriptionStatus: null,
                 oneOffLevel: 'bookkeeper',
                 oneOffAccessUntil: PAST,
             },
@@ -96,7 +101,38 @@ describe('deriveAccessLevel', () => {
             {
                 planCode: 'brand',
                 hasActiveSubscription: true,
+                subscriptionStatus: null,
                 oneOffLevel: 'bookkeeper',
+                oneOffAccessUntil: FUTURE,
+            },
+            NOW
+        );
+        expect(level).toBe('bookkeeper');
+    });
+
+    it('відкладений TRIALING поверх one-off: рівень = one-off, не майбутній тариф', () => {
+        // Brand-one-off + bookkeeper-підписка на відкладеному старті (ще не
+        // списана) → доступ лише brand, не безкоштовний bookkeeper до списання.
+        const level = deriveAccessLevel(
+            {
+                planCode: 'bookkeeper',
+                hasActiveSubscription: true,
+                subscriptionStatus: SUBSCRIPTION_STATUS.TRIALING,
+                oneOffLevel: 'brand',
+                oneOffAccessUntil: FUTURE,
+            },
+            NOW
+        );
+        expect(level).toBe('brand');
+    });
+
+    it('ACTIVE підписка (після списання) зараховується повністю', () => {
+        const level = deriveAccessLevel(
+            {
+                planCode: 'bookkeeper',
+                hasActiveSubscription: true,
+                subscriptionStatus: SUBSCRIPTION_STATUS.ACTIVE,
+                oneOffLevel: 'brand',
                 oneOffAccessUntil: FUTURE,
             },
             NOW

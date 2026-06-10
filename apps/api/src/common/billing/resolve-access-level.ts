@@ -9,6 +9,7 @@ import { deriveAccessLevel, type AccessLevel } from '@finly/types';
 type BillingLike = {
     planCode: string | null;
     hasActiveSubscription: boolean;
+    subscriptionStatus: string | null;
     oneOffLevel: string | null;
     oneOffAccessUntil: Date | null;
 } | null;
@@ -27,6 +28,7 @@ export function resolveAccessLevel(
         {
             planCode: billing.planCode,
             hasActiveSubscription: billing.hasActiveSubscription,
+            subscriptionStatus: billing.subscriptionStatus,
             oneOffLevel: billing.oneOffLevel as AccessLevel | null,
             oneOffAccessUntil: billing.oneOffAccessUntil,
         },
