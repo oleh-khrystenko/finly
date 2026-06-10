@@ -23,6 +23,7 @@ import { PaymentsService } from './payments.service';
 import { ReconciliationService } from '../businesses/reconciliation.service';
 import { PAYMENT_PROVIDER } from './interfaces/payment-provider.interface';
 import { REDIS_CLIENT } from '../../common/modules/redis.module';
+import { RedisLockService } from '../../common/services/redis-lock.service';
 import { UsersService } from '../users/users.service';
 import { User, UserDocument, UserSchema } from '../users/schemas/user.schema';
 import {
@@ -128,10 +129,12 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
                 {
                     // Per-user білінг-лок: за замовчуванням вільний (set → 'OK',
                     // release → 1). Окремий тест нижче форсує set → null, щоб
-                    // перевірити відмову при зайнятому локу.
+                    // перевірити відмову при зайнятому локу. Лок іде через
+                    // справжній RedisLockService поверх цього ж мока.
                     provide: REDIS_CLIENT,
                     useValue: redisMock,
                 },
+                RedisLockService,
             ],
         }).compile();
 

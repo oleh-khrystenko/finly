@@ -4,6 +4,7 @@ import { Model, Types } from 'mongoose';
 import type { BusinessType } from '@finly/types';
 
 import { createReplSetMongo, type InMemoryMongo } from '../../test-utils/mongo';
+import { RedisLockService } from '../../common/services/redis-lock.service';
 import { ReconciliationService } from './reconciliation.service';
 import {
     AccountSlugHistory,
@@ -67,7 +68,17 @@ describe('ReconciliationService (MongoMemoryReplSet)', () => {
     let accountHistoryModel: Model<AccountSlugHistoryDocument>;
     let invoiceModel: Model<InvoiceDocument>;
     let invoiceHistoryModel: Model<InvoiceSlugHistoryDocument>;
-    const usersService = { findById: jest.fn() };
+    const usersService = {
+        findById: jest.fn(),
+        setBillingReconcileRequired: jest.fn().mockResolvedValue(undefined),
+    };
+    // reconcile() у тестах викликається напряму (без локу); withLock —
+    // pass-through для reconcileUnderLock-шляхів.
+    const locks = {
+        withLock: jest.fn(
+            (_key: string, _ttl: number, fn: () => Promise<unknown>) => fn()
+        ),
+    };
 
     const userId = new Types.ObjectId();
 
@@ -98,6 +109,7 @@ describe('ReconciliationService (MongoMemoryReplSet)', () => {
                 ReconciliationService,
                 SlugGeneratorService,
                 { provide: UsersService, useValue: usersService },
+                { provide: RedisLockService, useValue: locks },
             ],
         }).compile();
 

@@ -292,6 +292,7 @@ describe('Businesses E2E', () => {
         oneOffLevel: null,
         oneOffAccessUntil: null,
         oneOffOrderReference: null,
+        reconcileRequiredAt: null,
     };
 
     async function createUser(

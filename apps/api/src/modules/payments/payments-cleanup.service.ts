@@ -17,10 +17,23 @@ import {
     ProcessedWebhookEventDocument,
 } from './schemas/processed-webhook-event.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
-import { PaymentsService } from './payments.service';
+import { ReconciliationService } from '../businesses/reconciliation.service';
 
 /** Stop retrying after this many failed attempts. */
 const MAX_ATTEMPTS = 5;
+
+/**
+ * Sprint 19 — grace для deferred-старту підписки поверх one-off. Поки підписка
+ * у TRIALING чекає Approved першого списання (WayForPay списує у день
+ * `currentPeriodEnd`, ретраї declined можуть зсунути на години-дні), сплив
+ * one-off НЕ обробляємо: реконсиляція у цьому вікні бачила б рівень none
+ * (TRIALING свідомо не зараховується у `deriveAccessLevel`) і незворотно
+ * скинула б кастомні slug-и користувача, що вже оплатив продовження. Approved →
+ * ACTIVE → наступний прогін підбирає; Declined → PAST_DUE → теж виходить
+ * з-під виключення. Якщо за grace списання так і не сталося (кинутий
+ * deferred-checkout) — обробляємо як звичайний сплив.
+ */
+const DEFERRED_START_FIRST_CHARGE_GRACE_MS = 3 * 24 * 60 * 60 * 1000;
 
 /**
  * `pending` webhook-подія, старша за цей поріг, — crash-orphan (нормальна
@@ -50,7 +63,7 @@ export class PaymentsCleanupService {
         @InjectModel(User.name)
         private readonly userModel: Model<UserDocument>,
 
-        private readonly paymentsService: PaymentsService
+        private readonly reconciliation: ReconciliationService
     ) {}
 
     @Cron(CronExpression.EVERY_DAY_AT_4AM)
@@ -60,19 +73,25 @@ export class PaymentsCleanupService {
         await this.expirePastDueSubscriptions();
         await this.expireAbandonedRebinds();
         await this.expireOneOffAccess();
+        // Останнім: добиває reconcile-и, відкладені lock-контенцією/збоями —
+        // і давні (минулі прогони), і щойно відкладені кроками вище.
+        await this.retryPendingReconciles();
     }
 
     /**
      * Реконсиляція бізнесів кожного зачепленого користувача — best-effort
      * (per-user, щоб збій одного не зривав решту батча). Через
-     * `reconcileUserUnderLock` бере той самий per-user білінг-лок, що й
+     * `reconcileUnderLock` бере той самий per-user білінг-лок, що й
      * вебхуки/мутації: інакше cron-реконсиляція конкурувала б за `accessBlockedAt`
      * з grant-вебхуком того ж користувача (lost-update). Метод сам ловить
-     * лок-контенцію і reconcile-помилки, тож тут без додаткового try/catch.
+     * лок-контенцію і reconcile-помилки, тож тут без додаткового try/catch;
+     * відкладені/неповні прогони лишаються стемпнутими `reconcileRequiredAt`
+     * (ставиться у `$set` expire-флоу ДО реконсиляції) і доганяються
+     * `retryPendingReconciles`.
      */
     private async reconcileUsers(userIds: string[]): Promise<void> {
         for (const userId of userIds) {
-            await this.paymentsService.reconcileUserUnderLock(userId);
+            await this.reconciliation.reconcileUnderLock(userId);
         }
     }
 
@@ -82,6 +101,12 @@ export class PaymentsCleanupService {
      * зберігає атомарність флипу (реактивований між кроками юзер не матчиться),
      * а reconcile читає свіжий per-user стан, тож ідемпотентний навіть на
      * розбіжності зібраних id зі справді оновленими.
+     *
+     * Разом з флипом стемпиться `reconcileRequiredAt`: флип знищує сам
+     * cron-маркер (наступний прогін цього користувача вже не знайде), тож без
+     * durable-стемпа reconcile, відкладений lock-контенцією або урваний крахом,
+     * не мав би жодного наступного тригера. Успішний повний reconcile знімає
+     * стемп сам.
      */
     private async expireAndReconcile(
         filter: Record<string, unknown>,
@@ -90,7 +115,9 @@ export class PaymentsCleanupService {
     ): Promise<void> {
         const users = await this.userModel.find(filter, { _id: 1 }).lean();
         if (users.length === 0) return;
-        await this.userModel.updateMany(filter, { $set: set });
+        await this.userModel.updateMany(filter, {
+            $set: { ...set, 'billing.reconcileRequiredAt': new Date() },
+        });
         this.logger.log(`Expired ${users.length} ${label}`);
         await this.reconcileUsers(users.map((u) => u._id.toString()));
     }
@@ -230,27 +257,64 @@ export class PaymentsCleanupService {
      * ліниво на read (`deriveAccessLevel` звіряє дату), але реконсиляція
      * (блокування зайвих бізнесів) — активна дія, тож потрібен цей sweep.
      *
-     * Порядок: реконсилюємо ПЕРШИМ (рівень уже обчислюється з простроченим
-     * one-off як none), ПОТІМ чистимо поля-маркер. Якщо clear упаде — наступний
-     * запуск пере-знайде і пере-реконсилює (ідемпотентно). Якби чистили перед
-     * reconcile і reconcile упав — зайві бізнеси лишились би розблокованими.
+     * `$nor`-гілка пропускає користувачів у вікні deferred-старту підписки
+     * (TRIALING + перше списання очікується щойно/найближчими днями): для них
+     * reconcile на рівні none був би хибним і руйнівним — див.
+     * `DEFERRED_START_FIRST_CHARGE_GRACE_MS`.
+     *
+     * Маркерні поля чистяться РАЗОМ зі стемпом `reconcileRequiredAt` в одному
+     * updateMany ДО реконсиляції: рівень reconcile рахує лінивo за датою (вона
+     * вже в минулому), а стемп гарантує retry, якщо reconcile відкладено
+     * lock-контенцією або процес упав між clear-ом і reconcile-ом. Свіжа
+     * покупка між find і updateMany не зачіпається — її `oneOffAccessUntil` у
+     * майбутньому і під `$lt`-фільтр не підпадає.
      */
     private async expireOneOffAccess(): Promise<void> {
+        const now = new Date();
         const filter = {
             'billing.oneOffLevel': { $ne: null },
-            'billing.oneOffAccessUntil': { $lt: new Date() },
+            'billing.oneOffAccessUntil': { $lt: now },
+            $nor: [
+                {
+                    'billing.hasActiveSubscription': true,
+                    'billing.subscriptionStatus': SUBSCRIPTION_STATUS.TRIALING,
+                    'billing.currentPeriodEnd': {
+                        $gte: new Date(
+                            now.getTime() - DEFERRED_START_FIRST_CHARGE_GRACE_MS
+                        ),
+                    },
+                },
+            ],
         };
         const users = await this.userModel.find(filter, { _id: 1 }).lean();
         if (users.length === 0) return;
-        await this.reconcileUsers(users.map((u) => u._id.toString()));
         await this.userModel.updateMany(filter, {
             $set: {
                 'billing.oneOffLevel': null,
                 'billing.oneOffAccessUntil': null,
                 'billing.oneOffOrderReference': null,
+                'billing.reconcileRequiredAt': new Date(),
             },
         });
         this.logger.log(`Expired ${users.length} one-off access grants`);
+        await this.reconcileUsers(users.map((u) => u._id.toString()));
+    }
+
+    /**
+     * Sprint 19 — добиває реконсиляції, що не завершились у своєму тригері:
+     * відкладені lock-контенцією, урвані крахом процесу або неповні через
+     * батч-ліміт slug-rent. Джерело — durable-стемп `reconcileRequiredAt`
+     * (ставлять expire-флоу вище і сам `ReconciliationService.reconcile` при
+     * неповному прогоні; знімає повний reconcile). Колекція users мала, тож
+     * скан без індексу прийнятний.
+     */
+    private async retryPendingReconciles(): Promise<void> {
+        const users = await this.userModel
+            .find({ 'billing.reconcileRequiredAt': { $ne: null } }, { _id: 1 })
+            .lean();
+        if (users.length === 0) return;
+        this.logger.log(`Retrying ${users.length} pending reconciles`);
+        await this.reconcileUsers(users.map((u) => u._id.toString()));
     }
 
     /**

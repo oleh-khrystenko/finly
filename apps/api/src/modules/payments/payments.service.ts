@@ -7,8 +7,6 @@ import {
 } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
-import { randomBytes } from 'crypto';
-import Redis from 'ioredis';
 import {
     BILLING_CURRENCY,
     EXECUTION_ACTION,
@@ -52,7 +50,14 @@ import {
 } from './schemas/payment-record.schema';
 import { UsersService } from '../users/users.service';
 import { ReconciliationService } from '../businesses/reconciliation.service';
-import { REDIS_CLIENT } from '../../common/modules/redis.module';
+import {
+    BILLING_LOCK_TTL_MS,
+    billingLockKey,
+} from '../../common/billing/billing-lock';
+import {
+    RedisLockBusyError,
+    RedisLockService,
+} from '../../common/services/redis-lock.service';
 import {
     ORDER_KIND,
     buildOneOffOrderReference,
@@ -63,30 +68,6 @@ import {
 
 const WEBHOOK_MONGO_TIMEOUT_MS = 10_000;
 const PROVIDER = 'wayforpay';
-
-// Стеля утримання per-user білінг-локу. Найдовша операція (changePlan upgrade)
-// робить послідовно proration-Charge + CHANGE, кожен до REQUEST_TIMEOUT_MS=20s,
-// тож 60s покриває з запасом. Lock авто-звільняється по TTL, якщо процес упав
-// усередині критичної секції.
-const BILLING_LOCK_TTL_MS = 60_000;
-const BILLING_LOCK_PREFIX = 'billing_op:';
-
-// Cron-реконсиляція бере той самий per-user лок, що й білінг-мутації. Лок
-// звільняється за десятки мс (критична секція — кілька Mongo-write-ів), тож
-// кілька спроб з коротким бекофом перекривають типову контенцію; якщо холдер
-// усе ще тримає лок (рідкісний non-reconciling — активний one-off checkout) —
-// відкладаємо до наступного тригера.
-const RECONCILE_LOCK_MAX_ATTEMPTS = 5;
-const RECONCILE_LOCK_RETRY_DELAY_MS = 200;
-
-// Звільнення локу — compare-and-delete: знімаємо лише власний токен, інакше
-// операція, що перевищила TTL, видалила б lock, уже захоплений іншим запитом.
-const BILLING_LOCK_RELEASE_SCRIPT = `
-if redis.call('GET', KEYS[1]) == ARGV[1] then
-    return redis.call('DEL', KEYS[1])
-end
-return 0
-`;
 
 // Нефінальні статуси транзакції: проміжний колбек, після якого WayForPay
 // надішле фінальний статус окремою подією (providerEventId містить статус).
@@ -115,59 +96,42 @@ export class PaymentsService {
         @InjectModel(PaymentRecord.name)
         private readonly paymentRecordModel: Model<PaymentRecordDocument>,
 
-        @Inject(REDIS_CLIENT)
-        private readonly redis: Redis,
-
         @InjectConnection()
         private readonly connection: Connection,
 
         private readonly usersService: UsersService,
 
-        private readonly reconciliation: ReconciliationService
+        private readonly reconciliation: ReconciliationService,
+
+        private readonly locks: RedisLockService
     ) {}
 
     /**
-     * Серіалізує білінг-write-операції одного користувача per-user Redis-локом.
-     * WayForPay charge/refund/CHANGE неідемпотентні: два паралельні запити (дві
-     * вкладки) інакше задвоїли б proration-списання чи refund. Lock зайнятий →
-     * `BILLING_OPERATION_IN_PROGRESS`. Звільнення гарантоване (`finally`) +
-     * TTL-fallback на випадок краху всередині секції.
+     * Серіалізує білінг-write-операції одного користувача per-user Redis-локом
+     * (`RedisLockService` + спільний ключ з `billing-lock.ts` — той самий
+     * мьютекс тримає і `ReconciliationService.reconcileUnderLock`). WayForPay
+     * charge/refund/CHANGE неідемпотентні: два паралельні запити (дві вкладки)
+     * інакше задвоїли б proration-списання чи refund. Lock зайнятий →
+     * `BILLING_OPERATION_IN_PROGRESS`.
      */
     private async withBillingLock<T>(
         userId: string,
         fn: () => Promise<T>
     ): Promise<T> {
-        const key = `${BILLING_LOCK_PREFIX}${userId}`;
-        const token = randomBytes(16).toString('hex');
-        const acquired = await this.redis.set(
-            key,
-            token,
-            'PX',
-            BILLING_LOCK_TTL_MS,
-            'NX'
-        );
-        if (acquired !== 'OK') {
-            throw new ConflictException({
-                code: RESPONSE_CODE.BILLING_OPERATION_IN_PROGRESS,
-                message: 'Billing operation already in progress',
-            });
-        }
         try {
-            return await fn();
-        } finally {
-            try {
-                await this.redis.eval(
-                    BILLING_LOCK_RELEASE_SCRIPT,
-                    1,
-                    key,
-                    token
-                );
-            } catch (error) {
-                this.logger.error(
-                    `Failed to release billing lock for user ${userId} (expires in ≤${BILLING_LOCK_TTL_MS}ms)`,
-                    error instanceof Error ? error.stack : String(error)
-                );
+            return await this.locks.withLock(
+                billingLockKey(userId),
+                BILLING_LOCK_TTL_MS,
+                fn
+            );
+        } catch (error) {
+            if (error instanceof RedisLockBusyError) {
+                throw new ConflictException({
+                    code: RESPONSE_CODE.BILLING_OPERATION_IN_PROGRESS,
+                    message: 'Billing operation already in progress',
+                });
             }
+            throw error;
         }
     }
 
@@ -251,6 +215,8 @@ export class PaymentsService {
                             user.billing?.oneOffAccessUntil ?? null,
                         oneOffOrderReference:
                             user.billing?.oneOffOrderReference ?? null,
+                        reconcileRequiredAt:
+                            user.billing?.reconcileRequiredAt ?? null,
                     }),
                 },
             });
@@ -1249,52 +1215,6 @@ export class PaymentsService {
         }
     }
 
-    /**
-     * Реконсиляція бізнесів користувача, серіалізована тим самим per-user
-     * білінг-локом, що й білінг-мутації. Для cron-шляхів (сплив підписки /
-     * one-off / abandoned re-bind), які інакше йшли б повз лок і конкурували б
-     * за `accessBlockedAt` з grant-вебхуком того ж користувача (lost-update:
-     * cron блокує бізнес під рівень none, тоді як вебхук щойно підняв доступ —
-     * без re-тригера бізнес лишився б хибно заблокованим). Reconcile re-читає
-     * свіжий білінг-стан, тож серіалізований порядок не важить — останній
-     * виконавець бачить фінальний стан. Лок зайнятий → bounded-retry; якщо так і
-     * не звільнився — лог і відкладання (наступний білінг-тригер добʼє).
-     * Reconcile-помилки best-effort, як `reconcileSafe`. **Внутрішні мутації
-     * НЕ викликають цей метод** — вони вже тримають лок, тож ідуть через
-     * `reconcileSafe` (повторне взяття non-reentrant локу кинуло б busy).
-     */
-    async reconcileUserUnderLock(userId: string): Promise<void> {
-        for (
-            let attempt = 1;
-            attempt <= RECONCILE_LOCK_MAX_ATTEMPTS;
-            attempt++
-        ) {
-            try {
-                await this.withBillingLock(userId, () =>
-                    this.reconciliation.reconcile(userId)
-                );
-                return;
-            } catch (error) {
-                if (isBillingLockBusy(error)) {
-                    if (attempt < RECONCILE_LOCK_MAX_ATTEMPTS) {
-                        await delay(RECONCILE_LOCK_RETRY_DELAY_MS);
-                        continue;
-                    }
-                    this.logger.warn(
-                        `Reconcile deferred for user ${userId}: billing lock busy ` +
-                            `after ${RECONCILE_LOCK_MAX_ATTEMPTS} attempts`
-                    );
-                    return;
-                }
-                this.logger.error(
-                    `Reconciliation failed for user ${userId} (deferred to next trigger)`,
-                    error instanceof Error ? error.stack : String(error)
-                );
-                return;
-            }
-        }
-    }
-
     private async requireActiveSubscription(userId: string) {
         const user = await this.userModel.findById(userId).lean();
         if (
@@ -1457,6 +1377,7 @@ export class PaymentsService {
         oneOffLevel: string | null;
         oneOffAccessUntil: Date | null;
         oneOffOrderReference: string | null;
+        reconcileRequiredAt: Date | null;
     }): NonNullable<UserDocument['billing']> {
         return {
             provider: PROVIDER,
@@ -1477,6 +1398,9 @@ export class PaymentsService {
             oneOffLevel: partial.oneOffLevel,
             oneOffAccessUntil: partial.oneOffAccessUntil,
             oneOffOrderReference: partial.oneOffOrderReference,
+            // Переносимо незнятий маркер незавершеної реконсиляції — повна
+            // заміна субдока інакше загубила б його разом з retry.
+            reconcileRequiredAt: partial.reconcileRequiredAt,
         };
     }
 
@@ -1510,6 +1434,7 @@ export class PaymentsService {
             oneOffLevel: level,
             oneOffAccessUntil: accessUntil,
             oneOffOrderReference,
+            reconcileRequiredAt: null,
         };
     }
 
@@ -1545,10 +1470,6 @@ export class PaymentsService {
 }
 
 // ── Module-level pure helpers ────────────────────────────────────────────
-
-function delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 function isDuplicateKeyError(error: unknown): boolean {
     return (

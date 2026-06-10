@@ -8,7 +8,7 @@ export function generateMetadata(): Metadata {
         href: 'billing',
         meta: {
             title: 'Білінг',
-            description: 'Керуйте підпискою та виконаннями Finly.',
+            description: 'Керуйте підпискою та доступом у Finly.',
         },
     });
 }

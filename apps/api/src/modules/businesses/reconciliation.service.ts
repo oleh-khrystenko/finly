@@ -7,7 +7,15 @@ import {
     type BusinessType,
 } from '@finly/types';
 
+import {
+    BILLING_LOCK_TTL_MS,
+    billingLockKey,
+} from '../../common/billing/billing-lock';
 import { resolveAccessLevel } from '../../common/billing/resolve-access-level';
+import {
+    RedisLockBusyError,
+    RedisLockService,
+} from '../../common/services/redis-lock.service';
 import { UsersService } from '../users/users.service';
 import {
     AccountSlugHistory,
@@ -34,7 +42,35 @@ type BucketItem = {
     accessBlockedAt: Date | null;
 };
 
+/**
+ * Бюджет slug-rent одного прогону. `remaining` — скільки ще entity-reset-ів
+ * дозволено; `incomplete` — лишилась робота поза бюджетом або частина reset-ів
+ * упала (обидва випадки → durable-стемп `reconcileRequiredAt`, доганяє
+ * daily-sweep).
+ */
+type SlugRentBudget = {
+    remaining: number;
+    incomplete: boolean;
+};
+
 const NESTED_SLUG_MAX_ATTEMPTS = 10;
+
+// Стеля per-entity slug-reset-ів за один прогін реконсиляції. Реконсиляція
+// виконується під білінг-локом (TTL 60s, див. billing-lock.ts), а кількість
+// кастомних slug-ів bookkeeper-користувача необмежена за продуктом — без
+// батч-ліміту довгий slug-rent виїв би TTL (зник би mutual-exclusion) і
+// затягував би webhook-відповідь провайдеру. Кожен reset — коротка TX
+// (одиниці-десятки мс), тож 200 тримає прогін у межах кількох секунд;
+// решта доганяється наступними прогонами через `reconcileRequiredAt`-стемп.
+const SLUG_RENT_MAX_RESETS_PER_RUN = 200;
+
+// Cron-реконсиляція бере той самий per-user білінг-лок, що й білінг-мутації.
+// Лок звільняється швидко (критична секція обмежена батч-лімітом вище), тож
+// кілька спроб з коротким бекофом перекривають типову контенцію; якщо холдер
+// усе ще тримає лок — стемп `reconcileRequiredAt` (ставиться cron-тригером ДО
+// виклику) гарантує retry наступним daily-sweep-ом.
+const RECONCILE_LOCK_MAX_ATTEMPTS = 5;
+const RECONCILE_LOCK_RETRY_DELAY_MS = 200;
 
 /**
  * Sprint 19 — реконсиляція бізнесів під поточний рівень доступу користувача.
@@ -77,8 +113,59 @@ export class ReconciliationService {
         @InjectConnection()
         private readonly connection: Connection,
         private readonly slugGenerator: SlugGeneratorService,
-        private readonly usersService: UsersService
+        private readonly usersService: UsersService,
+        private readonly locks: RedisLockService
     ) {}
+
+    /**
+     * Реконсиляція під per-user білінг-локом (той самий ключ, що й
+     * білінг-мутації у `PaymentsService`). Для тригерів, що НЕ тримають лок
+     * самі: cron-сплини (`PaymentsCleanupService`) і видалення бізнесу
+     * (`BusinessesController.delete`) — інакше вони конкурували б за
+     * `accessBlockedAt` з grant-вебхуком того ж користувача (lost-update).
+     * `reconcile` re-читає свіжий білінг-стан, тож серіалізований порядок не
+     * важить — останній виконавець бачить фінальний стан.
+     *
+     * Ніколи не кидає: lock-контенція після ретраїв і reconcile-помилки —
+     * best-effort лог; durable-retry гарантує `reconcileRequiredAt`-стемп
+     * (ставиться cron-тригером або самим `reconcile` при неповному slug-rent),
+     * який добиває daily-sweep. Холдери білінг-локу цей метод НЕ викликають —
+     * вони йдуть напряму у `reconcile` (повторне взяття non-reentrant локу
+     * кинуло б busy).
+     */
+    async reconcileUnderLock(userId: string): Promise<void> {
+        for (
+            let attempt = 1;
+            attempt <= RECONCILE_LOCK_MAX_ATTEMPTS;
+            attempt++
+        ) {
+            try {
+                await this.locks.withLock(
+                    billingLockKey(userId),
+                    BILLING_LOCK_TTL_MS,
+                    () => this.reconcile(userId)
+                );
+                return;
+            } catch (error) {
+                if (error instanceof RedisLockBusyError) {
+                    if (attempt < RECONCILE_LOCK_MAX_ATTEMPTS) {
+                        await delay(RECONCILE_LOCK_RETRY_DELAY_MS);
+                        continue;
+                    }
+                    this.logger.warn(
+                        `Reconcile deferred for user ${userId}: billing lock busy ` +
+                            `after ${RECONCILE_LOCK_MAX_ATTEMPTS} attempts`
+                    );
+                    return;
+                }
+                this.logger.error(
+                    `Reconciliation failed for user ${userId} (deferred to next trigger)`,
+                    error instanceof Error ? error.stack : String(error)
+                );
+                return;
+            }
+        }
+    }
 
     async reconcile(userId: string): Promise<void> {
         const user = await this.usersService.findById(userId);
@@ -142,45 +229,100 @@ export class ReconciliationService {
         // повертається ринку). brand/bookkeeper зберігають кастомні.
         // Ідемпотентно: після reset slugCustomized=false, повторний прогін не
         // чіпає. businessIds беремо з уже завантажених bucket-ів (без зайвого
-        // запиту).
+        // запиту). Обсяг одного прогону обмежений батчем (TTL білінг-локу +
+        // латентність webhook-шляху) — хвіст доганяється через стемп нижче.
+        let slugRentComplete = true;
         if (!isAccessLevelAtLeast(level, 'brand')) {
             const businessIds = [...owned, ...client].map((b) => b._id);
             if (businessIds.length > 0) {
-                await this.resetCustomizedBusinessSlugs(businessIds);
-                await this.resetCustomizedAccountSlugs(businessIds);
-                await this.resetCustomizedInvoiceSlugs(businessIds);
+                slugRentComplete = await this.runSlugRent(businessIds);
+            }
+        }
+
+        // Durable-маркер на білінгу: неповний прогін (батч-ліміт / збої
+        // окремих reset-ів) → стемп, daily-sweep `PaymentsCleanupService`
+        // доганяє; повний → знімаємо (включно зі стемпами cron-тригерів, що
+        // ставляться ДО реконсиляції). Для користувача без білінг-субдока
+        // стемп неможливий ($set крізь null) і не потрібен — у нього немає
+        // cron-тригерів, які могли б загубитись.
+        if (user.billing) {
+            await this.usersService.setBillingReconcileRequired(
+                userId,
+                !slugRentComplete
+            );
+            if (!slugRentComplete) {
+                this.logger.warn(
+                    `Slug-rent for user ${userId} incomplete (batch limit or ` +
+                        `per-entity failures), stamped for daily retry`
+                );
             }
         }
     }
 
     // ── Slug-rent reset (рівень нижче brand) ─────────────────────────────
 
+    /**
+     * Скидає кастомні slug-и трьох рівнів у межах спільного бюджету
+     * (`SLUG_RENT_MAX_RESETS_PER_RUN`). Повертає true, якщо все скинуто
+     * (бюджету вистачило і жоден reset не впав).
+     */
+    private async runSlugRent(businessIds: Types.ObjectId[]): Promise<boolean> {
+        const budget: SlugRentBudget = {
+            remaining: SLUG_RENT_MAX_RESETS_PER_RUN,
+            incomplete: false,
+        };
+        await this.resetCustomizedBusinessSlugs(businessIds, budget);
+        await this.resetCustomizedAccountSlugs(businessIds, budget);
+        await this.resetCustomizedInvoiceSlugs(businessIds, budget);
+        return !budget.incomplete;
+    }
+
     private async resetCustomizedBusinessSlugs(
-        businessIds: Types.ObjectId[]
+        businessIds: Types.ObjectId[],
+        budget: SlugRentBudget
     ): Promise<void> {
+        // Бюджет вичерпано попереднім рівнем — консервативно вважаємо прогін
+        // неповним (зайвий no-op retry дешевший за exists-перевірку тут).
+        if (budget.remaining <= 0) {
+            budget.incomplete = true;
+            return;
+        }
         const customized = await this.businessModel
             .find(
                 { _id: { $in: businessIds }, slugCustomized: true },
                 { slugLower: 1 }
             )
+            .limit(budget.remaining + 1)
             .lean<Array<{ _id: Types.ObjectId; slugLower: string }>>()
             .exec();
+        if (customized.length > budget.remaining) {
+            budget.incomplete = true;
+            customized.length = budget.remaining;
+        }
 
         for (const biz of customized) {
-            await this.safeReset('business', biz._id, () =>
+            const ok = await this.safeReset('business', biz._id, () =>
                 this.resetOneBusinessSlug(biz._id, biz.slugLower)
             );
+            if (!ok) budget.incomplete = true;
+            budget.remaining--;
         }
     }
 
     private async resetCustomizedAccountSlugs(
-        businessIds: Types.ObjectId[]
+        businessIds: Types.ObjectId[],
+        budget: SlugRentBudget
     ): Promise<void> {
+        if (budget.remaining <= 0) {
+            budget.incomplete = true;
+            return;
+        }
         const customized = await this.accountModel
             .find(
                 { businessId: { $in: businessIds }, slugCustomized: true },
                 { businessId: 1, slugLower: 1 }
             )
+            .limit(budget.remaining + 1)
             .lean<
                 Array<{
                     _id: Types.ObjectId;
@@ -189,22 +331,34 @@ export class ReconciliationService {
                 }>
             >()
             .exec();
+        if (customized.length > budget.remaining) {
+            budget.incomplete = true;
+            customized.length = budget.remaining;
+        }
 
         for (const acc of customized) {
-            await this.safeReset('account', acc._id, () =>
+            const ok = await this.safeReset('account', acc._id, () =>
                 this.resetOneAccountSlug(acc._id, acc.businessId, acc.slugLower)
             );
+            if (!ok) budget.incomplete = true;
+            budget.remaining--;
         }
     }
 
     private async resetCustomizedInvoiceSlugs(
-        businessIds: Types.ObjectId[]
+        businessIds: Types.ObjectId[],
+        budget: SlugRentBudget
     ): Promise<void> {
+        if (budget.remaining <= 0) {
+            budget.incomplete = true;
+            return;
+        }
         const customized = await this.invoiceModel
             .find(
                 { businessId: { $in: businessIds }, slugCustomized: true },
                 { businessId: 1, accountId: 1, slugLower: 1 }
             )
+            .limit(budget.remaining + 1)
             .lean<
                 Array<{
                     _id: Types.ObjectId;
@@ -214,9 +368,13 @@ export class ReconciliationService {
                 }>
             >()
             .exec();
+        if (customized.length > budget.remaining) {
+            budget.incomplete = true;
+            customized.length = budget.remaining;
+        }
 
         for (const inv of customized) {
-            await this.safeReset('invoice', inv._id, () =>
+            const ok = await this.safeReset('invoice', inv._id, () =>
                 this.resetOneInvoiceSlug(
                     inv._id,
                     inv.businessId,
@@ -224,6 +382,8 @@ export class ReconciliationService {
                     inv.slugLower
                 )
             );
+            if (!ok) budget.incomplete = true;
+            budget.remaining--;
         }
     }
 
@@ -355,22 +515,25 @@ export class ReconciliationService {
 
     /**
      * Best-effort обгортка для per-entity slug-reset: збій одного не зриває
-     * решту батча (наступний reconcile-тригер доскидає — slugCustomized
-     * лишається true).
+     * решту батча (slugCustomized лишається true, durable-стемп
+     * `reconcileRequiredAt` гарантує retry). Повертає false на збій — caller
+     * мітить прогін неповним.
      */
     private async safeReset(
         kind: string,
         id: Types.ObjectId,
         fn: () => Promise<void>
-    ): Promise<void> {
+    ): Promise<boolean> {
         try {
             await fn();
+            return true;
         } catch (error) {
             this.logger.error(
                 `Failed to reset ${kind} slug ${id.toString()} ` +
                     `(deferred to next trigger)`,
                 error instanceof Error ? error.stack : String(error)
             );
+            return false;
         }
     }
 
@@ -399,6 +562,10 @@ export class ReconciliationService {
 }
 
 // ── Module-level pure helpers ────────────────────────────────────────────
+
+function delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 /** Ліміт власних бізнесів за типом і рівнем доступу. */
 function ownedLimit(type: BusinessType, level: AccessLevel): number {

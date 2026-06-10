@@ -301,6 +301,7 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
         oneOffLevel: null,
         oneOffAccessUntil: null,
         oneOffOrderReference: null,
+        reconcileRequiredAt: null,
     };
 
     async function createUser(

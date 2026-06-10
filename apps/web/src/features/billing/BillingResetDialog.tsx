@@ -33,7 +33,7 @@ export default function BillingResetDialog() {
             open={isOpen}
             onOpenChange={(open) => !open && close()}
             title="Скинути білінг?"
-            description="Усі підписки, виконання та історію платежів буде видалено. Цю дію неможливо скасувати."
+            description="Підписку, доступ та історію платежів буде видалено. Цю дію неможливо скасувати."
             confirmLabel="Скинути"
             cancelLabel="Скасувати"
             variant="destructive"

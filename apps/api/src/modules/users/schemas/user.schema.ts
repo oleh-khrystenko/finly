@@ -163,6 +163,7 @@ export class User {
             oneOffLevel: { type: String, default: null },
             oneOffAccessUntil: { type: Date, default: null },
             oneOffOrderReference: { type: String, default: null },
+            reconcileRequiredAt: { type: Date, default: null },
         },
         default: null,
         _id: false,
@@ -204,6 +205,16 @@ export class User {
          * (слот уже перезаписано новішою) не зачіпає чинний оплачений доступ.
          */
         oneOffOrderReference: string | null;
+        /**
+         * Sprint 19 — durable-маркер незавершеної реконсиляції бізнесів.
+         * Стемпиться cleanup-cron-ом при флипі доступу (щоб відкладений через
+         * lock-contention reconcile не загубився разом зі своїм тригером) і
+         * самою реконсиляцією, коли slug-rent не вмістився у батч-ліміт.
+         * Знімається `ReconciliationService.reconcile` після повного проходу.
+         * Daily-sweep (`PaymentsCleanupService.retryPendingReconciles`) добиває
+         * стемпнутих.
+         */
+        reconcileRequiredAt: Date | null;
     } | null;
 }
 

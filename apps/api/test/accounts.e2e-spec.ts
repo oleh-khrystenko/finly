@@ -268,6 +268,7 @@ describe('Accounts E2E (Sprint 9 §SP-1..§SP-3)', () => {
         oneOffLevel: null,
         oneOffAccessUntil: null,
         oneOffOrderReference: null,
+        reconcileRequiredAt: null,
     };
 
     async function createUser(

@@ -164,6 +164,27 @@ export class UsersService {
         await this.userModel.findByIdAndUpdate(userId, { timezone }).exec();
     }
 
+    /**
+     * Sprint 19 — durable-маркер незавершеної реконсиляції бізнесів
+     * (`billing.reconcileRequiredAt`). `required=true` стемпить, `false` знімає.
+     * Guard `billing: { $ne: null }` — `$set` крізь null-субдок падає на
+     * Mongo-рівні; без білінгу маркер і не потрібен (немає cron-тригерів, які
+     * могли б загубитись).
+     */
+    async setBillingReconcileRequired(
+        userId: string,
+        required: boolean
+    ): Promise<void> {
+        await this.userModel.updateOne(
+            { _id: userId, billing: { $ne: null } },
+            {
+                $set: {
+                    'billing.reconcileRequiredAt': required ? new Date() : null,
+                },
+            }
+        );
+    }
+
     async setPasswordHash(userId: string, hash: string): Promise<void> {
         await this.userModel.findByIdAndUpdate(userId, { passwordHash: hash });
     }

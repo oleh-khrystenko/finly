@@ -35,6 +35,7 @@ import type { UserDocument } from '../users/schemas/user.schema';
 import { BusinessAccessGuard, CurrentBusiness } from './business-access.guard';
 import { BusinessesService } from './businesses.service';
 import { UpdateBusinessDto } from './dto/update-business.dto';
+import { ReconciliationService } from './reconciliation.service';
 import type { BusinessDocument } from './schemas/business.schema';
 
 /**
@@ -62,6 +63,7 @@ import type { BusinessDocument } from './schemas/business.schema';
 export class BusinessesController {
     constructor(
         private readonly businessesService: BusinessesService,
+        private readonly reconciliation: ReconciliationService,
         @InjectModel(Account.name)
         private readonly accountModel: Model<AccountDocument>,
         @InjectModel(Invoice.name)
@@ -172,13 +174,22 @@ export class BusinessesController {
     @Delete(':slug')
     @UseGuards(BusinessAccessGuard)
     @HttpCode(HttpStatus.OK)
-    async delete(@CurrentBusiness() business: BusinessDocument): Promise<{
+    async delete(
+        @CurrentUser() user: UserDocument,
+        @CurrentBusiness() business: BusinessDocument
+    ): Promise<{
         data: { affectedAccounts: number; affectedInvoices: number };
     }> {
         // Sprint 9 §SP-5 — повертаємо обидва counters cascade-видалених
         // (accounts + invoices). Frontend toast: "Видалено бізнес, {N}
         // рахунків і {M} інвойсів".
         const result = await this.businessesService.delete(business);
+        // Sprint 19 — видалення міняє склад bucket-ів (хто «виживає» у межах
+        // ліміту), а білінг-тригера тут немає. Без перерахунку юзер, що видалив
+        // вцілілий бізнес, назавжди лишився б із заблокованим іншим, хоч той
+        // уже в межах безкоштовного ліміту. Best-effort (метод сам логує збої)
+        // під спільним білінг-локом проти race з вебхуком.
+        await this.reconciliation.reconcileUnderLock(user._id.toString());
         return { data: result };
     }
 }
