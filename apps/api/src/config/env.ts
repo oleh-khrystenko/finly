@@ -21,6 +21,21 @@ const getEnvVar = (name: string): string => {
     return value;
 };
 
+// Строгий integer-парсинг для security-критичних чисел: Express `trust proxy`
+// мовчки трактує NaN як 0 (`i < NaN` завжди false), тож нечислове значення за
+// реверс-проксі непомітно злило б усіх відвідувачів в один IP проксі замість
+// crash-у на старті (fail-fast). Regex замість `parseInt`/`Number`: parseInt
+// обрізає хвіст ("1abc" → 1), Number трактує whitespace як 0.
+export const getNonNegativeIntEnvVar = (name: string): number => {
+    const raw = getEnvVar(name);
+    if (!/^\d+$/.test(raw)) {
+        throw new Error(
+            `❌ Environment variable "${name}" must be a non-negative integer (got "${raw}")`
+        );
+    }
+    return Number(raw);
+};
+
 const subscriptionEnabled =
     getEnvVar('PAYMENTS_SUBSCRIPTION_ENABLED') === 'true';
 const oneOffEnabled = getEnvVar('PAYMENTS_ONE_OFF_ENABLED') === 'true';
@@ -43,7 +58,7 @@ export const ENV = {
      * злив би всіх відвідувачів в один IP проксі, хибний N>0 без проксі
      * дозволив би клієнту підробляти IP заголовком.
      */
-    TRUST_PROXY_HOPS: parseInt(getEnvVar('TRUST_PROXY_HOPS'), 10),
+    TRUST_PROXY_HOPS: getNonNegativeIntEnvVar('TRUST_PROXY_HOPS'),
     /**
      * Cabinet origin (`finly.com.ua` prod, `localhost:3000` dev). Використовується
      * для CORS, OAuth callback, magic-link redirect, WayForPay return/service
