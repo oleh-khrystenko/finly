@@ -154,7 +154,6 @@ React Hook Form + Zod resolver. Приклад: `apps/web/src/features/profile/P
 
 - `JwtActiveGuard` — основний, JWT + блокує soft-deleted
 - `JwtAuthGuard` — JWT без soft-delete check (тільки restore)
-- `SubscriptionGuard` — перевіряє `hasActiveSubscription`
 - `HelpChatRateLimitGuard` — IP-based Redis rate limit (24h TTL; public help)
 - `BusinessAccessGuard` / `AccountAccessGuard` / `InvoiceAccessGuard` — slug-lookup (case-insensitive `slugLower`) + attach `request.{business,account,invoice}`
 

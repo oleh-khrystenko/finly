@@ -38,7 +38,6 @@ const ERRORS: Record<string, MessageDict> = {
     },
     payments: {
         already_subscribed: 'У вас вже є активна підписка.',
-        subscription_required: 'Для доступу потрібна активна підписка.',
         no_billing_account: 'Платіжний акаунт не знайдено. Оформіть підписку.',
         no_active_subscription: 'Активної підписки немає.',
         same_plan: 'Ви вже на цьому плані.',

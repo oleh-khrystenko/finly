@@ -40,10 +40,10 @@ interface OneOffCopy {
 
 export const ONE_OFF_COPY: Record<string, OneOffCopy> = {
     brand: {
-        tagline: 'Разовий доступ рівня «Свій бренд» на 30 днів',
+        tagline: 'Разовий доступ рівня «Свій бренд» на місяць',
     },
     bookkeeper: {
-        tagline: 'Разовий доступ рівня «Бухгалтер» на 30 днів',
+        tagline: 'Разовий доступ рівня «Бухгалтер» на місяць',
         badge: 'Повний доступ',
     },
 };

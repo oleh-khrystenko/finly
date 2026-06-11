@@ -1652,9 +1652,25 @@ function isBillingLockBusy(error: unknown): boolean {
     );
 }
 
+/**
+ * Календарний зсув на N місяців із клемпінгом дня до останнього дня цільового
+ * місяця: 31 січня + 1 міс = 28/29 лютого, НЕ 3 березня. Голий `setMonth`
+ * переливає неіснуючий день у наступний місяць, через що periodEnd /
+ * oneOffAccessUntil на списаннях 29-31 числа дрейфували б до 3 днів від
+ * реального графіка провайдера, а `remainingRatio` рахував би довжину періоду
+ * по зсунутих межах (завищений refund/proration).
+ */
 function addMonths(date: Date, months: number): Date {
     const next = new Date(date);
+    const day = next.getDate();
+    next.setDate(1);
     next.setMonth(next.getMonth() + months);
+    const lastDay = new Date(
+        next.getFullYear(),
+        next.getMonth() + 1,
+        0
+    ).getDate();
+    next.setDate(Math.min(day, lastDay));
     return next;
 }
 
@@ -1672,13 +1688,9 @@ function activeOneOffUntil(
 }
 
 function addInterval(date: Date, interval: BillingInterval): Date {
-    const next = new Date(date);
-    if (interval === 'year') {
-        next.setFullYear(next.getFullYear() + 1);
-    } else {
-        next.setMonth(next.getMonth() + 1);
-    }
-    return next;
+    // 12 місяців замість setFullYear: успадковує клемпінг (29 лютого + рік =
+    // 28 лютого, не 1 березня).
+    return addMonths(date, interval === 'year' ? 12 : 1);
 }
 
 /**
@@ -1723,14 +1735,14 @@ function periodLookbackStart(periodEnd: Date, interval: BillingInterval): Date {
     return d;
 }
 
+// Зворотний зсув для `remainingRatio` — той самий клемпінг. Для клемпнутого
+// periodEnd (28 лютого від списання 31 січня) відновлений старт наближений
+// (28 січня): без збереженого periodStart точніше не відновити. Похибка ≤3 днів
+// ЗБІЛЬШУЄ знаменник, тож refund консервативно занижується, не завищується.
 function subMonths(date: Date): Date {
-    const d = new Date(date);
-    d.setMonth(d.getMonth() - 1);
-    return d;
+    return addMonths(date, -1);
 }
 
 function subYears(date: Date): Date {
-    const d = new Date(date);
-    d.setFullYear(d.getFullYear() - 1);
-    return d;
+    return addMonths(date, -12);
 }
