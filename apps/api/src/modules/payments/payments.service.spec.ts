@@ -32,6 +32,7 @@ import {
 } from '../users/schemas/execution-transaction.schema';
 import {
     ProcessedWebhookEvent,
+    ProcessedWebhookEventDocument,
     ProcessedWebhookEventSchema,
 } from './schemas/processed-webhook-event.schema';
 import {
@@ -84,6 +85,7 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
     let userModel: Model<UserDocument>;
     let paymentRecordModel: Model<PaymentRecordDocument>;
     let failedRemovalModel: Model<FailedRecurringRemovalDocument>;
+    let webhookEventModel: Model<ProcessedWebhookEventDocument>;
     let provider: ProviderMock;
     let connection: Connection;
     let redisMock: { set: jest.Mock; eval: jest.Mock };
@@ -143,6 +145,9 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
         paymentRecordModel = moduleRef.get(getModelToken(PaymentRecord.name));
         failedRemovalModel = moduleRef.get(
             getModelToken(FailedRecurringRemoval.name)
+        );
+        webhookEventModel = moduleRef.get(
+            getModelToken(ProcessedWebhookEvent.name)
         );
         connection = moduleRef.get<Connection>(getConnectionToken());
         // Збудувати unique-індекси (зокрема ProcessedWebhookEvent) — без них
@@ -1052,5 +1057,148 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
         expect((error as ConflictException).getResponse()).toMatchObject({
             code: RESPONSE_CODE.BILLING_OPERATION_IN_PROGRESS,
         });
+    });
+
+    // ── Stale orderReference (рекурент пережив перезапис) ────────────────
+
+    it('Approved на stale orderReference: UNMATCHED-слід + REMOVE-черга, грант не застосовано', async () => {
+        const user = await createUser({
+            planCode: 'brand',
+            subscriptionStatus: SUBSCRIPTION_STATUS.ACTIVE,
+            hasActiveSubscription: true,
+            currentPeriodEnd: new Date(Date.now() + 20 * 86_400_000),
+        });
+        const currentRef = buildSubscriptionOrderReference(user._id.toString());
+        await userModel.findByIdAndUpdate(user._id, {
+            $set: { 'billing.orderReference': currentRef },
+        });
+        // Списання на роуг-рекуренті зі СТАРОГО orderReference (інший nonce).
+        const staleRef = buildSubscriptionOrderReference(user._id.toString());
+
+        const accept = await feed(approvedEvent(staleRef, { amount: 4900 }));
+
+        // Ack разом зі слідом: подія оброблена (запис + черга), повтори не потрібні.
+        expect(accept).toEqual({ status: 'accept' });
+
+        const record = await paymentRecordModel
+            .findOne({ orderReference: staleRef })
+            .lean();
+        expect(record).toMatchObject({
+            type: PAYMENT_RECORD_TYPE.UNMATCHED,
+            status: PAYMENT_RECORD_STATUS.APPROVED,
+            amount: 4900,
+        });
+        const queued = await failedRemovalModel
+            .findOne({ orderReference: staleRef })
+            .lean();
+        expect(queued).not.toBeNull();
+
+        // Білінг чинної підписки не зачеплено: ні періоду, ні watermark-у.
+        const updated = await userModel.findById(user._id).lean();
+        expect(updated!.billing!.orderReference).toBe(currentRef);
+        expect(updated!.billing!.hasActiveSubscription).toBe(true);
+        expect(updated!.billing!.lastProviderEventAt).toBeNull();
+    });
+
+    it('Declined на stale orderReference: тихий ack без сліду (ретраї знятого рекуренту)', async () => {
+        const user = await createUser({
+            planCode: 'brand',
+            subscriptionStatus: SUBSCRIPTION_STATUS.ACTIVE,
+            hasActiveSubscription: true,
+        });
+        const currentRef = buildSubscriptionOrderReference(user._id.toString());
+        await userModel.findByIdAndUpdate(user._id, {
+            $set: { 'billing.orderReference': currentRef },
+        });
+        const staleRef = buildSubscriptionOrderReference(user._id.toString());
+
+        const accept = await feed(
+            approvedEvent(staleRef, {
+                transactionStatus: WAYFORPAY_TRANSACTION_STATUS.DECLINED,
+            })
+        );
+
+        expect(accept).toEqual({ status: 'accept' });
+        expect(
+            await paymentRecordModel.findOne({ orderReference: staleRef })
+        ).toBeNull();
+        expect(
+            await failedRemovalModel.findOne({ orderReference: staleRef })
+        ).toBeNull();
+    });
+
+    // ── Re-bind картки (rebindPendingAt) ─────────────────────────────────
+
+    it('Approved при rebindPendingAt: верифікація картки, без руху періоду і без платежу', async () => {
+        const periodEnd = new Date(Date.now() + 12 * 86_400_000);
+        const user = await createUser({
+            planCode: 'bookkeeper',
+            subscriptionStatus: SUBSCRIPTION_STATUS.ACTIVE,
+            hasActiveSubscription: true,
+            currentPeriodEnd: periodEnd,
+            rebindPendingAt: new Date(),
+        });
+        const newRef = buildSubscriptionOrderReference(user._id.toString());
+        await userModel.findByIdAndUpdate(user._id, {
+            $set: { 'billing.orderReference': newRef },
+        });
+
+        await feed(
+            approvedEvent(newRef, {
+                recToken: 'tok_rebound',
+                cardMask: '55****2222',
+            })
+        );
+
+        const updated = await userModel.findById(user._id).lean();
+        // Прапорець знято, токен/маску оновлено.
+        expect(updated!.billing!.rebindPendingAt).toBeNull();
+        expect(updated!.billing!.recToken).toBe('tok_rebound');
+        expect(updated!.billing!.cardMask).toBe('55****2222');
+        // Це верифікація, не списання: період НЕ продовжено, статус не змінено.
+        expect(updated!.billing!.currentPeriodEnd!.getTime()).toBe(
+            periodEnd.getTime()
+        );
+        expect(updated!.billing!.subscriptionStatus).toBe(
+            SUBSCRIPTION_STATUS.ACTIVE
+        );
+        // Платіж в історію не пишеться (грошового руху не було).
+        expect(await paymentRecordModel.countDocuments({})).toBe(0);
+    });
+
+    // ── Crash-orphan pending подія ───────────────────────────────────────
+
+    it('crash-orphan pending не ack-ається і не переобробляється (чекає sweep + передоставку)', async () => {
+        const user = await createUser();
+        const ref = buildOneOffOrderReference(user._id.toString(), 'brand');
+        const access = findOneOffAccess('brand')!;
+        const event = approvedEvent(ref, { amount: access.priceAmount });
+
+        // Сирота урваної обробки: pending-запис існує, ефекти НЕ застосовано
+        // (живий творець утримував би білінг-лок — у тесті його немає).
+        await webhookEventModel.create({
+            provider: 'wayforpay',
+            providerEventId: event.providerEventId,
+            receivedAt: new Date(),
+            occurredAt: event.occurredAt,
+            type: event.transactionStatus,
+            userId: user._id.toString(),
+            oneOffCode: 'brand',
+            status: 'pending',
+        });
+
+        const accept = await feed(event);
+
+        // Без ack — WayForPay передоставлятиме, доки sweep не прибере orphan.
+        expect(accept).toBeNull();
+        // Грант НЕ застосовано вдруге наосліп.
+        const updated = await userModel.findById(user._id).lean();
+        expect(updated!.billing).toBeNull();
+        expect(await paymentRecordModel.countDocuments({})).toBe(0);
+        // Orphan-запис лишився pending (його прибере sweep, не роутер).
+        const orphan = await webhookEventModel
+            .findOne({ providerEventId: event.providerEventId })
+            .lean();
+        expect(orphan!.status).toBe('pending');
     });
 });

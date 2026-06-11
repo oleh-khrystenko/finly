@@ -528,6 +528,73 @@ describe('ReconciliationService (MongoMemoryReplSet)', () => {
         expect(await isBlocked(newer)).toBe(true);
     });
 
+    // ── Неповний slug-rent прогін (збій per-entity reset-а) ──────────────
+
+    it('збій одного slug-reset-а: прогін неповний → стемп, без clear; решта батча не зривається', async () => {
+        // Білінг є (lapse після скасування), рівень none — стемп/clear гілки
+        // наприкінці reconcile активні (для null-білінгу вони скіпаються).
+        usersService.findById.mockResolvedValue({
+            billing: {
+                planCode: 'brand',
+                hasActiveSubscription: false,
+                subscriptionStatus: 'CANCELED',
+                oneOffLevel: null,
+                oneOffAccessUntil: null,
+            },
+        });
+        const failing = await seedBusiness({
+            type: 'tov',
+            owned: true,
+            slugCustomized: true,
+        });
+        const bizId = await seedBusiness({ type: 'fop', owned: true });
+        const accId = await seedAccount(bizId, true);
+
+        const generator = moduleRef.get(SlugGeneratorService);
+        const genSpy = jest
+            .spyOn(generator, 'generateRandomSlug')
+            .mockRejectedValueOnce(new Error('transient Mongo failure'));
+
+        await service.reconcile(userId.toString());
+
+        // Збійний reset відкладено: slugCustomized лишився true (retry побачить).
+        const failedDoc = await businessModel.findById(failing).lean();
+        expect(failedDoc!.slugCustomized).toBe(true);
+        // Решта батча (account-reset) виконалась попри збій сусіда.
+        const accDoc = await accountModel.findById(accId).lean();
+        expect(accDoc!.slugCustomized).toBe(false);
+        // Неповний прогін: durable-стемп поставлено, clear НЕ викликано —
+        // інакше відкладений reset лишився б без жодного наступного тригера.
+        expect(usersService.stampBillingReconcileRequired).toHaveBeenCalled();
+        expect(
+            usersService.clearBillingReconcileRequired
+        ).not.toHaveBeenCalled();
+
+        // Наступний прогін (генератор знову живий) добиває reset і знімає маркер.
+        genSpy.mockRestore();
+        jest.clearAllMocks();
+        usersService.findById.mockResolvedValue({
+            billing: {
+                planCode: 'brand',
+                hasActiveSubscription: false,
+                subscriptionStatus: 'CANCELED',
+                oneOffLevel: null,
+                oneOffAccessUntil: null,
+            },
+        });
+
+        await service.reconcile(userId.toString());
+
+        const retried = await businessModel.findById(failing).lean();
+        expect(retried!.slugCustomized).toBe(false);
+        expect(
+            usersService.clearBillingReconcileRequired
+        ).toHaveBeenCalledTimes(1);
+        expect(
+            usersService.stampBillingReconcileRequired
+        ).not.toHaveBeenCalled();
+    });
+
     // ── Durable-retry маркер ──────────────────────────────────────────────
 
     it('повний прогін знімає durable-маркер умовним clear-ом (notAfter ≤ старт прогону)', async () => {

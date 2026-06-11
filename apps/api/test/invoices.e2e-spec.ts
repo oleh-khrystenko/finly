@@ -763,6 +763,74 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
     // ─── PATCH ───
 
     describe('PATCH /businesses/me/:slug/invoices/:invoiceSlug', () => {
+        it('Sprint 19 — зміна slug без тарифу (Free) → 403 SLUG_EDIT_REQUIRES_PLAN', async () => {
+            const user = await createUser(); // без білінгу → рівень none
+            const { slug, accountSlug } = await createBusinessFor(user);
+            const create = await supertest(app.getHttpServer())
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
+                .set('Authorization', bearerFor(user))
+                .send({
+                    amount: 100,
+                    amountLocked: false,
+                    paymentPurpose: 'X',
+                    validUntil: null,
+                    slugInput: { kind: 'random' },
+                });
+            const invoiceSlug = (create.body as { data: { slug: string } }).data
+                .slug;
+
+            const res = await supertest(app.getHttpServer())
+                .patch(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`
+                )
+                .set('Authorization', bearerFor(user))
+                .send({ slug: 'oplata-konsultacii' })
+                .expect(403);
+            expect((res.body as { error: { code: string } }).error.code).toBe(
+                'SLUG_EDIT_REQUIRES_PLAN'
+            );
+
+            // Slug не змінено: стара адреса досі резолвиться у кабінеті.
+            await supertest(app.getHttpServer())
+                .get(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`
+                )
+                .set('Authorization', bearerFor(user))
+                .expect(200);
+        });
+
+        it('Sprint 19 — reset-slug без тарифу → 403 SLUG_EDIT_REQUIRES_PLAN', async () => {
+            const user = await createUser();
+            const { slug, accountSlug } = await createBusinessFor(user);
+            const create = await supertest(app.getHttpServer())
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
+                .set('Authorization', bearerFor(user))
+                .send({
+                    amount: 100,
+                    amountLocked: false,
+                    paymentPurpose: 'X',
+                    validUntil: null,
+                    slugInput: { kind: 'random' },
+                });
+            const invoiceSlug = (create.body as { data: { slug: string } }).data
+                .slug;
+
+            const res = await supertest(app.getHttpServer())
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}/reset-slug`
+                )
+                .set('Authorization', bearerFor(user))
+                .send({})
+                .expect(403);
+            expect((res.body as { error: { code: string } }).error.code).toBe(
+                'SLUG_EDIT_REQUIRES_PLAN'
+            );
+        });
+
         it('inline-edit paymentPurpose — 200', async () => {
             const user = await createUser();
             const { slug, accountSlug } = await createBusinessFor(user);

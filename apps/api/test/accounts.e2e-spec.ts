@@ -568,6 +568,61 @@ describe('Accounts E2E (Sprint 9 §SP-1..§SP-3)', () => {
             ).toBe('mono-cafe');
         });
 
+        it('Sprint 19 — slug-rename без тарифу (Free) → 403 SLUG_EDIT_REQUIRES_PLAN', async () => {
+            const user = await createUser(); // без білінгу → рівень none
+            const { businessSlug, accountSlug } = await seedAccount(user);
+
+            const res = await supertest(app.getHttpServer())
+                .patch(
+                    `/api/businesses/me/${businessSlug}/accounts/${accountSlug}`
+                )
+                .set('Authorization', bearerFor(user))
+                .send({ slug: 'mono-cafe' })
+                .expect(403);
+            expect((res.body as { error: { code: string } }).error.code).toBe(
+                'SLUG_EDIT_REQUIRES_PLAN'
+            );
+
+            // Slug не змінено: авто-адреса досі резолвиться у кабінеті.
+            await supertest(app.getHttpServer())
+                .get(
+                    `/api/businesses/me/${businessSlug}/accounts/${accountSlug}`
+                )
+                .set('Authorization', bearerFor(user))
+                .expect(200);
+        });
+
+        it('Sprint 19 — case-only зміна slug без тарифу → 403 (display-форма теж платна)', async () => {
+            const user = await createUser();
+            const { businessSlug, accountSlug } = await seedAccount(user);
+
+            const res = await supertest(app.getHttpServer())
+                .patch(
+                    `/api/businesses/me/${businessSlug}/accounts/${accountSlug}`
+                )
+                .set('Authorization', bearerFor(user))
+                .send({ slug: accountSlug.toUpperCase() })
+                .expect(403);
+            expect((res.body as { error: { code: string } }).error.code).toBe(
+                'SLUG_EDIT_REQUIRES_PLAN'
+            );
+        });
+
+        it('Sprint 19 — reset-slug без тарифу → 403 SLUG_EDIT_REQUIRES_PLAN', async () => {
+            const user = await createUser();
+            const { businessSlug, accountSlug } = await seedAccount(user);
+
+            const res = await supertest(app.getHttpServer())
+                .post(
+                    `/api/businesses/me/${businessSlug}/accounts/${accountSlug}/reset-slug`
+                )
+                .set('Authorization', bearerFor(user))
+                .expect(403);
+            expect((res.body as { error: { code: string } }).error.code).toBe(
+                'SLUG_EDIT_REQUIRES_PLAN'
+            );
+        });
+
         it('Sprint 15 — slug-rename колізія у межах бізнесу → 409 SLUG_TAKEN', async () => {
             const user = await createUser({ billing: ACTIVE_BRAND_BILLING });
             const { businessSlug, accountSlug } = await seedAccount(user);

@@ -1,11 +1,13 @@
 import {
     BadRequestException,
+    ForbiddenException,
     InternalServerErrorException,
     NotFoundException,
 } from '@nestjs/common';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import { Types } from 'mongoose';
+import { RESPONSE_CODE } from '@finly/types';
 import type { CreateInvoiceRequest, SlugInput } from '@finly/types';
 
 import {
@@ -449,6 +451,90 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                     'bookkeeper'
                 )
             ).rejects.toBeInstanceOf(NotFoundException);
+        });
+
+        describe('Sprint 19 — slug-гейт (платна фіча, brand+)', () => {
+            async function expectSlugGate(
+                promise: Promise<unknown>
+            ): Promise<void> {
+                const err = await promise.catch((e: unknown) => e);
+                expect(err).toBeInstanceOf(ForbiddenException);
+                expect((err as ForbiddenException).getResponse()).toMatchObject(
+                    {
+                        code: RESPONSE_CODE.SLUG_EDIT_REQUIRES_PLAN,
+                    }
+                );
+            }
+
+            it('зміна slug на none → SLUG_EDIT_REQUIRES_PLAN, до DB-роботи', async () => {
+                await expectSlugGate(
+                    service.update(
+                        business,
+                        account,
+                        invoiceDoc('inv-001-x'),
+                        { slug: 'my-vanity' },
+                        'none'
+                    )
+                );
+                expect(invoiceModel.findOneAndUpdate).not.toHaveBeenCalled();
+                expect(historyModel.create).not.toHaveBeenCalled();
+            });
+
+            it('case-only зміна display-форми на none → теж платна (рендериться у QR/URL)', async () => {
+                await expectSlugGate(
+                    service.update(
+                        business,
+                        account,
+                        invoiceDoc('inv-001-x'),
+                        { slug: 'INV-001-X' },
+                        'none'
+                    )
+                );
+                expect(invoiceModel.findOneAndUpdate).not.toHaveBeenCalled();
+            });
+
+            it('ідентичний slug у PATCH на none — no-op, гейт не спрацьовує', async () => {
+                mockUpdateReturn({ slug: 'inv-001-x' });
+                await service.update(
+                    business,
+                    account,
+                    invoiceDoc('inv-001-x'),
+                    { slug: 'inv-001-x' },
+                    'none'
+                );
+                const pipeline = invoiceModel.findOneAndUpdate.mock
+                    .calls[0]![1] as [{ $set: Record<string, unknown> }];
+                // Без позначення кастомним: slug-rent не сміє скидати авто-slug.
+                expect(pipeline[0].$set.slugCustomized).toBeUndefined();
+            });
+
+            it('resetSlug на none → SLUG_EDIT_REQUIRES_PLAN, TX не стартує', async () => {
+                await expectSlugGate(
+                    service.resetSlug(
+                        business,
+                        account,
+                        invoiceDoc('inv-001-x'),
+                        'none'
+                    )
+                );
+                expect(startSessionMock).not.toHaveBeenCalled();
+            });
+
+            it('case-only зміна на brand → проходить + позначає slugCustomized', async () => {
+                mockUpdateReturn({ slug: 'INV-001-X' });
+                await service.update(
+                    business,
+                    account,
+                    invoiceDoc('inv-001-x'),
+                    { slug: 'INV-001-X' },
+                    'brand'
+                );
+                const pipeline = invoiceModel.findOneAndUpdate.mock
+                    .calls[0]![1] as [{ $set: Record<string, unknown> }];
+                expect(pipeline[0].$set.slugCustomized).toBe(true);
+                // slugLower незмінний → rename-TX не потрібна.
+                expect(historyModel.create).not.toHaveBeenCalled();
+            });
         });
 
         it('validUntil у минулому на PATCH → 400 INVOICE_VALID_UNTIL_IN_PAST', async () => {
