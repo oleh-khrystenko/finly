@@ -56,14 +56,42 @@ export class PaymentsCleanupService {
 
     @Cron(CronExpression.EVERY_DAY_AT_4AM)
     async runDailyCleanup(): Promise<void> {
-        await this.retryFailedRemovals();
-        await this.expireCanceledSubscriptions();
-        await this.expirePastDueSubscriptions();
-        await this.expireAbandonedRebinds();
-        await this.expireOneOffAccess();
+        await this.step('retryFailedRemovals', () =>
+            this.retryFailedRemovals()
+        );
+        await this.step('expireCanceledSubscriptions', () =>
+            this.expireCanceledSubscriptions()
+        );
+        await this.step('expirePastDueSubscriptions', () =>
+            this.expirePastDueSubscriptions()
+        );
+        await this.step('expireAbandonedRebinds', () =>
+            this.expireAbandonedRebinds()
+        );
+        await this.step('expireOneOffAccess', () => this.expireOneOffAccess());
         // Останнім: добиває reconcile-и, відкладені lock-контенцією/збоями —
         // і давні (минулі прогони), і щойно відкладені кроками вище.
-        await this.retryPendingReconciles();
+        await this.step('retryPendingReconciles', () =>
+            this.retryPendingReconciles()
+        );
+    }
+
+    /**
+     * Ізолює крок добового ланцюга: внутрішні catch-і кроків покривають лише
+     * per-item операції, а top-level find/updateMany — ні. Без ізоляції один
+     * transient-збій Mongo у ранньому кроці зривав би весь прогін — зокрема
+     * `expireOneOffAccess` (єдиний тригер спливу one-off, вебхука немає) і
+     * `retryPendingReconciles` (durable-retry реконсиляцій) — до наступної доби.
+     */
+    private async step(label: string, fn: () => Promise<void>): Promise<void> {
+        try {
+            await fn();
+        } catch (error) {
+            this.logger.error(
+                `Daily cleanup step ${label} failed, continuing with next step`,
+                error instanceof Error ? error.stack : String(error)
+            );
+        }
     }
 
     /**
@@ -118,7 +146,9 @@ export class PaymentsCleanupService {
      */
     @Cron(CronExpression.EVERY_10_MINUTES)
     async runStalePendingSweep(): Promise<void> {
-        await this.sweepStalePendingEvents();
+        await this.step('sweepStalePendingEvents', () =>
+            this.sweepStalePendingEvents()
+        );
     }
 
     /**

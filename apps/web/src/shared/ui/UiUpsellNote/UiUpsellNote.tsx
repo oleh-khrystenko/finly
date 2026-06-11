@@ -2,15 +2,7 @@
 
 import { Lock } from 'lucide-react';
 import UiButton from '../UiButton';
-
-interface Props {
-    /** Чому фіча недоступна на поточному рівні. */
-    message: string;
-    /** Текст CTA (default «Покращити тариф»). */
-    ctaLabel?: string;
-    /** Куди веде CTA (default сторінка білінгу). */
-    href?: string;
-}
+import type { UiUpsellNoteProps } from './types';
 
 /**
  * Sprint 19 — компактний upsell-блок для замкнених фіч (редагування slug понад
@@ -21,7 +13,7 @@ export default function UiUpsellNote({
     message,
     ctaLabel = 'Покращити тариф',
     href = '/billing',
-}: Props) {
+}: UiUpsellNoteProps) {
     return (
         <div className="border-primary/30 bg-primary/5 flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-muted-foreground flex items-center gap-2 text-sm">

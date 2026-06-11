@@ -57,7 +57,7 @@ type SlugRentBudget = {
 const NESTED_SLUG_MAX_ATTEMPTS = 10;
 
 // Стеля per-entity slug-reset-ів за один прогін реконсиляції. Реконсиляція
-// виконується під білінг-локом (TTL 60s, див. billing-lock.ts), а кількість
+// виконується під білінг-локом (TTL — див. billing-lock.ts), а кількість
 // кастомних slug-ів bookkeeper-користувача необмежена за продуктом — без
 // батч-ліміту довгий slug-rent виїв би TTL (зник би mutual-exclusion) і
 // затягував би webhook-відповідь провайдеру. Кожен reset — коротка TX
@@ -442,7 +442,7 @@ export class ReconciliationService {
                 [{ businessId, slugLower: oldLower, redirect: false }],
                 { session }
             );
-            await this.businessModel.updateOne(
+            const updated = await this.businessModel.updateOne(
                 { _id: businessId },
                 {
                     $set: {
@@ -453,6 +453,15 @@ export class ReconciliationService {
                 },
                 { session }
             );
+            // Бізнес зник між скануванням і TX (cascade-delete не під
+            // білінг-локом): abort відкочує history-insert, інакше orphan-запис,
+            // поставлений ПІСЛЯ cascade-зачистки history, блокував би звільнений
+            // slug глобально до TTL.
+            if (updated.matchedCount === 0) {
+                throw new Error(
+                    `Business ${businessId.toString()} vanished during slug reset`
+                );
+            }
         });
     }
 
@@ -487,7 +496,7 @@ export class ReconciliationService {
                 ],
                 { session }
             );
-            await this.accountModel.updateOne(
+            const updated = await this.accountModel.updateOne(
                 { _id: accountId },
                 {
                     $set: {
@@ -498,6 +507,13 @@ export class ReconciliationService {
                 },
                 { session }
             );
+            // Симетрично resetOneBusinessSlug: abort відкочує history-insert
+            // для зниклої сутності.
+            if (updated.matchedCount === 0) {
+                throw new Error(
+                    `Account ${accountId.toString()} vanished during slug reset`
+                );
+            }
         });
     }
 
@@ -537,7 +553,7 @@ export class ReconciliationService {
             // Reset до random-slug-у без counter-нумерації: slugPreset/scope/
             // counter обнуляються (інвойс більше не counter-based), інакше stale
             // counter висів би у partial-unique-індексі.
-            await this.invoiceModel.updateOne(
+            const updated = await this.invoiceModel.updateOne(
                 { _id: invoiceId },
                 {
                     $set: {
@@ -551,6 +567,13 @@ export class ReconciliationService {
                 },
                 { session }
             );
+            // Симетрично resetOneBusinessSlug: abort відкочує history-insert
+            // для зниклої сутності.
+            if (updated.matchedCount === 0) {
+                throw new Error(
+                    `Invoice ${invoiceId.toString()} vanished during slug reset`
+                );
+            }
         });
     }
 

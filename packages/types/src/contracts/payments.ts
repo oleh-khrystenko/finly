@@ -232,6 +232,11 @@ export const PAYMENT_RECORD_TYPE = {
     SUBSCRIPTION: 'subscription', // рекурентне списання підписки
     ONE_OFF: 'one_off', // разовий доступ на місяць
     PRORATION: 'proration', // негайна доплата при апгрейді
+    // Approved-списання на orderReference, що вже не є чинним для користувача
+    // (рекурент пережив перезапис checkout-ом/re-bind-ом). Гроші рухались, але
+    // грант неможливий — слід для ручного розбору. Окремий тип, щоб запис не
+    // потрапляв у refund-скоуп cancel-у (він фільтрує type=subscription).
+    UNMATCHED: 'unmatched',
 } as const;
 
 export type PaymentRecordType =
@@ -254,6 +259,7 @@ export const PaymentRecordSchema = z.object({
         PAYMENT_RECORD_TYPE.SUBSCRIPTION,
         PAYMENT_RECORD_TYPE.ONE_OFF,
         PAYMENT_RECORD_TYPE.PRORATION,
+        PAYMENT_RECORD_TYPE.UNMATCHED,
     ]),
     amount: z.number().int(), // копійки
     currency: z.string(),

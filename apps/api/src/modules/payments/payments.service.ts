@@ -1020,9 +1020,7 @@ export class PaymentsService {
             .lean();
         const billing = user?.billing;
         if (!billing || billing.orderReference !== event.orderReference) {
-            this.logger.debug(
-                `Subscription webhook for stale orderReference ${event.orderReference}, ignored`
-            );
+            await this.handleStaleSubscriptionEvent(event, userId, session);
             return;
         }
 
@@ -1146,6 +1144,54 @@ export class PaymentsService {
         this.logger.log(
             `Subscription ${isDeferredStart ? 'deferred-binding' : 'charge'} for user ${userId} ` +
                 `(plan ${effectivePlanCode}, event ${event.providerEventId})`
+        );
+    }
+
+    /**
+     * Подія підписки на orderReference, що вже не є чинним для користувача
+     * (перезаписаний новим checkout-ом або re-bind-ом). Без руху грошей
+     * (declined-ретраї знятого рекуренту) — тихий ack, як і раніше. Approved —
+     * реальне списання «нічийного» рекуренту (можливий шлях: кинутий
+     * INCOMPLETE-checkout без recToken → REMOVE при перезапису пропущено →
+     * пізня оплата зі ще відкритої вкладки активувала рекурент): тихий ack
+     * ховав би щомісячні списання без гранту назавжди. Тому ERROR на ручний
+     * розбір (refund), запис в історію (тип UNMATCHED — поза refund-скоупом
+     * cancel-у) і REMOVE роуг-рекуренту через retry-чергу. Все в одній TX з
+     * flip-ом події: ack лише разом зі слідом.
+     */
+    private async handleStaleSubscriptionEvent(
+        event: BillingWebhookEvent,
+        userId: string,
+        session: ClientSession
+    ): Promise<void> {
+        if (event.transactionStatus !== WAYFORPAY_TRANSACTION_STATUS.APPROVED) {
+            this.logger.debug(
+                `Subscription webhook for stale orderReference ${event.orderReference}, ignored`
+            );
+            return;
+        }
+        this.logger.error(
+            `Money charged on stale orderReference ${event.orderReference} for user ${userId} ` +
+                `(event ${event.providerEventId}, amount ${event.amount} ${event.currency}): ` +
+                `no grant applied, recurring queued for REMOVE, manual refund review required`
+        );
+        await this.recordPayment(
+            {
+                userId,
+                orderReference: event.orderReference,
+                type: PAYMENT_RECORD_TYPE.UNMATCHED,
+                amount: event.amount,
+                currency: event.currency,
+                status: PAYMENT_RECORD_STATUS.APPROVED,
+                providerTransactionId: event.transactionId,
+                cardMask: event.cardMask,
+            },
+            session
+        );
+        await this.enqueueFailedRemoval(
+            event.orderReference,
+            'stale_reference_charge',
+            session
         );
     }
 
@@ -1394,23 +1440,28 @@ export class PaymentsService {
         }
     }
 
+    /**
+     * Upsert замість create-and-swallow-11000: всередині Mongo-TX
+     * (stale-charge шлях) write-помилка, навіть упіймана, абортить усю
+     * транзакцію — upsert на наявному записі лишається no-op без throw.
+     */
     private async enqueueFailedRemoval(
         orderReference: string,
-        reason: string
+        reason: string,
+        session?: ClientSession
     ): Promise<void> {
-        try {
-            await this.failedRemovalModel.create({
-                provider: PROVIDER,
-                orderReference,
-                reason,
-                failedAt: new Date(),
-                attempts: 0,
-                lastAttemptAt: null,
-            });
-        } catch (error: unknown) {
-            if (isDuplicateKeyError(error)) return;
-            throw error;
-        }
+        await this.failedRemovalModel.updateOne(
+            { provider: PROVIDER, orderReference },
+            {
+                $setOnInsert: {
+                    reason,
+                    failedAt: new Date(),
+                    attempts: 0,
+                    lastAttemptAt: null,
+                },
+            },
+            { upsert: true, session }
+        );
     }
 
     /**
