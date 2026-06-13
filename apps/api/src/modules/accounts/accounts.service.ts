@@ -9,14 +9,18 @@ import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
 import {
     RESPONSE_CODE,
+    SLUG_AVAILABILITY_STATUS,
     bankCodeFromIban,
     type AccessLevel,
     type AccountWithCounts,
     type CreateAccountRequest,
+    type SlugAvailabilityStatus,
     type UpdateAccountRequest,
 } from '@finly/types';
 
 import { assertSlugEditAllowed } from '../../common/billing/assert-access';
+import { SlugReservationService } from '../slug-reservation/slug-reservation.service';
+import type { SlugReservationDocument } from '../slug-reservation/schemas/slug-reservation.schema';
 import { isTransactionsUnsupportedError } from '../../common/mongoose/transactions-unsupported';
 import {
     Business,
@@ -70,8 +74,80 @@ export class AccountsService {
         }>,
         @InjectConnection()
         private readonly connection: Connection,
-        private readonly slugGenerator: AccountSlugGeneratorService
+        private readonly slugGenerator: AccountSlugGeneratorService,
+        private readonly slugReservations: SlugReservationService
     ) {}
+
+    /**
+     * Sprint 20 — статус бажаного імені рахунку до оплати (у scope бізнесу).
+     * Враховує зайнятий живий slug, чужу rename-історію і активні броні інших
+     * користувачів. Власний поточний slug/історія/бронь не блокують. Reserved-
+     * списку для вкладених сегментів немає (лише бізнес-slug).
+     */
+    async checkSlugAvailability(
+        account: AccountDocument,
+        desiredSlug: string,
+        userId: string
+    ): Promise<SlugAvailabilityStatus> {
+        const newLower = desiredSlug.toLowerCase();
+        const businessId = account.businessId;
+        const [liveClash, historyClash, heldByOther] = await Promise.all([
+            this.accountModel.exists({
+                businessId,
+                slugLower: newLower,
+                _id: { $ne: account._id },
+            }),
+            this.historyModel.exists({
+                businessId,
+                slugLower: newLower,
+                accountId: { $ne: account._id },
+            }),
+            this.slugReservations.isNameHeldByOther(
+                SlugReservationService.accountScopeKey(businessId),
+                newLower,
+                new Types.ObjectId(userId)
+            ),
+        ]);
+        return liveClash || historyClash || heldByOther
+            ? SLUG_AVAILABILITY_STATUS.TAKEN
+            : SLUG_AVAILABILITY_STATUS.AVAILABLE;
+    }
+
+    /**
+     * Sprint 20 — холд бажаного вільного імені рахунку за користувачем.
+     * `business` потрібен для snapshot канонічного шляху у броні (web будує з
+     * нього PATCH і success-повідомлення).
+     */
+    async reserveSlug(
+        business: BusinessDocument,
+        account: AccountDocument,
+        desiredSlug: string,
+        userId: string
+    ): Promise<SlugReservationDocument> {
+        const status = await this.checkSlugAvailability(
+            account,
+            desiredSlug,
+            userId
+        );
+        if (status === SLUG_AVAILABILITY_STATUS.TAKEN) {
+            throw new ConflictException({
+                code: RESPONSE_CODE.SLUG_TAKEN,
+                message: 'Account slug already taken in this business',
+            });
+        }
+        return this.slugReservations.reserve({
+            userId: new Types.ObjectId(userId),
+            entityType: 'account',
+            targetId: account._id,
+            scopeKey: SlugReservationService.accountScopeKey(
+                account.businessId
+            ),
+            slug: desiredSlug,
+            businessSlug: business.slug,
+            accountSlug: account.slug,
+            invoiceSlug: null,
+        });
+    }
 
     /**
      * Sprint 9 §SP-1 — create account з orphan-prevention vs concurrent
@@ -296,6 +372,8 @@ export class AccountsService {
         account: AccountDocument,
         dto: UpdateAccountRequest,
         actorLevel: AccessLevel,
+        // Sprint 20 — власник, чию активну бронь споживає успішний rename.
+        userId: string,
         markSlugCustomized = true
     ): Promise<AccountDocument> {
         if (Object.keys(dto).length === 0) {
@@ -318,7 +396,12 @@ export class AccountsService {
             assertSlugEditAllowed(actorLevel);
         }
         if (renaming) {
-            return this.renameAndUpdate(account, dto, markSlugCustomized);
+            return this.renameAndUpdate(
+                account,
+                dto,
+                userId,
+                markSlugCustomized
+            );
         }
 
         const setPayload: Record<string, unknown> = { ...dto };
@@ -364,13 +447,19 @@ export class AccountsService {
     private async renameAndUpdate(
         account: AccountDocument,
         dto: UpdateAccountRequest,
+        userId: string,
         markSlugCustomized: boolean
     ): Promise<AccountDocument> {
         const businessId = account.businessId;
         const oldLower = account.slugLower;
         const newLower = dto.slug!.toLowerCase();
 
-        await this.assertSlugAvailable(businessId, account._id, newLower);
+        await this.assertSlugAvailable(
+            businessId,
+            account._id,
+            newLower,
+            userId
+        );
 
         const setPayload: Record<string, unknown> = {
             ...dto,
@@ -388,6 +477,7 @@ export class AccountsService {
                     oldLower,
                     newLower,
                     setPayload,
+                    userId,
                     session
                 );
             });
@@ -423,6 +513,7 @@ export class AccountsService {
         oldLower: string,
         newLower: string,
         setPayload: Record<string, unknown>,
+        userId: string,
         session: ClientSession
     ): Promise<AccountDocument> {
         await this.historyModel
@@ -431,6 +522,11 @@ export class AccountsService {
         await this.historyModel.create(
             [{ businessId, accountId, slugLower: oldLower }],
             { session }
+        );
+        // Sprint 20 — атомарно споживаємо власну бронь користувача.
+        await this.slugReservations.consumeForUser(
+            new Types.ObjectId(userId),
+            session
         );
         const updated = await this.accountModel
             .findOneAndUpdate(
@@ -455,21 +551,31 @@ export class AccountsService {
      */
     async resetSlug(
         account: AccountDocument,
-        actorLevel: AccessLevel
+        actorLevel: AccessLevel,
+        userId: string
     ): Promise<AccountDocument> {
         const newSlug = await this.slugGenerator.generateUnique(
             account.businessId
         );
         // markSlugCustomized=false — reset повертає до авто.
-        return this.update(account, { slug: newSlug }, actorLevel, false);
+        return this.update(
+            account,
+            { slug: newSlug },
+            actorLevel,
+            userId,
+            false
+        );
     }
 
     private async assertSlugAvailable(
         businessId: Types.ObjectId,
         accountId: Types.ObjectId,
-        newLower: string
+        newLower: string,
+        userId: string
     ): Promise<void> {
-        const [liveClash, historyClash] = await Promise.all([
+        // Sprint 20 — активна бронь іншого користувача блокує rename нарівні із
+        // зайнятим іменем; власна бронь не блокує (її споживає TX).
+        const [liveClash, historyClash, heldByOther] = await Promise.all([
             this.accountModel.exists({
                 businessId,
                 slugLower: newLower,
@@ -480,8 +586,13 @@ export class AccountsService {
                 slugLower: newLower,
                 accountId: { $ne: accountId },
             }),
+            this.slugReservations.isNameHeldByOther(
+                SlugReservationService.accountScopeKey(businessId),
+                newLower,
+                new Types.ObjectId(userId)
+            ),
         ]);
-        if (liveClash || historyClash) {
+        if (liveClash || historyClash || heldByOther) {
             throw new ConflictException({
                 code: RESPONSE_CODE.SLUG_TAKEN,
                 message: 'Account slug already taken in this business',

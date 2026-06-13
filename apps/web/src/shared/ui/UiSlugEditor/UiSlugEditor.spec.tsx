@@ -1,0 +1,157 @@
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import {
+    SLUG_AVAILABILITY_STATUS,
+    type SlugReservationView,
+} from '@finly/types';
+import UiSlugEditor from './UiSlugEditor';
+
+const RESERVATION: SlugReservationView = {
+    entityType: 'business',
+    desiredSlug: 'acme',
+    expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+    businessSlug: 'old-slug',
+    accountSlug: null,
+    invoiceSlug: null,
+};
+
+function baseProps() {
+    return {
+        currentSlug: 'old-slug',
+        prefix: 'pay.finly.com.ua/',
+        publicUrl: 'https://pay.finly.com.ua/old-slug',
+        ariaLabel: 'Адреса сторінки',
+        validate: () => null,
+        checkAvailability: jest
+            .fn()
+            .mockResolvedValue(SLUG_AVAILABILITY_STATUS.AVAILABLE),
+        reserve: jest.fn().mockResolvedValue(RESERVATION),
+        onSave: jest.fn().mockResolvedValue(undefined),
+        onRegenerate: jest.fn(),
+        onSubscribe: jest.fn(),
+        subscribePriceLabel: 'Підписатись · 49 грн/міс',
+        initialReservation: null,
+        autoStartEdit: false,
+    };
+}
+
+async function openEditAndType(value: string) {
+    fireEvent.click(screen.getByRole('button', { name: 'Редагувати' }));
+    const input = screen.getByLabelText('Адреса сторінки');
+    fireEvent.change(input, { target: { value } });
+    return input;
+}
+
+describe('UiSlugEditor (Sprint 20 — slug upsell flow)', () => {
+    it('free: Save кладе ім\'я на холд і відкриває inline-апсел замість запису', async () => {
+        const props = { ...baseProps(), isPaid: false };
+        render(<UiSlugEditor {...props} />);
+
+        await openEditAndType('acme');
+        fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
+
+        await waitFor(() => {
+            expect(props.reserve).toHaveBeenCalledWith('acme');
+        });
+        expect(props.onSave).not.toHaveBeenCalled();
+        // Апсел: прев'ю майбутньої адреси + ціновий CTA + відлік.
+        expect(
+            await screen.findByText('Підписатись · 49 грн/міс')
+        ).toBeInTheDocument();
+        expect(screen.getByText('acme')).toBeInTheDocument();
+        expect(screen.getByText(/тримається за вами ще/)).toBeInTheDocument();
+    });
+
+    it('paid: Save пише slug одразу (onSave), без броні', async () => {
+        const props = { ...baseProps(), isPaid: true };
+        render(<UiSlugEditor {...props} />);
+
+        await openEditAndType('acme');
+        fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
+
+        await waitFor(() => {
+            expect(props.onSave).toHaveBeenCalledWith('acme');
+        });
+        expect(props.reserve).not.toHaveBeenCalled();
+    });
+
+    it('зайняте ім\'я не бронюється і не пишеться', async () => {
+        const props = {
+            ...baseProps(),
+            isPaid: false,
+            checkAvailability: jest
+                .fn()
+                .mockResolvedValue(SLUG_AVAILABILITY_STATUS.TAKEN),
+        };
+        render(<UiSlugEditor {...props} />);
+
+        await openEditAndType('taken-name');
+        fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
+
+        await waitFor(() => {
+            expect(props.checkAvailability).toHaveBeenCalled();
+        });
+        expect(props.reserve).not.toHaveBeenCalled();
+        expect(props.onSave).not.toHaveBeenCalled();
+    });
+
+    it('активна бронь (initialReservation) показує апсел одразу на mount', () => {
+        const props = {
+            ...baseProps(),
+            isPaid: false,
+            initialReservation: RESERVATION,
+        };
+        render(<UiSlugEditor {...props} />);
+
+        expect(
+            screen.getByText('Підписатись · 49 грн/міс')
+        ).toBeInTheDocument();
+        expect(screen.getByText(/тримається за вами ще/)).toBeInTheDocument();
+    });
+
+    it('autoStartEdit одразу відкриває поле редагування (фолбек «оберіть інше»)', () => {
+        const props = { ...baseProps(), isPaid: true, autoStartEdit: true };
+        render(<UiSlugEditor {...props} />);
+
+        expect(screen.getByLabelText('Адреса сторінки')).toBeInTheDocument();
+    });
+
+    it('paid: зміна лише регістру (case-only) доходить до onSave, не короткозамикається', async () => {
+        const props = { ...baseProps(), isPaid: true, currentSlug: 'old-slug' };
+        render(<UiSlugEditor {...props} />);
+
+        await openEditAndType('OLD-SLUG');
+        fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
+
+        await waitFor(() => {
+            expect(props.onSave).toHaveBeenCalledWith('OLD-SLUG');
+        });
+    });
+
+    it('free: збій броні при вільному імені → не показує «зайнято» і не відкриває апсел', async () => {
+        const props = {
+            ...baseProps(),
+            isPaid: false,
+            reserve: jest.fn().mockRejectedValue(new Error('network')),
+            checkAvailability: jest
+                .fn()
+                .mockResolvedValue(SLUG_AVAILABILITY_STATUS.AVAILABLE),
+        };
+        render(<UiSlugEditor {...props} />);
+
+        await openEditAndType('acme');
+        fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
+
+        await waitFor(() => {
+            expect(props.reserve).toHaveBeenCalled();
+        });
+        // Лишаємось у edit-mode (апсел не відкрито), без хибного «зайнято».
+        expect(
+            screen.queryByText('Підписатись · 49 грн/міс')
+        ).not.toBeInTheDocument();
+        expect(screen.getByLabelText('Адреса сторінки')).toBeInTheDocument();
+        expect(
+            screen.queryByText('Це посилання вже зайняте. Оберіть інше')
+        ).not.toBeInTheDocument();
+    });
+});

@@ -57,6 +57,10 @@ import { AiModule } from './modules/ai/ai.module';
                 // HelpChatRateLimitGuard. Apply via `@Throttle({ 'help-chat' })`
                 // + `@SkipThrottle({ default: true })`.
                 { name: 'help-chat', ttl: 60000, limit: 20 },
+                // Sprint 20 — live-перевірка доступності slug (authorized, усі
+                // рівні). Користувач друкує ім'я і запити йдуть debounce-ом —
+                // 30/min/IP вистачає на нормальний ввід, але стримує перебір.
+                { name: 'slug-availability', ttl: 60000, limit: 30 },
             ],
         }),
         ScheduleModule.forRoot(),

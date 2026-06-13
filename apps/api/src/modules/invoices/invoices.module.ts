@@ -5,6 +5,7 @@ import { AccountsModule } from '../accounts/accounts.module';
 import { Account, AccountSchema } from '../accounts/schemas/account.schema';
 import { BusinessesModule } from '../businesses/businesses.module';
 import { QrModule } from '../qr/qr.module';
+import { SlugReservationModule } from '../slug-reservation/slug-reservation.module';
 import { InvoiceAccessGuard } from './invoice-access.guard';
 import { InvoiceSlugGeneratorService } from './invoice-slug-generator.service';
 import { InvoicesController } from './invoices.controller';
@@ -56,6 +57,7 @@ import { Invoice, InvoiceSchema } from './schemas/invoice.schema';
         BusinessesModule,
         AccountsModule,
         QrModule,
+        SlugReservationModule,
     ],
     controllers: [InvoicesController, PublicInvoicesController],
     providers: [

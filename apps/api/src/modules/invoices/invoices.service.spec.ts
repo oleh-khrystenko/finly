@@ -15,6 +15,7 @@ import {
     type AccountDocument,
 } from '../accounts/schemas/account.schema';
 import type { BusinessDocument } from '../businesses/schemas/business.schema';
+import { SlugReservationService } from '../slug-reservation/slug-reservation.service';
 import { InvoiceSlugGeneratorService } from './invoice-slug-generator.service';
 import { InvoicesService } from './invoices.service';
 import { InvoiceSlugHistory } from './schemas/invoice-slug-history.schema';
@@ -42,6 +43,15 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
     let withTransactionMock: jest.Mock;
     let endSessionMock: jest.Mock;
     let startSessionMock: jest.Mock;
+
+    const TEST_USER_ID = '507f1f77bcf86cd799439099';
+
+    const mockSlugReservations = {
+        isNameHeldByOther: jest.fn().mockResolvedValue(false),
+        reserve: jest.fn(),
+        consumeForUser: jest.fn().mockResolvedValue(undefined),
+        getActiveForUser: jest.fn().mockResolvedValue(null),
+    };
 
     const businessId = new Types.ObjectId();
     const accountId = new Types.ObjectId();
@@ -143,6 +153,10 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                 {
                     provide: InvoiceSlugGeneratorService,
                     useValue: slugGenerator,
+                },
+                {
+                    provide: SlugReservationService,
+                    useValue: mockSlugReservations,
                 },
             ],
         }).compile();
@@ -361,7 +375,8 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                 {
                     paymentPurpose: 'New',
                 },
-                'bookkeeper'
+                'bookkeeper',
+                TEST_USER_ID
             );
             const filter = invoiceModel.findOneAndUpdate.mock.calls[0]![0];
             expect(filter).toEqual({ accountId, slug: 'inv-001-x' });
@@ -378,7 +393,8 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                 {
                     amountLocked: true,
                 },
-                'bookkeeper'
+                'bookkeeper',
+                TEST_USER_ID
             );
             const filter = invoiceModel.findOneAndUpdate.mock.calls[0]![0];
             expect(filter.$expr).toEqual({
@@ -395,7 +411,8 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                 {
                     amount: null,
                 },
-                'bookkeeper'
+                'bookkeeper',
+                TEST_USER_ID
             );
             const filter = invoiceModel.findOneAndUpdate.mock.calls[0]![0];
             expect(filter.$expr).toEqual({
@@ -416,7 +433,8 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                     {
                         amountLocked: true,
                     },
-                    'bookkeeper'
+                    'bookkeeper',
+                    TEST_USER_ID
                 )
             ).rejects.toBeInstanceOf(BadRequestException);
         });
@@ -431,7 +449,8 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                     {
                         paymentPurpose: 'X',
                     },
-                    'bookkeeper'
+                    'bookkeeper',
+                    TEST_USER_ID
                 )
             ).rejects.toBeInstanceOf(NotFoundException);
             expect(invoiceModel.exists).not.toHaveBeenCalled();
@@ -448,7 +467,8 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                     {
                         amountLocked: true,
                     },
-                    'bookkeeper'
+                    'bookkeeper',
+                    TEST_USER_ID
                 )
             ).rejects.toBeInstanceOf(NotFoundException);
         });
@@ -473,7 +493,8 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                         account,
                         invoiceDoc('inv-001-x'),
                         { slug: 'my-vanity' },
-                        'none'
+                        'none',
+                        TEST_USER_ID
                     )
                 );
                 expect(invoiceModel.findOneAndUpdate).not.toHaveBeenCalled();
@@ -487,7 +508,8 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                         account,
                         invoiceDoc('inv-001-x'),
                         { slug: 'INV-001-X' },
-                        'none'
+                        'none',
+                        TEST_USER_ID
                     )
                 );
                 expect(invoiceModel.findOneAndUpdate).not.toHaveBeenCalled();
@@ -500,7 +522,8 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                     account,
                     invoiceDoc('inv-001-x'),
                     { slug: 'inv-001-x' },
-                    'none'
+                    'none',
+                    TEST_USER_ID
                 );
                 const pipeline = invoiceModel.findOneAndUpdate.mock
                     .calls[0]![1] as [{ $set: Record<string, unknown> }];
@@ -514,7 +537,8 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                         business,
                         account,
                         invoiceDoc('inv-001-x'),
-                        'none'
+                        'none',
+                        TEST_USER_ID
                     )
                 );
                 expect(startSessionMock).not.toHaveBeenCalled();
@@ -527,7 +551,8 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                     account,
                     invoiceDoc('inv-001-x'),
                     { slug: 'INV-001-X' },
-                    'brand'
+                    'brand',
+                    TEST_USER_ID
                 );
                 const pipeline = invoiceModel.findOneAndUpdate.mock
                     .calls[0]![1] as [{ $set: Record<string, unknown> }];
@@ -547,7 +572,8 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                     {
                         validUntil: past,
                     },
-                    'bookkeeper'
+                    'bookkeeper',
+                    TEST_USER_ID
                 )
             ).rejects.toBeInstanceOf(BadRequestException);
             expect(invoiceModel.findOneAndUpdate).not.toHaveBeenCalled();
@@ -563,7 +589,8 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                     {
                         paymentPurpose: 'Updated',
                     },
-                    'bookkeeper'
+                    'bookkeeper',
+                    TEST_USER_ID
                 );
                 const updateArg =
                     invoiceModel.findOneAndUpdate.mock.calls[0]![1];
@@ -595,7 +622,8 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                     {
                         paymentPurpose: null,
                     },
-                    'bookkeeper'
+                    'bookkeeper',
+                    TEST_USER_ID
                 );
                 const updateArg =
                     invoiceModel.findOneAndUpdate.mock.calls[0]![1];
@@ -628,7 +656,8 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                     {
                         amount: 200000,
                     },
-                    'bookkeeper'
+                    'bookkeeper',
+                    TEST_USER_ID
                 );
                 const updateArg =
                     invoiceModel.findOneAndUpdate.mock.calls[0]![1];

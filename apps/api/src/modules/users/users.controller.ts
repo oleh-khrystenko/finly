@@ -21,6 +21,10 @@ import { SkipOnboarding } from '../../common/decorators/skip-onboarding.decorato
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { AuthService } from '../auth/auth.service';
+import {
+    SlugReservationService,
+    toSlugReservationView,
+} from '../slug-reservation/slug-reservation.service';
 import { VerifyPasswordDto } from '../auth/dto/verify-password.dto';
 import { AcceptTermsDto } from './dto/accept-terms.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -32,16 +36,25 @@ import { UsersService } from './users.service';
 export class UsersController {
     constructor(
         private readonly usersService: UsersService,
-        private readonly authService: AuthService
+        private readonly authService: AuthService,
+        private readonly slugReservations: SlugReservationService
     ) {}
 
     @Get('me')
     @UseGuards(JwtActiveGuard)
     @SkipOnboarding()
-    getMe(@CurrentUser() user: UserDocument): {
+    async getMe(@CurrentUser() user: UserDocument): Promise<{
         data: Record<string, unknown>;
-    } {
-        return { data: mapUserToProfileResponse(user) };
+    }> {
+        const reservation = await this.slugReservations.getActiveForUser(
+            user._id
+        );
+        return {
+            data: mapUserToProfileResponse(
+                user,
+                reservation ? toSlugReservationView(reservation) : null
+            ),
+        };
     }
 
     @Patch('me')

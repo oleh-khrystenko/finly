@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { RESPONSE_CODE, MAGIC_LINK_PURPOSE } from '@finly/types';
 
 import { AuthService } from '../auth/auth.service';
+import { SlugReservationService } from '../slug-reservation/slug-reservation.service';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
 
@@ -33,6 +34,10 @@ const mockAuthService = {
     sendDeletionConfirmationEmail: jest.fn(),
 };
 
+const mockSlugReservations = {
+    getActiveForUser: jest.fn().mockResolvedValue(null),
+};
+
 describe('UsersController', () => {
     let controller: UsersController;
 
@@ -42,6 +47,10 @@ describe('UsersController', () => {
             providers: [
                 { provide: UsersService, useValue: mockUsersService },
                 { provide: AuthService, useValue: mockAuthService },
+                {
+                    provide: SlugReservationService,
+                    useValue: mockSlugReservations,
+                },
             ],
         }).compile();
 
@@ -50,8 +59,8 @@ describe('UsersController', () => {
     });
 
     describe('GET /users/me', () => {
-        it('should return user data in correct format', () => {
-            const result = controller.getMe(mockUser as any);
+        it('should return user data in correct format', async () => {
+            const result = await controller.getMe(mockUser as any);
 
             expect(result).toEqual({
                 data: {
@@ -70,50 +79,51 @@ describe('UsersController', () => {
                     accountDeletionRequestedAt: null,
                     termsVersion: null,
                     billing: null,
+                    activeSlugReservation: null,
                 },
             });
         });
 
-        it('falls back to defaults for legacy users without role / worksAsBookkeeper', () => {
+        it('falls back to defaults for legacy users without role / worksAsBookkeeper', async () => {
             const legacy = {
                 ...mockUser,
                 role: undefined,
                 worksAsBookkeeper: undefined,
             };
-            const result = controller.getMe(legacy as any);
+            const result = await controller.getMe(legacy as any);
 
             expect(result.data.role).toBe('user');
             expect(result.data.worksAsBookkeeper).toBe(false);
         });
 
-        it('passes through admin role for admin users', () => {
+        it('passes through admin role for admin users', async () => {
             const admin = { ...mockUser, role: 'admin' };
-            const result = controller.getMe(admin as any);
+            const result = await controller.getMe(admin as any);
 
             expect(result.data.role).toBe('admin');
         });
 
-        it('passes through worksAsBookkeeper=true', () => {
+        it('passes through worksAsBookkeeper=true', async () => {
             const bookkeeper = { ...mockUser, worksAsBookkeeper: true };
-            const result = controller.getMe(bookkeeper as any);
+            const result = await controller.getMe(bookkeeper as any);
 
             expect(result.data.worksAsBookkeeper).toBe(true);
         });
 
-        it('should return hasPassword: false when no passwordHash', () => {
+        it('should return hasPassword: false when no passwordHash', async () => {
             const userNoPass = { ...mockUser, passwordHash: null };
-            const result = controller.getMe(userNoPass as any);
+            const result = await controller.getMe(userNoPass as any);
 
             expect(result.data.hasPassword).toBe(false);
         });
 
-        it('should return deletedAt when user is soft-deleted', () => {
+        it('should return deletedAt when user is soft-deleted', async () => {
             const deletedDate = new Date('2026-01-01');
             const deletedUser = {
                 ...mockUser,
                 deletedAt: deletedDate,
             };
-            const result = controller.getMe(deletedUser as any);
+            const result = await controller.getMe(deletedUser as any);
 
             expect(result.data.deletedAt).toBe(deletedDate);
         });

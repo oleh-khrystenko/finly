@@ -12,10 +12,19 @@ import {
     Query,
     UseGuards,
 } from '@nestjs/common';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
+import { ZodValidationPipe } from 'nestjs-zod';
 
-import type { AccessLevel } from '@finly/types';
+import {
+    InvoiceSlugCandidateSchema,
+    type AccessLevel,
+    type InvoiceSlugCandidate,
+    type SlugAvailabilityResponse,
+    type SlugReservationView,
+} from '@finly/types';
 
 import { CurrentAccessLevel } from '../../common/decorators/current-access-level.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
 import {
     AccountAccessGuard,
@@ -27,6 +36,8 @@ import {
     CurrentBusiness,
 } from '../businesses/business-access.guard';
 import type { BusinessDocument } from '../businesses/schemas/business.schema';
+import { toSlugReservationView } from '../slug-reservation/slug-reservation.service';
+import type { UserDocument } from '../users/schemas/user.schema';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { ResetInvoiceSlugDto } from './dto/reset-invoice-slug.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
@@ -87,6 +98,7 @@ export class InvoicesController {
     @Patch(':invoiceSlug')
     @UseGuards(InvoiceAccessGuard)
     async update(
+        @CurrentUser() user: UserDocument,
         @CurrentBusiness() business: BusinessDocument,
         @CurrentAccount() account: AccountDocument,
         @CurrentInvoice() invoice: InvoiceDocument,
@@ -98,7 +110,8 @@ export class InvoicesController {
             account,
             invoice,
             dto,
-            actorLevel
+            actorLevel,
+            user._id.toString()
         );
         return { data: updated };
     }
@@ -107,6 +120,7 @@ export class InvoicesController {
     @UseGuards(InvoiceAccessGuard)
     @HttpCode(HttpStatus.OK)
     async resetSlug(
+        @CurrentUser() user: UserDocument,
         @CurrentBusiness() business: BusinessDocument,
         @CurrentAccount() account: AccountDocument,
         @CurrentInvoice() invoice: InvoiceDocument,
@@ -118,9 +132,63 @@ export class InvoicesController {
             account,
             invoice,
             actorLevel,
+            user._id.toString(),
             dto.mode
         );
         return { data: updated };
+    }
+
+    /**
+     * Sprint 20 — live-доступність бажаного імені документа до оплати. Усі
+     * рівні, окремий rate-limit.
+     */
+    @Get(':invoiceSlug/slug-availability')
+    @UseGuards(InvoiceAccessGuard)
+    // Лише власний бакет `slug-availability` (30/min) — skip інших named-
+    // throttler-ів, що інакше тіньовили б ліміт (див. businesses.controller).
+    @Throttle({ 'slug-availability': { limit: 30, ttl: 60_000 } })
+    @SkipThrottle({
+        default: true,
+        'public-payment': true,
+        'qr-preview': true,
+        'help-chat': true,
+    })
+    async checkSlugAvailability(
+        @CurrentUser() user: UserDocument,
+        @CurrentInvoice() invoice: InvoiceDocument,
+        @Query(new ZodValidationPipe(InvoiceSlugCandidateSchema))
+        query: InvoiceSlugCandidate
+    ): Promise<{ data: SlugAvailabilityResponse }> {
+        const status = await this.invoicesService.checkSlugAvailability(
+            invoice,
+            query.slug,
+            user._id.toString()
+        );
+        return { data: { slug: query.slug, status } };
+    }
+
+    /**
+     * Sprint 20 — холд бажаного вільного імені документа (free-flow на Save).
+     */
+    @Post(':invoiceSlug/slug-reservation')
+    @UseGuards(InvoiceAccessGuard)
+    @HttpCode(HttpStatus.CREATED)
+    async reserveSlug(
+        @CurrentUser() user: UserDocument,
+        @CurrentBusiness() business: BusinessDocument,
+        @CurrentAccount() account: AccountDocument,
+        @CurrentInvoice() invoice: InvoiceDocument,
+        @Body(new ZodValidationPipe(InvoiceSlugCandidateSchema))
+        dto: InvoiceSlugCandidate
+    ): Promise<{ data: SlugReservationView }> {
+        const reservation = await this.invoicesService.reserveSlug(
+            business,
+            account,
+            invoice,
+            dto.slug,
+            user._id.toString()
+        );
+        return { data: toSlugReservationView(reservation) };
     }
 
     @Delete(':invoiceSlug')

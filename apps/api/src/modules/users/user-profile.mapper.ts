@@ -1,6 +1,7 @@
 import {
     DEFAULT_USER_ROLE,
     type AccessLevel,
+    type SlugReservationView,
     type UserBilling,
     type UserProfile,
 } from '@finly/types';
@@ -23,9 +24,16 @@ import type { UserDocument } from './schemas/user.schema';
  * вони лишаються тільки на боці API. Кожне поле — explicit pick, тож секрети
  * не протікають за замовчуванням.
  */
-export function mapUserToProfileResponse(user: UserDocument): UserProfile {
+export function mapUserToProfileResponse(
+    user: UserDocument,
+    // Sprint 20 — активна бронь slug (top-level, не в `billing`). Передається
+    // лише з `getMe` (cabinet-flow читає для відліку + добивання наміру); інші
+    // call-сайти (login/verify) залишають null — бронь там нерелевантна.
+    activeSlugReservation: SlugReservationView | null = null
+): UserProfile {
     return {
         id: user._id.toString(),
+        activeSlugReservation,
         email: user.email,
         role: user.role ?? DEFAULT_USER_ROLE,
         worksAsBookkeeper: user.worksAsBookkeeper ?? false,

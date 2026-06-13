@@ -10,14 +10,18 @@ import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Connection, Model, Types, type FilterQuery } from 'mongoose';
 import {
     RESPONSE_CODE,
+    SLUG_AVAILABILITY_STATUS,
     type AccessLevel,
     type AutoSlugMode,
     type CreateInvoiceRequest,
+    type SlugAvailabilityStatus,
     type SlugInput,
     type UpdateInvoiceRequest,
 } from '@finly/types';
 
 import { assertSlugEditAllowed } from '../../common/billing/assert-access';
+import { SlugReservationService } from '../slug-reservation/slug-reservation.service';
+import type { SlugReservationDocument } from '../slug-reservation/schemas/slug-reservation.schema';
 import { isTransactionsUnsupportedError } from '../../common/mongoose/transactions-unsupported';
 import {
     Account,
@@ -80,8 +84,77 @@ export class InvoicesService {
         private readonly accountModel: Model<AccountDocument>,
         @InjectConnection()
         private readonly connection: Connection,
-        private readonly slugGenerator: InvoiceSlugGeneratorService
+        private readonly slugGenerator: InvoiceSlugGeneratorService,
+        private readonly slugReservations: SlugReservationService
     ) {}
+
+    /**
+     * Sprint 20 — статус бажаного імені документа до оплати (у scope рахунку).
+     * Враховує зайнятий живий slug, чужу rename-історію і активні броні інших
+     * користувачів. Власний поточний slug/історія/бронь не блокують.
+     */
+    async checkSlugAvailability(
+        invoice: InvoiceDocument,
+        desiredSlug: string,
+        userId: string
+    ): Promise<SlugAvailabilityStatus> {
+        const newLower = desiredSlug.toLowerCase();
+        const accountId = invoice.accountId;
+        const [liveClash, historyClash, heldByOther] = await Promise.all([
+            this.invoiceModel.exists({
+                accountId,
+                slugLower: newLower,
+                _id: { $ne: invoice._id },
+            }),
+            this.historyModel.exists({
+                accountId,
+                slugLower: newLower,
+                invoiceId: { $ne: invoice._id },
+            }),
+            this.slugReservations.isNameHeldByOther(
+                SlugReservationService.invoiceScopeKey(accountId),
+                newLower,
+                new Types.ObjectId(userId)
+            ),
+        ]);
+        return liveClash || historyClash || heldByOther
+            ? SLUG_AVAILABILITY_STATUS.TAKEN
+            : SLUG_AVAILABILITY_STATUS.AVAILABLE;
+    }
+
+    /**
+     * Sprint 20 — холд бажаного вільного імені документа за користувачем.
+     * `business`/`account` потрібні для snapshot канонічного шляху у броні.
+     */
+    async reserveSlug(
+        business: BusinessDocument,
+        account: AccountDocument,
+        invoice: InvoiceDocument,
+        desiredSlug: string,
+        userId: string
+    ): Promise<SlugReservationDocument> {
+        const status = await this.checkSlugAvailability(
+            invoice,
+            desiredSlug,
+            userId
+        );
+        if (status === SLUG_AVAILABILITY_STATUS.TAKEN) {
+            throw new ConflictException({
+                code: RESPONSE_CODE.SLUG_TAKEN,
+                message: 'Invoice slug already taken in this account',
+            });
+        }
+        return this.slugReservations.reserve({
+            userId: new Types.ObjectId(userId),
+            entityType: 'invoice',
+            targetId: invoice._id,
+            scopeKey: SlugReservationService.invoiceScopeKey(invoice.accountId),
+            slug: desiredSlug,
+            businessSlug: business.slug,
+            accountSlug: account.slug,
+            invoiceSlug: invoice.slug,
+        });
+    }
 
     /**
      * Sprint 4 §4.2 — invoice create з двома незалежними race-protections.
@@ -384,6 +457,8 @@ export class InvoicesService {
         invoice: InvoiceDocument,
         dto: UpdateInvoiceRequest,
         actorLevel: AccessLevel,
+        // Sprint 20 — власник, чию активну бронь споживає успішний rename.
+        userId: string,
         markSlugCustomized = true
     ): Promise<InvoiceDocument> {
         if (dto.validUntil !== undefined) {
@@ -477,7 +552,8 @@ export class InvoicesService {
                 filter,
                 setStage,
                 dto.slug!.toLowerCase(),
-                hasCoupledFields
+                hasCoupledFields,
+                userId
             );
         }
 
@@ -524,13 +600,19 @@ export class InvoicesService {
         filter: FilterQuery<InvoiceDocument>,
         setStage: Record<string, unknown>,
         newLower: string,
-        hasCoupledFields: boolean
+        hasCoupledFields: boolean,
+        userId: string
     ): Promise<InvoiceDocument> {
         const accountId = invoice.accountId;
         const businessId = invoice.businessId;
         const oldLower = invoice.slugLower;
 
-        await this.assertSlugAvailable(accountId, invoice._id, newLower);
+        await this.assertSlugAvailable(
+            accountId,
+            invoice._id,
+            newLower,
+            userId
+        );
 
         const session = await this.connection.startSession();
         try {
@@ -549,6 +631,11 @@ export class InvoicesService {
                         },
                     ],
                     { session }
+                );
+                // Sprint 20 — атомарно споживаємо власну бронь користувача.
+                await this.slugReservations.consumeForUser(
+                    new Types.ObjectId(userId),
+                    session
                 );
                 updated = await this.invoiceModel
                     .findOneAndUpdate(filter, [{ $set: setStage }], {
@@ -601,9 +688,12 @@ export class InvoicesService {
     private async assertSlugAvailable(
         accountId: Types.ObjectId,
         invoiceId: Types.ObjectId,
-        newLower: string
+        newLower: string,
+        userId: string
     ): Promise<void> {
-        const [liveClash, historyClash] = await Promise.all([
+        // Sprint 20 — активна бронь іншого користувача блокує rename нарівні із
+        // зайнятим іменем; власна бронь не блокує (її споживає TX).
+        const [liveClash, historyClash, heldByOther] = await Promise.all([
             this.invoiceModel.exists({
                 accountId,
                 slugLower: newLower,
@@ -614,8 +704,13 @@ export class InvoicesService {
                 slugLower: newLower,
                 invoiceId: { $ne: invoiceId },
             }),
+            this.slugReservations.isNameHeldByOther(
+                SlugReservationService.invoiceScopeKey(accountId),
+                newLower,
+                new Types.ObjectId(userId)
+            ),
         ]);
-        if (liveClash || historyClash) {
+        if (liveClash || historyClash || heldByOther) {
             throw new ConflictException({
                 code: RESPONSE_CODE.SLUG_TAKEN,
                 message: 'Invoice slug already taken in this account',
@@ -639,6 +734,7 @@ export class InvoicesService {
         account: AccountDocument,
         invoice: InvoiceDocument,
         actorLevel: AccessLevel,
+        userId: string,
         mode?: AutoSlugMode
     ): Promise<InvoiceDocument> {
         // Sprint 19 — slug як платна фіча (brand+). resetSlug не йде через
@@ -661,7 +757,8 @@ export class InvoicesService {
                     business,
                     account,
                     invoice,
-                    slugInput
+                    slugInput,
+                    userId
                 );
             } catch (err) {
                 if (isDuplicateKeyError(err)) {
@@ -692,7 +789,8 @@ export class InvoicesService {
         business: BusinessDocument,
         account: AccountDocument,
         invoice: InvoiceDocument,
-        slugInput: SlugInput
+        slugInput: SlugInput,
+        userId: string
     ): Promise<InvoiceDocument> {
         const accountId = account._id;
         const businessId = business._id;
@@ -730,6 +828,11 @@ export class InvoicesService {
                         },
                     ],
                     { session }
+                );
+                // Sprint 20 — споживаємо власну бронь користувача в тій самій TX.
+                await this.slugReservations.consumeForUser(
+                    new Types.ObjectId(userId),
+                    session
                 );
                 updated = await this.invoiceModel
                     .findOneAndUpdate(

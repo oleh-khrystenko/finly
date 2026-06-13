@@ -9,15 +9,23 @@ import {
     type UpdateBusinessRequest,
 } from '@finly/types';
 import {
+    checkBusinessSlugAvailability,
     extractApiErrorCode,
     getApiMessage,
     getBusinessBySlug,
+    reserveBusinessSlug,
     resetBusinessSlug,
     updateBusiness,
 } from '@/shared/api';
 import type { BusinessWithCounts } from '@finly/types';
 import { OwnershipBadge } from '@/entities/business';
-import { useAuthStore } from '@/entities/user';
+import {
+    matchActiveSlugReservation,
+    useApplyPendingSlug,
+    useAuthStore,
+    useCanEditSlug,
+} from '@/entities/user';
+import { brandUpsellCtaLabel, startBrandCheckout } from '@/features/billing';
 import { ENV } from '@/shared/config/env';
 import UiButton from '@/shared/ui/UiButton';
 import UiBreadcrumb from '@/shared/ui/UiBreadcrumb';
@@ -54,10 +62,13 @@ export default function BusinessSlugPage() {
     const router = useRouter();
     const params = useParams<{ slug: string }>();
     const userId = useAuthStore((s) => s.user?.id);
+    const reservation = useAuthStore((s) => s.user?.activeSlugReservation ?? null);
+    const isPaid = useCanEditSlug();
     const openDeleteConfirm = useDeleteBusinessConfirmStore((s) => s.open);
 
     const [business, setBusiness] = useState<BusinessWithCounts | null>(null);
     const [error, setError] = useState<{ code: string } | null>(null);
+    const [autoEditSlug, setAutoEditSlug] = useState(false);
 
     useEffect(() => {
         if (!params.slug) return;
@@ -147,6 +158,33 @@ export default function BusinessSlugPage() {
         );
     }, [business, openDeleteConfirm, router]);
 
+    // Sprint 20 — добивання наміру після оплати: бажане ім'я з активної броні
+    // застосовується звичайним rename-ом, щойно користувач став платним.
+    const desiredSlug = business
+        ? matchActiveSlugReservation(reservation, {
+              entityType: 'business',
+              businessSlug: business.slug,
+          })
+        : null;
+    const applyReservedSlug = useCallback(
+        (slug: string) => handlePatch({ slug }),
+        [handlePatch]
+    );
+    const handleSlugTaken = useCallback(() => setAutoEditSlug(true), []);
+    useApplyPendingSlug({
+        matches: desiredSlug !== null,
+        desiredSlug,
+        apply: applyReservedSlug,
+        onTaken: handleSlugTaken,
+    });
+
+    const handleSubscribe = useCallback(() => {
+        if (!business) return;
+        void startBrandCheckout(`/business/${business.slug}`).catch(() => {
+            toast.error('Не вдалося відкрити оплату. Спробуйте ще раз');
+        });
+    }, [business]);
+
     if (business === null && !error) {
         return (
             <UiPageContainer className="py-16">
@@ -194,8 +232,21 @@ export default function BusinessSlugPage() {
             <PublicSection
                 business={business}
                 payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
+                isPaid={isPaid}
                 onSave={handlePatch}
                 onResetSlug={handleResetSlug}
+                checkSlugAvailability={(slug) =>
+                    checkBusinessSlugAvailability(business.slug, slug).then(
+                        (r) => r.status
+                    )
+                }
+                reserveSlug={(slug) => reserveBusinessSlug(business.slug, slug)}
+                onSubscribe={handleSubscribe}
+                subscribePriceLabel={brandUpsellCtaLabel()}
+                initialReservation={
+                    !isPaid && desiredSlug ? reservation : null
+                }
+                autoStartSlugEdit={autoEditSlug}
             />
             <AccountsSection businessSlug={business.slug} />
             <RequisitesCard business={business} onSave={handlePatch} />

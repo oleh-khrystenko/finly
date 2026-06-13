@@ -12,14 +12,22 @@ import {
     type UpdateAccountRequest,
 } from '@finly/types';
 import {
+    checkAccountSlugAvailability,
     getAccountBySlug,
     getApiMessage,
     getBusinessBySlug,
+    reserveAccountSlug,
     resetAccountSlug,
     updateAccount,
 } from '@/shared/api';
 import { OwnershipBadge } from '@/entities/business';
-import { useAuthStore } from '@/entities/user';
+import {
+    matchActiveSlugReservation,
+    useApplyPendingSlug,
+    useAuthStore,
+    useCanEditSlug,
+} from '@/entities/user';
+import { brandUpsellCtaLabel, startBrandCheckout } from '@/features/billing';
 import { ENV } from '@/shared/config/env';
 import UiButton from '@/shared/ui/UiButton';
 import UiBreadcrumb from '@/shared/ui/UiBreadcrumb';
@@ -84,10 +92,13 @@ export default function AccountCabinetPage() {
     const router = useRouter();
     const params = useParams<{ slug: string; accountSlug: string }>();
     const userId = useAuthStore((s) => s.user?.id);
+    const reservation = useAuthStore((s) => s.user?.activeSlugReservation ?? null);
+    const isPaid = useCanEditSlug();
     const openDeleteConfirm = useDeleteAccountConfirmStore((s) => s.open);
 
     const [data, setData] = useState<LoadedData | null>(null);
     const [error, setError] = useState<ErrorState | null>(null);
+    const [autoEditSlug, setAutoEditSlug] = useState(false);
 
     const paramBiz = params.slug;
     const paramAcc = params.accountSlug;
@@ -163,6 +174,43 @@ export default function AccountCabinetPage() {
         },
         [router]
     );
+
+    // Sprint 20 — добивання наміру після оплати (бронь slug рахунку).
+    const desiredSlug = data
+        ? matchActiveSlugReservation(reservation, {
+              entityType: 'account',
+              businessSlug: data.business.slug,
+              accountSlug: data.account.slug,
+          })
+        : null;
+    const applyReservedSlug = useCallback(
+        (slug: string) => {
+            if (!data) return Promise.resolve();
+            return handlePatch(
+                { slug },
+                {
+                    businessSlug: data.business.slug,
+                    accountSlug: data.account.slug,
+                }
+            );
+        },
+        [data, handlePatch]
+    );
+    const handleSlugTaken = useCallback(() => setAutoEditSlug(true), []);
+    useApplyPendingSlug({
+        matches: desiredSlug !== null,
+        desiredSlug,
+        apply: applyReservedSlug,
+        onTaken: handleSlugTaken,
+    });
+    const handleSubscribe = useCallback(() => {
+        if (!data) return;
+        void startBrandCheckout(
+            `/business/${data.business.slug}/account/${data.account.slug}`
+        ).catch(() => {
+            toast.error('Не вдалося відкрити оплату. Спробуйте ще раз');
+        });
+    }, [data]);
 
     const isDataCurrent =
         data?.paramBiz === paramBiz && data?.paramAcc === paramAcc;
@@ -273,8 +321,25 @@ export default function AccountCabinetPage() {
                 businessSlug={business.slug}
                 payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
                 accessSuspended={business.accessBlockedAt != null}
+                isPaid={isPaid}
                 onSave={onSaveAccount}
                 onResetSlug={handleResetSlug}
+                checkSlugAvailability={(slug) =>
+                    checkAccountSlugAvailability(
+                        business.slug,
+                        account.slug,
+                        slug
+                    ).then((r) => r.status)
+                }
+                reserveSlug={(slug) =>
+                    reserveAccountSlug(business.slug, account.slug, slug)
+                }
+                onSubscribe={handleSubscribe}
+                subscribePriceLabel={brandUpsellCtaLabel()}
+                initialReservation={
+                    !isPaid && desiredSlug ? reservation : null
+                }
+                autoStartSlugEdit={autoEditSlug}
             />
             <InvoicesSection
                 businessSlug={business.slug}

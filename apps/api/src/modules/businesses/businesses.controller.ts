@@ -11,13 +11,18 @@ import {
     UseGuards,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { Model } from 'mongoose';
 import { ZodValidationPipe } from 'nestjs-zod';
 import {
+    BusinessSlugCandidateSchema,
     CreateBusinessSchema,
     type AccessLevel,
+    type BusinessSlugCandidate,
     type BusinessWithCounts,
     type CreateBusinessRequest,
+    type SlugAvailabilityResponse,
+    type SlugReservationView,
 } from '@finly/types';
 
 import { CurrentAccessLevel } from '../../common/decorators/current-access-level.decorator';
@@ -32,6 +37,7 @@ import {
     type InvoiceDocument,
 } from '../invoices/schemas/invoice.schema';
 import type { UserDocument } from '../users/schemas/user.schema';
+import { toSlugReservationView } from '../slug-reservation/slug-reservation.service';
 import { BusinessAccessGuard, CurrentBusiness } from './business-access.guard';
 import { BusinessesService } from './businesses.service';
 import { UpdateBusinessDto } from './dto/update-business.dto';
@@ -145,6 +151,7 @@ export class BusinessesController {
     @Patch(':slug')
     @UseGuards(BusinessAccessGuard)
     async update(
+        @CurrentUser() user: UserDocument,
         @CurrentBusiness() business: BusinessDocument,
         @CurrentAccessLevel() actorLevel: AccessLevel,
         @Body() dto: UpdateBusinessDto
@@ -152,7 +159,8 @@ export class BusinessesController {
         const updated = await this.businessesService.update(
             business.slug,
             dto,
-            actorLevel
+            actorLevel,
+            user._id.toString()
         );
         return { data: updated };
     }
@@ -161,14 +169,69 @@ export class BusinessesController {
     @UseGuards(BusinessAccessGuard)
     @HttpCode(HttpStatus.OK)
     async resetSlug(
+        @CurrentUser() user: UserDocument,
         @CurrentBusiness() business: BusinessDocument,
         @CurrentAccessLevel() actorLevel: AccessLevel
     ): Promise<{ data: BusinessDocument }> {
         const updated = await this.businessesService.resetSlug(
             business,
-            actorLevel
+            actorLevel,
+            user._id.toString()
         );
         return { data: updated };
+    }
+
+    /**
+     * Sprint 20 — live-перевірка доступності бажаного slug до будь-якої оплати
+     * (гачок конверсії). Доступно всім рівням; окремий rate-limit проти
+     * перебору. Без запису. Формат валідує `BusinessSlugCandidateSchema`.
+     */
+    @Get(':slug/slug-availability')
+    @UseGuards(BusinessAccessGuard)
+    // Лише власний бакет `slug-availability` (30/min) має керувати цим роутом.
+    // Skip усіх інших named-throttler-ів: інакше нижчі `qr-preview` (10/min) і
+    // `help-chat` (20/min), що теж діють на кожному роуті, тіньовили б 30 до
+    // ефективних 10 і давали б хибний 429 на live-набір імені.
+    @Throttle({ 'slug-availability': { limit: 30, ttl: 60_000 } })
+    @SkipThrottle({
+        default: true,
+        'public-payment': true,
+        'qr-preview': true,
+        'help-chat': true,
+    })
+    async checkSlugAvailability(
+        @CurrentUser() user: UserDocument,
+        @CurrentBusiness() business: BusinessDocument,
+        @Query(new ZodValidationPipe(BusinessSlugCandidateSchema))
+        query: BusinessSlugCandidate
+    ): Promise<{ data: SlugAvailabilityResponse }> {
+        const status = await this.businessesService.checkSlugAvailability(
+            business,
+            query.slug,
+            user._id.toString()
+        );
+        return { data: { slug: query.slug, status } };
+    }
+
+    /**
+     * Sprint 20 — кладе бажане вільне ім'я на холд за користувачем (free-flow на
+     * Save). Повертає бронь з моментом спливу для inline-апселу і відліку.
+     */
+    @Post(':slug/slug-reservation')
+    @UseGuards(BusinessAccessGuard)
+    @HttpCode(HttpStatus.CREATED)
+    async reserveSlug(
+        @CurrentUser() user: UserDocument,
+        @CurrentBusiness() business: BusinessDocument,
+        @Body(new ZodValidationPipe(BusinessSlugCandidateSchema))
+        dto: BusinessSlugCandidate
+    ): Promise<{ data: SlugReservationView }> {
+        const reservation = await this.businessesService.reserveSlug(
+            business,
+            dto.slug,
+            user._id.toString()
+        );
+        return { data: toSlugReservationView(reservation) };
     }
 
     @Delete(':slug')

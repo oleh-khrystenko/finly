@@ -7,3 +7,4 @@ export { useBillingResetDialogStore } from './billingResetDialogStore';
 export { useCancelSubscriptionDialogStore } from './cancelSubscriptionDialogStore';
 export { useChangePlanDialogStore } from './changePlanDialogStore';
 export { PLAN_COPY, ONE_OFF_COPY, ACCESS_LEVEL_LABEL } from './catalogCopy';
+export { brandUpsellCtaLabel, startBrandCheckout } from './brandUpsell';

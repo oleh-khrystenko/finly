@@ -17,6 +17,7 @@ import {
 } from 'mongoose';
 import {
     RESPONSE_CODE,
+    SLUG_AVAILABILITY_STATUS,
     VAT_ALLOWED_TAXATION_SYSTEMS,
     isAccessLevelAtLeast,
     isTaxIdValidForType,
@@ -26,10 +27,13 @@ import {
     type BusinessType,
     type BusinessWithCounts,
     type CreateBusinessRequest,
+    type SlugAvailabilityStatus,
     type UpdateBusinessRequest,
 } from '@finly/types';
 
 import { assertSlugEditAllowed } from '../../common/billing/assert-access';
+import { SlugReservationService } from '../slug-reservation/slug-reservation.service';
+import type { SlugReservationDocument } from '../slug-reservation/schemas/slug-reservation.schema';
 import { isTransactionsUnsupportedError } from '../../common/mongoose/transactions-unsupported';
 import {
     RedisLockBusyError,
@@ -130,8 +134,84 @@ export class BusinessesService {
         @InjectConnection()
         private readonly connection: Connection,
         private readonly slugGenerator: SlugGeneratorService,
-        private readonly locks: RedisLockService
+        private readonly locks: RedisLockService,
+        private readonly slugReservations: SlugReservationService
     ) {}
+
+    /**
+     * Sprint 20 — статус бажаного імені до будь-якої оплати (гачок конверсії).
+     * Доступно всім рівням. Враховує ті самі правила, що й rename: reserved-
+     * список, зайнятий живий slug, чужа rename-історія, плюс активні броні інших
+     * користувачів. Власний поточний slug і власна історія/бронь не блокують.
+     */
+    async checkSlugAvailability(
+        business: BusinessDocument,
+        desiredSlug: string,
+        userId: string
+    ): Promise<SlugAvailabilityStatus> {
+        const newLower = desiredSlug.toLowerCase();
+        if (this.slugGenerator.isReserved(newLower)) {
+            return SLUG_AVAILABILITY_STATUS.RESERVED;
+        }
+        const [businessClash, historyClash, heldByOther] = await Promise.all([
+            this.businessModel.exists({
+                slugLower: newLower,
+                _id: { $ne: business._id },
+            }),
+            this.historyModel.exists({
+                slugLower: newLower,
+                businessId: { $ne: business._id },
+            }),
+            this.slugReservations.isNameHeldByOther(
+                SlugReservationService.businessScopeKey(),
+                newLower,
+                new Types.ObjectId(userId)
+            ),
+        ]);
+        return businessClash || historyClash || heldByOther
+            ? SLUG_AVAILABILITY_STATUS.TAKEN
+            : SLUG_AVAILABILITY_STATUS.AVAILABLE;
+    }
+
+    /**
+     * Sprint 20 — кладе бажане вільне ім'я на холд за користувачем (free-flow на
+     * Save). Перевіряє доступність тими самими правилами, що availability, перед
+     * холдом; конкурентний перехоплювач ловиться unique-індексом броні
+     * (`SlugReservationService.reserve` мапить у `SLUG_TAKEN`).
+     */
+    async reserveSlug(
+        business: BusinessDocument,
+        desiredSlug: string,
+        userId: string
+    ): Promise<SlugReservationDocument> {
+        const status = await this.checkSlugAvailability(
+            business,
+            desiredSlug,
+            userId
+        );
+        if (status === SLUG_AVAILABILITY_STATUS.RESERVED) {
+            throw new BadRequestException({
+                code: RESPONSE_CODE.SLUG_RESERVED,
+                message: 'Slug is reserved by the system',
+            });
+        }
+        if (status === SLUG_AVAILABILITY_STATUS.TAKEN) {
+            throw new ConflictException({
+                code: RESPONSE_CODE.SLUG_TAKEN,
+                message: 'Slug already taken',
+            });
+        }
+        return this.slugReservations.reserve({
+            userId: new Types.ObjectId(userId),
+            entityType: 'business',
+            targetId: business._id,
+            scopeKey: SlugReservationService.businessScopeKey(),
+            slug: desiredSlug,
+            businessSlug: business.slug,
+            accountSlug: null,
+            invoiceSlug: null,
+        });
+    }
 
     async create(
         userId: string,
@@ -519,6 +599,9 @@ export class BusinessesService {
         slug: string,
         dto: UpdateBusinessRequest,
         actorLevel: AccessLevel,
+        // Sprint 20 — власник, чию активну бронь споживає успішний rename
+        // (атомарно у TX). Чужа бронь блокує rename нарівні із зайнятим іменем.
+        userId: string,
         // Sprint 19 — чи позначати новий slug як кастомний. true для user-PATCH
         // (vanity), false для reset-slug (авто). Впливає лише при rename.
         markSlugCustomized = true
@@ -545,7 +628,8 @@ export class BusinessesService {
         if (slugRenaming) {
             renameOwnerId = await this.resolveSlugRenameContext(
                 newSlugLower,
-                slugLower
+                slugLower,
+                userId
             );
         }
 
@@ -668,7 +752,8 @@ export class BusinessesService {
                 renameOwnerId!,
                 slugLower,
                 newSlugLower,
-                hasCoupledFields
+                hasCoupledFields,
+                userId
             );
         }
         if (slugCaseOnlyChange) {
@@ -724,7 +809,8 @@ export class BusinessesService {
      */
     private async resolveSlugRenameContext(
         newLower: string,
-        oldLower: string
+        oldLower: string,
+        userId: string
     ): Promise<Types.ObjectId> {
         if (this.slugGenerator.isReserved(newLower)) {
             throw new BadRequestException({
@@ -745,12 +831,19 @@ export class BusinessesService {
         // Поточний бізнес сидить на `oldLower`, ми перевіряємо `newLower !==
         // oldLower` — будь-який hit на Business завжди cross-business.
         // Self-history не блокує (revert-flow видалить запис всередині TX).
-        const [businessClash, historyClash] = await Promise.all([
+        // Sprint 20 — активна бронь ІНШОГО користувача блокує rename нарівні із
+        // зайнятим іменем; власна бронь не блокує (її споживає TX нижче).
+        const [businessClash, historyClash, heldByOther] = await Promise.all([
             this.businessModel.exists({ slugLower: newLower }),
             this.historyModel.exists({
                 slugLower: newLower,
                 businessId: { $ne: owner._id },
             }),
+            this.slugReservations.isNameHeldByOther(
+                SlugReservationService.businessScopeKey(),
+                newLower,
+                new Types.ObjectId(userId)
+            ),
         ]);
         if (businessClash) {
             throw new ConflictException({
@@ -763,6 +856,12 @@ export class BusinessesService {
                 code: RESPONSE_CODE.SLUG_TAKEN,
                 message:
                     'Slug is reserved by recent rename of another business',
+            });
+        }
+        if (heldByOther) {
+            throw new ConflictException({
+                code: RESPONSE_CODE.SLUG_TAKEN,
+                message: 'Slug is currently reserved by another user',
             });
         }
         return owner._id;
@@ -792,7 +891,8 @@ export class BusinessesService {
         businessId: Types.ObjectId,
         oldLower: string,
         newLower: string,
-        hasCoupledFields: boolean
+        hasCoupledFields: boolean,
+        userId: string
     ): Promise<BusinessDocument> {
         const session = await this.connection.startSession();
         try {
@@ -804,6 +904,7 @@ export class BusinessesService {
                     businessId,
                     oldLower,
                     hasCoupledFields,
+                    userId,
                     session
                 );
             });
@@ -841,6 +942,7 @@ export class BusinessesService {
         businessId: Types.ObjectId,
         oldLower: string,
         hasCoupledFields: boolean,
+        userId: string,
         session: ClientSession
     ): Promise<BusinessDocument> {
         const newLower = setPayload.slugLower as string;
@@ -853,6 +955,14 @@ export class BusinessesService {
         await this.historyModel.create([{ businessId, slugLower: oldLower }], {
             session,
         });
+
+        // Sprint 20 — атомарно споживаємо власну бронь користувача разом із
+        // записом slug (whichever name; одна бронь на користувача, після rename
+        // вона у будь-якому разі неактуальна).
+        await this.slugReservations.consumeForUser(
+            new Types.ObjectId(userId),
+            session
+        );
 
         const updated = await this.businessModel
             .findOneAndUpdate(
@@ -889,11 +999,18 @@ export class BusinessesService {
      */
     async resetSlug(
         business: BusinessDocument,
-        actorLevel: AccessLevel
+        actorLevel: AccessLevel,
+        userId: string
     ): Promise<BusinessDocument> {
         const newSlug = await this.slugGenerator.generateRandomSlug();
         // markSlugCustomized=false — reset повертає до авто, не vanity.
-        return this.update(business.slug, { slug: newSlug }, actorLevel, false);
+        return this.update(
+            business.slug,
+            { slug: newSlug },
+            actorLevel,
+            userId,
+            false
+        );
     }
 
     /**

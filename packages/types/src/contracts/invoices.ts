@@ -173,6 +173,15 @@ export const UpdateInvoiceSchema = z
 export type UpdateInvoiceRequest = z.infer<typeof UpdateInvoiceSchema>;
 
 /**
+ * Sprint 20 — бажане ім'я для перевірки доступності і броні у scope документа.
+ */
+export const InvoiceSlugCandidateSchema = z
+    .object({ slug: invoiceSlugSchema })
+    .strict();
+
+export type InvoiceSlugCandidate = z.infer<typeof InvoiceSlugCandidateSchema>;
+
+/**
  * `ResetInvoiceSlugSchema` — body для `POST .../reset-slug`. `mode` — one-time
  * формат перевипуску (5 авто-режимів, без `explicit`: ручний rename живе у
  * `UpdateInvoiceSchema.slug`). `optional`: відсутність → service fallback на

@@ -7,6 +7,8 @@ import {
     type Invoice,
     type PublicInvoiceView,
     type ResetInvoiceSlugRequest,
+    type SlugAvailabilityResponse,
+    type SlugReservationView,
     type UpdateInvoiceRequest,
 } from '@finly/types';
 
@@ -109,6 +111,34 @@ export async function resetInvoiceSlug(
         body
     );
     return InvoiceSchema.parse(data.data);
+}
+
+/** Sprint 20 — live-доступність бажаного slug документа (у scope рахунку). */
+export async function checkInvoiceSlugAvailability(
+    businessSlug: string,
+    accountSlug: string,
+    invoiceSlug: string,
+    desired: string
+): Promise<SlugAvailabilityResponse> {
+    const { data } = await apiClient.get<{ data: SlugAvailabilityResponse }>(
+        `${invoicesBase(businessSlug, accountSlug)}/${encodeURIComponent(invoiceSlug)}/slug-availability`,
+        { params: { slug: desired } }
+    );
+    return data.data;
+}
+
+/** Sprint 20 — холд бажаного вільного slug документа за користувачем. */
+export async function reserveInvoiceSlug(
+    businessSlug: string,
+    accountSlug: string,
+    invoiceSlug: string,
+    desired: string
+): Promise<SlugReservationView> {
+    const { data } = await apiClient.post<{ data: SlugReservationView }>(
+        `${invoicesBase(businessSlug, accountSlug)}/${encodeURIComponent(invoiceSlug)}/slug-reservation`,
+        { slug: desired }
+    );
+    return data.data;
 }
 
 export async function deleteInvoice(
