@@ -27,8 +27,12 @@ export interface UiSlugEditorProps {
     onSave: (slug: string) => Promise<void>;
     /** Відкриває confirm-діалог скидання на свіже випадкове посилання. */
     onRegenerate: () => void;
-    /** Primary CTA апселу: прямий checkout підписки з поверненням на цю сторінку. */
-    onSubscribe: () => void;
+    /**
+     * Primary CTA апселу: прямий checkout підписки з поверненням на цю сторінку.
+     * Може повертати Promise — на reject (збій створення сесії) контрол знімає
+     * loading з кнопки для повтору; на success сторінка редіректить на провайдера.
+     */
+    onSubscribe: () => void | Promise<void>;
     /** Підпис ціни на primary CTA («Підписатись · 49 грн/міс»). */
     subscribePriceLabel: string;
     /**

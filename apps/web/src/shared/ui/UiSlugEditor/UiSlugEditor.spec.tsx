@@ -116,6 +116,45 @@ describe('UiSlugEditor (Sprint 20 — slug upsell flow)', () => {
         expect(screen.getByLabelText('Адреса сторінки')).toBeInTheDocument();
     });
 
+    it('autoStartEdit увімкнений ПІСЛЯ mount (поач-фолбек) відкриває поле', () => {
+        const props = { ...baseProps(), isPaid: true, autoStartEdit: false };
+        const { rerender } = render(<UiSlugEditor {...props} />);
+        // На mount поле закрите (read-mode).
+        expect(
+            screen.queryByLabelText('Адреса сторінки')
+        ).not.toBeInTheDocument();
+
+        // Батько вмикає фолбек після провалу добивання наміру (SLUG_TAKEN).
+        rerender(<UiSlugEditor {...props} autoStartEdit={true} />);
+        expect(screen.getByLabelText('Адреса сторінки')).toBeInTheDocument();
+    });
+
+    it('upsell: збій старту оплати знімає loading з кнопки «Підписатись»', async () => {
+        const onSubscribe = jest
+            .fn()
+            .mockRejectedValue(new Error('checkout failed'));
+        const props = {
+            ...baseProps(),
+            isPaid: false,
+            initialReservation: RESERVATION,
+            onSubscribe,
+        };
+        render(<UiSlugEditor {...props} />);
+
+        const cta = screen.getByRole('button', {
+            name: 'Підписатись · 49 грн/міс',
+        });
+        fireEvent.click(cta);
+
+        await waitFor(() => {
+            expect(onSubscribe).toHaveBeenCalled();
+        });
+        // Після reject кнопка знову активна (loading знято) — повтор можливий.
+        await waitFor(() => {
+            expect(cta).not.toBeDisabled();
+        });
+    });
+
     it('paid: зміна лише регістру (case-only) доходить до onSave, не короткозамикається', async () => {
         const props = { ...baseProps(), isPaid: true, currentSlug: 'old-slug' };
         render(<UiSlugEditor {...props} />);

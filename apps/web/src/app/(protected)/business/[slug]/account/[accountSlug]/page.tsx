@@ -196,7 +196,10 @@ export default function AccountCabinetPage() {
         },
         [data, handlePatch]
     );
-    const handleSlugTaken = useCallback(() => setAutoEditSlug(true), []);
+    const handleSlugTaken = useCallback(() => {
+        toast.error('Це посилання щойно зайняли. Оберіть інше');
+        setAutoEditSlug(true);
+    }, []);
     useApplyPendingSlug({
         matches: desiredSlug !== null,
         desiredSlug,
@@ -204,8 +207,8 @@ export default function AccountCabinetPage() {
         onTaken: handleSlugTaken,
     });
     const handleSubscribe = useCallback(() => {
-        if (!data) return;
-        void startBrandCheckout(
+        if (!data) return Promise.resolve();
+        return startBrandCheckout(
             `/business/${data.business.slug}/account/${data.account.slug}`
         ).catch(() => {
             toast.error('Не вдалося відкрити оплату. Спробуйте ще раз');

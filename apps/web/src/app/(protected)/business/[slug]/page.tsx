@@ -170,7 +170,10 @@ export default function BusinessSlugPage() {
         (slug: string) => handlePatch({ slug }),
         [handlePatch]
     );
-    const handleSlugTaken = useCallback(() => setAutoEditSlug(true), []);
+    const handleSlugTaken = useCallback(() => {
+        toast.error('Це посилання щойно зайняли. Оберіть інше');
+        setAutoEditSlug(true);
+    }, []);
     useApplyPendingSlug({
         matches: desiredSlug !== null,
         desiredSlug,
@@ -179,8 +182,8 @@ export default function BusinessSlugPage() {
     });
 
     const handleSubscribe = useCallback(() => {
-        if (!business) return;
-        void startBrandCheckout(`/business/${business.slug}`).catch(() => {
+        if (!business) return Promise.resolve();
+        return startBrandCheckout(`/business/${business.slug}`).catch(() => {
             toast.error('Не вдалося відкрити оплату. Спробуйте ще раз');
         });
     }, [business]);

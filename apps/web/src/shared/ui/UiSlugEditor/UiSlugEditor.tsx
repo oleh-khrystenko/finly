@@ -131,6 +131,22 @@ export default function UiSlugEditor({
         return () => clearInterval(interval);
     }, [mode, reservation]);
 
+    // Sprint 20 — поач-фолбек: батько вмикає `autoStartEdit` уже ПІСЛЯ mount
+    // (добивання наміру впало на SLUG_TAKEN, ім'я перехопили). useState-
+    // ініціалізатор читає проп лише на першому рендері, тож реагуємо ефектом —
+    // відкриваємо поле з поточним іменем. Ref-guard, щоб не перебивати ручний
+    // Cancel наступними рендерами з тим самим `autoStartEdit=true`.
+    const autoEditAppliedRef = useRef(false);
+    useEffect(() => {
+        if (autoStartEdit && !autoEditAppliedRef.current) {
+            autoEditAppliedRef.current = true;
+            setDraft(currentSlug);
+            setFormatError(undefined);
+            setAvailability({ status: null, checking: false });
+            setMode('edit');
+        }
+    }, [autoStartEdit, currentSlug]);
+
     const startEdit = () => {
         setDraft(currentSlug);
         setFormatError(undefined);
@@ -242,7 +258,15 @@ export default function UiSlugEditor({
                         loading={subscribing}
                         onClick={() => {
                             setSubscribing(true);
-                            onSubscribe();
+                            // `onSubscribe` редіректить на провайдера (сторінка
+                            // вивантажується) АБО reject-ить на збої створення
+                            // сесії. Помилку показує батько (toast); тут лише
+                            // знімаємо loading, щоб кнопка лишалась клікабельною
+                            // для повтору. `.catch` ковтає reject (свій toast уже
+                            // показано) — інакше unhandled rejection.
+                            void Promise.resolve(onSubscribe())
+                                .catch(() => {})
+                                .finally(() => setSubscribing(false));
                         }}
                         className="w-full sm:w-auto"
                     >
