@@ -36,6 +36,7 @@ const mockAuthService = {
 
 const mockSlugReservations = {
     getActiveForUser: jest.fn().mockResolvedValue(null),
+    consumeForUser: jest.fn().mockResolvedValue(undefined),
 };
 
 describe('UsersController', () => {
@@ -164,6 +165,19 @@ describe('UsersController', () => {
                 lastName: 'Name',
                 avatar: 'https://new.url',
             });
+        });
+    });
+
+    describe('DELETE /users/me/slug-reservation', () => {
+        it('споживає власну бронь користувача і повертає released', async () => {
+            const result = await controller.releaseSlugReservation(
+                mockUser as any
+            );
+
+            expect(mockSlugReservations.consumeForUser).toHaveBeenCalledWith(
+                mockUser._id
+            );
+            expect(result).toEqual({ data: { released: true } });
         });
     });
 

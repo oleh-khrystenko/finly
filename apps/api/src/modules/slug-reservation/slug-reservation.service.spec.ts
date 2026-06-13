@@ -3,7 +3,10 @@ import { MongooseModule, getModelToken } from '@nestjs/mongoose';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { Model, Types } from 'mongoose';
 
-import { RedisLockService } from '../../common/services/redis-lock.service';
+import {
+    RedisLockBusyError,
+    RedisLockService,
+} from '../../common/services/redis-lock.service';
 import { createStandaloneMongo } from '../../test-utils/mongo';
 import {
     SlugReservation,
@@ -165,6 +168,55 @@ describe('SlugReservationService (Sprint 20, MongoMemoryServer)', () => {
     it('consumeForUser видаляє бронь користувача', async () => {
         await service.reserve(baseParams(userA, targetA, 'to-consume'));
         await service.consumeForUser(userA);
+        await expect(service.getActiveForUser(userA)).resolves.toBeNull();
+    });
+
+    // Лок зайнятий N перших викликів, далі делегує fn (симуляція конкурентного
+    // self-reserve, що тримає per-user лок). Власний інстанс сервісу, бо лок
+    // інжектиться у конструктор.
+    class ProgrammableLock {
+        failsLeft = Number.POSITIVE_INFINITY;
+        calls = 0;
+        async withLock<T>(
+            key: string,
+            _ttl: number,
+            fn: () => Promise<T>
+        ): Promise<T> {
+            this.calls++;
+            if (this.failsLeft > 0) {
+                this.failsLeft--;
+                throw new RedisLockBusyError(key);
+            }
+            return fn();
+        }
+    }
+
+    it('reserve ретраїть на зайнятому локу і зрештою кладе бронь', async () => {
+        const lock = new ProgrammableLock();
+        lock.failsLeft = 2; // перші 2 спроби — busy, 3-тя проходить
+        const svc = new SlugReservationService(
+            model,
+            lock as unknown as RedisLockService
+        );
+
+        const doc = await svc.reserve(baseParams(userA, targetA, 'retry-win'));
+
+        expect(doc.slugLower).toBe('retry-win');
+        expect(lock.calls).toBe(3);
+    });
+
+    it('reserve вичерпав ретраї на локу → SLUG_RESERVATION_IN_PROGRESS, нічого не записано', async () => {
+        const lock = new ProgrammableLock(); // failsLeft = Infinity → усі спроби busy
+        const svc = new SlugReservationService(
+            model,
+            lock as unknown as RedisLockService
+        );
+
+        await expect(
+            svc.reserve(baseParams(userA, targetA, 'never-acquired'))
+        ).rejects.toMatchObject({
+            response: { code: 'SLUG_RESERVATION_IN_PROGRESS' },
+        });
         await expect(service.getActiveForUser(userA)).resolves.toBeNull();
     });
 });

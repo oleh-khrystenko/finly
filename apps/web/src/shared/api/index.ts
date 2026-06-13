@@ -67,4 +67,4 @@ export {
     getPublicInvoiceView,
 } from './invoices';
 export type { PaginatedInvoices } from './invoices';
-export { clearPendingPostLoginTarget } from './users';
+export { clearPendingPostLoginTarget, releaseSlugReservation } from './users';

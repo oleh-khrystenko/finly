@@ -2,7 +2,13 @@
 
 import { useEffect, useRef } from 'react';
 
-import { getMe } from '@/shared/api';
+import { RESPONSE_CODE } from '@finly/types';
+
+import {
+    extractApiErrorCode,
+    getMe,
+    releaseSlugReservation,
+} from '@/shared/api';
 import { useAuthStore } from './authStore';
 import { useCanEditSlug } from './useAccessLevel';
 
@@ -38,9 +44,26 @@ export function useApplyPendingSlug(opts: {
                 await apply(desiredSlug);
                 const user = await getMe();
                 useAuthStore.getState().setUser(user);
-            } catch {
+            } catch (err) {
+                // Розрізняємо «ім'я перехопили» від транзієнтного збою rename-у
+                // (мережа, 5xx, throttle). Лише SLUG_TAKEN означає, що бронь
+                // мертва: тоді відкриваємо поле і знімаємо її. На будь-якій іншій
+                // помилці бронь ще валідна, тож зберігаємо холд (auto-добивання
+                // повториться на наступному mount; doneRef стримує повтор тут).
+                if (extractApiErrorCode(err) !== RESPONSE_CODE.SLUG_TAKEN) return;
                 // Ім'я перехопили (рідко): підписка вже діє, відкриваємо поле.
                 onTaken();
+                // Знімаємо мертву бронь і освіжаємо стор, інакше провальне
+                // добивання повторювалось би з тим самим toast на кожному
+                // наступному заході до спливу TTL (rename-fail НЕ споживає
+                // бронь). Best-effort: doneRef стримує повтор у цьому mount.
+                try {
+                    await releaseSlugReservation();
+                    const user = await getMe();
+                    useAuthStore.getState().setUser(user);
+                } catch {
+                    // Стор лишаємо як є; повтор стримує doneRef до наступного mount.
+                }
             }
         })();
     }, [isPaid, matches, desiredSlug, apply, onTaken]);

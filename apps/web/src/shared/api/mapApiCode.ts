@@ -59,6 +59,10 @@ const ERRORS: Record<string, MessageDict> = {
         // трьох модулів, тож у generic-fallback.
         slug_edit_requires_plan:
             'Власні посилання доступні на тарифі «Свій бренд». Оформіть підписку у розділі «Білінг»',
+        // Sprint 20 — бронь slug серіалізується per-user локом; конкурентний
+        // self-reserve не звільнив його за ретраї. Спільне для трьох модулів.
+        slug_reservation_in_progress:
+            'Збереження вже виконується. Спробуйте за кілька секунд',
         rate_limit_exceeded:
             'Забагато запитів. Спробуйте через {minutes} хвилин',
         email_send_failed: 'Не вдалося надіслати лист. Спробуйте пізніше',

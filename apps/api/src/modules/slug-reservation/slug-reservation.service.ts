@@ -8,7 +8,10 @@ import {
     type SlugReservationView,
 } from '@finly/types';
 
-import { RedisLockService } from '../../common/services/redis-lock.service';
+import {
+    RedisLockBusyError,
+    RedisLockService,
+} from '../../common/services/redis-lock.service';
 import {
     SlugReservation,
     SlugReservationDocument,
@@ -16,6 +19,12 @@ import {
 
 const RESERVE_LOCK_PREFIX = 'slug_reservation:';
 const RESERVE_LOCK_TTL_MS = 5_000;
+// Конкурентний self-reserve (та сама сутність у двох вкладках) контендить на
+// per-user лок. Критична секція коротка (3 DB-оп), тож короткий bounded-retry
+// дочікується попередньої броні замість 500 на unhandled RedisLockBusyError
+// (симетрично до create-флоу у BusinessesService).
+const RESERVE_LOCK_MAX_ATTEMPTS = 5;
+const RESERVE_LOCK_RETRY_DELAY_MS = 150;
 const TTL_MS = SLUG_RESERVATION_TTL_MINUTES * 60 * 1000;
 
 export interface ReserveSlugParams {
@@ -93,39 +102,62 @@ export class SlugReservationService {
      */
     async reserve(params: ReserveSlugParams): Promise<SlugReservationDocument> {
         const lockKey = `${RESERVE_LOCK_PREFIX}${params.userId.toString()}`;
-        return this.locks.withLock(lockKey, RESERVE_LOCK_TTL_MS, async () => {
-            const now = new Date();
-            await this.model.deleteMany({ userId: params.userId }).exec();
-            await this.model
-                .deleteMany({
-                    scopeKey: params.scopeKey,
-                    slugLower: params.slug.toLowerCase(),
-                    expiresAt: { $lte: now },
-                })
-                .exec();
+        for (let attempt = 1; attempt <= RESERVE_LOCK_MAX_ATTEMPTS; attempt++) {
             try {
-                return await this.model.create({
-                    userId: params.userId,
-                    entityType: params.entityType,
-                    targetId: params.targetId,
-                    businessSlug: params.businessSlug,
-                    accountSlug: params.accountSlug,
-                    invoiceSlug: params.invoiceSlug,
-                    scopeKey: params.scopeKey,
-                    slug: params.slug,
-                    slugLower: params.slug.toLowerCase(),
-                    expiresAt: new Date(now.getTime() + TTL_MS),
-                });
+                return await this.locks.withLock(
+                    lockKey,
+                    RESERVE_LOCK_TTL_MS,
+                    () => this.reserveLocked(params)
+                );
             } catch (err) {
-                if (isDuplicateKeyError(err)) {
-                    throw new ConflictException({
-                        code: RESPONSE_CODE.SLUG_TAKEN,
-                        message: 'Slug is currently reserved by another user',
-                    });
+                if (!(err instanceof RedisLockBusyError)) {
+                    throw err;
                 }
-                throw err;
+                if (attempt < RESERVE_LOCK_MAX_ATTEMPTS) {
+                    await delay(RESERVE_LOCK_RETRY_DELAY_MS);
+                }
             }
+        }
+        throw new ConflictException({
+            code: RESPONSE_CODE.SLUG_RESERVATION_IN_PROGRESS,
+            message: 'Slug reservation already in progress',
         });
+    }
+
+    private async reserveLocked(
+        params: ReserveSlugParams
+    ): Promise<SlugReservationDocument> {
+        const now = new Date();
+        await this.model.deleteMany({ userId: params.userId }).exec();
+        await this.model
+            .deleteMany({
+                scopeKey: params.scopeKey,
+                slugLower: params.slug.toLowerCase(),
+                expiresAt: { $lte: now },
+            })
+            .exec();
+        try {
+            return await this.model.create({
+                userId: params.userId,
+                entityType: params.entityType,
+                targetId: params.targetId,
+                businessSlug: params.businessSlug,
+                accountSlug: params.accountSlug,
+                invoiceSlug: params.invoiceSlug,
+                scopeKey: params.scopeKey,
+                slug: params.slug,
+                slugLower: params.slug.toLowerCase(),
+                expiresAt: new Date(now.getTime() + TTL_MS),
+            });
+        } catch (err) {
+            if (isDuplicateKeyError(err)) {
+                throw new ConflictException({
+                    code: RESPONSE_CODE.SLUG_TAKEN,
+                    message: 'Slug is currently reserved by another user',
+                });
+            }
+            throw err;
+        }
     }
 
     /**
@@ -161,6 +193,10 @@ export function toSlugReservationView(
         accountSlug: doc.accountSlug,
         invoiceSlug: doc.invoiceSlug,
     };
+}
+
+function delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function isDuplicateKeyError(err: unknown): boolean {
