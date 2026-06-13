@@ -108,12 +108,10 @@ export class AccountsController {
     @HttpCode(HttpStatus.OK)
     async resetSlug(
         @CurrentUser() user: UserDocument,
-        @CurrentAccount() account: AccountDocument,
-        @CurrentAccessLevel() actorLevel: AccessLevel
+        @CurrentAccount() account: AccountDocument
     ): Promise<{ data: AccountDocument }> {
         const updated = await this.accountsService.resetSlug(
             account,
-            actorLevel,
             user._id.toString()
         );
         return { data: updated };

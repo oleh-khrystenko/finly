@@ -801,7 +801,7 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                 .expect(200);
         });
 
-        it('Sprint 19 — reset-slug без тарифу → 403 SLUG_EDIT_REQUIRES_PLAN', async () => {
+        it('reset-slug без тарифу → 200, свіжий авто-slug (гігієна номера, не платна фіча)', async () => {
             const user = await createUser();
             const { slug, accountSlug } = await createBusinessFor(user);
             const create = await supertest(app.getHttpServer())
@@ -825,10 +825,9 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                 )
                 .set('Authorization', bearerFor(user))
                 .send({})
-                .expect(403);
-            expect((res.body as { error: { code: string } }).error.code).toBe(
-                'SLUG_EDIT_REQUIRES_PLAN'
-            );
+                .expect(200);
+            const newSlug = (res.body as { data: { slug: string } }).data.slug;
+            expect(newSlug).not.toBe(invoiceSlug);
         });
 
         it('inline-edit paymentPurpose — 200', async () => {

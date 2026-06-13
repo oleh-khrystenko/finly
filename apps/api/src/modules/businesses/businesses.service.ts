@@ -620,8 +620,10 @@ export class BusinessesService {
         // обходив би SLUG_EDIT_REQUIRES_PLAN через зміну регістру.
         const slugCaseOnlyChange =
             newSlug !== undefined && !slugRenaming && newSlug !== slug;
-        if (slugRenaming || slugCaseOnlyChange) {
-            // Sprint 19 — slug як платна фіча (brand+). Cheap-reject до DB-роботи.
+        if ((slugRenaming || slugCaseOnlyChange) && markSlugCustomized) {
+            // Sprint 19 — vanity-slug як платна фіча (brand+). Cheap-reject до
+            // DB-роботи. Гейт лише на кастомне ім'я (`markSlugCustomized=true`);
+            // reset-slug (false) — гігієна випадкової адреси, доступна всім рівням.
             assertSlugEditAllowed(actorLevel);
         }
         let renameOwnerId: Types.ObjectId | null = null;
@@ -999,18 +1001,13 @@ export class BusinessesService {
      */
     async resetSlug(
         business: BusinessDocument,
-        actorLevel: AccessLevel,
         userId: string
     ): Promise<BusinessDocument> {
         const newSlug = await this.slugGenerator.generateRandomSlug();
-        // markSlugCustomized=false — reset повертає до авто, не vanity.
-        return this.update(
-            business.slug,
-            { slug: newSlug },
-            actorLevel,
-            userId,
-            false
-        );
+        // markSlugCustomized=false — reset повертає до авто, не vanity. Гейт
+        // assertSlugEditAllowed не спрацьовує (умова `&& markSlugCustomized`),
+        // тож рівень доступу тут не читається: reset доступний усім рівням.
+        return this.update(business.slug, { slug: newSlug }, 'none', userId, false);
     }
 
     /**

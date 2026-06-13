@@ -383,18 +383,22 @@ export default function UiSlugEditor({
                 >
                     Редагувати
                 </UiButton>
-                {isPaid && (
-                    <UiButton
-                        type="button"
-                        variant="outline"
-                        size="md"
-                        onClick={onRegenerate}
-                        IconLeft={<RefreshCw />}
-                        className="w-full sm:w-auto"
-                    >
-                        Згенерувати нове посилання
-                    </UiButton>
-                )}
+                {/*
+                 * Згенерувати нове посилання — доступне всім рівням. Це не
+                 * брендова фіча (видає випадковий slug), а гігієна/безпека:
+                 * спалити витекле посилання й отримати свіже. На Free це єдиний
+                 * важіль над власною адресою, тож без гейта й без апселу.
+                 */}
+                <UiButton
+                    type="button"
+                    variant="outline"
+                    size="md"
+                    onClick={onRegenerate}
+                    IconLeft={<RefreshCw />}
+                    className="w-full sm:w-auto"
+                >
+                    Згенерувати нове посилання
+                </UiButton>
             </div>
         </div>
     );

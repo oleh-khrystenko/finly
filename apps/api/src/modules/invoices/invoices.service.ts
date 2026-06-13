@@ -733,13 +733,12 @@ export class InvoicesService {
         business: BusinessDocument,
         account: AccountDocument,
         invoice: InvoiceDocument,
-        actorLevel: AccessLevel,
         userId: string,
         mode?: AutoSlugMode
     ): Promise<InvoiceDocument> {
-        // Sprint 19 — slug як платна фіча (brand+). resetSlug не йде через
-        // update(), тож гейт явний тут.
-        assertSlugEditAllowed(actorLevel);
+        // reset-slug — гігієна номера рахунку (свіжий авто-slug), а не платне
+        // кастомне ім'я, тож доступний усім рівням (без assertSlugEditAllowed).
+        // Платний гейт лишається на vanity-PATCH (`update()`).
         const effectiveMode: AutoSlugMode =
             mode ?? account.invoiceSlugPresetDefault ?? 'simple';
         const slugInput: SlugInput =

@@ -608,7 +608,7 @@ describe('Accounts E2E (Sprint 9 §SP-1..§SP-3)', () => {
             );
         });
 
-        it('Sprint 19 — reset-slug без тарифу → 403 SLUG_EDIT_REQUIRES_PLAN', async () => {
+        it('reset-slug без тарифу → 200, свіжий авто-slug (гігієна адреси, не платна фіча)', async () => {
             const user = await createUser();
             const { businessSlug, accountSlug } = await seedAccount(user);
 
@@ -617,10 +617,14 @@ describe('Accounts E2E (Sprint 9 §SP-1..§SP-3)', () => {
                     `/api/businesses/me/${businessSlug}/accounts/${accountSlug}/reset-slug`
                 )
                 .set('Authorization', bearerFor(user))
-                .expect(403);
-            expect((res.body as { error: { code: string } }).error.code).toBe(
-                'SLUG_EDIT_REQUIRES_PLAN'
-            );
+                .expect(200);
+            const newSlug = (res.body as { data: { slug: string } }).data.slug;
+            expect(newSlug).not.toBe(accountSlug);
+            // Нова адреса резолвиться у кабінеті.
+            await supertest(app.getHttpServer())
+                .get(`/api/businesses/me/${businessSlug}/accounts/${newSlug}`)
+                .set('Authorization', bearerFor(user))
+                .expect(200);
         });
 
         it('Sprint 15 — slug-rename колізія у межах бізнесу → 409 SLUG_TAKEN', async () => {

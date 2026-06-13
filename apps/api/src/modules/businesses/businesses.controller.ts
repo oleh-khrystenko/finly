@@ -170,12 +170,10 @@ export class BusinessesController {
     @HttpCode(HttpStatus.OK)
     async resetSlug(
         @CurrentUser() user: UserDocument,
-        @CurrentBusiness() business: BusinessDocument,
-        @CurrentAccessLevel() actorLevel: AccessLevel
+        @CurrentBusiness() business: BusinessDocument
     ): Promise<{ data: BusinessDocument }> {
         const updated = await this.businessesService.resetSlug(
             business,
-            actorLevel,
             user._id.toString()
         );
         return { data: updated };

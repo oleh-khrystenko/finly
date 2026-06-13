@@ -531,17 +531,27 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                 expect(pipeline[0].$set.slugCustomized).toBeUndefined();
             });
 
-            it('resetSlug на none → SLUG_EDIT_REQUIRES_PLAN, TX не стартує', async () => {
-                await expectSlugGate(
-                    service.resetSlug(
-                        business,
-                        account,
-                        invoiceDoc('inv-001-x'),
-                        'none',
-                        TEST_USER_ID
-                    )
+            it('resetSlug не гейтиться рівнем — стартує TX і пише авто-slug (доступно всім)', async () => {
+                invoiceModel.findOneAndUpdate.mockReturnValue({
+                    exec: jest
+                        .fn()
+                        .mockResolvedValue({ slug: 'inv-001-aaaaaaaa' }),
+                });
+                const result = await service.resetSlug(
+                    business,
+                    account,
+                    invoiceDoc('inv-001-x'),
+                    TEST_USER_ID
                 );
-                expect(startSessionMock).not.toHaveBeenCalled();
+                expect(startSessionMock).toHaveBeenCalledTimes(1);
+                expect(slugGenerator.generateInvoiceSlug).toHaveBeenCalled();
+                const setArg = invoiceModel.findOneAndUpdate.mock
+                    .calls[0]![1] as { $set: Record<string, unknown> };
+                // reset повертає до авто-slug, не кастомного.
+                expect(setArg.$set.slugCustomized).toBe(false);
+                expect((result as { slug: string }).slug).toBe(
+                    'inv-001-aaaaaaaa'
+                );
             });
 
             it('case-only зміна на brand → проходить + позначає slugCustomized', async () => {

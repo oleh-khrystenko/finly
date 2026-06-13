@@ -124,14 +124,12 @@ export class InvoicesController {
         @CurrentBusiness() business: BusinessDocument,
         @CurrentAccount() account: AccountDocument,
         @CurrentInvoice() invoice: InvoiceDocument,
-        @CurrentAccessLevel() actorLevel: AccessLevel,
         @Body() dto: ResetInvoiceSlugDto
     ): Promise<{ data: InvoiceDocument }> {
         const updated = await this.invoicesService.resetSlug(
             business,
             account,
             invoice,
-            actorLevel,
             user._id.toString(),
             dto.mode
         );

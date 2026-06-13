@@ -391,8 +391,10 @@ export class AccountsService {
         // зміною регістру).
         const slugCaseOnlyChange =
             dto.slug !== undefined && !renaming && dto.slug !== account.slug;
-        if (renaming || slugCaseOnlyChange) {
-            // Sprint 19 — slug як платна фіча (brand+).
+        if ((renaming || slugCaseOnlyChange) && markSlugCustomized) {
+            // Sprint 19 — vanity-slug як платна фіча (brand+). Гейт лише на
+            // кастомне ім'я (`markSlugCustomized=true`); reset-slug (false) —
+            // гігієна випадкової адреси, доступна всім рівням.
             assertSlugEditAllowed(actorLevel);
         }
         if (renaming) {
@@ -551,20 +553,15 @@ export class AccountsService {
      */
     async resetSlug(
         account: AccountDocument,
-        actorLevel: AccessLevel,
         userId: string
     ): Promise<AccountDocument> {
         const newSlug = await this.slugGenerator.generateUnique(
             account.businessId
         );
-        // markSlugCustomized=false — reset повертає до авто.
-        return this.update(
-            account,
-            { slug: newSlug },
-            actorLevel,
-            userId,
-            false
-        );
+        // markSlugCustomized=false — reset повертає до авто. Гейт
+        // assertSlugEditAllowed не спрацьовує (умова `&& markSlugCustomized`),
+        // тож рівень доступу тут не читається: reset доступний усім рівням.
+        return this.update(account, { slug: newSlug }, 'none', userId, false);
     }
 
     private async assertSlugAvailable(
