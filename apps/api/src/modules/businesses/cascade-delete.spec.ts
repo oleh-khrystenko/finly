@@ -27,6 +27,7 @@ import {
     InvoiceDocument,
     InvoiceSchema,
 } from '../invoices/schemas/invoice.schema';
+import { SlugReservationService } from '../slug-reservation/slug-reservation.service';
 import { BusinessesService } from './businesses.service';
 import {
     BusinessSlugHistory,
@@ -102,6 +103,16 @@ describe('BusinessesService cascade-delete (Sprint 4 §SP-5, MongoMemoryReplSet)
                             _ttlMs: number,
                             fn: () => Promise<unknown>
                         ) => fn(),
+                    },
+                },
+                {
+                    // Cascade-delete броні не торкається — stub.
+                    provide: SlugReservationService,
+                    useValue: {
+                        isNameHeldByOther: jest.fn().mockResolvedValue(false),
+                        reserve: jest.fn(),
+                        consumeForUser: jest.fn().mockResolvedValue(undefined),
+                        getActiveForUser: jest.fn().mockResolvedValue(null),
                     },
                 },
             ],

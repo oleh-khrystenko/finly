@@ -1007,7 +1007,13 @@ export class BusinessesService {
         // markSlugCustomized=false — reset повертає до авто, не vanity. Гейт
         // assertSlugEditAllowed не спрацьовує (умова `&& markSlugCustomized`),
         // тож рівень доступу тут не читається: reset доступний усім рівням.
-        return this.update(business.slug, { slug: newSlug }, 'none', userId, false);
+        return this.update(
+            business.slug,
+            { slug: newSlug },
+            'none',
+            userId,
+            false
+        );
     }
 
     /**
