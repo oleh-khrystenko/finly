@@ -23,7 +23,10 @@ import type { UiSlugEditorProps } from './types';
 const AVAILABILITY_DEBOUNCE_MS = 350;
 
 type Mode = 'read' | 'edit' | 'upsell';
-type AvailabilityState = { status: SlugAvailabilityStatus | null; checking: boolean };
+type LiveState =
+    | { kind: 'idle' }
+    | { kind: 'checking' }
+    | { kind: 'status'; status: SlugAvailabilityStatus };
 
 /**
  * Sprint 20 — єдиний контрол редагування vanity-slug на трьох сторінках
@@ -62,11 +65,8 @@ export default function UiSlugEditor({
     const [draft, setDraft] = useState(
         initialReservation?.desiredSlug ?? currentSlug
     );
-    const [formatError, setFormatError] = useState<string | undefined>();
-    const [availability, setAvailability] = useState<AvailabilityState>({
-        status: null,
-        checking: false,
-    });
+    const [saveError, setSaveError] = useState<string | undefined>();
+    const [live, setLive] = useState<LiveState>({ kind: 'idle' });
     const [saving, setSaving] = useState(false);
     const [subscribing, setSubscribing] = useState(false);
     const [reservation, setReservation] = useState<SlugReservationView | null>(
@@ -81,34 +81,47 @@ export default function UiSlugEditor({
     // (`ivanenko` → `IvanEnko`) — валідна платна правка (бекенд: slugCaseOnlyChange),
     // тож вона НЕ no-op і має дійти до запису.
     const isExactSame = draft === currentSlug;
-    const formatValid = validate(draft) === null;
+    // Формат-помилка рахується синхронно на рендері (дешево) — показується
+    // миттєво без debounce, на відміну від мережевої перевірки вільності.
+    const formatMessage = validate(draft);
+    // Save блокується, поки формат невалідний, поле порожнє, або ім'я зайняте/
+    // зарезервоване: помилка стає недосяжною, контрол веде до валідного стану
+    // замість сюрпризу на клік.
+    const saveBlocked =
+        formatMessage !== null ||
+        (live.kind === 'status' &&
+            live.status !== SLUG_AVAILABILITY_STATUS.AVAILABLE);
+    const canSave = !saving && draft.trim() !== '' && !saveBlocked;
 
-    // Live-доступність із debounce. Тільки в edit-mode, лише для валідного
-    // формату і відмінного від поточного імені. Stale-guard через requestId.
+    // Live-доступність із debounce. Мережа стартує лише коли формат валідний,
+    // поле непорожнє і ім'я відмінне від поточного. Формат-помилку показує
+    // синхронний `formatMessage` (без debounce), тож тут її гілка — просто idle.
+    // Stale-guard: `id` бампиться на КОЖНОМУ прогоні, тож in-flight промис із
+    // попереднього драфту відкидається навіть на гілках без мережі.
     const requestIdRef = useRef(0);
     useEffect(() => {
         if (mode !== 'edit') return;
-        if (!formatValid || isUnchanged) {
-            setAvailability({ status: null, checking: false });
+        const id = ++requestIdRef.current;
+        if (draft.trim() === '' || isUnchanged || formatMessage) {
+            setLive({ kind: 'idle' });
             return;
         }
-        const id = ++requestIdRef.current;
-        setAvailability({ status: null, checking: true });
+        setLive({ kind: 'checking' });
         const handle = setTimeout(() => {
             void checkAvailability(draft)
                 .then((status) => {
                     if (requestIdRef.current === id) {
-                        setAvailability({ status, checking: false });
+                        setLive({ kind: 'status', status });
                     }
                 })
                 .catch(() => {
                     if (requestIdRef.current === id) {
-                        setAvailability({ status: null, checking: false });
+                        setLive({ kind: 'idle' });
                     }
                 });
         }, AVAILABILITY_DEBOUNCE_MS);
         return () => clearTimeout(handle);
-    }, [draft, mode, formatValid, isUnchanged, checkAvailability]);
+    }, [draft, mode, isUnchanged, formatMessage, checkAvailability]);
 
     // Зворотний відлік броні. На нулі — апсел тихо згортається у edit-mode,
     // ім'я повертається в доступ, повторний Save бронює знову.
@@ -141,21 +154,21 @@ export default function UiSlugEditor({
         if (autoStartEdit && !autoEditAppliedRef.current) {
             autoEditAppliedRef.current = true;
             setDraft(currentSlug);
-            setFormatError(undefined);
-            setAvailability({ status: null, checking: false });
+            setSaveError(undefined);
+            setLive({ kind: 'idle' });
             setMode('edit');
         }
     }, [autoStartEdit, currentSlug]);
 
     const startEdit = () => {
         setDraft(currentSlug);
-        setFormatError(undefined);
-        setAvailability({ status: null, checking: false });
+        setSaveError(undefined);
+        setLive({ kind: 'idle' });
         setMode('edit');
     };
 
     const cancelEdit = () => {
-        setFormatError(undefined);
+        setSaveError(undefined);
         setMode(reservation ? 'upsell' : 'read');
     };
 
@@ -170,19 +183,17 @@ export default function UiSlugEditor({
     };
 
     const handleSave = async () => {
-        const err = validate(draft);
-        if (err) {
-            setFormatError(err);
-            return;
-        }
-        setFormatError(undefined);
+        // Формат уже підсвічено синхронно (`formatMessage`), а Save задизейблено
+        // на невалідному — це лише захисний guard.
+        if (validate(draft) !== null) return;
+        setSaveError(undefined);
         if (isExactSame) {
             setMode('read');
             return;
         }
         // Свіжа перевірка перед дією (live-статус міг бути ще не дорахований).
         const status = await checkAvailability(draft);
-        setAvailability({ status, checking: false });
+        setLive({ kind: 'status', status });
         if (status !== SLUG_AVAILABILITY_STATUS.AVAILABLE) return;
 
         if (isPaid) {
@@ -191,7 +202,7 @@ export default function UiSlugEditor({
                 await onSave(draft);
                 setMode('read');
             } catch (e) {
-                setFormatError(
+                setSaveError(
                     e instanceof Error ? e.message : 'Не вдалося зберегти'
                 );
             } finally {
@@ -214,13 +225,13 @@ export default function UiSlugEditor({
                 const status = await checkAvailability(draft);
                 conflicted = status !== SLUG_AVAILABILITY_STATUS.AVAILABLE;
                 if (conflicted) {
-                    setAvailability({ status, checking: false });
+                    setLive({ kind: 'status', status });
                 }
             } catch {
                 conflicted = false;
             }
             if (!conflicted) {
-                setFormatError('Не вдалося зберегти. Спробуйте ще раз');
+                setSaveError('Не вдалося зберегти. Спробуйте ще раз');
             }
         } finally {
             setSaving(false);
@@ -241,8 +252,9 @@ export default function UiSlugEditor({
                         </span>
                     </span>
                     <p className="text-muted-foreground text-sm">
-                        Оформіть тариф «Свій бренд», і ця адреса стане вашою
-                        одразу після оплати. Поки що вона потрібна лише вам.
+                        Ця адреса поки вільна, і ми тримаємо її за вами.
+                        Оформіть «Свій бренд», і вона стане вашою одразу після
+                        оплати.
                     </p>
                 </div>
                 <p className="text-muted-foreground flex items-center gap-2 text-sm">
@@ -304,16 +316,19 @@ export default function UiSlugEditor({
                 <UiPrefixInput
                     prefix={prefix}
                     value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    error={formatError}
+                    onChange={(e) => {
+                        setDraft(e.target.value);
+                        setSaveError(undefined);
+                    }}
+                    error={saveError}
                     aria-label={ariaLabel}
                     autoFocus
                     autoCapitalize="off"
                     autoCorrect="off"
                     spellCheck={false}
                 />
-                {!formatError && !isUnchanged && (
-                    <AvailabilityHint state={availability} />
+                {!saveError && !isUnchanged && draft.trim() !== '' && (
+                    <SlugHint formatMessage={formatMessage} live={live} />
                 )}
                 {helpText && (
                     <p className="text-muted-foreground text-sm">{helpText}</p>
@@ -335,6 +350,7 @@ export default function UiSlugEditor({
                         size="sm"
                         onClick={() => void handleSave()}
                         loading={saving}
+                        disabled={!canSave}
                         IconLeft={<Check />}
                     >
                         Зберегти
@@ -404,30 +420,41 @@ export default function UiSlugEditor({
     );
 }
 
-function AvailabilityHint({ state }: { state: AvailabilityState }) {
-    if (state.checking) {
+function SlugHint({
+    formatMessage,
+    live,
+}: {
+    formatMessage: string | null;
+    live: LiveState;
+}) {
+    if (formatMessage) {
+        return <p className="text-destructive text-sm">{formatMessage}</p>;
+    }
+    if (live.kind === 'checking') {
         return (
             <p className="text-muted-foreground text-sm">
                 Перевіряємо доступність…
             </p>
         );
     }
-    if (state.status === SLUG_AVAILABILITY_STATUS.AVAILABLE) {
-        return <p className="text-success text-sm">Адреса вільна</p>;
-    }
-    if (state.status === SLUG_AVAILABILITY_STATUS.TAKEN) {
-        return (
-            <p className="text-destructive text-sm">
-                Це посилання вже зайняте. Оберіть інше
-            </p>
-        );
-    }
-    if (state.status === SLUG_AVAILABILITY_STATUS.RESERVED) {
-        return (
-            <p className="text-destructive text-sm">
-                Це посилання зарезервоване системою. Оберіть інше
-            </p>
-        );
+    if (live.kind === 'status') {
+        if (live.status === SLUG_AVAILABILITY_STATUS.AVAILABLE) {
+            return <p className="text-success text-sm">Адреса вільна</p>;
+        }
+        if (live.status === SLUG_AVAILABILITY_STATUS.TAKEN) {
+            return (
+                <p className="text-destructive text-sm">
+                    Це посилання вже зайняте. Оберіть інше
+                </p>
+            );
+        }
+        if (live.status === SLUG_AVAILABILITY_STATUS.RESERVED) {
+            return (
+                <p className="text-destructive text-sm">
+                    Це посилання зарезервоване системою. Оберіть інше
+                </p>
+            );
+        }
     }
     return null;
 }

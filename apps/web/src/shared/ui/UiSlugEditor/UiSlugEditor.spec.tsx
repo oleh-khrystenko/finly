@@ -167,6 +167,72 @@ describe('UiSlugEditor (Sprint 20 — slug upsell flow)', () => {
         });
     });
 
+    it('невалідний формат: показує live-помилку і блокує Save (без кліку)', async () => {
+        const props = {
+            ...baseProps(),
+            isPaid: true,
+            validate: (v: string) =>
+                /^[a-z0-9-]+$/i.test(v) && v.length >= 3
+                    ? null
+                    : 'Лише латинські літери, цифри і дефіс, від 3 символів',
+        };
+        render(<UiSlugEditor {...props} />);
+
+        await openEditAndType('ів'); // кирилиця + закоротко
+        expect(
+            await screen.findByText(
+                'Лише латинські літери, цифри і дефіс, від 3 символів'
+            )
+        ).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Зберегти' })).toBeDisabled();
+        expect(props.checkAvailability).not.toHaveBeenCalled();
+    });
+
+    it('фікс невалідного на валідне+вільне: помилка зникає, Save розблоковано', async () => {
+        const props = {
+            ...baseProps(),
+            isPaid: true,
+            validate: (v: string) =>
+                /^[a-z0-9-]+$/i.test(v) && v.length >= 3
+                    ? null
+                    : 'Невалідний формат',
+        };
+        render(<UiSlugEditor {...props} />);
+
+        const input = await openEditAndType('ів');
+        expect(await screen.findByText('Невалідний формат')).toBeInTheDocument();
+
+        fireEvent.change(input, { target: { value: 'acme' } });
+        expect(await screen.findByText('Адреса вільна')).toBeInTheDocument();
+        expect(
+            screen.queryByText('Невалідний формат')
+        ).not.toBeInTheDocument();
+        expect(
+            screen.getByRole('button', { name: 'Зберегти' })
+        ).not.toBeDisabled();
+    });
+
+    it('зайняте ім\'я: live-статус блокує Save до кліку', async () => {
+        const props = {
+            ...baseProps(),
+            isPaid: true,
+            checkAvailability: jest
+                .fn()
+                .mockResolvedValue(SLUG_AVAILABILITY_STATUS.TAKEN),
+        };
+        render(<UiSlugEditor {...props} />);
+
+        await openEditAndType('taken-name');
+        expect(
+            await screen.findByText('Це посилання вже зайняте. Оберіть інше')
+        ).toBeInTheDocument();
+        await waitFor(() => {
+            expect(
+                screen.getByRole('button', { name: 'Зберегти' })
+            ).toBeDisabled();
+        });
+    });
+
     it('free: збій броні при вільному імені → не показує «зайнято» і не відкриває апсел', async () => {
         const props = {
             ...baseProps(),
