@@ -39,11 +39,8 @@ export const getNonNegativeIntEnvVar = (name: string): number => {
 const subscriptionEnabled =
     getEnvVar('PAYMENTS_SUBSCRIPTION_ENABLED') === 'true';
 const oneOffEnabled = getEnvVar('PAYMENTS_ONE_OFF_ENABLED') === 'true';
-// Демо-інструменти білінгу (POST /payments/reset: повне видалення підписки,
-// історії платежів і webhook-маркерів користувача). На проді з живими грошима
-// МУСИТЬ бути false — інакше користувач одним кліком знищує фінансову історію
-// і знімає idempotency-захист обробки вебхуків. Web-аналог:
-// NEXT_PUBLIC_BILLING_DEMO_MODE (ховає секцію «Скинути білінг»).
+// Демо-режим білінгу. На проді з живими грошима МУСИТЬ бути false. Web-аналог:
+// NEXT_PUBLIC_BILLING_DEMO_MODE (показує демо-банер на сторінці тарифу).
 const billingDemoMode = getEnvVar('BILLING_DEMO_MODE') === 'true';
 
 export const ENV = {

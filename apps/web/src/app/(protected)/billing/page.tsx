@@ -16,7 +16,6 @@ import {
 import { extractApiErrorCode, getApiMessage } from '@/shared/api';
 import { useAuthStore } from '@/entities/user';
 import {
-    useBillingResetDialogStore,
     ManageSubscription,
     DemoBanner,
     PLAN_COPY,
@@ -39,7 +38,6 @@ export default function BillingPage() {
     const user = useAuthStore((s) => s.user);
     const [loadingAction, setLoadingAction] = useState<string | null>(null);
     const [catalog, setCatalog] = useState<PaymentsCatalog | null>(null);
-    const openResetDialog = useBillingResetDialogStore((s) => s.open);
     const [catalogLoading, setCatalogLoading] = useState(true);
     // Стабільний «зараз» на час життя компонента — порівняння дати one-off без
     // impure Date.now() у render-body (React purity).
@@ -58,7 +56,6 @@ export default function BillingPage() {
 
     const billing = user.billing;
     const hasActive = billing?.hasActiveSubscription === true;
-    const hasBillingData = billing != null;
 
     // Sprint 19 — активний one-off (рівень + дата). Підписка перекриває one-off
     // у видимості (ManageSubscription), тож банер one-off і фільтр карток —
@@ -105,7 +102,7 @@ export default function BillingPage() {
 
             {/* ── Page Header ── */}
             <div>
-                <UiPageHeading>Білінг</UiPageHeading>
+                <UiPageHeading>Тариф</UiPageHeading>
                 <p className="text-muted-foreground mt-2">
                     Керуйте підпискою та доступом. Усі платежі безпечно
                     обробляються через WayForPay.
@@ -337,32 +334,6 @@ export default function BillingPage() {
                         </div>
                     </section>
                 )}
-
-            {/* ── Reset Billing (демо-інструмент; API-ендпоінт теж загейчено
-                BILLING_DEMO_MODE — на проді з живими грошима секції немає) ── */}
-            {BILLING_DEMO_MODE && hasBillingData && (
-                <section className="border-border border-t pt-8">
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="min-w-0">
-                            <h2 className="text-foreground text-lg font-semibold">
-                                Скинути білінг
-                            </h2>
-                            <p className="text-muted-foreground mt-1 text-sm">
-                                Видаляє підписку, доступ та історію платежів у
-                                WayForPay і в базі.
-                            </p>
-                        </div>
-                        <UiButton
-                            variant="destructive-outline"
-                            size="md"
-                            className="w-full shrink-0 sm:w-auto"
-                            onClick={openResetDialog}
-                        >
-                            Скинути білінг
-                        </UiButton>
-                    </div>
-                </section>
-            )}
 
             {/* ── Terms Note ── */}
             <p className="text-muted-foreground text-center text-xs">

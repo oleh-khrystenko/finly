@@ -92,46 +92,46 @@ export interface PaymentsCatalog {
 export const SUBSCRIPTION_PLANS: readonly SubscriptionPlanItem[] = [
     {
         code: 'brand',
-        name: 'Свій бренд',
+        name: 'Бренд',
         priceAmount: 4900,
         currency: BILLING_CURRENCY,
         interval: 'month',
         level: 'brand',
         displayOrder: 0,
-        featured: false,
+        featured: true,
     },
     {
         code: 'bookkeeper',
-        name: 'Бухгалтер',
+        name: 'Агенція',
         priceAmount: 9900,
         currency: BILLING_CURRENCY,
         interval: 'month',
         level: 'bookkeeper',
         displayOrder: 1,
-        featured: true,
+        featured: false,
     },
 ] as const;
 
 export const ONE_OFF_ACCESSES: readonly OneOffAccessItem[] = [
     {
         code: 'brand',
-        name: 'Свій бренд на місяць',
+        name: 'Бренд на місяць',
         priceAmount: 6900,
         currency: BILLING_CURRENCY,
         level: 'brand',
         durationMonths: 1,
         displayOrder: 0,
-        featured: false,
+        featured: true,
     },
     {
         code: 'bookkeeper',
-        name: 'Бухгалтер на місяць',
+        name: 'Агенція на місяць',
         priceAmount: 12_900,
         currency: BILLING_CURRENCY,
         level: 'bookkeeper',
         durationMonths: 1,
         displayOrder: 1,
-        featured: true,
+        featured: false,
     },
 ] as const;
 

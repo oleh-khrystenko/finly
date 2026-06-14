@@ -5,7 +5,6 @@ import {
     Get,
     HttpCode,
     HttpStatus,
-    NotFoundException,
     Param,
     Post,
     Query,
@@ -130,25 +129,6 @@ export class PaymentsController {
             limit
         );
         return { data: records.map(mapPaymentRecord) };
-    }
-
-    @UseGuards(JwtActiveGuard)
-    @Post('reset')
-    @HttpCode(HttpStatus.OK)
-    async resetBilling(
-        @CurrentUser() user: UserDocument
-    ): Promise<{ data: null }> {
-        // Демо-інструмент: видаляє підписку, історію платежів і webhook-маркери
-        // користувача. На проді з живими грошима (BILLING_DEMO_MODE=false)
-        // ендпоінт не існує — 404, без витоку причини.
-        if (!ENV.BILLING_DEMO_MODE) {
-            throw new NotFoundException({
-                code: RESPONSE_CODE.NOT_FOUND,
-                message: 'Not found',
-            });
-        }
-        await this.paymentsService.resetBilling(user._id.toString());
-        return { data: null };
     }
 
     @SkipThrottle()

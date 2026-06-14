@@ -154,12 +154,6 @@ export class UsersService {
         return transaction;
     }
 
-    async clearTransactions(userId: string): Promise<void> {
-        await this.executionTransactionModel.deleteMany({
-            userId: new Types.ObjectId(userId),
-        });
-    }
-
     async updateTimezone(userId: string, timezone: string): Promise<void> {
         await this.userModel.findByIdAndUpdate(userId, { timezone }).exec();
     }

@@ -9,8 +9,6 @@ import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
 import {
     BILLING_CURRENCY,
-    EXECUTION_ACTION,
-    EXECUTION_TRANSACTION_TYPE,
     PAYMENT_RECORD_STATUS,
     PAYMENT_RECORD_TYPE,
     PAYMENT_TYPE,
@@ -688,62 +686,6 @@ export class PaymentsService {
             .sort({ createdAt: -1 })
             .limit(limit)
             .lean();
-    }
-
-    // ── Reset (REMOVE recurring + clear local) ───────────────────────────
-
-    async resetBilling(userId: string): Promise<void> {
-        return this.withBillingLock(userId, () =>
-            this.resetBillingLocked(userId)
-        );
-    }
-
-    private async resetBillingLocked(userId: string): Promise<void> {
-        const user = await this.userModel.findById(userId).lean();
-        if (!user) {
-            throw new BadRequestException({
-                code: RESPONSE_CODE.NOT_FOUND,
-                message: 'User not found',
-            });
-        }
-
-        const orderReference = user.billing?.orderReference;
-        const previousBalance = user.executions.balance;
-
-        if (previousBalance > 0) {
-            await this.usersService.recordTransaction({
-                userId,
-                type: EXECUTION_TRANSACTION_TYPE.DEBIT,
-                action: EXECUTION_ACTION.BILLING_RESET,
-                amount: previousBalance,
-                balanceAfter: 0,
-            });
-        }
-
-        await this.userModel.findByIdAndUpdate(userId, {
-            $set: {
-                billing: null,
-                executions: { balance: 0, freeReportUsed: false },
-            },
-        });
-        await this.webhookEventModel.deleteMany({ userId });
-        await this.paymentRecordModel.deleteMany({
-            userId: new Types.ObjectId(userId),
-        });
-        await this.usersService.clearTransactions(userId);
-
-        if (orderReference && user.billing?.hasActiveSubscription) {
-            await this.removeRecurringWithRetry(
-                orderReference,
-                'billing_reset'
-            );
-        }
-
-        // Білінг обнулено → рівень доступу none: блокуємо зайві бізнеси і
-        // скидаємо кастомні slug (як при втраті доступу).
-        await this.reconcileSafe(userId);
-
-        this.logger.log(`Billing reset for user ${userId}`);
     }
 
     // ── Webhook ──────────────────────────────────────────────────────────

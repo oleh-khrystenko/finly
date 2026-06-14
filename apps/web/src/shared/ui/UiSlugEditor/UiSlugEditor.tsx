@@ -253,7 +253,7 @@ export default function UiSlugEditor({
                     </span>
                     <p className="text-muted-foreground text-sm">
                         Ця адреса поки вільна, і ми тримаємо її за вами.
-                        Оформіть «Свій бренд», і вона стане вашою одразу після
+                        Оформіть «Бренд», і вона стане вашою одразу після
                         оплати.
                     </p>
                 </div>

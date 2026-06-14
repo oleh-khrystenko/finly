@@ -42,7 +42,7 @@ export function useUserMenu(icons: {
         },
         {
             value: 'billing',
-            label: 'Білінг',
+            label: 'Тариф',
             icon: icons.billing,
             route: '/billing',
         },

@@ -77,7 +77,3 @@ export async function listPayments(limit?: number): Promise<PaymentRecord[]> {
     );
     return data.data;
 }
-
-export async function resetBilling(): Promise<void> {
-    await apiClient.post('/payments/reset');
-}
