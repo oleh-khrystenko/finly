@@ -27,6 +27,11 @@ export default function proxy(request: NextRequest) {
     // Виконується ПЕРЕД cabinet logic: public-зона має повністю ізольований
     // контракт; жоден `/business`, `/auth/...`, `/profile` на public host
     // не повинен дати валідну відповідь.
+    //
+    // Caveat matcher-а: `.*\..*`-виключення (пропуск статики) оминає proxy
+    // для шляхів з крапкою (`/business/x.y`), тож Branch B сам по собі не
+    // повний. Закриває це defense-in-depth host-check у
+    // `app/(protected)/layout.tsx` (дзеркало host-pay SC-перевірок).
 
     // Branch C — cabinet host + path під `/host-pay` → 404.
     // Захист від direct-URL-input у адресний рядок (`finly.com.ua/host-pay/test`
@@ -46,9 +51,7 @@ export default function proxy(request: NextRequest) {
         // посилання `pay.finly.com.ua/{businessSlug}`. Rewrite на host-pay index
         // дає брендований пояснювач замість 404-dead-end.
         if (pathname === '/') {
-            return NextResponse.rewrite(
-                new URL('/host-pay', request.url)
-            );
+            return NextResponse.rewrite(new URL('/host-pay', request.url));
         }
 
         // Branch A1 — public host + root-рівнева path (`/{businessSlug}`),

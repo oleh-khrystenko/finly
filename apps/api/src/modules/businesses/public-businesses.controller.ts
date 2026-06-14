@@ -19,6 +19,7 @@ import {
 } from '@finly/types';
 
 import { SkipOnboarding } from '../../common/decorators/skip-onboarding.decorator';
+import { PUBLIC_PAGE_CACHE_CONTROL } from '../../common/http/public-cache';
 import { ENV } from '../../config/env';
 import {
     Account,
@@ -47,7 +48,8 @@ import { BusinessesService } from './businesses.service';
  * BusinessesModule (для cascade-delete-business). Sort `{ createdAt: 1 }` —
  * customer-perspective "перший-створений = основний-рахунок зверху".
  *
- * **Whitelist 5 полів** + cache `public, max-age=3600, SWR=86400`. Реквізити
+ * **Whitelist 5 полів** + cache `PUBLIC_PAGE_CACHE_CONTROL` (короткий TTL без
+ * SWR — сторінка revocable через `accessBlockedAt`). Реквізити
  * leak-vector лише через `nbuLinks` на per-account-page (Base64URL у платіжній
  * команді банку), не у JSON.
  *
@@ -66,10 +68,7 @@ export class PublicBusinessesController {
 
     @SkipOnboarding()
     @Get(':slug')
-    @Header(
-        'Cache-Control',
-        'public, max-age=3600, stale-while-revalidate=86400'
-    )
+    @Header('Cache-Control', PUBLIC_PAGE_CACHE_CONTROL)
     async getPublic(
         @Param('slug') slug: string
     ): Promise<{ data: PublicBusinessView }> {
@@ -111,10 +110,7 @@ export class PublicBusinessesController {
     @SkipOnboarding()
     @Get(':slug/qr/business.png')
     @Header('Content-Type', 'image/png')
-    @Header(
-        'Cache-Control',
-        'public, max-age=3600, stale-while-revalidate=86400'
-    )
+    @Header('Cache-Control', PUBLIC_PAGE_CACHE_CONTROL)
     async getBusinessQr(
         @Param('slug') slug: string,
         @Query('size') sizeParam: string | undefined,

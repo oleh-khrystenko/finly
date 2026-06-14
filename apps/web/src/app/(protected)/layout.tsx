@@ -1,8 +1,11 @@
 import { ReactNode } from 'react';
+import { headers } from 'next/headers';
+import { notFound } from 'next/navigation';
 import { Header } from '@/widgets/header';
 import { AppFooter } from '@/widgets/app-footer';
 import { AuthGuard } from '@/features/auth';
 import { ClaimLandingDraftHook } from '@/features/qr-landing-preview';
+import { isPublicHost } from '@/shared/config/publicHosts';
 
 interface ProtectedLayoutProps {
     children: ReactNode;
@@ -31,7 +34,17 @@ interface ProtectedLayoutProps {
 // узгоджує семантику з тим, що group і так не кешуватиметься.
 export const dynamic = 'force-dynamic';
 
-export default function ProtectedLayout({ children }: ProtectedLayoutProps) {
+export default async function ProtectedLayout({
+    children,
+}: ProtectedLayoutProps) {
+    // Defense-in-depth host-check (дзеркало host-pay SC): proxy.ts matcher
+    // пропускає шляхи з крапкою (`.*\..*`-виключення для статики), тож
+    // `pay-host/business/x.y` оминає Branch B і дістається cabinet-роуту.
+    // Кабінетні route-и на public host non-addressable за контрактом — 404.
+    const headerList = await headers();
+    if (isPublicHost(headerList.get('host'))) {
+        notFound();
+    }
     return (
         <>
             <Header />

@@ -11,10 +11,12 @@ import { App } from 'supertest/types';
 import { ZodValidationPipe } from 'nestjs-zod';
 
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
-import { REDIS_CLIENT } from '../src/common/modules/redis.module';
+import { REDIS_CLIENT, RedisModule } from '../src/common/modules/redis.module';
 import { AppController } from '../src/app.controller';
 import { AppService } from '../src/app.service';
 import { AuthModule } from '../src/modules/auth/auth.module';
+import { EmailModule } from '../src/modules/email/email.module';
+import { LandingClaimModule } from '../src/modules/landing-claim/landing-claim.module';
 import { UsersModule } from '../src/modules/users/users.module';
 import { ReportsModule } from '../src/modules/reports/reports.module';
 import { StorageModule } from '../src/modules/storage/storage.module';
@@ -60,6 +62,9 @@ const mockRedis = {
     smembers: jest.fn().mockResolvedValue([]),
     pipeline: jest.fn().mockReturnValue(mockPipeline),
     on: jest.fn().mockReturnThis(),
+    // Lua-лічильники RedisCounterService (lockout/rate-limit): достатньо
+    // повертати 1 — лімітів цей suite не тестує.
+    eval: jest.fn().mockResolvedValue(1),
 };
 
 describe('App (e2e)', () => {
@@ -76,11 +81,21 @@ describe('App (e2e)', () => {
                     throttlers: [{ ttl: 60000, limit: 60 }],
                 }),
                 MongooseModule.forRoot(mongoServer.getUri()),
+                // @Global-модулі реального AppModule: у тест-композиції globals
+                // реєструються лише якщо модуль присутній у графі. Без
+                // RedisModule токен REDIS_CLIENT не існує (override нічого не
+                // перекриває), без EmailModule CleanupService (UsersModule) не
+                // отримує EmailService.
+                RedisModule,
+                EmailModule,
                 AuthModule,
                 UsersModule,
                 ReportsModule,
                 StorageModule,
                 PaymentsModule,
+                // POST /auth/magic-link/verify живе у MagicLinkVerifyController
+                // (LandingClaimModule, Sprint 13) — без імпорту маршрут 404.
+                LandingClaimModule,
             ],
             controllers: [AppController],
             providers: [
@@ -150,9 +165,14 @@ describe('App (e2e)', () => {
         });
 
         it('POST /api/auth/refresh should reject when no cookie', () => {
-            return request(app.getHttpServer())
-                .post('/api/auth/refresh')
-                .expect(401);
+            return (
+                request(app.getHttpServer())
+                    .post('/api/auth/refresh')
+                    // Порожній JSON-body: без нього Express 5 лишає req.body
+                    // undefined і Zod відповідає 400 ще до cookie-перевірки.
+                    .send({})
+                    .expect(401)
+            );
         });
 
         it('POST /api/auth/logout should succeed without cookie', () => {

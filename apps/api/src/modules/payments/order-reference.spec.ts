@@ -1,6 +1,6 @@
 import {
     ORDER_KIND,
-    buildPackOrderReference,
+    buildOneOffOrderReference,
     buildSubscriptionOrderReference,
     parseOrderReference,
 } from './order-reference';
@@ -17,13 +17,13 @@ describe('order-reference', () => {
         });
     });
 
-    it('pack round-trip зберігає packCode', () => {
-        const ref = buildPackOrderReference(USER_ID, 'max');
+    it('one-off round-trip зберігає oneOffCode', () => {
+        const ref = buildOneOffOrderReference(USER_ID, 'bookkeeper');
         const parsed = parseOrderReference(ref);
         expect(parsed).toEqual({
-            kind: ORDER_KIND.PACK,
+            kind: ORDER_KIND.ONE_OFF,
             userId: USER_ID,
-            packCode: 'max',
+            oneOffCode: 'bookkeeper',
         });
     });
 
@@ -35,15 +35,15 @@ describe('order-reference', () => {
 
     it('ref починається з префікса fin', () => {
         expect(buildSubscriptionOrderReference(USER_ID)).toMatch(/^fin-sub-/);
-        expect(buildPackOrderReference(USER_ID, 'basic')).toMatch(
-            /^fin-pack-basic-/
+        expect(buildOneOffOrderReference(USER_ID, 'brand')).toMatch(
+            /^fin-oneoff-brand-/
         );
     });
 
     it('повертає null на чужих/невалідних ref-ах', () => {
         expect(parseOrderReference('fin-prorate-x-1')).toBeNull();
         expect(parseOrderReference('random-string')).toBeNull();
-        expect(parseOrderReference('fin-pack-unknown-uid-nonce')).toBeNull();
+        expect(parseOrderReference('fin-oneoff-unknown-uid-nonce')).toBeNull();
         expect(parseOrderReference('fin-sub-uid')).toBeNull(); // замало сегментів
         expect(parseOrderReference('')).toBeNull();
     });

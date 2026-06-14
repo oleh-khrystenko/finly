@@ -25,7 +25,7 @@ export class ProcessedWebhookEvent {
     userId!: string | null;
 
     @Prop({ type: String, default: null })
-    packCode!: string | null;
+    oneOffCode!: string | null;
 
     @Prop({ required: true, default: 'pending' })
     status!: 'pending' | 'applied';

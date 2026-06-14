@@ -1,11 +1,13 @@
 import {
     BadRequestException,
+    ForbiddenException,
     InternalServerErrorException,
     NotFoundException,
 } from '@nestjs/common';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import { Types } from 'mongoose';
+import { RESPONSE_CODE } from '@finly/types';
 import type { CreateInvoiceRequest, SlugInput } from '@finly/types';
 
 import {
@@ -13,6 +15,7 @@ import {
     type AccountDocument,
 } from '../accounts/schemas/account.schema';
 import type { BusinessDocument } from '../businesses/schemas/business.schema';
+import { SlugReservationService } from '../slug-reservation/slug-reservation.service';
 import { InvoiceSlugGeneratorService } from './invoice-slug-generator.service';
 import { InvoicesService } from './invoices.service';
 import { InvoiceSlugHistory } from './schemas/invoice-slug-history.schema';
@@ -40,6 +43,15 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
     let withTransactionMock: jest.Mock;
     let endSessionMock: jest.Mock;
     let startSessionMock: jest.Mock;
+
+    const TEST_USER_ID = '507f1f77bcf86cd799439099';
+
+    const mockSlugReservations = {
+        isNameHeldByOther: jest.fn().mockResolvedValue(false),
+        reserve: jest.fn(),
+        consumeForUser: jest.fn().mockResolvedValue(undefined),
+        getActiveForUser: jest.fn().mockResolvedValue(null),
+    };
 
     const businessId = new Types.ObjectId();
     const accountId = new Types.ObjectId();
@@ -141,6 +153,10 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                 {
                     provide: InvoiceSlugGeneratorService,
                     useValue: slugGenerator,
+                },
+                {
+                    provide: SlugReservationService,
+                    useValue: mockSlugReservations,
                 },
             ],
         }).compile();
@@ -352,9 +368,16 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
 
         it('без coupled-полів — filter без $expr (lookup `accountId, slug`)', async () => {
             mockUpdateReturn({ paymentPurpose: 'New' });
-            await service.update(business, account, invoiceDoc('inv-001-x'), {
-                paymentPurpose: 'New',
-            });
+            await service.update(
+                business,
+                account,
+                invoiceDoc('inv-001-x'),
+                {
+                    paymentPurpose: 'New',
+                },
+                'bookkeeper',
+                TEST_USER_ID
+            );
             const filter = invoiceModel.findOneAndUpdate.mock.calls[0]![0];
             expect(filter).toEqual({ accountId, slug: 'inv-001-x' });
             expect(filter.$expr).toBeUndefined();
@@ -363,9 +386,16 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
 
         it('coupled (тільки amountLocked): vat-літерал, amount — field-ref', async () => {
             mockUpdateReturn({});
-            await service.update(business, account, invoiceDoc('inv-001-x'), {
-                amountLocked: true,
-            });
+            await service.update(
+                business,
+                account,
+                invoiceDoc('inv-001-x'),
+                {
+                    amountLocked: true,
+                },
+                'bookkeeper',
+                TEST_USER_ID
+            );
             const filter = invoiceModel.findOneAndUpdate.mock.calls[0]![0];
             expect(filter.$expr).toEqual({
                 $or: [{ $ne: ['$amount', null] }, { $ne: [true, true] }],
@@ -374,9 +404,16 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
 
         it('coupled (тільки amount=null): amount-літерал, locked — field-ref', async () => {
             mockUpdateReturn({});
-            await service.update(business, account, invoiceDoc('inv-001-x'), {
-                amount: null,
-            });
+            await service.update(
+                business,
+                account,
+                invoiceDoc('inv-001-x'),
+                {
+                    amount: null,
+                },
+                'bookkeeper',
+                TEST_USER_ID
+            );
             const filter = invoiceModel.findOneAndUpdate.mock.calls[0]![0];
             expect(filter.$expr).toEqual({
                 $or: [{ $ne: [null, null] }, { $ne: ['$amountLocked', true] }],
@@ -389,18 +426,32 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                 _id: new Types.ObjectId(),
             });
             await expect(
-                service.update(business, account, invoiceDoc('inv-001-x'), {
-                    amountLocked: true,
-                })
+                service.update(
+                    business,
+                    account,
+                    invoiceDoc('inv-001-x'),
+                    {
+                        amountLocked: true,
+                    },
+                    'bookkeeper',
+                    TEST_USER_ID
+                )
             ).rejects.toBeInstanceOf(BadRequestException);
         });
 
         it('NotFound (no coupled fields): findOneAndUpdate→null → 404', async () => {
             mockUpdateReturn(null);
             await expect(
-                service.update(business, account, invoiceDoc('gone'), {
-                    paymentPurpose: 'X',
-                })
+                service.update(
+                    business,
+                    account,
+                    invoiceDoc('gone'),
+                    {
+                        paymentPurpose: 'X',
+                    },
+                    'bookkeeper',
+                    TEST_USER_ID
+                )
             ).rejects.toBeInstanceOf(NotFoundException);
             expect(invoiceModel.exists).not.toHaveBeenCalled();
         });
@@ -409,18 +460,131 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
             mockUpdateReturn(null);
             invoiceModel.exists.mockResolvedValue(null);
             await expect(
-                service.update(business, account, invoiceDoc('gone'), {
-                    amountLocked: true,
-                })
+                service.update(
+                    business,
+                    account,
+                    invoiceDoc('gone'),
+                    {
+                        amountLocked: true,
+                    },
+                    'bookkeeper',
+                    TEST_USER_ID
+                )
             ).rejects.toBeInstanceOf(NotFoundException);
+        });
+
+        describe('Sprint 19 — slug-гейт (платна фіча, brand+)', () => {
+            async function expectSlugGate(
+                promise: Promise<unknown>
+            ): Promise<void> {
+                const err = await promise.catch((e: unknown) => e);
+                expect(err).toBeInstanceOf(ForbiddenException);
+                expect((err as ForbiddenException).getResponse()).toMatchObject(
+                    {
+                        code: RESPONSE_CODE.SLUG_EDIT_REQUIRES_PLAN,
+                    }
+                );
+            }
+
+            it('зміна slug на none → SLUG_EDIT_REQUIRES_PLAN, до DB-роботи', async () => {
+                await expectSlugGate(
+                    service.update(
+                        business,
+                        account,
+                        invoiceDoc('inv-001-x'),
+                        { slug: 'my-vanity' },
+                        'none',
+                        TEST_USER_ID
+                    )
+                );
+                expect(invoiceModel.findOneAndUpdate).not.toHaveBeenCalled();
+                expect(historyModel.create).not.toHaveBeenCalled();
+            });
+
+            it('case-only зміна display-форми на none → теж платна (рендериться у QR/URL)', async () => {
+                await expectSlugGate(
+                    service.update(
+                        business,
+                        account,
+                        invoiceDoc('inv-001-x'),
+                        { slug: 'INV-001-X' },
+                        'none',
+                        TEST_USER_ID
+                    )
+                );
+                expect(invoiceModel.findOneAndUpdate).not.toHaveBeenCalled();
+            });
+
+            it('ідентичний slug у PATCH на none — no-op, гейт не спрацьовує', async () => {
+                mockUpdateReturn({ slug: 'inv-001-x' });
+                await service.update(
+                    business,
+                    account,
+                    invoiceDoc('inv-001-x'),
+                    { slug: 'inv-001-x' },
+                    'none',
+                    TEST_USER_ID
+                );
+                const pipeline = invoiceModel.findOneAndUpdate.mock
+                    .calls[0]![1] as [{ $set: Record<string, unknown> }];
+                // Без позначення кастомним: slug-rent не сміє скидати авто-slug.
+                expect(pipeline[0].$set.slugCustomized).toBeUndefined();
+            });
+
+            it('resetSlug не гейтиться рівнем — стартує TX і пише авто-slug (доступно всім)', async () => {
+                invoiceModel.findOneAndUpdate.mockReturnValue({
+                    exec: jest
+                        .fn()
+                        .mockResolvedValue({ slug: 'inv-001-aaaaaaaa' }),
+                });
+                const result = await service.resetSlug(
+                    business,
+                    account,
+                    invoiceDoc('inv-001-x'),
+                    TEST_USER_ID
+                );
+                expect(startSessionMock).toHaveBeenCalledTimes(1);
+                expect(slugGenerator.generateInvoiceSlug).toHaveBeenCalled();
+                const setArg = invoiceModel.findOneAndUpdate.mock
+                    .calls[0]![1] as { $set: Record<string, unknown> };
+                // reset повертає до авто-slug, не кастомного.
+                expect(setArg.$set.slugCustomized).toBe(false);
+                expect((result as { slug: string }).slug).toBe(
+                    'inv-001-aaaaaaaa'
+                );
+            });
+
+            it('case-only зміна на brand → проходить + позначає slugCustomized', async () => {
+                mockUpdateReturn({ slug: 'INV-001-X' });
+                await service.update(
+                    business,
+                    account,
+                    invoiceDoc('inv-001-x'),
+                    { slug: 'INV-001-X' },
+                    'brand',
+                    TEST_USER_ID
+                );
+                const pipeline = invoiceModel.findOneAndUpdate.mock
+                    .calls[0]![1] as [{ $set: Record<string, unknown> }];
+                expect(pipeline[0].$set.slugCustomized).toBe(true);
+                // slugLower незмінний → rename-TX не потрібна.
+                expect(historyModel.create).not.toHaveBeenCalled();
+            });
         });
 
         it('validUntil у минулому на PATCH → 400 INVOICE_VALID_UNTIL_IN_PAST', async () => {
             const past = new Date(Date.now() - 60_000);
             await expect(
-                service.update(business, account, invoiceDoc('inv-001'), {
-                    validUntil: past,
-                })
+                service.update(
+                    business,
+                    account,
+                    invoiceDoc('inv-001'),
+                    {
+                        validUntil: past,
+                    },
+                    'bookkeeper',
+                    TEST_USER_ID
+                )
             ).rejects.toBeInstanceOf(BadRequestException);
             expect(invoiceModel.findOneAndUpdate).not.toHaveBeenCalled();
         });
@@ -434,7 +598,9 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                     invoiceDoc('inv-001-x'),
                     {
                         paymentPurpose: 'Updated',
-                    }
+                    },
+                    'bookkeeper',
+                    TEST_USER_ID
                 );
                 const updateArg =
                     invoiceModel.findOneAndUpdate.mock.calls[0]![1];
@@ -465,7 +631,9 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                     invoiceDoc('inv-001-x'),
                     {
                         paymentPurpose: null,
-                    }
+                    },
+                    'bookkeeper',
+                    TEST_USER_ID
                 );
                 const updateArg =
                     invoiceModel.findOneAndUpdate.mock.calls[0]![1];
@@ -497,7 +665,9 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                     invoiceDoc('inv-001-x'),
                     {
                         amount: 200000,
-                    }
+                    },
+                    'bookkeeper',
+                    TEST_USER_ID
                 );
                 const updateArg =
                     invoiceModel.findOneAndUpdate.mock.calls[0]![1];

@@ -14,6 +14,7 @@ import { createReplSetMongo } from '../src/test-utils/mongo';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 import { REDIS_CLIENT } from '../src/common/modules/redis.module';
 import { RedisCounterService } from '../src/common/services/redis-counter.service';
+import { RedisLockService } from '../src/common/services/redis-lock.service';
 import { AuthModule } from '../src/modules/auth/auth.module';
 import { BusinessesModule } from '../src/modules/businesses/businesses.module';
 import { EmailModule } from '../src/modules/email/email.module';
@@ -26,6 +27,10 @@ import {
     Business,
     BusinessDocument,
 } from '../src/modules/businesses/schemas/business.schema';
+import {
+    BusinessSlugHistory,
+    BusinessSlugHistoryDocument,
+} from '../src/modules/businesses/schemas/business-slug-history.schema';
 import { CURRENT_TERMS_VERSION } from '@finly/types';
 
 // ─── Mock ENV ───
@@ -97,8 +102,20 @@ jest.mock('../src/config/env', () => ({
                 incrementSliding: jest.fn(async () => 1),
             },
         },
+        {
+            provide: RedisLockService,
+            // Pass-through: e2e — один процес без конкурентних create;
+            // fake-Redis не має eval для compare-and-delete release.
+            useValue: {
+                withLock: async (
+                    _key: string,
+                    _ttlMs: number,
+                    fn: () => Promise<unknown>
+                ) => fn(),
+            },
+        },
     ],
-    exports: [REDIS_CLIENT, RedisCounterService],
+    exports: [REDIS_CLIENT, RedisCounterService, RedisLockService],
 })
 class TestRedisModule {}
 
@@ -184,6 +201,7 @@ describe('Businesses E2E', () => {
     let mongo: Awaited<ReturnType<typeof createReplSetMongo>>;
     let userModel: Model<UserDocument>;
     let businessModel: Model<BusinessDocument>;
+    let historyModel: Model<BusinessSlugHistoryDocument>;
     let jwtService: JwtService;
 
     beforeAll(async () => {
@@ -235,6 +253,9 @@ describe('Businesses E2E', () => {
         businessModel = moduleFixture.get<Model<BusinessDocument>>(
             getModelToken(Business.name)
         );
+        historyModel = moduleFixture.get<Model<BusinessSlugHistoryDocument>>(
+            getModelToken(BusinessSlugHistory.name)
+        );
         jwtService = moduleFixture.get(JwtService);
     }, 60_000);
 
@@ -249,6 +270,30 @@ describe('Businesses E2E', () => {
     });
 
     // ─── Helpers ───
+
+    // Sprint 19 — slug-редагування вимагає рівня не нижче brand. Тести rename
+    // створюють користувача з активною підпискою brand.
+    const ACTIVE_BRAND_BILLING = {
+        provider: 'wayforpay',
+        orderReference: null,
+        recToken: null,
+        cardMask: null,
+        planCode: 'brand',
+        currency: 'UAH',
+        subscriptionStatus: 'ACTIVE',
+        providerSubscriptionStatus: null,
+        currentPeriodEnd: null,
+        cancelAtPeriodEnd: false,
+        hasActiveSubscription: true,
+        lastProviderEventAt: null,
+        scheduledPlanCode: null,
+        scheduledChangeDate: null,
+        rebindPendingAt: null,
+        oneOffLevel: null,
+        oneOffAccessUntil: null,
+        oneOffOrderReference: null,
+        reconcileRequiredAt: null,
+    };
 
     async function createUser(
         overrides: Partial<UserDocument> = {}
@@ -842,7 +887,7 @@ describe('Businesses E2E', () => {
         });
 
         it('Sprint 14 — vanity-slug edit через PATCH (200): slug перейменовується, старий slugLower звільняється', async () => {
-            const user = await createUser();
+            const user = await createUser({ billing: ACTIVE_BRAND_BILLING });
             const created = await supertest(app.getHttpServer())
                 .post('/api/businesses/me')
                 .set('Authorization', bearerFor(user))
@@ -1135,6 +1180,53 @@ describe('Businesses E2E', () => {
             expect(body.error.code).toBe('BUSINESS_NOT_FOUND');
         });
 
+        it('Sprint 19 — заблокований бізнес гасне публічно (404)', async () => {
+            const user = await createUser();
+            const created = await supertest(app.getHttpServer())
+                .post('/api/businesses/me')
+                .set('Authorization', bearerFor(user))
+                .send(VALID_CREATE_PAYLOAD);
+            const { slug } = (created.body as { data: { slug: string } }).data;
+
+            await businessModel.updateOne(
+                { slugLower: slug.toLowerCase() },
+                { $set: { accessBlockedAt: new Date() } }
+            );
+
+            await supertest(app.getHttpServer())
+                .get(`/api/businesses/public/${slug}`)
+                .expect(404);
+        });
+
+        it('Sprint 19 — lapse-history (redirect:false) не резолвиться публічно (404)', async () => {
+            const user = await createUser();
+            const created = await supertest(app.getHttpServer())
+                .post('/api/businesses/me')
+                .set('Authorization', bearerFor(user))
+                .send(VALID_CREATE_PAYLOAD);
+            const business = (created.body as { data: { id: string } }).data;
+
+            // Старе ім'я на холді без редіректу (як після lapse-reset).
+            await historyModel.create({
+                businessId: new Types.ObjectId(business.id),
+                slugLower: 'staryj-vanity',
+                redirect: false,
+            });
+            await supertest(app.getHttpServer())
+                .get('/api/businesses/public/staryj-vanity')
+                .expect(404);
+
+            // Контроль: redirect:true (добровільний rename) резолвиться у бізнес.
+            await historyModel.create({
+                businessId: new Types.ObjectId(business.id),
+                slugLower: 'redirect-vanity',
+                redirect: true,
+            });
+            await supertest(app.getHttpServer())
+                .get('/api/businesses/public/redirect-vanity')
+                .expect(200);
+        });
+
         it('встановлює Cache-Control: public для shared-CDN', async () => {
             const user = await createUser();
             const created = await supertest(app.getHttpServer())
@@ -1148,7 +1240,13 @@ describe('Businesses E2E', () => {
                 .expect(200);
 
             expect(res.headers['cache-control']).toMatch(/public/);
-            expect(res.headers['cache-control']).toMatch(/max-age=3600/);
+            // Sprint 19 — короткий TTL без stale-while-revalidate: сторінка
+            // revocable через accessBlockedAt, тож CDN не має віддавати погашену
+            // сторінку після спливу max-age.
+            expect(res.headers['cache-control']).toMatch(/max-age=300/);
+            expect(res.headers['cache-control']).not.toMatch(
+                /stale-while-revalidate/
+            );
         });
 
         it('не вимагає auth (public)', async () => {

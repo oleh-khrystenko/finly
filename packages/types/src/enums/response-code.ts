@@ -14,7 +14,6 @@ export const RESPONSE_CODE = {
 
     // --- payments error ---
     ALREADY_SUBSCRIBED: 'ALREADY_SUBSCRIBED',
-    SUBSCRIPTION_REQUIRED: 'SUBSCRIPTION_REQUIRED',
     NO_BILLING_ACCOUNT: 'NO_BILLING_ACCOUNT',
     PAYMENT_TYPE_DISABLED: 'PAYMENT_TYPE_DISABLED',
     NO_ACTIVE_SUBSCRIPTION: 'NO_ACTIVE_SUBSCRIPTION',
@@ -154,6 +153,38 @@ export const RESPONSE_CODE = {
      */
     SLUG_TAKEN: 'SLUG_TAKEN',
 
+    // --- access tier / limits (Sprint 19) ---
+    /**
+     * Sprint 19 — редагування vanity-slug (бізнес/рахунок/інвойс) і скидання
+     * slug вимагають рівня доступу не нижче brand. На Free slug автозгенерований
+     * і незмінний. Upsell на платний тариф.
+     */
+    SLUG_EDIT_REQUIRES_PLAN: 'SLUG_EDIT_REQUIRES_PLAN',
+    /**
+     * Sprint 19 — доменний інваріант: власник може мати максимум один бізнес
+     * типу «фізособа» і один «ФОП». Не апсел (платний тариф не зніме ліміт) —
+     * радимо редагувати наявний.
+     */
+    BUSINESS_TYPE_LIMIT_REACHED: 'BUSINESS_TYPE_LIMIT_REACHED',
+    /**
+     * Sprint 19 — перевищено ліміт бізнесів поточного рівня: власні ТОВ/
+     * організації (по 1 на none/brand) або клієнтські бізнеси (до 10 на
+     * none/brand). Знімається підпискою «Бухгалтер». Upsell на bookkeeper.
+     */
+    BUSINESS_LIMIT_REQUIRES_PLAN: 'BUSINESS_LIMIT_REQUIRES_PLAN',
+    /**
+     * Sprint 19 — створення бізнесів одного користувача серіалізується per-user
+     * Redis-локом (ліміт рахується count-ом, без локу конкурентний double-submit
+     * обходив би його). Лок не звільнився за відведені ретраї — повторити пізніше.
+     */
+    BUSINESS_CREATE_IN_PROGRESS: 'BUSINESS_CREATE_IN_PROGRESS',
+    /**
+     * Sprint 20 — бронь slug серіалізується per-user Redis-локом (інваріант
+     * «одна активна бронь на користувача»). Конкурентний self-reserve (та сама
+     * сутність у двох вкладках) не звільнив лок за відведені ретраї — повторити.
+     */
+    SLUG_RESERVATION_IN_PROGRESS: 'SLUG_RESERVATION_IN_PROGRESS',
+
     // --- invoices error (Sprint 4 §4.2 §4.8) ---
     /** Invoice не знайдено в межах business-у. `InvoiceAccessGuard` / `InvoicesService.getBySlug`. UA: "Рахунок не знайдено". */
     INVOICE_NOT_FOUND: 'INVOICE_NOT_FOUND',
@@ -273,7 +304,6 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.ACCOUNT_DELETED]: RESPONSE_TYPE.SUCCESS,
     [RESPONSE_CODE.ACCOUNT_RESTORED]: RESPONSE_TYPE.SUCCESS,
     [RESPONSE_CODE.ALREADY_SUBSCRIBED]: RESPONSE_TYPE.ERROR,
-    [RESPONSE_CODE.SUBSCRIPTION_REQUIRED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.NO_BILLING_ACCOUNT]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.PAYMENT_TYPE_DISABLED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.NO_ACTIVE_SUBSCRIPTION]: RESPONSE_TYPE.ERROR,
@@ -303,6 +333,11 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.SLUG_RESERVED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.SLUG_TAKEN]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.SLUG_EDIT_REQUIRES_PLAN]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BUSINESS_TYPE_LIMIT_REACHED]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BUSINESS_LIMIT_REQUIRES_PLAN]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BUSINESS_CREATE_IN_PROGRESS]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.SLUG_RESERVATION_IN_PROGRESS]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVOICE_NOT_FOUND]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVOICE_SLUG_GENERATION_FAILED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVOICE_AMOUNT_LOCKED_REQUIRES_AMOUNT]: RESPONSE_TYPE.ERROR,

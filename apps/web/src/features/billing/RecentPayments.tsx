@@ -14,8 +14,9 @@ import UiSpinner from '@/shared/ui/UiSpinner';
 
 const TYPE_LABELS: Record<PaymentRecord['type'], string> = {
     [PAYMENT_RECORD_TYPE.SUBSCRIPTION]: 'Підписка',
-    [PAYMENT_RECORD_TYPE.PACK]: 'Пакет виконань',
+    [PAYMENT_RECORD_TYPE.ONE_OFF]: 'Доступ на місяць',
     [PAYMENT_RECORD_TYPE.PRORATION]: 'Доплата за апгрейд',
+    [PAYMENT_RECORD_TYPE.UNMATCHED]: 'Нерозпізнане списання',
 };
 
 const STATUS_LABELS: Record<PaymentRecord['status'], string> = {
@@ -27,7 +28,7 @@ const STATUS_LABELS: Record<PaymentRecord['status'], string> = {
 
 const STATUS_CLASSES: Record<PaymentRecord['status'], string> = {
     [PAYMENT_RECORD_STATUS.APPROVED]: 'bg-success/15 text-success',
-    [PAYMENT_RECORD_STATUS.DECLINED]: 'bg-error/15 text-error',
+    [PAYMENT_RECORD_STATUS.DECLINED]: 'bg-destructive/15 text-destructive',
     [PAYMENT_RECORD_STATUS.REFUNDED]: 'bg-warning/15 text-warning',
     [PAYMENT_RECORD_STATUS.PENDING]: 'bg-muted text-muted-foreground',
 };

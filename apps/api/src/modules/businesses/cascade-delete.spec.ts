@@ -3,6 +3,7 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import { Model, Types } from 'mongoose';
 
 import { createReplSetMongo } from '../../test-utils/mongo';
+import { RedisLockService } from '../../common/services/redis-lock.service';
 import {
     AccountSlugHistory,
     AccountSlugHistorySchema,
@@ -26,6 +27,7 @@ import {
     InvoiceDocument,
     InvoiceSchema,
 } from '../invoices/schemas/invoice.schema';
+import { SlugReservationService } from '../slug-reservation/slug-reservation.service';
 import { BusinessesService } from './businesses.service';
 import {
     BusinessSlugHistory,
@@ -91,6 +93,27 @@ describe('BusinessesService cascade-delete (Sprint 4 §SP-5, MongoMemoryReplSet)
                 {
                     provide: SlugGeneratorService,
                     useValue: { generateRandomSlug: jest.fn() },
+                },
+                {
+                    // Cascade-delete лок не використовує — pass-through stub.
+                    provide: RedisLockService,
+                    useValue: {
+                        withLock: async (
+                            _key: string,
+                            _ttlMs: number,
+                            fn: () => Promise<unknown>
+                        ) => fn(),
+                    },
+                },
+                {
+                    // Cascade-delete броні не торкається — stub.
+                    provide: SlugReservationService,
+                    useValue: {
+                        isNameHeldByOther: jest.fn().mockResolvedValue(false),
+                        reserve: jest.fn(),
+                        consumeForUser: jest.fn().mockResolvedValue(undefined),
+                        getActiveForUser: jest.fn().mockResolvedValue(null),
+                    },
                 },
             ],
         }).compile();

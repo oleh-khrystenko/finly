@@ -3,88 +3,32 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Check } from 'lucide-react';
-import Image from 'next/image';
 import {
     PAYMENTS_SUBSCRIPTION_ENABLED,
     PAYMENTS_ONE_OFF_ENABLED,
     BILLING_DEMO_MODE,
 } from '@/shared/config/env';
-import { INTL_LOCALE } from '@/shared/lib';
 import {
     getCatalog,
     createSubscriptionCheckout,
     createOneOffCheckout,
 } from '@/shared/api/payments';
+import { extractApiErrorCode, getApiMessage } from '@/shared/api';
 import { useAuthStore } from '@/entities/user';
 import {
-    useBillingResetDialogStore,
     ManageSubscription,
     DemoBanner,
+    PLAN_COPY,
+    ONE_OFF_COPY,
+    ACCESS_LEVEL_LABEL,
 } from '@/features/billing';
 import { formatPrice, type PaymentsCatalog } from '@finly/types';
+import { formatLocalDate } from '@/shared/lib';
 import UiButton from '@/shared/ui/UiButton';
 import UiLink from '@/shared/ui/UiLink';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
 import UiPageHeading from '@/shared/ui/UiPageHeading';
 import UiSpinner from '@/shared/ui/UiSpinner';
-
-interface PlanCopy {
-    name: string;
-    tagline: string;
-    badge?: string;
-    features: string[];
-}
-
-// Плани різняться лише квотою виконань і ціною (per-tier feature-gating у
-// продукті немає), тож перелік можливостей однаковий — квоту показує окремий
-// рядок «виконань за період». Тримаємо копію правдивою: лише реальні
-// можливості Finly, без вигаданих фіч на кшталт «команд» чи «аналітики».
-const FINLY_FEATURES = [
-    'Платіжні QR-коди за стандартом НБУ',
-    'Брендовані QR з логотипом і рамкою',
-    'Публічні сторінки оплати та платіжні посилання',
-    'Кілька отримувачів і банківських реквізитів',
-];
-
-const PLAN_COPY: Record<string, PlanCopy> = {
-    starter: {
-        name: 'Starter',
-        tagline: 'Для ФОП, що приймає оплати через QR',
-        features: FINLY_FEATURES,
-    },
-    pro: {
-        name: 'Pro',
-        tagline: 'Для бухгалтерів і отримувачів з великим обігом',
-        badge: 'Популярний',
-        features: FINLY_FEATURES,
-    },
-};
-
-interface PackCopy {
-    name: string;
-    tagline: string;
-    badge?: string;
-}
-
-const PACK_COPY: Record<string, PackCopy> = {
-    basic: {
-        name: 'Basic Pack',
-        tagline: 'Швидке поповнення для миттєвих потреб',
-    },
-    max: {
-        name: 'Max Pack',
-        tagline: 'Найвигідніше для використання за потребою',
-        badge: 'Вигода',
-    },
-};
-
-function planName(code: string): string {
-    return PLAN_COPY[code]?.name ?? code;
-}
-
-function packName(code: string): string {
-    return PACK_COPY[code]?.name ?? code;
-}
 
 function intervalSuffix(interval: string): string {
     return interval === 'year' ? '/ рік' : '/ місяць';
@@ -94,8 +38,10 @@ export default function BillingPage() {
     const user = useAuthStore((s) => s.user);
     const [loadingAction, setLoadingAction] = useState<string | null>(null);
     const [catalog, setCatalog] = useState<PaymentsCatalog | null>(null);
-    const openResetDialog = useBillingResetDialogStore((s) => s.open);
     const [catalogLoading, setCatalogLoading] = useState(true);
+    // Стабільний «зараз» на час життя компонента — порівняння дати one-off без
+    // impure Date.now() у render-body (React purity).
+    const [nowMs] = useState(() => Date.now());
 
     useEffect(() => {
         getCatalog()
@@ -110,40 +56,55 @@ export default function BillingPage() {
 
     const billing = user.billing;
     const hasActive = billing?.hasActiveSubscription === true;
-    const hasBillingData = billing != null;
+
+    // Sprint 19 — активний one-off (рівень + дата). Підписка перекриває one-off
+    // у видимості (ManageSubscription), тож банер one-off і фільтр карток —
+    // лише коли підписки немає.
+    const oneOffUntil = billing?.oneOffAccessUntil
+        ? new Date(billing.oneOffAccessUntil)
+        : null;
+    const oneOffActive =
+        !hasActive && oneOffUntil != null && oneOffUntil.getTime() > nowMs;
+    const oneOffLevel = oneOffActive ? (billing?.oneOffLevel ?? null) : null;
 
     const handleSubscriptionCheckout = async (planCode: string) => {
         setLoadingAction(`subscribe_${planCode}`);
         try {
             const { checkoutUrl } = await createSubscriptionCheckout(planCode);
             window.location.assign(checkoutUrl);
-        } catch {
-            toast.error('Не вдалося створити сесію оплати');
+        } catch (err) {
+            toast.error(getApiMessage(extractApiErrorCode(err), 'payments'));
             setLoadingAction(null);
         }
     };
 
-    const handleOneOffCheckout = async (packCode: string) => {
-        setLoadingAction(`oneoff_${packCode}`);
+    const handleOneOffCheckout = async (oneOffCode: string) => {
+        setLoadingAction(`oneoff_${oneOffCode}`);
         try {
-            const { checkoutUrl } = await createOneOffCheckout(packCode);
+            const { checkoutUrl } = await createOneOffCheckout(oneOffCode);
             window.location.assign(checkoutUrl);
-        } catch {
-            toast.error('Не вдалося створити сесію оплати');
+        } catch (err) {
+            toast.error(getApiMessage(extractApiErrorCode(err), 'payments'));
             setLoadingAction(null);
         }
     };
+
+    // Активний one-off ховає однойменну one-off картку (тримаєш — не купуєш
+    // повторно); показуємо інший one-off + підписки.
+    const visibleOneOffs =
+        catalog?.oneOffAccesses.filter(
+            (o) => !(oneOffActive && o.level === oneOffLevel)
+        ) ?? [];
 
     return (
         <UiPageContainer className="space-y-10 py-12">
-            {/* ── Demo Banner ── */}
             {BILLING_DEMO_MODE && <DemoBanner />}
 
             {/* ── Page Header ── */}
             <div>
-                <UiPageHeading>Білінг</UiPageHeading>
+                <UiPageHeading>Тариф</UiPageHeading>
                 <p className="text-muted-foreground mt-2">
-                    Керуйте підпискою та виконаннями. Усі платежі безпечно
+                    Керуйте підпискою та доступом. Усі платежі безпечно
                     обробляються через WayForPay.
                 </p>
             </div>
@@ -160,6 +121,20 @@ export default function BillingPage() {
                 !catalogLoading &&
                 catalog &&
                 hasActive && <ManageSubscription catalog={catalog} />}
+
+            {/* ── Active One-off Access Banner (no subscription) ── */}
+            {!catalogLoading && oneOffActive && oneOffLevel && (
+                <div className="border-primary/30 bg-primary/10 rounded-xl border p-5">
+                    <p className="text-foreground font-semibold">
+                        Активний доступ: {ACCESS_LEVEL_LABEL[oneOffLevel]}
+                    </p>
+                    <p className="text-muted-foreground mt-1 text-sm">
+                        Діє до {formatLocalDate(oneOffUntil)}.
+                        {PAYMENTS_SUBSCRIPTION_ENABLED &&
+                            ' Оформлення підписки нижче перенесе перше списання на цю дату.'}
+                    </p>
+                </div>
+            )}
 
             {/* ── Subscription Plans (no active subscription) ── */}
             {PAYMENTS_SUBSCRIPTION_ENABLED &&
@@ -183,7 +158,7 @@ export default function BillingPage() {
                                     >
                                         <div className="flex items-center justify-between">
                                             <h3 className="text-foreground text-xl font-bold">
-                                                {planName(plan.code)}
+                                                {plan.name}
                                             </h3>
                                             {plan.featured && copy?.badge && (
                                                 <span className="border-muted-foreground/25 bg-muted/50 text-muted-foreground rounded-full border px-3 py-0.5 text-xs font-medium">
@@ -210,13 +185,6 @@ export default function BillingPage() {
                                         )}
 
                                         <ul className="mt-6 flex-1 space-y-3">
-                                            <li className="text-muted-foreground flex items-center gap-2 text-sm">
-                                                <Check className="text-success h-4 w-4 shrink-0" />
-                                                {plan.executions.toLocaleString(
-                                                    INTL_LOCALE
-                                                )}{' '}
-                                                виконань за період
-                                            </li>
                                             {(copy?.features ?? []).map(
                                                 (feature, idx) => (
                                                     <li
@@ -256,8 +224,7 @@ export default function BillingPage() {
                                                         : ''
                                                 }
                                             >
-                                                Підписатись на{' '}
-                                                {planName(plan.code)}
+                                                Підписатись на {plan.name}
                                             </span>
                                             {loadingAction ===
                                                 `subscribe_${plan.code}` && (
@@ -274,143 +241,99 @@ export default function BillingPage() {
                     </section>
                 )}
 
-            {/* ── Executions Section ── */}
-            {PAYMENTS_ONE_OFF_ENABLED && !catalogLoading && catalog && (
-                <section>
-                    <div className="mb-6">
-                        <h2 className="text-foreground text-2xl font-bold">
-                            Пакети виконань
-                        </h2>
-                    </div>
-
-                    <div
-                        className={`grid gap-6 ${catalog.executionPacks.length <= 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}
-                    >
-                        {catalog.executionPacks.map((pack) => {
-                            const copy = PACK_COPY[pack.code];
-                            return (
-                                <div
-                                    key={pack.code}
-                                    className="border-border bg-card flex flex-col rounded-xl border p-5 md:p-6"
-                                >
-                                    {/* ── Upper: image + name + badge ── */}
-                                    <div className="flex items-center gap-4">
-                                        <div className="relative aspect-square w-14 shrink-0 overflow-hidden rounded-lg">
-                                            <Image
-                                                src={`/images/packs/${pack.code}-light.svg`}
-                                                alt={packName(pack.code)}
-                                                fill
-                                                className="block object-cover dark:hidden"
-                                            />
-                                            <Image
-                                                src={`/images/packs/${pack.code}-dark.svg`}
-                                                alt={packName(pack.code)}
-                                                fill
-                                                className="hidden object-cover dark:block"
-                                            />
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                            <div className="flex items-center justify-between">
-                                                <p className="text-foreground text-base font-semibold">
-                                                    {packName(pack.code)}
-                                                </p>
-                                                {pack.featured &&
-                                                    copy?.badge && (
-                                                        <span className="border-muted-foreground/25 bg-muted/50 text-muted-foreground rounded-full border px-3 py-0.5 text-xs font-medium">
-                                                            {copy.badge}
-                                                        </span>
-                                                    )}
-                                            </div>
-                                            {copy?.tagline && (
-                                                <p className="text-muted-foreground mt-0.5 text-sm">
-                                                    {copy.tagline}
-                                                </p>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* ── Lower: price + executions + button ── */}
-                                    <div className="border-border mt-5 flex items-center justify-between border-t pt-5">
-                                        <div>
-                                            <p className="text-foreground text-xl font-bold">
-                                                {formatPrice(
-                                                    pack.priceAmount,
-                                                    pack.currency
-                                                )}
-                                            </p>
-                                            <p className="text-muted-foreground text-xs">
-                                                {pack.executions.toLocaleString(
-                                                    INTL_LOCALE
-                                                )}{' '}
-                                                виконань
-                                            </p>
-                                        </div>
-                                        <UiButton
-                                            variant={
-                                                pack.featured
-                                                    ? 'filled'
-                                                    : 'outline'
-                                            }
-                                            size="md"
-                                            className={`relative ${!pack.featured ? 'border-primary text-primary hover:bg-primary/10 hover:text-primary hover:border-primary' : ''}`}
-                                            onClick={() =>
-                                                handleOneOffCheckout(pack.code)
-                                            }
-                                            disabled={
-                                                loadingAction ===
-                                                `oneoff_${pack.code}`
-                                            }
-                                        >
-                                            <span
-                                                className={
-                                                    loadingAction ===
-                                                    `oneoff_${pack.code}`
-                                                        ? 'invisible'
-                                                        : ''
-                                                }
-                                            >
-                                                Придбати
-                                            </span>
-                                            {loadingAction ===
-                                                `oneoff_${pack.code}` && (
-                                                <UiSpinner
-                                                    size="sm"
-                                                    className="absolute inset-0 m-auto"
-                                                />
-                                            )}
-                                        </UiButton>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </section>
-            )}
-
-            {/* ── Reset Billing ── */}
-            {hasBillingData && (
-                <section className="border-border border-t pt-8">
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="min-w-0">
-                            <h2 className="text-foreground text-lg font-semibold">
-                                Скинути білінг
+            {/* ── One-off Monthly Access (no active subscription) ── */}
+            {PAYMENTS_ONE_OFF_ENABLED &&
+                !catalogLoading &&
+                catalog &&
+                !hasActive &&
+                visibleOneOffs.length > 0 && (
+                    <section>
+                        <div className="mb-6">
+                            <h2 className="text-foreground text-2xl font-bold">
+                                Доступ на місяць
                             </h2>
                             <p className="text-muted-foreground mt-1 text-sm">
-                                Видаляє підписку, виконання та історію платежів
-                                у WayForPay і в базі.
+                                Разова оплата без автопродовження. Зручно
+                                спробувати без підписки.
                             </p>
                         </div>
-                        <UiButton
-                            variant="destructive-outline"
-                            size="md"
-                            className="w-full shrink-0 sm:w-auto"
-                            onClick={openResetDialog}
+
+                        <div
+                            className={`grid gap-6 ${visibleOneOffs.length === 1 ? '' : 'sm:grid-cols-2'}`}
                         >
-                            Скинути білінг
-                        </UiButton>
-                    </div>
-                </section>
-            )}
+                            {visibleOneOffs.map((access) => {
+                                const copy = ONE_OFF_COPY[access.code];
+                                return (
+                                    <div
+                                        key={access.code}
+                                        className="border-border bg-card flex flex-col rounded-xl border p-5 md:p-6"
+                                    >
+                                        <div className="flex items-center justify-between">
+                                            <p className="text-foreground text-base font-semibold">
+                                                {access.name}
+                                            </p>
+                                            {access.featured && copy?.badge && (
+                                                <span className="border-muted-foreground/25 bg-muted/50 text-muted-foreground rounded-full border px-3 py-0.5 text-xs font-medium">
+                                                    {copy.badge}
+                                                </span>
+                                            )}
+                                        </div>
+                                        {copy?.tagline && (
+                                            <p className="text-muted-foreground mt-1 text-sm">
+                                                {copy.tagline}
+                                            </p>
+                                        )}
+
+                                        <div className="border-border mt-5 flex items-center justify-between border-t pt-5">
+                                            <p className="text-foreground text-xl font-bold">
+                                                {formatPrice(
+                                                    access.priceAmount,
+                                                    access.currency
+                                                )}
+                                            </p>
+                                            <UiButton
+                                                variant={
+                                                    access.featured
+                                                        ? 'filled'
+                                                        : 'outline'
+                                                }
+                                                size="md"
+                                                className={`relative ${!access.featured ? 'border-primary text-primary hover:bg-primary/10 hover:text-primary hover:border-primary' : ''}`}
+                                                onClick={() =>
+                                                    handleOneOffCheckout(
+                                                        access.code
+                                                    )
+                                                }
+                                                disabled={
+                                                    loadingAction ===
+                                                    `oneoff_${access.code}`
+                                                }
+                                            >
+                                                <span
+                                                    className={
+                                                        loadingAction ===
+                                                        `oneoff_${access.code}`
+                                                            ? 'invisible'
+                                                            : ''
+                                                    }
+                                                >
+                                                    Придбати
+                                                </span>
+                                                {loadingAction ===
+                                                    `oneoff_${access.code}` && (
+                                                    <UiSpinner
+                                                        size="sm"
+                                                        className="absolute inset-0 m-auto"
+                                                    />
+                                                )}
+                                            </UiButton>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </section>
+                )}
 
             {/* ── Terms Note ── */}
             <p className="text-muted-foreground text-center text-xs">

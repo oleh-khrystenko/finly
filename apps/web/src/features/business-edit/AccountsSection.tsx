@@ -2,9 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { CreditCard, Plus } from 'lucide-react';
-import { AxiosError } from 'axios';
 import { BANK_LABEL, type AccountWithCounts } from '@finly/types';
-import { getApiMessage, listAccounts } from '@/shared/api';
+import { extractApiErrorCode, getApiMessage, listAccounts } from '@/shared/api';
 import UiButton from '@/shared/ui/UiButton';
 import UiNavCard from '@/shared/ui/UiNavCard';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
@@ -29,12 +28,7 @@ interface SectionError {
 }
 
 function extractMessage(err: unknown): string {
-    const code =
-        err instanceof AxiosError
-            ? ((err.response?.data as { error?: { code?: string } } | undefined)
-                  ?.error?.code ?? 'unknown')
-            : 'unknown';
-    return getApiMessage(code, 'accounts');
+    return getApiMessage(extractApiErrorCode(err), 'accounts');
 }
 
 /**
@@ -200,8 +194,8 @@ function EmptyState({ createHref }: { createHref: string }) {
                     Поки немає жодних реквізитів
                 </p>
                 <p className="text-muted-foreground max-w-sm text-base">
-                    Додайте перші реквізити — клієнт зможе оплатити через QR-код
-                    або посилання.
+                    Додайте перші реквізити, і клієнт зможе оплатити через
+                    QR-код або посилання.
                 </p>
             </div>
             <UiButton
@@ -216,4 +210,3 @@ function EmptyState({ createHref }: { createHref: string }) {
         </div>
     );
 }
-

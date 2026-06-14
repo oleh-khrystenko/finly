@@ -1,21 +1,21 @@
 'use client';
 
-import { useState } from 'react';
-import { Check, Copy, ExternalLink, Pencil, RefreshCw } from 'lucide-react';
-import { toast } from 'sonner';
 import {
     buildQrDownloadFilename,
     businessSlugSchema,
     type Business,
+    type SlugAvailabilityStatus,
+    type SlugReservationView,
     type UpdateBusinessRequest,
 } from '@finly/types';
-import UiButton from '@/shared/ui/UiButton';
-import UiEditableField from '@/shared/ui/UiEditableField';
-import UiPrefixInput from '@/shared/ui/UiPrefixInput';
 import UiQrPanel from '@/shared/ui/UiQrPanel';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
+import UiSlugEditor from '@/shared/ui/UiSlugEditor';
 import UiSwitch from '@/shared/ui/UiSwitch';
+import UiUpsellNote from '@/shared/ui/UiUpsellNote';
 import { mapValidationCode } from '@/shared/lib';
+import { useState } from 'react';
+import { toast } from 'sonner';
 import { useResetBusinessSlugConfirmStore } from './resetBusinessSlugConfirmStore';
 
 interface Props {
@@ -23,40 +23,64 @@ interface Props {
     /** Public payment-page origin (NEXT_PUBLIC_PAY_PUBLIC_URL чи аналог). */
     payPublicOrigin: string;
     apiBase?: string;
+    /** Платний рівень (brand+): Save пише slug одразу, інакше — бронь + апсел. */
+    isPaid: boolean;
     onSave: (patch: UpdateBusinessRequest) => Promise<void>;
     /** Скидання slug-у на свіже випадкове посилання (через confirm-dialog). */
     onResetSlug: () => Promise<void>;
+    /** Sprint 20 — live-доступність бажаного імені. */
+    checkSlugAvailability: (slug: string) => Promise<SlugAvailabilityStatus>;
+    /** Sprint 20 — холд бажаного імені (free-flow на Save). */
+    reserveSlug: (slug: string) => Promise<SlugReservationView>;
+    /** Sprint 20 — primary CTA апселу: підписка з поверненням на цю сторінку. */
+    onSubscribe: () => void;
+    subscribePriceLabel: string;
+    /** Активна бронь цієї сутності (показати апсел + відлік одразу). */
+    initialReservation: SlugReservationView | null;
+    /** Фолбек «оберіть інше»: відкрити поле редагування на mount. */
+    autoStartSlugEdit: boolean;
 }
 
 /**
- * Sprint 14: slug + public URL — один концепт (адреса публічної сторінки),
- * рендериться як єдине поле через `UiEditableField`. Раніше було два окремі
- * рядки що дублювали slug-значення (раз "Slug: Xv0RTvfe", раз
- * "Посилання: pay.finly.com.ua/Xv0RTvfe").
+ * Sprint 14: slug + public URL — один концепт (адреса публічної сторінки).
+ * Sprint 20 інвертує гейтинг: поле і кнопка редагування видимі всім рівням
+ * (`UiSlugEditor`), бар'єр спрацьовує на Save (free → бронь + inline-апсел).
  *
- * Read mode — host-prefix у muted-кольорі + slug у foreground (Twitter/GitHub-
- * стиль) + inline copy-button; pencil-action рендерить UiEditableField.
- * Edit mode — composite input з немутабельним prefix у `bg-secondary` лівій
- * частині і редагованою slug-частиною праворуч (єдина рамка).
+ * QR-код тут — друге кодування тієї самої адреси (URL для людини, QR для камери),
+ * тому живе в одній картці. На бізнес-рівні можливий лише тип-2 (URL на вітрину).
  *
- * Підписковий gate (free-tier — slug random, paid — vanity-edit) приходить
- * разом з білінгом окремим спринтом; зараз slug відкритий для всіх.
- *
- * QR-код тут — не окрема секція, а друге кодування тієї самої адреси
- * (URL — для людини, QR — для камери телефона), тому живе в одній картці
- * під дією-посиланнями. На бізнес-рівні можливий лише тип-2 (URL на вітрину):
- * тип-1 (НБУ-payload) потребує IBAN, а IBAN живе на рахунку, не на бізнесі.
+ * Sprint 19: заблокований реконсиляцією отримувач (`accessBlockedAt`) рендерить
+ * стан «доступ призупинено» — публічні ендпоінти для нього віддають 404.
  */
 export default function PublicSection({
     business,
     payPublicOrigin,
     apiBase = '/api',
+    isPaid,
     onSave,
     onResetSlug,
+    checkSlugAvailability,
+    reserveSlug,
+    onSubscribe,
+    subscribePriceLabel,
+    initialReservation,
+    autoStartSlugEdit,
 }: Props) {
-    const [copied, setCopied] = useState(false);
     const [seoSaving, setSeoSaving] = useState(false);
     const openResetConfirm = useResetBusinessSlugConfirmStore((s) => s.open);
+
+    if (business.accessBlockedAt != null) {
+        return (
+            <UiSectionCard title="Публічна сторінка">
+                <div className="mt-4">
+                    <UiUpsellNote
+                        message="Доступ призупинено, публічна сторінка і QR-коди неактивні. Поновіть доступ або видаліть отримувача."
+                        ctaLabel="Поновити доступ"
+                    />
+                </div>
+            </UiSectionCard>
+        );
+    }
 
     const hostnamePrefix = `${payPublicOrigin
         .replace(/^https?:\/\//, '')
@@ -65,16 +89,6 @@ export default function PublicSection({
     const qrEndpoint = `${apiBase}/businesses/public/${encodeURIComponent(
         business.slug
     )}/qr/business.png`;
-
-    const handleCopy = async () => {
-        try {
-            await navigator.clipboard.writeText(publicUrl);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-        } catch {
-            toast.error('Не вдалося скопіювати');
-        }
-    };
 
     const handleSeoToggle = async (next: boolean) => {
         setSeoSaving(true);
@@ -91,82 +105,12 @@ export default function PublicSection({
         <UiSectionCard title="Публічна сторінка">
             <div className="divide-border mt-4 divide-y">
                 <div className="pb-6">
-                    <UiEditableField<string>
-                        value={business.slug}
-                        hideDefaultPencil
-                        renderRead={(_v, { startEdit }) => (
-                            <div className="flex flex-col gap-3">
-                                <span className="font-mono break-all">
-                                    <span className="text-muted-foreground">
-                                        {hostnamePrefix}
-                                    </span>
-                                    <span className="text-foreground">
-                                        {business.slug}
-                                    </span>
-                                </span>
-                                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-                                    <UiButton
-                                        as="a"
-                                        href={publicUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        variant="outline"
-                                        size="md"
-                                        IconLeft={<ExternalLink />}
-                                        className="w-full sm:w-auto"
-                                    >
-                                        Відкрити в новій вкладці
-                                    </UiButton>
-                                    <UiButton
-                                        type="button"
-                                        variant="outline"
-                                        size="md"
-                                        onClick={() => void handleCopy()}
-                                        IconLeft={copied ? <Check /> : <Copy />}
-                                        className="w-full sm:w-auto"
-                                    >
-                                        {copied ? 'Скопійовано' : 'Копіювати'}
-                                    </UiButton>
-                                    <UiButton
-                                        type="button"
-                                        variant="outline"
-                                        size="md"
-                                        onClick={startEdit}
-                                        IconLeft={<Pencil />}
-                                        className="w-full sm:w-auto"
-                                    >
-                                        Редагувати
-                                    </UiButton>
-                                    <UiButton
-                                        type="button"
-                                        variant="outline"
-                                        size="md"
-                                        onClick={() =>
-                                            openResetConfirm(() => {
-                                                void onResetSlug();
-                                            })
-                                        }
-                                        IconLeft={<RefreshCw />}
-                                        className="w-full sm:w-auto"
-                                    >
-                                        Згенерувати нове посилання
-                                    </UiButton>
-                                </div>
-                            </div>
-                        )}
-                        renderEdit={({ value, setValue, error }) => (
-                            <UiPrefixInput
-                                prefix={hostnamePrefix}
-                                value={value}
-                                onChange={(e) => setValue(e.target.value)}
-                                error={error}
-                                aria-label="Адреса сторінки"
-                                autoFocus
-                                autoCapitalize="off"
-                                autoCorrect="off"
-                                spellCheck={false}
-                            />
-                        )}
+                    <UiSlugEditor
+                        currentSlug={business.slug}
+                        prefix={hostnamePrefix}
+                        publicUrl={publicUrl}
+                        ariaLabel="Адреса сторінки"
+                        isPaid={isPaid}
                         validate={(v) => {
                             const r = businessSlugSchema.safeParse(v);
                             return r.success
@@ -175,7 +119,18 @@ export default function PublicSection({
                                       r.error.issues[0]?.message
                                   ) ?? null);
                         }}
+                        checkAvailability={checkSlugAvailability}
+                        reserve={reserveSlug}
                         onSave={(slug) => onSave({ slug })}
+                        onRegenerate={() =>
+                            openResetConfirm(() => {
+                                void onResetSlug();
+                            })
+                        }
+                        onSubscribe={onSubscribe}
+                        subscribePriceLabel={subscribePriceLabel}
+                        initialReservation={initialReservation}
+                        autoStartEdit={autoStartSlugEdit}
                     />
                 </div>
                 <div className="py-6">

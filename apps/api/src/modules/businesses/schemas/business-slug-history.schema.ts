@@ -52,6 +52,17 @@ export class BusinessSlugHistory {
     @Prop({ required: true, lowercase: true, trim: true })
     slugLower!: string;
 
+    /**
+     * Sprint 19 — чи робить запис 308-redirect на канонічний бізнес. `true`
+     * (default) для добровільного rename: старе посилання веде на новий slug.
+     * `false` для lapse-reset (втрата доступу): ім'я лише резервується на холд
+     * (anti-squatting через unique-index лишається), але публічний хіт на нього
+     * НЕ редіректить на колишнього неплатника — інакше його надруковані QR
+     * лишались би робочими, а ім'я не можна було б перепродати.
+     */
+    @Prop({ type: Boolean, default: true })
+    redirect!: boolean;
+
     createdAt!: Date;
 }
 

@@ -16,6 +16,7 @@ import {
 } from '../invoices/schemas/invoice-slug-history.schema';
 import { Invoice, InvoiceSchema } from '../invoices/schemas/invoice.schema';
 import { QrModule } from '../qr/qr.module';
+import { SlugReservationModule } from '../slug-reservation/slug-reservation.module';
 import { UsersModule } from '../users/users.module';
 import { BusinessAccessGuard } from './business-access.guard';
 import { BusinessesController } from './businesses.controller';
@@ -26,6 +27,7 @@ import {
     BusinessSlugHistorySchema,
 } from './schemas/business-slug-history.schema';
 import { Business, BusinessSchema } from './schemas/business.schema';
+import { ReconciliationService } from './reconciliation.service';
 import { SlugGeneratorService } from './slug-generator.service';
 
 /**
@@ -70,9 +72,20 @@ import { SlugGeneratorService } from './slug-generator.service';
         ]),
         UsersModule,
         QrModule,
+        SlugReservationModule,
     ],
     controllers: [BusinessesController, PublicBusinessesController],
-    providers: [BusinessesService, SlugGeneratorService, BusinessAccessGuard],
-    exports: [MongooseModule, BusinessesService, BusinessAccessGuard],
+    providers: [
+        BusinessesService,
+        SlugGeneratorService,
+        BusinessAccessGuard,
+        ReconciliationService,
+    ],
+    exports: [
+        MongooseModule,
+        BusinessesService,
+        BusinessAccessGuard,
+        ReconciliationService,
+    ],
 })
 export class BusinessesModule {}

@@ -36,8 +36,10 @@ jobs:
                       git fetch origin main
                       git reset --hard origin/main
 
-                      # Build and restart containers
-                      docker compose build --parallel
+                      # Build runtime services and the profiled migration image
+                      # from the same commit. Without the profile, Compose skips
+                      # `api-migrations` and `run` may reuse a stale image.
+                      docker compose --profile migrations build --parallel
 
                       # Run pending DB migrations (Sprint 3 §3.1 + future).
                       # One-shot service via dedicated `migrations` profile +

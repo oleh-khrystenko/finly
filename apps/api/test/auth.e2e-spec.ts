@@ -13,7 +13,7 @@ import * as bcrypt from 'bcrypt';
 import { Model } from 'mongoose';
 
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
-import { REDIS_CLIENT } from '../src/common/modules/redis.module';
+import { REDIS_CLIENT, RedisModule } from '../src/common/modules/redis.module';
 import { AppController } from '../src/app.controller';
 import { AppService } from '../src/app.service';
 import { AuthModule } from '../src/modules/auth/auth.module';
@@ -22,6 +22,7 @@ import { UsersModule } from '../src/modules/users/users.module';
 import { ReportsModule } from '../src/modules/reports/reports.module';
 import { StorageModule } from '../src/modules/storage/storage.module';
 import { PaymentsModule } from '../src/modules/payments/payments.module';
+import { LandingClaimModule } from '../src/modules/landing-claim/landing-claim.module';
 import { User, UserDocument } from '../src/modules/users/schemas/user.schema';
 import { EmailService } from '../src/modules/email/email.service';
 import { CURRENT_TERMS_VERSION } from '@finly/types';
@@ -123,6 +124,32 @@ function createStatefulRedisMock() {
         quit: jest.fn().mockResolvedValue('OK'),
         on: jest.fn().mockReturnThis(),
 
+        /**
+         * Lua-скрипти: `RedisCounterService` (INCR+EXPIRE лічильники lockout /
+         * rate-limit) і `RedisLockService` (compare-and-delete release). TTL у
+         * тестах ігнорується, як і в решті мока.
+         */
+        async eval(
+            script: string,
+            _numKeys: number,
+            key: string,
+            arg?: string | number
+        ) {
+            if (script.includes("'INCR'")) {
+                const next = (parseInt(store.get(key) ?? '0', 10) || 0) + 1;
+                store.set(key, String(next));
+                return next;
+            }
+            if (script.includes("'GET'") && script.includes("'DEL'")) {
+                if (store.get(key) === String(arg)) {
+                    store.delete(key);
+                    return 1;
+                }
+                return 0;
+            }
+            return 0;
+        },
+
         async get(key: string) {
             return store.get(key) ?? null;
         },
@@ -216,12 +243,19 @@ describe('Auth E2E', () => {
                     throttlers: [{ ttl: 60000, limit: 600 }],
                 }),
                 MongooseModule.forRoot(mongoServer.getUri()),
+                // @Global RedisModule мусить бути у графі тест-композиції,
+                // інакше токен REDIS_CLIENT не існує і override не діє.
+                RedisModule,
                 AuthModule,
                 EmailModule,
                 UsersModule,
                 ReportsModule,
                 StorageModule,
                 PaymentsModule,
+                // Sprint 13 переніс POST /auth/magic-link/verify у
+                // MagicLinkVerifyController (LandingClaimModule) — без нього
+                // verify-тести били б у неіснуючий маршрут (404).
+                LandingClaimModule,
             ],
             controllers: [AppController],
             providers: [
@@ -537,12 +571,10 @@ describe('Auth E2E', () => {
         });
 
         it('should send with each purpose', async () => {
-            const purposes = [
-                'login',
-                'register',
-                'reset-password',
-                'delete-account',
-            ];
+            // `delete-account` свідомо НЕ приймається публічним send-ендпоінтом
+            // (контролер відповідає 400): видалення акаунта шле власний
+            // magic-link через POST /users/account/delete.
+            const purposes = ['login', 'register', 'reset-password'];
             for (const purpose of purposes) {
                 redisMock._clear();
                 mockEmailService.sendMagicLink.mockClear();
@@ -554,6 +586,16 @@ describe('Auth E2E', () => {
 
                 expect(mockEmailService.sendMagicLink).toHaveBeenCalled();
             }
+
+            mockEmailService.sendMagicLink.mockClear();
+            await supertest(app.getHttpServer())
+                .post('/api/auth/magic-link/send')
+                .send({
+                    email: 'test-delete@example.com',
+                    purpose: 'delete-account',
+                })
+                .expect(400);
+            expect(mockEmailService.sendMagicLink).not.toHaveBeenCalled();
         });
 
         it('should rate limit after 3 requests for same email', async () => {
@@ -569,6 +611,16 @@ describe('Auth E2E', () => {
             redisMock._store.set(
                 'magic_dedup:user@example.com:login',
                 'existing-token'
+            );
+            // Sprint 10 overwrite-flow: dedup спрацьовує лише коли живий і сам
+            // magic-record (інакше fall-through на повторний send як
+            // defense-in-depth). Сидимо обидва ключі, як у реальному Redis.
+            redisMock._store.set(
+                'magic:existing-token',
+                JSON.stringify({
+                    email: 'user@example.com',
+                    purpose: 'login',
+                })
             );
 
             await supertest(app.getHttpServer())
@@ -1044,6 +1096,7 @@ describe('Auth E2E', () => {
             const res = await supertest(app.getHttpServer())
                 .post('/api/auth/refresh')
                 .set('Cookie', `bid_refresh=${refreshCookie}`)
+                .send({})
                 .expect(201);
 
             const body = res.body as { data: { accessToken: string } };
@@ -1058,6 +1111,7 @@ describe('Auth E2E', () => {
         it('should return 401 on refresh without cookie', async () => {
             await supertest(app.getHttpServer())
                 .post('/api/auth/refresh')
+                .send({})
                 .expect(401);
         });
 
@@ -1373,6 +1427,7 @@ describe('Auth E2E', () => {
             await supertest(app.getHttpServer())
                 .post('/api/auth/refresh')
                 .set('Cookie', `bid_refresh=${refreshToken}`)
+                .send({})
                 .expect(401);
         });
 

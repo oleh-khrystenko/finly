@@ -271,6 +271,17 @@ export const UpdateBusinessSchema = z
 export type UpdateBusinessRequest = z.infer<typeof UpdateBusinessSchema>;
 
 /**
+ * Sprint 20 — бажане ім'я для перевірки доступності (GET-query) і броні
+ * (POST-body) у scope бізнесу. Лише формат slug; uniqueness/reserved/бронь —
+ * на сервері.
+ */
+export const BusinessSlugCandidateSchema = z
+    .object({ slug: businessSlugSchema })
+    .strict();
+
+export type BusinessSlugCandidate = z.infer<typeof BusinessSlugCandidateSchema>;
+
+/**
  * Sprint 9 §SP-4 + §4.4 — list/getBySlug response shape для cabinet-зони.
  * `Business` (entity-Zod) + **два counters**: `accountsCount` + `invoicesCount`.
  *

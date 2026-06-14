@@ -55,8 +55,8 @@ export class PaymentsController {
                 subscriptionPlans: ENV.PAYMENTS_SUBSCRIPTION_ENABLED
                     ? catalog.subscriptionPlans
                     : [],
-                executionPacks: ENV.PAYMENTS_ONE_OFF_ENABLED
-                    ? catalog.executionPacks
+                oneOffAccesses: ENV.PAYMENTS_ONE_OFF_ENABLED
+                    ? catalog.oneOffAccesses
                     : [],
             },
         };
@@ -129,16 +129,6 @@ export class PaymentsController {
             limit
         );
         return { data: records.map(mapPaymentRecord) };
-    }
-
-    @UseGuards(JwtActiveGuard)
-    @Post('reset')
-    @HttpCode(HttpStatus.OK)
-    async resetBilling(
-        @CurrentUser() user: UserDocument
-    ): Promise<{ data: null }> {
-        await this.paymentsService.resetBilling(user._id.toString());
-        return { data: null };
     }
 
     @SkipThrottle()

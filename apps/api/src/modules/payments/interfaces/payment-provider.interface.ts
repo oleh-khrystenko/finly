@@ -32,7 +32,7 @@ export interface OneOffCheckoutInput {
     userId: string;
     userEmail: string;
     orderReference: string;
-    packName: string;
+    productName: string;
     amount: number; // копійки
     currency: string;
     serviceUrl: string;

@@ -42,7 +42,7 @@ export function useUserMenu(icons: {
         },
         {
             value: 'billing',
-            label: 'Білінг',
+            label: 'Тариф',
             icon: icons.billing,
             route: '/billing',
         },
@@ -64,7 +64,16 @@ export function useUserMenu(icons: {
             router.push(item.route);
         } else if (value === 'logout') {
             void (async () => {
-                await logout();
+                // Server-side revoke — best-effort: interceptor пропускає
+                // `/auth/logout`-помилки наскрізь, і без catch користувач
+                // лишався б «не вийшов» без жодної реакції. Локальний вихід
+                // (clearUser + redirect) виконується завжди; невідкликаний
+                // refresh-token доживе до TTL або ротації.
+                try {
+                    await logout();
+                } catch (error) {
+                    console.warn('Logout request failed', error);
+                }
                 clearUser();
                 window.location.assign('/');
             })();

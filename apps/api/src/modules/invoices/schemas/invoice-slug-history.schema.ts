@@ -41,6 +41,13 @@ export class InvoiceSlugHistory {
     @Prop({ required: true, lowercase: true, trim: true })
     slugLower!: string;
 
+    /**
+     * Sprint 19 — `true` (default) для добровільного rename (308-redirect);
+     * `false` для lapse-reset (ім'я резервується на холд без редіректу).
+     */
+    @Prop({ type: Boolean, default: true })
+    redirect!: boolean;
+
     createdAt!: Date;
 }
 

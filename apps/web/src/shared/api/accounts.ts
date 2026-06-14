@@ -4,6 +4,8 @@ import type {
     AccountWithCounts,
     CreateAccountRequest,
     PublicAccountView,
+    SlugAvailabilityResponse,
+    SlugReservationView,
     UpdateAccountRequest,
 } from '@finly/types';
 
@@ -64,6 +66,32 @@ export async function resetAccountSlug(
 ): Promise<Account> {
     const { data } = await apiClient.post<{ data: Account }>(
         `/businesses/me/${encodeURIComponent(businessSlug)}/accounts/${encodeURIComponent(accountSlug)}/reset-slug`
+    );
+    return data.data;
+}
+
+/** Sprint 20 — live-доступність бажаного slug рахунку (у scope бізнесу). */
+export async function checkAccountSlugAvailability(
+    businessSlug: string,
+    accountSlug: string,
+    desired: string
+): Promise<SlugAvailabilityResponse> {
+    const { data } = await apiClient.get<{ data: SlugAvailabilityResponse }>(
+        `/businesses/me/${encodeURIComponent(businessSlug)}/accounts/${encodeURIComponent(accountSlug)}/slug-availability`,
+        { params: { slug: desired } }
+    );
+    return data.data;
+}
+
+/** Sprint 20 — холд бажаного вільного slug рахунку за користувачем. */
+export async function reserveAccountSlug(
+    businessSlug: string,
+    accountSlug: string,
+    desired: string
+): Promise<SlugReservationView> {
+    const { data } = await apiClient.post<{ data: SlugReservationView }>(
+        `/businesses/me/${encodeURIComponent(businessSlug)}/accounts/${encodeURIComponent(accountSlug)}/slug-reservation`,
+        { slug: desired }
     );
     return data.data;
 }

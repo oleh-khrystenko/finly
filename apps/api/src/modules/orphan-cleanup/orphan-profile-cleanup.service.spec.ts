@@ -26,7 +26,9 @@ import {
     BusinessSchema,
 } from '../businesses/schemas/business.schema';
 import { BusinessesService } from '../businesses/businesses.service';
+import { RedisLockService } from '../../common/services/redis-lock.service';
 import { SlugGeneratorService } from '../businesses/slug-generator.service';
+import { SlugReservationService } from '../slug-reservation/slug-reservation.service';
 import { EmailService } from '../email/email.service';
 import {
     InvoiceSlugCounter,
@@ -115,6 +117,27 @@ describe('OrphanProfileCleanupService (Sprint 12 §12.1c, MongoMemoryReplSet)', 
                 {
                     provide: SlugGeneratorService,
                     useValue: { generateRandomSlug: jest.fn() },
+                },
+                {
+                    // Orphan-cleanup лок не використовує — pass-through stub.
+                    provide: RedisLockService,
+                    useValue: {
+                        withLock: async (
+                            _key: string,
+                            _ttlMs: number,
+                            fn: () => Promise<unknown>
+                        ) => fn(),
+                    },
+                },
+                {
+                    // Orphan-cleanup броні не торкається — stub.
+                    provide: SlugReservationService,
+                    useValue: {
+                        isNameHeldByOther: jest.fn().mockResolvedValue(false),
+                        reserve: jest.fn(),
+                        consumeForUser: jest.fn().mockResolvedValue(undefined),
+                        getActiveForUser: jest.fn().mockResolvedValue(null),
+                    },
                 },
                 { provide: EmailService, useValue: emailMock },
             ],

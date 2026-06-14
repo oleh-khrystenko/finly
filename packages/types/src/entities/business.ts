@@ -173,6 +173,12 @@ export const BusinessSchema = z
         paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
         seoIndexEnabled: z.boolean(),
         deletedAt: z.coerce.date().nullable(),
+        /**
+         * Sprint 19 — стемп блокування доступу реконсиляцією (null = активний).
+         * Заблокований бізнес видимий у кабінеті як «доступ призупинено», його
+         * публічна сторінка і QR неактивні.
+         */
+        accessBlockedAt: z.coerce.date().nullable(),
         createdAt: z.coerce.date(),
         updatedAt: z.coerce.date(),
     })

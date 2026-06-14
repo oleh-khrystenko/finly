@@ -18,7 +18,10 @@ describe('LandingClaimService.attemptLandingClaim (Sprint 10 §10.1)', () => {
         create: jest.Mock;
         findByBusinessAndIban: jest.Mock;
     }>;
-    let usersService: jest.Mocked<{ setPendingPostLoginTarget: jest.Mock }>;
+    let usersService: jest.Mocked<{
+        setPendingPostLoginTarget: jest.Mock;
+        findById: jest.Mock;
+    }>;
 
     const DRAFT: LandingDraft = {
         receiverName: 'Іваненко',
@@ -40,6 +43,9 @@ describe('LandingClaimService.attemptLandingClaim (Sprint 10 §10.1)', () => {
         };
         usersService = {
             setPendingPostLoginTarget: jest.fn().mockResolvedValue(undefined),
+            // Sprint 19 — claim резолвить рівень доступу claiming-користувача
+            // для лімітів create. Без білінгу → 'none' (типовий онбординг).
+            findById: jest.fn().mockResolvedValue({ billing: null }),
         };
         const module = await Test.createTestingModule({
             providers: [

@@ -170,7 +170,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
                 ? exception.message
                 : 'Internal server error';
 
-        // Allow exceptions to carry an explicit error code (e.g. SubscriptionGuard).
+        // Allow exceptions to carry an explicit error code (e.g. access-level
+        // замки на кшталт assertSlugEditAllowed).
         const explicitCode =
             exceptionResponse &&
             typeof exceptionResponse === 'object' &&
