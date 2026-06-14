@@ -60,7 +60,7 @@ export default function QrSection({
                     params={{ host: 'legacy' }}
                     title="Запасний код для оплати"
                     description="Покажіть його, якщо банк клієнта не зчитав основний код для оплати."
-                    alt="QR за стандартом НБУ — запасна адреса"
+                    alt="QR за стандартом НБУ (запасна адреса)"
                     downloadFilename={buildQrDownloadFilename(
                         'payment-legacy',
                         {

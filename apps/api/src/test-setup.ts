@@ -2,6 +2,7 @@
 // but not needed for unit tests (mocked at service level).
 process.env.NODE_ENV ??= 'test';
 process.env.PORT ??= '4000';
+process.env.TRUST_PROXY_HOPS ??= '0';
 process.env.WEB_URL ??= 'http://localhost:3000';
 process.env.PAY_PUBLIC_URL ??= 'http://pay.finly.local:3000';
 process.env.MONGODB_URI ??= 'mongodb://localhost:27017/test';
@@ -19,6 +20,7 @@ process.env.WAYFORPAY_MERCHANT_SECRET_KEY ??= 'flk3409refn54t54t*FNJRET';
 process.env.WAYFORPAY_MERCHANT_DOMAIN ??= 'finly.com.ua';
 process.env.PAYMENTS_SUBSCRIPTION_ENABLED ??= 'true';
 process.env.PAYMENTS_ONE_OFF_ENABLED ??= 'true';
+process.env.BILLING_DEMO_MODE ??= 'true';
 process.env.AUTH_PASSWORD_MIN_LENGTH ??= '8';
 process.env.AUTH_LOCKOUT_THRESHOLDS ??= '5:1,10:5,20:15';
 process.env.AUTH_LOGIN_ATTEMPTS_TTL_MIN ??= '15';

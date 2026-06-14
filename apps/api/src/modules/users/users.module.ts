@@ -2,6 +2,7 @@ import { forwardRef, Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 
 import { AuthModule } from '../auth/auth.module';
+import { SlugReservationModule } from '../slug-reservation/slug-reservation.module';
 import { StorageModule } from '../storage/storage.module';
 import { AvatarController } from './avatar.controller';
 import { AvatarService } from './avatar.service';
@@ -28,6 +29,9 @@ import { UsersService } from './users.service';
         // потрібен доступ до StorageService для pure file-ops. StorageModule
         // autonomous, тому імпорт безризиковий — петлі немає.
         StorageModule,
+        // Sprint 20 — `getMe` віддає активну бронь slug (відлік + добивання
+        // наміру). SlugReservationModule standalone, циклу немає.
+        SlugReservationModule,
     ],
     controllers: [UsersController, AvatarController],
     providers: [UsersService, AvatarService, CleanupService],

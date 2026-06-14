@@ -7,21 +7,17 @@ import {
 } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
-import { randomBytes } from 'crypto';
-import Redis from 'ioredis';
 import {
     BILLING_CURRENCY,
-    EXECUTION_ACTION,
-    EXECUTION_TRANSACTION_TYPE,
     PAYMENT_RECORD_STATUS,
     PAYMENT_RECORD_TYPE,
     PAYMENT_TYPE,
     RESPONSE_CODE,
     SUBSCRIPTION_STATUS,
-    SUBSCRIPTION_TRIAL_MONTHS,
     WAYFORPAY_TRANSACTION_STATUS,
-    findExecutionPack,
+    findOneOffAccess,
     findSubscriptionPlan,
+    type AccessLevel,
     type BillingInterval,
     type BillingWebhookEvent,
     type CancelSubscription,
@@ -51,10 +47,18 @@ import {
     PaymentRecordLean,
 } from './schemas/payment-record.schema';
 import { UsersService } from '../users/users.service';
-import { REDIS_CLIENT } from '../../common/modules/redis.module';
+import { ReconciliationService } from '../businesses/reconciliation.service';
+import {
+    BILLING_LOCK_TTL_MS,
+    billingLockKey,
+} from '../../common/billing/billing-lock';
+import {
+    RedisLockBusyError,
+    RedisLockService,
+} from '../../common/services/redis-lock.service';
 import {
     ORDER_KIND,
-    buildPackOrderReference,
+    buildOneOffOrderReference,
     buildSubscriptionOrderReference,
     parseOrderReference,
     type ParsedOrderReference,
@@ -62,22 +66,6 @@ import {
 
 const WEBHOOK_MONGO_TIMEOUT_MS = 10_000;
 const PROVIDER = 'wayforpay';
-
-// Стеля утримання per-user білінг-локу. Найдовша операція (changePlan upgrade)
-// робить послідовно proration-Charge + CHANGE, кожен до REQUEST_TIMEOUT_MS=20s,
-// тож 60s покриває з запасом. Lock авто-звільняється по TTL, якщо процес упав
-// усередині критичної секції.
-const BILLING_LOCK_TTL_MS = 60_000;
-const BILLING_LOCK_PREFIX = 'billing_op:';
-
-// Звільнення локу — compare-and-delete: знімаємо лише власний токен, інакше
-// операція, що перевищила TTL, видалила б lock, уже захоплений іншим запитом.
-const BILLING_LOCK_RELEASE_SCRIPT = `
-if redis.call('GET', KEYS[1]) == ARGV[1] then
-    return redis.call('DEL', KEYS[1])
-end
-return 0
-`;
 
 // Нефінальні статуси транзакції: проміжний колбек, після якого WayForPay
 // надішле фінальний статус окремою подією (providerEventId містить статус).
@@ -106,57 +94,42 @@ export class PaymentsService {
         @InjectModel(PaymentRecord.name)
         private readonly paymentRecordModel: Model<PaymentRecordDocument>,
 
-        @Inject(REDIS_CLIENT)
-        private readonly redis: Redis,
-
         @InjectConnection()
         private readonly connection: Connection,
 
-        private readonly usersService: UsersService
+        private readonly usersService: UsersService,
+
+        private readonly reconciliation: ReconciliationService,
+
+        private readonly locks: RedisLockService
     ) {}
 
     /**
-     * Серіалізує білінг-write-операції одного користувача per-user Redis-локом.
-     * WayForPay charge/refund/CHANGE неідемпотентні: два паралельні запити (дві
-     * вкладки) інакше задвоїли б proration-списання чи refund. Lock зайнятий →
-     * `BILLING_OPERATION_IN_PROGRESS`. Звільнення гарантоване (`finally`) +
-     * TTL-fallback на випадок краху всередині секції.
+     * Серіалізує білінг-write-операції одного користувача per-user Redis-локом
+     * (`RedisLockService` + спільний ключ з `billing-lock.ts` — той самий
+     * мьютекс тримає і `ReconciliationService.reconcileUnderLock`). WayForPay
+     * charge/refund/CHANGE неідемпотентні: два паралельні запити (дві вкладки)
+     * інакше задвоїли б proration-списання чи refund. Lock зайнятий →
+     * `BILLING_OPERATION_IN_PROGRESS`.
      */
     private async withBillingLock<T>(
         userId: string,
         fn: () => Promise<T>
     ): Promise<T> {
-        const key = `${BILLING_LOCK_PREFIX}${userId}`;
-        const token = randomBytes(16).toString('hex');
-        const acquired = await this.redis.set(
-            key,
-            token,
-            'PX',
-            BILLING_LOCK_TTL_MS,
-            'NX'
-        );
-        if (acquired !== 'OK') {
-            throw new ConflictException({
-                code: RESPONSE_CODE.BILLING_OPERATION_IN_PROGRESS,
-                message: 'Billing operation already in progress',
-            });
-        }
         try {
-            return await fn();
-        } finally {
-            try {
-                await this.redis.eval(
-                    BILLING_LOCK_RELEASE_SCRIPT,
-                    1,
-                    key,
-                    token
-                );
-            } catch (error) {
-                this.logger.error(
-                    `Failed to release billing lock for user ${userId} (expires in ≤${BILLING_LOCK_TTL_MS}ms)`,
-                    error instanceof Error ? error.stack : String(error)
-                );
+            return await this.locks.withLock(
+                billingLockKey(userId),
+                BILLING_LOCK_TTL_MS,
+                fn
+            );
+        } catch (error) {
+            if (error instanceof RedisLockBusyError) {
+                throw new ConflictException({
+                    code: RESPONSE_CODE.BILLING_OPERATION_IN_PROGRESS,
+                    message: 'Billing operation already in progress',
+                });
             }
+            throw error;
         }
     }
 
@@ -175,7 +148,7 @@ export class PaymentsService {
         userId: string,
         dto: CreateCheckoutSession
     ): Promise<{ checkoutUrl: string }> {
-        const { paymentType, planCode, packCode, returnPath } = dto;
+        const { paymentType, planCode, oneOffCode, returnPath } = dto;
 
         if (
             paymentType === PAYMENT_TYPE.SUBSCRIPTION &&
@@ -217,11 +190,34 @@ export class PaymentsService {
             }
 
             const orderReference = buildSubscriptionOrderReference(userId);
-            const trialEnd = addMonths(new Date(), SUBSCRIPTION_TRIAL_MONTHS);
 
-            // Optimistically persist INCOMPLETE billing: access не дається
-            // (hasActiveSubscription=false) поки перший колбек WayForPay не
-            // підтвердить привʼязку картки. trialEnd зберігаємо як межу періоду.
+            // Попередня підписка (UNPAID після past-due sweep, CANCELED) могла
+            // лишити живий рекурент у WayForPay: past-due sweep свідомо НЕ робить
+            // REMOVE (живі ретраї лишаються провайдеру). Новий checkout
+            // перезаписує billing.orderReference, тож пізніше успішне списання
+            // старого рекуренту прийшло б вебхуком зі stale-reference і було б
+            // проігнороване — гроші списані, доступ не зарахований. Тому перед
+            // перезаписом знімаємо старий рекурент (симетрично updateCard).
+            // Guard на recToken: рекурент існує лише після Approved-привʼязки;
+            // без нього (кинутий INCOMPLETE-checkout) REMOVE гарантовано падав
+            // би і засмічував retry-чергу.
+            const previousOrderReference = user.billing?.orderReference ?? null;
+            if (previousOrderReference && user.billing?.recToken) {
+                await this.removeRecurringWithRetry(
+                    previousOrderReference,
+                    'superseded_by_new_checkout'
+                );
+            }
+
+            // Trial прибрано: підписка списується одразу (firstChargeDate
+            // undefined). Виняток — активний one-off: перше списання
+            // відкладається на дату його закінчення (`oneOffUntil`), доступ
+            // тримає one-off до того. `currentPeriodEnd` сидиться цією датою як
+            // сигнал відкладеного старту для webhook-класифікації; null →
+            // негайний старт. One-off поля переносимо, інакше freshBilling
+            // (повна заміна субдока) стер би вже сплачений one-off.
+            const oneOffUntil = activeOneOffUntil(user.billing, new Date());
+
             await this.userModel.findByIdAndUpdate(userId, {
                 $set: {
                     billing: this.freshBilling({
@@ -229,7 +225,14 @@ export class PaymentsService {
                         planCode: plan.code,
                         currency: plan.currency,
                         subscriptionStatus: SUBSCRIPTION_STATUS.INCOMPLETE,
-                        currentPeriodEnd: trialEnd,
+                        currentPeriodEnd: oneOffUntil,
+                        oneOffLevel: user.billing?.oneOffLevel ?? null,
+                        oneOffAccessUntil:
+                            user.billing?.oneOffAccessUntil ?? null,
+                        oneOffOrderReference:
+                            user.billing?.oneOffOrderReference ?? null,
+                        reconcileRequiredAt:
+                            user.billing?.reconcileRequiredAt ?? null,
                     }),
                 },
             });
@@ -243,28 +246,28 @@ export class PaymentsService {
                     amount: plan.priceAmount,
                     currency: plan.currency,
                     interval: plan.interval,
-                    firstChargeDate: trialEnd,
+                    firstChargeDate: oneOffUntil ?? undefined,
                     serviceUrl,
                     returnUrl,
                 });
             return { checkoutUrl: result.checkoutUrl };
         }
 
-        const pack = findExecutionPack(packCode ?? '');
-        if (!pack) {
+        const access = findOneOffAccess(oneOffCode ?? '');
+        if (!access) {
             throw new BadRequestException({
                 code: RESPONSE_CODE.INVALID_PLAN,
-                message: 'Invalid packCode',
+                message: 'Invalid oneOffCode',
             });
         }
-        const orderReference = buildPackOrderReference(userId, pack.code);
+        const orderReference = buildOneOffOrderReference(userId, access.code);
         const result = await this.paymentProvider.createOneOffCheckout({
             userId,
             userEmail: user.email,
             orderReference,
-            packName: this.packLabel(pack.code),
-            amount: pack.priceAmount,
-            currency: pack.currency,
+            productName: this.oneOffLabel(access.code),
+            amount: access.priceAmount,
+            currency: access.currency,
             serviceUrl,
             returnUrl,
         });
@@ -307,20 +310,40 @@ export class PaymentsService {
         // З поверненням за невикористаний період. Останнє списання беремо як
         // APPROVED або вже REFUNDED: повторний виклик після часткового збою
         // (refund пройшов, локальний flip не завершився) має впізнати завершене
-        // повернення і не списати refund удруге.
-        const lastCharge = await this.paymentRecordModel
-            .findOne({
-                userId: new Types.ObjectId(userId),
-                type: PAYMENT_RECORD_TYPE.SUBSCRIPTION,
-                status: {
-                    $in: [
-                        PAYMENT_RECORD_STATUS.APPROVED,
-                        PAYMENT_RECORD_STATUS.REFUNDED,
-                    ],
-                },
-            })
-            .sort({ createdAt: -1 })
-            .lean();
+        // повернення і не списати refund удруге. Звужуємо до списань ПОТОЧНОГО
+        // періоду (createdAt ≥ межа періоду): без цього cancel підхопив би
+        // списання попередньої підписки і повертав би чужі кошти. Звуження по
+        // даті, а не по orderReference: після re-bind картки чинне списання
+        // періоду живе на старому orderReference.
+        //
+        // Під час відкладеного старту (TRIALING) реального списання на цій
+        // підписці ще не було (binding-вебхук не рухав коштів) — повертати
+        // нічого: refund лишається null, нижче відпрацьовують лише REMOVE + flip.
+        // Симетрично спец-гілці TRIALING у `changePlanLocked`.
+        const interval = this.planInterval(billing.planCode);
+        const lastCharge =
+            billing.subscriptionStatus !== SUBSCRIPTION_STATUS.TRIALING &&
+            billing.currentPeriodEnd
+                ? await this.paymentRecordModel
+                      .findOne({
+                          userId: new Types.ObjectId(userId),
+                          type: PAYMENT_RECORD_TYPE.SUBSCRIPTION,
+                          status: {
+                              $in: [
+                                  PAYMENT_RECORD_STATUS.APPROVED,
+                                  PAYMENT_RECORD_STATUS.REFUNDED,
+                              ],
+                          },
+                          createdAt: {
+                              $gte: periodLookbackStart(
+                                  billing.currentPeriodEnd,
+                                  interval
+                              ),
+                          },
+                      })
+                      .sort({ createdAt: -1 })
+                      .lean()
+                : null;
 
         let refundedAmount: number | null = null;
 
@@ -328,7 +351,6 @@ export class PaymentsService {
             // Уже повернуто попередньою спробою — лишилось добити REMOVE + flip.
             refundedAmount = lastCharge.refundAmount;
         } else if (lastCharge) {
-            const interval = this.planInterval(billing.planCode);
             const refundAmount = Math.round(
                 lastCharge.amount *
                     remainingRatio(billing.currentPeriodEnd, interval)
@@ -352,14 +374,40 @@ export class PaymentsService {
                     { new: true }
                 );
                 if (claimed) {
-                    const result = await this.paymentProvider.refund({
-                        orderReference,
-                        amount: refundAmount,
-                        currency: billing.currency ?? BILLING_CURRENCY,
-                        comment:
-                            'Скасування підписки з поверненням за невикористаний період',
-                    });
+                    let result;
+                    try {
+                        // Refund адресуємо order-у самого списання: після
+                        // re-bind поточний billing.orderReference ще не має
+                        // жодної транзакції, повертати можна лише з того
+                        // order-а, де гроші реально рухались.
+                        result = await this.paymentProvider.refund({
+                            orderReference: lastCharge.orderReference,
+                            amount: refundAmount,
+                            currency: billing.currency ?? BILLING_CURRENCY,
+                            comment:
+                                'Скасування підписки з поверненням за невикористаний період',
+                        });
+                    } catch (error) {
+                        // Транспортний збій (timeout/network/HTTP): результат
+                        // refund-а НЕВІДОМИЙ — на timeout гроші могли рухатись.
+                        // Мітку НЕ відкочуємо (повтор не сміє списати refund
+                        // удруге), але це означає, що повторний cancel пропустить
+                        // refund назавжди — тому гучний ERROR на ручний розбір,
+                        // а користувачу мапована помилка замість success-тоста.
+                        this.logger.error(
+                            `Refund transport failure for ${lastCharge.orderReference} ` +
+                                `(record ${String(lastCharge._id)} kept REFUNDED), ` +
+                                `manual review required`,
+                            error instanceof Error ? error.stack : String(error)
+                        );
+                        throw new BadRequestException({
+                            code: RESPONSE_CODE.REFUND_FAILED,
+                            message: 'Refund failed',
+                        });
+                    }
                     if (!result.success) {
+                        // Провайдер явно відхилив: гроші не рухались — безпечно
+                        // відкотити мітку, повтор спробує знову.
                         await this.paymentRecordModel.updateOne(
                             { _id: lastCharge._id },
                             {
@@ -390,6 +438,9 @@ export class PaymentsService {
                 'billing.scheduledChangeDate': null,
             },
         });
+
+        // Доступ міг впасти (до one-off-рівня або none) — блокуємо зайві бізнеси.
+        await this.reconcileSafe(userId);
 
         return { refundedAmount };
     }
@@ -423,6 +474,28 @@ export class PaymentsService {
                 code: RESPONSE_CODE.SAME_PLAN,
                 message: 'Already on this plan',
             });
+        }
+
+        // Відкладений старт поверх one-off (TRIALING): першого списання ще не
+        // було, тож proration нема за що рахувати, а доплата не підняла б
+        // доступ (deriveAccessLevel свідомо не зараховує TRIALING — рівень до
+        // межі тримає one-off). Будь-яка зміна плану тут — лише заміна того,
+        // що почне списуватись на межі: CHANGE суми рекурента + локальний
+        // planCode, без списання і без reconcile (рівень не змінився).
+        if (billing.subscriptionStatus === SUBSCRIPTION_STATUS.TRIALING) {
+            await this.changeRecurringOrThrow(orderReference, {
+                amount: target.priceAmount,
+                currency: target.currency,
+                interval: target.interval,
+            });
+            await this.userModel.findByIdAndUpdate(userId, {
+                $set: {
+                    'billing.planCode': target.code,
+                    'billing.scheduledPlanCode': null,
+                    'billing.scheduledChangeDate': null,
+                },
+            });
+            return { scheduled: false };
         }
 
         const currentPrice = current?.priceAmount ?? 0;
@@ -487,7 +560,7 @@ export class PaymentsService {
         // повернути доплату. Інакше повторний апгрейд згенерував би новий
         // orderReference і списав різницю вдруге, а користувач лишився б зі
         // сплаченою, але незастосованою доплатою (план/рекурент старі). Тільки
-        // після успішного CHANGE піднімаємо план і нараховуємо executions.
+        // після успішного CHANGE піднімаємо план.
         try {
             if (prorationRef && prorationCharge) {
                 await this.recordPayment({
@@ -517,10 +590,6 @@ export class PaymentsService {
             throw error;
         }
 
-        const executionsDelta = Math.round(
-            ((target.executions ?? 0) - (current?.executions ?? 0)) * ratio
-        );
-
         const update: Record<string, unknown> = {
             'billing.planCode': target.code,
             'billing.scheduledPlanCode': null,
@@ -528,13 +597,10 @@ export class PaymentsService {
         };
         await this.userModel.findByIdAndUpdate(userId, { $set: update });
 
-        if (executionsDelta > 0) {
-            await this.usersService.addExecutions(
-                userId,
-                executionsDelta,
-                EXECUTION_ACTION.PLAN_CHANGE
-            );
-        }
+        // Рівень міг зрости (brand→bookkeeper) — знімаємо блокування з бізнесів
+        // у межах нового рівня. Downgrade scheduled-шлях reconcile не потребує:
+        // план перемкнеться на межі через renewal-вебхук, який reconcile сам.
+        await this.reconcileSafe(userId);
 
         return { scheduled: false };
     }
@@ -562,6 +628,17 @@ export class PaymentsService {
                 message: 'Subscription plan no longer exists',
             });
         }
+
+        // Маркер незавершеного re-bind ДО зняття старого рекуренту: збій
+        // будь-якого з наступних кроків (REMOVE, checkout-виклик, фінальний
+        // $set) інакше лишав би hasActiveSubscription=true без рекуренту і поза
+        // всіма sweep-ами назавжди — `expireAbandonedRebinds` ловить лише
+        // rebindPendingAt ≠ null. Конкурентний вебхук не вклиниться: handleWebhook
+        // тримає той самий білінг-лок. Успішна привʼязка (Approved на новому
+        // orderReference) чистить маркер.
+        await this.userModel.findByIdAndUpdate(userId, {
+            $set: { 'billing.rebindPendingAt': new Date() },
+        });
 
         // Re-bind = cancel old + create new зі збереженням плану і дати
         // наступного списання (без негайної повторної оплати поточного періоду).
@@ -609,58 +686,6 @@ export class PaymentsService {
             .sort({ createdAt: -1 })
             .limit(limit)
             .lean();
-    }
-
-    // ── Reset (REMOVE recurring + clear local) ───────────────────────────
-
-    async resetBilling(userId: string): Promise<void> {
-        return this.withBillingLock(userId, () =>
-            this.resetBillingLocked(userId)
-        );
-    }
-
-    private async resetBillingLocked(userId: string): Promise<void> {
-        const user = await this.userModel.findById(userId).lean();
-        if (!user) {
-            throw new BadRequestException({
-                code: RESPONSE_CODE.NOT_FOUND,
-                message: 'User not found',
-            });
-        }
-
-        const orderReference = user.billing?.orderReference;
-        const previousBalance = user.executions.balance;
-
-        if (previousBalance > 0) {
-            await this.usersService.recordTransaction({
-                userId,
-                type: EXECUTION_TRANSACTION_TYPE.DEBIT,
-                action: EXECUTION_ACTION.BILLING_RESET,
-                amount: previousBalance,
-                balanceAfter: 0,
-            });
-        }
-
-        await this.userModel.findByIdAndUpdate(userId, {
-            $set: {
-                billing: null,
-                executions: { balance: 0, freeReportUsed: false },
-            },
-        });
-        await this.webhookEventModel.deleteMany({ userId });
-        await this.paymentRecordModel.deleteMany({
-            userId: new Types.ObjectId(userId),
-        });
-        await this.usersService.clearTransactions(userId);
-
-        if (orderReference && user.billing?.hasActiveSubscription) {
-            await this.removeRecurringWithRetry(
-                orderReference,
-                'billing_reset'
-            );
-        }
-
-        this.logger.log(`Billing reset for user ${userId}`);
     }
 
     // ── Webhook ──────────────────────────────────────────────────────────
@@ -723,10 +748,14 @@ export class PaymentsService {
         parsed: ParsedOrderReference
     ): Promise<boolean> {
         const userId = parsed.userId;
-        const insert = await this.insertWebhookEvent(event, userId);
+        const insert = await this.insertWebhookEvent(
+            event,
+            userId,
+            parsed.kind === ORDER_KIND.ONE_OFF ? parsed.oneOffCode : null
+        );
         if (insert === 'applied') {
             // Подію вже застосовано — звичайний дубль доставки. Підтверджуємо.
-            // НЕ переобробляємо: pack-ефект (`addExecutions`) не ідемпотентний.
+            // НЕ переобробляємо: one-off-грант доступу не ідемпотентний.
             return true;
         }
         if (insert === 'pending') {
@@ -742,20 +771,20 @@ export class PaymentsService {
         }
 
         // Усі side-effects події + перехід webhook-події pending→applied — в
-        // одній транзакції. Flip статусу = атомарний commit-маркер: грант,
-        // billing-update і payment-record комітяться РАЗОМ зі статусом 'applied'
-        // або не комітяться зовсім. Частковий збій (напр. addExecutions кинув
-        // після billing-update) відкочує все, лишає подію 'pending', і catch її
-        // видаляє → передоставка WayForPay переобробляє з нуля. Без транзакції
-        // out-of-order CAS на lastProviderEventAt заблокував би повторний грант,
-        // і оплачені executions губились би назавжди.
+        // одній транзакції. Flip статусу = атомарний commit-маркер: грант
+        // доступу, billing-update і payment-record комітяться РАЗОМ зі статусом
+        // 'applied' або не комітяться зовсім. Частковий збій (напр. billing-write
+        // кинув після payment-record) відкочує все, лишає подію 'pending', і
+        // catch її видаляє → передоставка WayForPay переобробляє з нуля. Без
+        // транзакції out-of-order CAS на lastProviderEventAt заблокував би
+        // повторний грант, і оплачений доступ губився б назавжди.
         const session = await this.connection.startSession();
         try {
             await session.withTransaction(async () => {
-                if (parsed.kind === ORDER_KIND.PACK) {
-                    await this.applyPackTransaction(
+                if (parsed.kind === ORDER_KIND.ONE_OFF) {
+                    await this.applyOneOffTransaction(
                         event,
-                        parsed.packCode,
+                        parsed.oneOffCode,
                         userId,
                         session
                     );
@@ -781,17 +810,41 @@ export class PaymentsService {
         } finally {
             await session.endSession();
         }
+        // Доступ міг піднятись (активація підписки / грант one-off) — знімаємо
+        // блокування з бізнесів у межах нового рівня. Після commit-у TX, тож
+        // reconcile бачить актуальний білінг-стан.
+        await this.reconcileSafe(userId);
         return true;
     }
 
-    private async applyPackTransaction(
+    private async applyOneOffTransaction(
         event: BillingWebhookEvent,
-        packCode: string,
+        oneOffCode: string,
         userId: string,
         session: ClientSession
     ): Promise<void> {
         if (event.transactionStatus === WAYFORPAY_TRANSACTION_STATUS.REFUNDED) {
             await this.markRefunded(event, session);
+            // Повернення one-off знімає орендований доступ; post-TX reconcile
+            // (routeTransaction) заблокує зайві бізнеси за новим рівнем. Гасимо
+            // слот ЛИШЕ якщо його тримає саме ця покупка (overwrite-модель:
+            // слот один, новіша покупка перезаписує): refund старішої покупки,
+            // чий грант уже перезаписано, не має зачіпати чинний оплачений
+            // доступ — guard у filter-і робить це atomically.
+            await this.userModel.updateOne(
+                {
+                    _id: userId,
+                    'billing.oneOffOrderReference': event.orderReference,
+                },
+                {
+                    $set: {
+                        'billing.oneOffLevel': null,
+                        'billing.oneOffAccessUntil': null,
+                        'billing.oneOffOrderReference': null,
+                    },
+                },
+                { session }
+            );
             return;
         }
         // Проміжний колбек (InProcessing/Pending) не пишемо у історію — інакше
@@ -806,7 +859,7 @@ export class PaymentsService {
                 {
                     userId,
                     orderReference: event.orderReference,
-                    type: PAYMENT_RECORD_TYPE.PACK,
+                    type: PAYMENT_RECORD_TYPE.ONE_OFF,
                     amount: event.amount,
                     currency: event.currency,
                     status: PAYMENT_RECORD_STATUS.DECLINED,
@@ -818,27 +871,57 @@ export class PaymentsService {
             return;
         }
 
-        const pack = findExecutionPack(packCode);
-        if (!pack) {
-            this.logger.warn(`Unknown packCode ${packCode} in webhook`);
+        const access = findOneOffAccess(oneOffCode);
+        if (!access) {
+            this.logger.warn(`Unknown oneOffCode ${oneOffCode} in webhook`);
             return;
         }
 
-        // Грант executions неідемпотентний ($inc), але комітиться в одній
-        // транзакції з flip-ом події pending→applied (`routeTransaction`).
-        // Дубль-доставка ловиться unique-індексом на (provider, providerEventId)
-        // у `insertWebhookEvent` ще до транзакції, тож повторний грант неможливий.
-        await this.usersService.addExecutions(
-            userId,
-            pack.executions,
-            EXECUTION_ACTION.PACK_PURCHASE,
-            session
-        );
+        // One-off дає орендований доступ до рівня з датою закінчення (свіжий
+        // місяць від моменту оплати — перезаписуємо, без додавання залишку,
+        // рішення Q1). Грант неідемпотентний, але комітиться в одній транзакції
+        // з flip-ом події pending→applied; дубль-доставка ловиться unique-
+        // індексом (provider, providerEventId) ще до транзакції. One-off НЕ
+        // використовує lastProviderEventAt-CAS (спільний watermark із підпискою):
+        // це одинична подія, а її ідемпотентність уже гарантує webhook-індекс.
+        const accessUntil = addMonths(event.occurredAt, access.durationMonths);
+        const owner = await this.userModel
+            .findById(userId)
+            .session(session)
+            .lean();
+        if (owner?.billing) {
+            await this.userModel.updateOne(
+                { _id: userId },
+                {
+                    $set: {
+                        'billing.oneOffLevel': access.level,
+                        'billing.oneOffAccessUntil': accessUntil,
+                        'billing.oneOffOrderReference': event.orderReference,
+                    },
+                },
+                { session }
+            );
+        } else {
+            await this.userModel.updateOne(
+                { _id: userId },
+                {
+                    $set: {
+                        billing: this.freshOneOffBilling(
+                            access.level,
+                            accessUntil,
+                            event.currency,
+                            event.orderReference
+                        ),
+                    },
+                },
+                { session }
+            );
+        }
         await this.recordPayment(
             {
                 userId,
                 orderReference: event.orderReference,
-                type: PAYMENT_RECORD_TYPE.PACK,
+                type: PAYMENT_RECORD_TYPE.ONE_OFF,
                 amount: event.amount,
                 currency: event.currency,
                 status: PAYMENT_RECORD_STATUS.APPROVED,
@@ -848,7 +931,8 @@ export class PaymentsService {
             session
         );
         this.logger.log(
-            `Pack ${packCode}: +${pack.executions} executions for user ${userId}`
+            `One-off ${oneOffCode}: access ${access.level} until ` +
+                `${accessUntil.toISOString()} for user ${userId}`
         );
     }
 
@@ -878,9 +962,7 @@ export class PaymentsService {
             .lean();
         const billing = user?.billing;
         if (!billing || billing.orderReference !== event.orderReference) {
-            this.logger.debug(
-                `Subscription webhook for stale orderReference ${event.orderReference}, ignored`
-            );
+            await this.handleStaleSubscriptionEvent(event, userId, session);
             return;
         }
 
@@ -933,11 +1015,20 @@ export class PaymentsService {
             return;
         }
 
-        // Approved. Класифікуємо за поточним станом: INCOMPLETE → привʼязка
-        // (trial), інакше → списання (trial-end або renewal). Застосовуємо
-        // запланований downgrade, якщо настала його дата.
+        // Approved. Trial прибрано: за замовчуванням перший Approved (INCOMPLETE)
+        // — це реальне списання → ACTIVE, період = occurredAt + інтервал. Виняток
+        // — відкладений старт поверх one-off: при checkout-і `currentPeriodEnd`
+        // сидиться датою закінчення one-off у майбутньому; такий перший Approved
+        // — лише привʼязка картки (deferred binding) → TRIALING до тієї дати,
+        // реальне списання прийде окремим Approved на межі (тоді status уже не
+        // INCOMPLETE → гілка списання → ACTIVE). Застосовуємо запланований
+        // downgrade, якщо настала його дата.
         const wasBinding =
             billing.subscriptionStatus === SUBSCRIPTION_STATUS.INCOMPLETE;
+        const isDeferredStart =
+            wasBinding &&
+            billing.currentPeriodEnd != null &&
+            billing.currentPeriodEnd.getTime() > event.occurredAt.getTime();
 
         const scheduledDue =
             billing.scheduledPlanCode != null &&
@@ -949,13 +1040,12 @@ export class PaymentsService {
         const plan = findSubscriptionPlan(effectivePlanCode ?? '');
         const interval = plan?.interval ?? 'month';
 
-        const periodEnd = wasBinding
-            ? (billing.currentPeriodEnd ??
-              addInterval(event.occurredAt, interval))
+        const periodEnd = isDeferredStart
+            ? billing.currentPeriodEnd!
             : addInterval(event.occurredAt, interval);
 
         const set: Record<string, unknown> = {
-            'billing.subscriptionStatus': wasBinding
+            'billing.subscriptionStatus': isDeferredStart
                 ? SUBSCRIPTION_STATUS.TRIALING
                 : SUBSCRIPTION_STATUS.ACTIVE,
             'billing.hasActiveSubscription': true,
@@ -980,14 +1070,6 @@ export class PaymentsService {
             return;
         }
 
-        if (plan) {
-            await this.usersService.addExecutions(
-                userId,
-                plan.executions,
-                EXECUTION_ACTION.SUBSCRIPTION_ACTIVATION,
-                session
-            );
-        }
         await this.recordPayment(
             {
                 userId,
@@ -1002,8 +1084,56 @@ export class PaymentsService {
             session
         );
         this.logger.log(
-            `Subscription ${wasBinding ? 'trial-binding' : 'charge'} for user ${userId} ` +
+            `Subscription ${isDeferredStart ? 'deferred-binding' : 'charge'} for user ${userId} ` +
                 `(plan ${effectivePlanCode}, event ${event.providerEventId})`
+        );
+    }
+
+    /**
+     * Подія підписки на orderReference, що вже не є чинним для користувача
+     * (перезаписаний новим checkout-ом або re-bind-ом). Без руху грошей
+     * (declined-ретраї знятого рекуренту) — тихий ack, як і раніше. Approved —
+     * реальне списання «нічийного» рекуренту (можливий шлях: кинутий
+     * INCOMPLETE-checkout без recToken → REMOVE при перезапису пропущено →
+     * пізня оплата зі ще відкритої вкладки активувала рекурент): тихий ack
+     * ховав би щомісячні списання без гранту назавжди. Тому ERROR на ручний
+     * розбір (refund), запис в історію (тип UNMATCHED — поза refund-скоупом
+     * cancel-у) і REMOVE роуг-рекуренту через retry-чергу. Все в одній TX з
+     * flip-ом події: ack лише разом зі слідом.
+     */
+    private async handleStaleSubscriptionEvent(
+        event: BillingWebhookEvent,
+        userId: string,
+        session: ClientSession
+    ): Promise<void> {
+        if (event.transactionStatus !== WAYFORPAY_TRANSACTION_STATUS.APPROVED) {
+            this.logger.debug(
+                `Subscription webhook for stale orderReference ${event.orderReference}, ignored`
+            );
+            return;
+        }
+        this.logger.error(
+            `Money charged on stale orderReference ${event.orderReference} for user ${userId} ` +
+                `(event ${event.providerEventId}, amount ${event.amount} ${event.currency}): ` +
+                `no grant applied, recurring queued for REMOVE, manual refund review required`
+        );
+        await this.recordPayment(
+            {
+                userId,
+                orderReference: event.orderReference,
+                type: PAYMENT_RECORD_TYPE.UNMATCHED,
+                amount: event.amount,
+                currency: event.currency,
+                status: PAYMENT_RECORD_STATUS.APPROVED,
+                providerTransactionId: event.transactionId,
+                cardMask: event.cardMask,
+            },
+            session
+        );
+        await this.enqueueFailedRemoval(
+            event.orderReference,
+            'stale_reference_charge',
+            session
         );
     }
 
@@ -1096,7 +1226,8 @@ export class PaymentsService {
 
     private async insertWebhookEvent(
         event: BillingWebhookEvent,
-        userId: string
+        userId: string,
+        oneOffCode: string | null
     ): Promise<'new' | 'applied' | 'pending'> {
         try {
             await this.webhookEventModel.create({
@@ -1106,7 +1237,7 @@ export class PaymentsService {
                 occurredAt: event.occurredAt,
                 type: event.transactionStatus,
                 userId,
-                packCode: null,
+                oneOffCode,
                 status: 'pending',
             });
             return 'new';
@@ -1154,6 +1285,36 @@ export class PaymentsService {
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
+
+    /**
+     * Реконсиляція бізнесів під новий рівень доступу — best-effort. Білінг-мутація
+     * вже завершена (гроші пройшли / статус флипнуто), тож збій реконсиляції НЕ
+     * має валити операцію чи un-ack-ати вебхук. Durable-маркер
+     * `reconcileRequiredAt` ставиться ДО спроби (симетрично
+     * `reconcileUnderLock`): без нього transient-збій усередині `reconcile` не
+     * мав би наступного тригера — daily-sweep `retryPendingReconciles` добиває
+     * лише стемпнутих. Повний успішний прогін знімає маркер сам (clear умовний
+     * за startedAt). Викликається в межах per-user білінг-локу (без race з
+     * іншими мутаціями того ж користувача).
+     */
+    private async reconcileSafe(userId: string): Promise<void> {
+        try {
+            await this.usersService.stampBillingReconcileRequired(userId);
+        } catch (error) {
+            this.logger.error(
+                `Failed to stamp reconcileRequiredAt for user ${userId}`,
+                error instanceof Error ? error.stack : String(error)
+            );
+        }
+        try {
+            await this.reconciliation.reconcile(userId);
+        } catch (error) {
+            this.logger.error(
+                `Reconciliation failed for user ${userId} (deferred to daily retry)`,
+                error instanceof Error ? error.stack : String(error)
+            );
+        }
+    }
 
     private async requireActiveSubscription(userId: string) {
         const user = await this.userModel.findById(userId).lean();
@@ -1221,23 +1382,28 @@ export class PaymentsService {
         }
     }
 
+    /**
+     * Upsert замість create-and-swallow-11000: всередині Mongo-TX
+     * (stale-charge шлях) write-помилка, навіть упіймана, абортить усю
+     * транзакцію — upsert на наявному записі лишається no-op без throw.
+     */
     private async enqueueFailedRemoval(
         orderReference: string,
-        reason: string
+        reason: string,
+        session?: ClientSession
     ): Promise<void> {
-        try {
-            await this.failedRemovalModel.create({
-                provider: PROVIDER,
-                orderReference,
-                reason,
-                failedAt: new Date(),
-                attempts: 0,
-                lastAttemptAt: null,
-            });
-        } catch (error: unknown) {
-            if (isDuplicateKeyError(error)) return;
-            throw error;
-        }
+        await this.failedRemovalModel.updateOne(
+            { provider: PROVIDER, orderReference },
+            {
+                $setOnInsert: {
+                    reason,
+                    failedAt: new Date(),
+                    attempts: 0,
+                    lastAttemptAt: null,
+                },
+            },
+            { upsert: true, session }
+        );
     }
 
     /**
@@ -1313,7 +1479,11 @@ export class PaymentsService {
         planCode: string;
         currency: string;
         subscriptionStatus: string;
-        currentPeriodEnd: Date;
+        currentPeriodEnd: Date | null;
+        oneOffLevel: string | null;
+        oneOffAccessUntil: Date | null;
+        oneOffOrderReference: string | null;
+        reconcileRequiredAt: Date | null;
     }): NonNullable<UserDocument['billing']> {
         return {
             provider: PROVIDER,
@@ -1331,6 +1501,46 @@ export class PaymentsService {
             scheduledPlanCode: null,
             scheduledChangeDate: null,
             rebindPendingAt: null,
+            oneOffLevel: partial.oneOffLevel,
+            oneOffAccessUntil: partial.oneOffAccessUntil,
+            oneOffOrderReference: partial.oneOffOrderReference,
+            // Переносимо незнятий маркер незавершеної реконсиляції — повна
+            // заміна субдока інакше загубила б його разом з retry.
+            reconcileRequiredAt: partial.reconcileRequiredAt,
+        };
+    }
+
+    /**
+     * Білінг-субдок для one-off-гранту користувачу без наявного білінгу (ніколи
+     * не підписувався). Підписочні поля null, card не зберігаємо (one-off не
+     * лишає recToken). Лише рівень доступу + дата закінчення.
+     */
+    private freshOneOffBilling(
+        level: AccessLevel,
+        accessUntil: Date,
+        currency: string,
+        oneOffOrderReference: string
+    ): NonNullable<UserDocument['billing']> {
+        return {
+            provider: PROVIDER,
+            orderReference: null,
+            recToken: null,
+            cardMask: null,
+            planCode: null,
+            currency,
+            subscriptionStatus: null,
+            providerSubscriptionStatus: null,
+            currentPeriodEnd: null,
+            cancelAtPeriodEnd: false,
+            hasActiveSubscription: false,
+            lastProviderEventAt: null,
+            scheduledPlanCode: null,
+            scheduledChangeDate: null,
+            rebindPendingAt: null,
+            oneOffLevel: level,
+            oneOffAccessUntil: accessUntil,
+            oneOffOrderReference,
+            reconcileRequiredAt: null,
         };
     }
 
@@ -1342,8 +1552,8 @@ export class PaymentsService {
         return `Підписка ${findSubscriptionPlan(code)?.name ?? code}`;
     }
 
-    private packLabel(code: string): string {
-        return `Пакет виконань ${findExecutionPack(code)?.name ?? code}`;
+    private oneOffLabel(code: string): string {
+        return findOneOffAccess(code)?.name ?? code;
     }
 
     private serviceUrl(): string {
@@ -1384,20 +1594,45 @@ function isBillingLockBusy(error: unknown): boolean {
     );
 }
 
+/**
+ * Календарний зсув на N місяців із клемпінгом дня до останнього дня цільового
+ * місяця: 31 січня + 1 міс = 28/29 лютого, НЕ 3 березня. Голий `setMonth`
+ * переливає неіснуючий день у наступний місяць, через що periodEnd /
+ * oneOffAccessUntil на списаннях 29-31 числа дрейфували б до 3 днів від
+ * реального графіка провайдера, а `remainingRatio` рахував би довжину періоду
+ * по зсунутих межах (завищений refund/proration).
+ */
 function addMonths(date: Date, months: number): Date {
     const next = new Date(date);
+    const day = next.getDate();
+    next.setDate(1);
     next.setMonth(next.getMonth() + months);
+    const lastDay = new Date(
+        next.getFullYear(),
+        next.getMonth() + 1,
+        0
+    ).getDate();
+    next.setDate(Math.min(day, lastDay));
     return next;
 }
 
+/**
+ * Дата закінчення активного one-off доступу (у майбутньому відносно `now`), або
+ * null. Використовується для відкладеного старту підписки поверх one-off.
+ */
+function activeOneOffUntil(
+    billing: UserDocument['billing'],
+    now: Date
+): Date | null {
+    const until = billing?.oneOffAccessUntil ?? null;
+    if (until && until.getTime() > now.getTime()) return until;
+    return null;
+}
+
 function addInterval(date: Date, interval: BillingInterval): Date {
-    const next = new Date(date);
-    if (interval === 'year') {
-        next.setFullYear(next.getFullYear() + 1);
-    } else {
-        next.setMonth(next.getMonth() + 1);
-    }
-    return next;
+    // 12 місяців замість setFullYear: успадковує клемпінг (29 лютого + рік =
+    // 28 лютого, не 1 березня).
+    return addMonths(date, interval === 'year' ? 12 : 1);
 }
 
 /**
@@ -1420,14 +1655,36 @@ function remainingRatio(
     return Math.max(0, Math.min(1, (end - now) / total));
 }
 
-function subMonths(date: Date): Date {
-    const d = new Date(date);
-    d.setMonth(d.getMonth() - 1);
+// Максимально можлива довжина інтервалу в днях. Місяць ≤ 31 дня, рік ≤ 366
+// (високосний). Використовується як консервативна нижня межа refund-вікна.
+const MAX_INTERVAL_DAYS: Record<BillingInterval, number> = {
+    month: 31,
+    year: 366,
+};
+
+/**
+ * Найраніша межа списань поточного періоду: `periodEnd` мінус максимально
+ * можлива довжина інтервалу В ДНЯХ. День-орієнтований відлік (а не календарний
+ * `setMonth(-1)`) критичний: календарне віднімання місяця на кінцях місяця
+ * (31 травня → клемпінг) зсуває межу ВПЕРЕД за реальну дату списання і виключає
+ * легітимне списання поточного періоду з refund-вікна. Денна межа гарантовано
+ * не пізніша за реальне списання; запас у кілька днів нешкідливий — попереднє
+ * списання щонайменше на повний інтервал старіше і у вікно не потрапляє.
+ */
+function periodLookbackStart(periodEnd: Date, interval: BillingInterval): Date {
+    const d = new Date(periodEnd);
+    d.setDate(d.getDate() - MAX_INTERVAL_DAYS[interval]);
     return d;
 }
 
+// Зворотний зсув для `remainingRatio` — той самий клемпінг. Для клемпнутого
+// periodEnd (28 лютого від списання 31 січня) відновлений старт наближений
+// (28 січня): без збереженого periodStart точніше не відновити. Похибка ≤3 днів
+// ЗБІЛЬШУЄ знаменник, тож refund консервативно занижується, не завищується.
+function subMonths(date: Date): Date {
+    return addMonths(date, -1);
+}
+
 function subYears(date: Date): Date {
-    const d = new Date(date);
-    d.setFullYear(d.getFullYear() - 1);
-    return d;
+    return addMonths(date, -12);
 }

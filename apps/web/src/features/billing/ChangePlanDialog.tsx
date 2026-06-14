@@ -19,8 +19,8 @@ import { changePlan } from '@/shared/api/payments';
 import { getMe, extractApiErrorCode } from '@/shared/api';
 import { getApiMessage } from '@/shared/api/mapApiCode';
 import { useAuthStore } from '@/entities/user';
-import { INTL_LOCALE } from '@/shared/lib';
 import { useChangePlanDialogStore } from './changePlanDialogStore';
+import { PLAN_COPY } from './catalogCopy';
 
 function isPlanCode(value: string): value is SubscriptionPlanCode {
     return (SUBSCRIPTION_PLAN_CODES as readonly string[]).includes(value);
@@ -76,7 +76,7 @@ export default function ChangePlanDialog() {
         .map((p) => ({
             value: p.code as SubscriptionPlanCode,
             title: `${p.name}, ${formatPrice(p.priceAmount, p.currency)}${p.interval === 'year' ? '/рік' : '/міс'}`,
-            description: `${p.executions.toLocaleString(INTL_LOCALE)} виконань за період`,
+            description: PLAN_COPY[p.code]?.tagline ?? '',
         }));
 
     return (

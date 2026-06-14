@@ -7,7 +7,7 @@ describe('taxIdFieldConfig — Sprint 7 §SP-4 type-aware UI config', () => {
             {
                 label: 'РНОКПП',
                 placeholder: '1234567890',
-                description: '10 цифр — як у довідці ДПС',
+                description: '10 цифр, як у довідці ДПС',
                 maxLength: 10,
             },
         ],
@@ -16,7 +16,7 @@ describe('taxIdFieldConfig — Sprint 7 §SP-4 type-aware UI config', () => {
             {
                 label: 'РНОКПП',
                 placeholder: '1234567890',
-                description: '10 цифр — особистий код з довідки ДПС',
+                description: '10 цифр, особистий код з довідки ДПС',
                 maxLength: 10,
             },
         ],
@@ -25,7 +25,7 @@ describe('taxIdFieldConfig — Sprint 7 §SP-4 type-aware UI config', () => {
             {
                 label: 'ЄДРПОУ',
                 placeholder: '12345678',
-                description: '8 цифр — як у виписці ЄДР',
+                description: '8 цифр, як у виписці ЄДР',
                 maxLength: 8,
             },
         ],
@@ -34,7 +34,7 @@ describe('taxIdFieldConfig — Sprint 7 §SP-4 type-aware UI config', () => {
             {
                 label: 'ЄДРПОУ',
                 placeholder: '12345678',
-                description: '8 цифр — як у виписці ЄДР',
+                description: '8 цифр, як у виписці ЄДР',
                 maxLength: 8,
             },
         ],

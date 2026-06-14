@@ -13,15 +13,17 @@ import {
     RESPONSE_CODE,
     SUBSCRIPTION_STATUS,
     WAYFORPAY_TRANSACTION_STATUS,
-    findExecutionPack,
+    findOneOffAccess,
     findSubscriptionPlan,
     type BillingWebhookEvent,
 } from '@finly/types';
 
 import { createReplSetMongo, type InMemoryMongo } from '../../test-utils/mongo';
 import { PaymentsService } from './payments.service';
+import { ReconciliationService } from '../businesses/reconciliation.service';
 import { PAYMENT_PROVIDER } from './interfaces/payment-provider.interface';
 import { REDIS_CLIENT } from '../../common/modules/redis.module';
+import { RedisLockService } from '../../common/services/redis-lock.service';
 import { UsersService } from '../users/users.service';
 import { User, UserDocument, UserSchema } from '../users/schemas/user.schema';
 import {
@@ -30,6 +32,7 @@ import {
 } from '../users/schemas/execution-transaction.schema';
 import {
     ProcessedWebhookEvent,
+    ProcessedWebhookEventDocument,
     ProcessedWebhookEventSchema,
 } from './schemas/processed-webhook-event.schema';
 import {
@@ -43,7 +46,7 @@ import {
     PaymentRecordSchema,
 } from './schemas/payment-record.schema';
 import {
-    buildPackOrderReference,
+    buildOneOffOrderReference,
     buildSubscriptionOrderReference,
 } from './order-reference';
 
@@ -82,6 +85,7 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
     let userModel: Model<UserDocument>;
     let paymentRecordModel: Model<PaymentRecordDocument>;
     let failedRemovalModel: Model<FailedRecurringRemovalDocument>;
+    let webhookEventModel: Model<ProcessedWebhookEventDocument>;
     let provider: ProviderMock;
     let connection: Connection;
     let redisMock: { set: jest.Mock; eval: jest.Mock };
@@ -117,14 +121,22 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
             providers: [
                 PaymentsService,
                 UsersService,
+                {
+                    provide: ReconciliationService,
+                    useValue: {
+                        reconcile: jest.fn().mockResolvedValue(undefined),
+                    },
+                },
                 { provide: PAYMENT_PROVIDER, useValue: provider },
                 {
                     // Per-user білінг-лок: за замовчуванням вільний (set → 'OK',
                     // release → 1). Окремий тест нижче форсує set → null, щоб
-                    // перевірити відмову при зайнятому локу.
+                    // перевірити відмову при зайнятому локу. Лок іде через
+                    // справжній RedisLockService поверх цього ж мока.
                     provide: REDIS_CLIENT,
                     useValue: redisMock,
                 },
+                RedisLockService,
             ],
         }).compile();
 
@@ -133,6 +145,9 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
         paymentRecordModel = moduleRef.get(getModelToken(PaymentRecord.name));
         failedRemovalModel = moduleRef.get(
             getModelToken(FailedRecurringRemoval.name)
+        );
+        webhookEventModel = moduleRef.get(
+            getModelToken(ProcessedWebhookEvent.name)
         );
         connection = moduleRef.get<Connection>(getConnectionToken());
         // Збудувати unique-індекси (зокрема ProcessedWebhookEvent) — без них
@@ -184,6 +199,10 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
                       lastProviderEventAt: null,
                       scheduledPlanCode: null,
                       scheduledChangeDate: null,
+                      rebindPendingAt: null,
+                      oneOffLevel: null,
+                      oneOffAccessUntil: null,
+                      oneOffOrderReference: null,
                       ...billing,
                   }
                 : null,
@@ -218,55 +237,127 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
         return service.handleWebhook(Buffer.from('{}'));
     }
 
-    // ── Pack purchase ────────────────────────────────────────────────────
+    // ── One-off access ────────────────────────────────────────────────────
 
-    it('pack-webhook Approved нараховує executions і пише PaymentRecord', async () => {
+    it('one-off Approved дає тимчасовий доступ до рівня і пише PaymentRecord', async () => {
         const user = await createUser();
-        const ref = buildPackOrderReference(user._id.toString(), 'max');
-        const pack = findExecutionPack('max')!;
+        const ref = buildOneOffOrderReference(
+            user._id.toString(),
+            'bookkeeper'
+        );
+        const access = findOneOffAccess('bookkeeper')!;
 
-        await feed(approvedEvent(ref, { amount: pack.priceAmount }));
+        await feed(approvedEvent(ref, { amount: access.priceAmount }));
 
         const updated = await userModel.findById(user._id).lean();
-        expect(updated!.executions.balance).toBe(pack.executions);
+        expect(updated!.billing!.oneOffLevel).toBe('bookkeeper');
+        expect(updated!.billing!.oneOffAccessUntil).toBeInstanceOf(Date);
+        // Слот привʼязаний до покупки — refund гасить доступ лише при збігу.
+        expect(updated!.billing!.oneOffOrderReference).toBe(ref);
+        expect(updated!.billing!.hasActiveSubscription).toBe(false);
+        // Ledger білінг більше не наповнює.
+        expect(updated!.executions.balance).toBe(0);
 
         const records = await paymentRecordModel.find({ userId: user._id });
         expect(records).toHaveLength(1);
         expect(records[0]).toMatchObject({
-            type: PAYMENT_RECORD_TYPE.PACK,
+            type: PAYMENT_RECORD_TYPE.ONE_OFF,
             status: PAYMENT_RECORD_STATUS.APPROVED,
         });
     });
 
-    it('ідемпотентність: дубль події нараховує executions лише раз', async () => {
+    it('one-off REFUNDED знімає орендований доступ + тригерить reconcile', async () => {
+        const user = await createUser({
+            oneOffLevel: 'brand',
+            oneOffAccessUntil: new Date(Date.now() + 20 * 86_400_000),
+        });
+        const ref = buildOneOffOrderReference(user._id.toString(), 'brand');
+        // Слот тримає саме ця покупка — guard у refund-гілці має збіг.
+        await userModel.findByIdAndUpdate(user._id, {
+            $set: { 'billing.oneOffOrderReference': ref },
+        });
+
+        await feed(
+            approvedEvent(ref, {
+                transactionStatus: WAYFORPAY_TRANSACTION_STATUS.REFUNDED,
+                amount: findOneOffAccess('brand')!.priceAmount,
+            })
+        );
+
+        const updated = await userModel.findById(user._id).lean();
+        expect(updated!.billing!.oneOffLevel).toBeNull();
+        expect(updated!.billing!.oneOffAccessUntil).toBeNull();
+        expect(updated!.billing!.oneOffOrderReference).toBeNull();
+        const reconcile = moduleRef.get<{ reconcile: jest.Mock }>(
+            ReconciliationService
+        ).reconcile;
+        expect(reconcile).toHaveBeenCalledWith(user._id.toString());
+    });
+
+    it('REFUNDED старішої покупки (слот перезаписано новішою) НЕ гасить чинний доступ', async () => {
+        // createUser({}) → білінг-субдок існує (dotted $set нижче потребує
+        // non-null billing).
+        const user = await createUser({});
+        const userId = user._id.toString();
+        const oldRef = buildOneOffOrderReference(userId, 'brand');
+        const newRef = buildOneOffOrderReference(userId, 'bookkeeper');
+
+        // Слот тримає новіша bookkeeper-покупка (overwrite-модель).
+        await userModel.findByIdAndUpdate(user._id, {
+            $set: {
+                'billing.oneOffLevel': 'bookkeeper',
+                'billing.oneOffAccessUntil': new Date(
+                    Date.now() + 25 * 86_400_000
+                ),
+                'billing.oneOffOrderReference': newRef,
+            },
+        });
+
+        // Support повертає гроші за стару brand-покупку.
+        await feed(
+            approvedEvent(oldRef, {
+                transactionStatus: WAYFORPAY_TRANSACTION_STATUS.REFUNDED,
+                amount: findOneOffAccess('brand')!.priceAmount,
+            })
+        );
+
+        const updated = await userModel.findById(user._id).lean();
+        expect(updated!.billing!.oneOffLevel).toBe('bookkeeper');
+        expect(updated!.billing!.oneOffAccessUntil).toBeInstanceOf(Date);
+        expect(updated!.billing!.oneOffOrderReference).toBe(newRef);
+    });
+
+    it('ідемпотентність: дубль one-off події дає доступ лише раз', async () => {
         const user = await createUser();
-        const ref = buildPackOrderReference(user._id.toString(), 'basic');
-        const pack = findExecutionPack('basic')!;
-        const event = approvedEvent(ref, { amount: pack.priceAmount });
+        const ref = buildOneOffOrderReference(user._id.toString(), 'brand');
+        const access = findOneOffAccess('brand')!;
+        const event = approvedEvent(ref, { amount: access.priceAmount });
 
         await feed(event);
         await feed(event); // той самий providerEventId
 
+        const records = await paymentRecordModel.find({ userId: user._id });
+        expect(records).toHaveLength(1);
         const updated = await userModel.findById(user._id).lean();
-        expect(updated!.executions.balance).toBe(pack.executions);
+        expect(updated!.billing!.oneOffLevel).toBe('brand');
     });
 
     // ── Subscription activation + out-of-order ───────────────────────────
 
-    it('INCOMPLETE → TRIALING на першому Approved, нараховує план-executions', async () => {
+    it('INCOMPLETE → ACTIVE на першому Approved (негайний старт, без trial)', async () => {
         const ref = buildSubscriptionOrderReference('placeholder');
         const user = await createUser({
             orderReference: ref,
-            planCode: 'pro',
+            planCode: 'bookkeeper',
             subscriptionStatus: SUBSCRIPTION_STATUS.INCOMPLETE,
-            currentPeriodEnd: new Date(Date.now() + 30 * 86_400_000),
+            currentPeriodEnd: null, // негайний старт (немає відкладеної дати)
         });
         const realRef = buildSubscriptionOrderReference(user._id.toString());
         await userModel.findByIdAndUpdate(user._id, {
             $set: { 'billing.orderReference': realRef },
         });
 
-        const plan = findSubscriptionPlan('pro')!;
+        const plan = findSubscriptionPlan('bookkeeper')!;
         await feed(
             approvedEvent(realRef, {
                 amount: plan.priceAmount,
@@ -276,18 +367,48 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
 
         const updated = await userModel.findById(user._id).lean();
         expect(updated!.billing!.subscriptionStatus).toBe(
-            SUBSCRIPTION_STATUS.TRIALING
+            SUBSCRIPTION_STATUS.ACTIVE
         );
         expect(updated!.billing!.hasActiveSubscription).toBe(true);
         expect(updated!.billing!.recToken).toBe('tok_live');
-        expect(updated!.executions.balance).toBe(plan.executions);
+        expect(updated!.billing!.currentPeriodEnd).toBeInstanceOf(Date);
+        // Ledger білінг більше не наповнює.
+        expect(updated!.executions.balance).toBe(0);
+    });
+
+    it('INCOMPLETE → TRIALING на відкладеному старті поверх one-off', async () => {
+        const deferredUntil = new Date(Date.now() + 20 * 86_400_000);
+        const user = await createUser({
+            orderReference: 'placeholder',
+            planCode: 'bookkeeper',
+            subscriptionStatus: SUBSCRIPTION_STATUS.INCOMPLETE,
+            // currentPeriodEnd у майбутньому = сигнал відкладеного першого
+            // списання (one-off ще активний).
+            currentPeriodEnd: deferredUntil,
+        });
+        const realRef = buildSubscriptionOrderReference(user._id.toString());
+        await userModel.findByIdAndUpdate(user._id, {
+            $set: { 'billing.orderReference': realRef },
+        });
+
+        await feed(approvedEvent(realRef, { recToken: 'tok_live' }));
+
+        const updated = await userModel.findById(user._id).lean();
+        expect(updated!.billing!.subscriptionStatus).toBe(
+            SUBSCRIPTION_STATUS.TRIALING
+        );
+        expect(updated!.billing!.hasActiveSubscription).toBe(true);
+        // Період лишається датою відкладеного старту, не occurredAt + інтервал.
+        expect(updated!.billing!.currentPeriodEnd!.getTime()).toBe(
+            deferredUntil.getTime()
+        );
     });
 
     it('out-of-order: застаріла подія (раніший occurredAt) ігнорується', async () => {
         const user = await createUser({
             subscriptionStatus: SUBSCRIPTION_STATUS.INCOMPLETE,
             currentPeriodEnd: new Date(Date.now() + 30 * 86_400_000),
-            planCode: 'starter',
+            planCode: 'brand',
         });
         const ref = buildSubscriptionOrderReference(user._id.toString());
         await userModel.findByIdAndUpdate(user._id, {
@@ -315,10 +436,10 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
 
     // ── Change plan (upgrade proration) ──────────────────────────────────
 
-    it('upgrade: тиха доплата за токеном, зміна плану і нарахування executions', async () => {
+    it('upgrade: тиха доплата за токеном і зміна плану', async () => {
         const user = await createUser({
             orderReference: 'placeholder',
-            planCode: 'starter',
+            planCode: 'brand',
             recToken: 'tok_abc',
             subscriptionStatus: SUBSCRIPTION_STATUS.ACTIVE,
             hasActiveSubscription: true,
@@ -331,14 +452,14 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
 
         provider.chargeByToken.mockResolvedValue({
             success: true,
-            transactionId: 'tx_pro',
+            transactionId: 'tx_bk',
             cardMask: '44****1111',
             reasonCode: 1100,
             reason: 'Ok',
         });
 
         const result = await service.changePlan(user._id.toString(), {
-            planCode: 'pro',
+            planCode: 'bookkeeper',
         });
 
         expect(result.scheduled).toBe(false);
@@ -346,20 +467,25 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
         expect(provider.changeSubscription).toHaveBeenCalled();
 
         const updated = await userModel.findById(user._id).lean();
-        expect(updated!.billing!.planCode).toBe('pro');
-        expect(updated!.executions.balance).toBeGreaterThan(0);
+        expect(updated!.billing!.planCode).toBe('bookkeeper');
 
         const proration = await paymentRecordModel.findOne({
             userId: user._id,
             type: PAYMENT_RECORD_TYPE.PRORATION,
         });
         expect(proration).not.toBeNull();
+
+        // Рівень зріс → reconcile знімає блокування у межах нового тарифу.
+        const reconcile = moduleRef.get<{ reconcile: jest.Mock }>(
+            ReconciliationService
+        ).reconcile;
+        expect(reconcile).toHaveBeenCalledWith(user._id.toString());
     });
 
     it('upgrade: невдала доплата — план не змінюється', async () => {
         const user = await createUser({
             orderReference: 'r',
-            planCode: 'starter',
+            planCode: 'brand',
             recToken: 'tok_abc',
             subscriptionStatus: SUBSCRIPTION_STATUS.ACTIVE,
             hasActiveSubscription: true,
@@ -379,18 +505,18 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
         });
 
         await expect(
-            service.changePlan(user._id.toString(), { planCode: 'pro' })
+            service.changePlan(user._id.toString(), { planCode: 'bookkeeper' })
         ).rejects.toThrow();
 
         const updated = await userModel.findById(user._id).lean();
-        expect(updated!.billing!.planCode).toBe('starter');
+        expect(updated!.billing!.planCode).toBe('brand');
         expect(provider.changeSubscription).not.toHaveBeenCalled();
     });
 
     it('upgrade: збій CHANGE рекуренту після доплати кидає, план не застосовано', async () => {
         const user = await createUser({
             orderReference: 'r',
-            planCode: 'starter',
+            planCode: 'brand',
             recToken: 'tok_abc',
             subscriptionStatus: SUBSCRIPTION_STATUS.ACTIVE,
             hasActiveSubscription: true,
@@ -403,7 +529,7 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
 
         provider.chargeByToken.mockResolvedValue({
             success: true,
-            transactionId: 'tx_pro',
+            transactionId: 'tx_bk',
             cardMask: '44****1111',
             reasonCode: 1100,
             reason: 'Ok',
@@ -416,12 +542,12 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
         });
 
         await expect(
-            service.changePlan(user._id.toString(), { planCode: 'pro' })
+            service.changePlan(user._id.toString(), { planCode: 'bookkeeper' })
         ).rejects.toThrow();
 
         // Тихий дрейф білінгу неприпустимий: план НЕ застосовано локально.
         const updated = await userModel.findById(user._id).lean();
-        expect(updated!.billing!.planCode).toBe('starter');
+        expect(updated!.billing!.planCode).toBe('brand');
 
         // Доплату вже списали — мусимо повернути, інакше юзер заплатив за
         // апгрейд, якого не отримав.
@@ -435,7 +561,7 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
     it('cancel withRefund: збій REMOVE ставить orderReference у retry-чергу', async () => {
         const user = await createUser({
             orderReference: 'r',
-            planCode: 'pro',
+            planCode: 'bookkeeper',
             subscriptionStatus: SUBSCRIPTION_STATUS.ACTIVE,
             hasActiveSubscription: true,
             currentPeriodEnd: new Date(Date.now() + 15 * 86_400_000),
@@ -448,7 +574,7 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
             userId: user._id,
             orderReference: ref,
             type: PAYMENT_RECORD_TYPE.SUBSCRIPTION,
-            amount: 14900,
+            amount: 9900,
             currency: 'UAH',
             status: PAYMENT_RECORD_STATUS.APPROVED,
             providerTransactionId: 'tx_1',
@@ -480,7 +606,7 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
     it('downgrade: планується на наступний період', async () => {
         const user = await createUser({
             orderReference: 'r',
-            planCode: 'pro',
+            planCode: 'bookkeeper',
             recToken: 'tok_abc',
             subscriptionStatus: SUBSCRIPTION_STATUS.ACTIVE,
             hasActiveSubscription: true,
@@ -492,14 +618,52 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
         });
 
         const result = await service.changePlan(user._id.toString(), {
-            planCode: 'starter',
+            planCode: 'brand',
         });
 
         expect(result.scheduled).toBe(true);
         expect(provider.chargeByToken).not.toHaveBeenCalled();
         const updated = await userModel.findById(user._id).lean();
-        expect(updated!.billing!.scheduledPlanCode).toBe('starter');
-        expect(updated!.billing!.planCode).toBe('pro');
+        expect(updated!.billing!.scheduledPlanCode).toBe('brand');
+        expect(updated!.billing!.planCode).toBe('bookkeeper');
+    });
+
+    it('зміна плану під час відкладеного старту (TRIALING): без proration, лише CHANGE + planCode', async () => {
+        const user = await createUser({
+            orderReference: 'placeholder',
+            planCode: 'brand',
+            recToken: 'tok_abc',
+            subscriptionStatus: SUBSCRIPTION_STATUS.TRIALING,
+            hasActiveSubscription: true,
+            currentPeriodEnd: new Date(Date.now() + 20 * 86_400_000),
+            oneOffLevel: 'brand',
+            oneOffAccessUntil: new Date(Date.now() + 20 * 86_400_000),
+        });
+        const ref = buildSubscriptionOrderReference(user._id.toString());
+        await userModel.findByIdAndUpdate(user._id, {
+            $set: { 'billing.orderReference': ref },
+        });
+
+        const result = await service.changePlan(user._id.toString(), {
+            planCode: 'bookkeeper',
+        });
+
+        expect(result.scheduled).toBe(false);
+        // Першого списання ще не було, а TRIALING не дає доступу
+        // (deriveAccessLevel) — доплата була б грошима за ніщо.
+        expect(provider.chargeByToken).not.toHaveBeenCalled();
+        expect(provider.changeSubscription).toHaveBeenCalled();
+
+        const updated = await userModel.findById(user._id).lean();
+        expect(updated!.billing!.planCode).toBe('bookkeeper');
+        expect(updated!.billing!.subscriptionStatus).toBe(
+            SUBSCRIPTION_STATUS.TRIALING
+        );
+
+        const proration = await paymentRecordModel.findOne({
+            type: PAYMENT_RECORD_TYPE.PRORATION,
+        });
+        expect(proration).toBeNull();
     });
 
     // ── Cancel with refund ───────────────────────────────────────────────
@@ -507,7 +671,7 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
     it('cancel withRefund: повертає кошти, REMOVE, білінг CANCELED', async () => {
         const user = await createUser({
             orderReference: 'r',
-            planCode: 'pro',
+            planCode: 'bookkeeper',
             subscriptionStatus: SUBSCRIPTION_STATUS.ACTIVE,
             hasActiveSubscription: true,
             currentPeriodEnd: new Date(Date.now() + 15 * 86_400_000),
@@ -520,7 +684,7 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
             userId: user._id,
             orderReference: ref,
             type: PAYMENT_RECORD_TYPE.SUBSCRIPTION,
-            amount: 14900,
+            amount: 9900,
             currency: 'UAH',
             status: PAYMENT_RECORD_STATUS.APPROVED,
             providerTransactionId: 'tx_1',
@@ -553,6 +717,195 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
             status: PAYMENT_RECORD_STATUS.REFUNDED,
         });
         expect(refunded).not.toBeNull();
+    });
+
+    it('cancel withRefund: транспортний збій refund кидає, claim лишається REFUNDED, білінг не флипнуто', async () => {
+        const user = await createUser({
+            orderReference: 'r',
+            planCode: 'bookkeeper',
+            subscriptionStatus: SUBSCRIPTION_STATUS.ACTIVE,
+            hasActiveSubscription: true,
+            currentPeriodEnd: new Date(Date.now() + 15 * 86_400_000),
+        });
+        const ref = buildSubscriptionOrderReference(user._id.toString());
+        await userModel.findByIdAndUpdate(user._id, {
+            $set: { 'billing.orderReference': ref },
+        });
+        await paymentRecordModel.create({
+            userId: user._id,
+            orderReference: ref,
+            type: PAYMENT_RECORD_TYPE.SUBSCRIPTION,
+            amount: 9900,
+            currency: 'UAH',
+            status: PAYMENT_RECORD_STATUS.APPROVED,
+            providerTransactionId: 'tx_1',
+            cardMask: '44****1111',
+            refundAmount: null,
+        });
+
+        // Транспортний збій (timeout/network) — результат refund-а невідомий,
+        // на відміну від явного `success: false`.
+        provider.refund.mockRejectedValueOnce(new Error('WFP timeout'));
+
+        await expect(
+            service.cancelSubscription(user._id.toString(), {
+                withRefund: true,
+            })
+        ).rejects.toThrow();
+
+        // Claim-first: мітка НЕ відкочується (гроші могли рухатись — повтор не
+        // сміє списати refund удруге; ручний розбір за ERROR-логом).
+        const record = await paymentRecordModel
+            .findOne({ orderReference: ref })
+            .lean();
+        expect(record!.status).toBe(PAYMENT_RECORD_STATUS.REFUNDED);
+
+        // Операція НЕ завершилась успіхом: REMOVE не викликано, доступ живий.
+        expect(provider.removeSubscription).not.toHaveBeenCalled();
+        const updated = await userModel.findById(user._id).lean();
+        expect(updated!.billing!.hasActiveSubscription).toBe(true);
+    });
+
+    it('cancel withRefund під час відкладеного старту: списання попередньої підписки не повертається', async () => {
+        const user = await createUser({
+            orderReference: 'placeholder',
+            planCode: 'bookkeeper',
+            subscriptionStatus: SUBSCRIPTION_STATUS.TRIALING,
+            hasActiveSubscription: true,
+            currentPeriodEnd: new Date(Date.now() + 10 * 86_400_000),
+        });
+        const ref = buildSubscriptionOrderReference(user._id.toString());
+        await userModel.findByIdAndUpdate(user._id, {
+            $set: { 'billing.orderReference': ref },
+        });
+        // Списання ПОПЕРЕДНЬОЇ підписки — старіше за початок поточного періоду
+        // (periodEnd - інтервал). collection.insertOne обходить timestamps,
+        // щоб createdAt був у минулому.
+        await paymentRecordModel.collection.insertOne({
+            userId: user._id,
+            orderReference: 'fin-sub-old-ref',
+            type: PAYMENT_RECORD_TYPE.SUBSCRIPTION,
+            amount: 9900,
+            currency: 'UAH',
+            status: PAYMENT_RECORD_STATUS.APPROVED,
+            providerTransactionId: 'tx_old',
+            cardMask: '44****1111',
+            refundAmount: null,
+            createdAt: new Date(Date.now() - 40 * 86_400_000),
+            updatedAt: new Date(Date.now() - 40 * 86_400_000),
+        });
+
+        const result = await service.cancelSubscription(user._id.toString(), {
+            withRefund: true,
+        });
+
+        // У поточному періоді нічого не списувалось → нічого не повертаємо.
+        expect(result.refundedAmount).toBeNull();
+        expect(provider.refund).not.toHaveBeenCalled();
+
+        // Старе списання не зачеплено, скасування завершено.
+        const oldRecord = await paymentRecordModel
+            .findOne({ orderReference: 'fin-sub-old-ref' })
+            .lean();
+        expect(oldRecord!.status).toBe(PAYMENT_RECORD_STATUS.APPROVED);
+        const updated = await userModel.findById(user._id).lean();
+        expect(updated!.billing!.hasActiveSubscription).toBe(false);
+    });
+
+    it('cancel withRefund після re-bind: refund адресується orderReference самого списання', async () => {
+        const user = await createUser({
+            orderReference: 'placeholder',
+            planCode: 'bookkeeper',
+            subscriptionStatus: SUBSCRIPTION_STATUS.ACTIVE,
+            hasActiveSubscription: true,
+            currentPeriodEnd: new Date(Date.now() + 15 * 86_400_000),
+        });
+        // Після re-bind поточний billing.orderReference новий, а чинне
+        // списання періоду живе на попередньому orderReference.
+        const newRef = buildSubscriptionOrderReference(user._id.toString());
+        await userModel.findByIdAndUpdate(user._id, {
+            $set: { 'billing.orderReference': newRef },
+        });
+        await paymentRecordModel.create({
+            userId: user._id,
+            orderReference: 'fin-sub-prev-ref',
+            type: PAYMENT_RECORD_TYPE.SUBSCRIPTION,
+            amount: 9900,
+            currency: 'UAH',
+            status: PAYMENT_RECORD_STATUS.APPROVED,
+            providerTransactionId: 'tx_prev',
+            cardMask: '44****1111',
+            refundAmount: null,
+        });
+
+        provider.refund.mockResolvedValue({
+            success: true,
+            reasonCode: 1100,
+            reason: 'Ok',
+        });
+
+        const result = await service.cancelSubscription(user._id.toString(), {
+            withRefund: true,
+        });
+
+        expect(result.refundedAmount).toBeGreaterThan(0);
+        // Гроші рухались на order-і списання, не на новому (порожньому).
+        expect(provider.refund).toHaveBeenCalledWith(
+            expect.objectContaining({ orderReference: 'fin-sub-prev-ref' })
+        );
+        // REMOVE рекуренту — на чинному (новому) orderReference.
+        expect(provider.removeSubscription).toHaveBeenCalledWith(newRef);
+    });
+
+    // ── Checkout після попередньої підписки ──────────────────────────────
+
+    it('новий subscription-checkout зносить старий рекурент (UNPAID з recToken), без recToken не чіпає', async () => {
+        // UNPAID після past-due sweep: рекурент свідомо лишився живим у
+        // WayForPay. Новий checkout перезаписує orderReference — без REMOVE
+        // пізніше списання старого рекуренту прийшло б зі stale-reference і
+        // було б проігнороване (гроші списані, доступ не зарахований).
+        const lapsed = await createUser({
+            planCode: 'brand',
+            recToken: 'tok_old',
+            subscriptionStatus: SUBSCRIPTION_STATUS.UNPAID,
+            hasActiveSubscription: false,
+        });
+        const oldRef = buildSubscriptionOrderReference(lapsed._id.toString());
+        await userModel.findByIdAndUpdate(lapsed._id, {
+            $set: { 'billing.orderReference': oldRef },
+        });
+        provider.createSubscriptionCheckout.mockResolvedValue({
+            checkoutUrl: 'https://pay.example/checkout',
+            orderReference: 'irrelevant',
+        });
+
+        await service.createCheckoutSession(lapsed._id.toString(), {
+            paymentType: PAYMENT_TYPE.SUBSCRIPTION,
+            planCode: 'brand',
+        });
+        expect(provider.removeSubscription).toHaveBeenCalledWith(oldRef);
+        expect(provider.removeSubscription).toHaveBeenCalledTimes(1);
+
+        // Кинутий INCOMPLETE-checkout (без recToken — привʼязки не було):
+        // рекурент не існує, REMOVE не викликається (не засмічуємо retry-чергу).
+        const abandoned = await createUser({
+            planCode: 'brand',
+            recToken: null,
+            subscriptionStatus: SUBSCRIPTION_STATUS.INCOMPLETE,
+            hasActiveSubscription: false,
+        });
+        const abandonedRef = buildSubscriptionOrderReference(
+            abandoned._id.toString()
+        );
+        await userModel.findByIdAndUpdate(abandoned._id, {
+            $set: { 'billing.orderReference': abandonedRef },
+        });
+
+        await service.createCheckoutSession(abandoned._id.toString(), {
+            paymentType: PAYMENT_TYPE.SUBSCRIPTION,
+            planCode: 'brand',
+        });
+        expect(provider.removeSubscription).toHaveBeenCalledTimes(1);
     });
 
     // ── Refund webhook (markRefunded) ────────────────────────────────────
@@ -635,19 +988,19 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
 
     it('вебхук відкладається (без accept), якщо per-user лок зайнятий', async () => {
         const user = await createUser();
-        const ref = buildPackOrderReference(user._id.toString(), 'basic');
-        const pack = findExecutionPack('basic')!;
+        const ref = buildOneOffOrderReference(user._id.toString(), 'brand');
+        const access = findOneOffAccess('brand')!;
         redisMock.set.mockResolvedValueOnce(null); // лок зайнятий user-мутацією
 
         const accept = await feed(
-            approvedEvent(ref, { amount: pack.priceAmount })
+            approvedEvent(ref, { amount: access.priceAmount })
         );
 
         // Немає accept → WayForPay передоставить подію пізніше.
         expect(accept).toBeNull();
-        // Подія не оброблена: executions не нараховано.
+        // Подія не оброблена: доступ не надано.
         const updated = await userModel.findById(user._id).lean();
-        expect(updated!.executions.balance).toBe(0);
+        expect(updated!.billing).toBeNull();
     });
 
     it('cancel у кінці періоду: cancelAtPeriodEnd=true, доступ лишається', async () => {
@@ -677,7 +1030,9 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
         redisMock.set.mockResolvedValueOnce(null);
 
         const error = await service
-            .changePlan(new Types.ObjectId().toString(), { planCode: 'pro' })
+            .changePlan(new Types.ObjectId().toString(), {
+                planCode: 'bookkeeper',
+            })
             .catch((e: unknown) => e);
 
         expect(error).toBeInstanceOf(ConflictException);
@@ -694,7 +1049,7 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
         const error = await service
             .createCheckoutSession(new Types.ObjectId().toString(), {
                 paymentType: PAYMENT_TYPE.SUBSCRIPTION,
-                planCode: 'starter',
+                planCode: 'brand',
             })
             .catch((e: unknown) => e);
 
@@ -702,5 +1057,148 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
         expect((error as ConflictException).getResponse()).toMatchObject({
             code: RESPONSE_CODE.BILLING_OPERATION_IN_PROGRESS,
         });
+    });
+
+    // ── Stale orderReference (рекурент пережив перезапис) ────────────────
+
+    it('Approved на stale orderReference: UNMATCHED-слід + REMOVE-черга, грант не застосовано', async () => {
+        const user = await createUser({
+            planCode: 'brand',
+            subscriptionStatus: SUBSCRIPTION_STATUS.ACTIVE,
+            hasActiveSubscription: true,
+            currentPeriodEnd: new Date(Date.now() + 20 * 86_400_000),
+        });
+        const currentRef = buildSubscriptionOrderReference(user._id.toString());
+        await userModel.findByIdAndUpdate(user._id, {
+            $set: { 'billing.orderReference': currentRef },
+        });
+        // Списання на роуг-рекуренті зі СТАРОГО orderReference (інший nonce).
+        const staleRef = buildSubscriptionOrderReference(user._id.toString());
+
+        const accept = await feed(approvedEvent(staleRef, { amount: 4900 }));
+
+        // Ack разом зі слідом: подія оброблена (запис + черга), повтори не потрібні.
+        expect(accept).toEqual({ status: 'accept' });
+
+        const record = await paymentRecordModel
+            .findOne({ orderReference: staleRef })
+            .lean();
+        expect(record).toMatchObject({
+            type: PAYMENT_RECORD_TYPE.UNMATCHED,
+            status: PAYMENT_RECORD_STATUS.APPROVED,
+            amount: 4900,
+        });
+        const queued = await failedRemovalModel
+            .findOne({ orderReference: staleRef })
+            .lean();
+        expect(queued).not.toBeNull();
+
+        // Білінг чинної підписки не зачеплено: ні періоду, ні watermark-у.
+        const updated = await userModel.findById(user._id).lean();
+        expect(updated!.billing!.orderReference).toBe(currentRef);
+        expect(updated!.billing!.hasActiveSubscription).toBe(true);
+        expect(updated!.billing!.lastProviderEventAt).toBeNull();
+    });
+
+    it('Declined на stale orderReference: тихий ack без сліду (ретраї знятого рекуренту)', async () => {
+        const user = await createUser({
+            planCode: 'brand',
+            subscriptionStatus: SUBSCRIPTION_STATUS.ACTIVE,
+            hasActiveSubscription: true,
+        });
+        const currentRef = buildSubscriptionOrderReference(user._id.toString());
+        await userModel.findByIdAndUpdate(user._id, {
+            $set: { 'billing.orderReference': currentRef },
+        });
+        const staleRef = buildSubscriptionOrderReference(user._id.toString());
+
+        const accept = await feed(
+            approvedEvent(staleRef, {
+                transactionStatus: WAYFORPAY_TRANSACTION_STATUS.DECLINED,
+            })
+        );
+
+        expect(accept).toEqual({ status: 'accept' });
+        expect(
+            await paymentRecordModel.findOne({ orderReference: staleRef })
+        ).toBeNull();
+        expect(
+            await failedRemovalModel.findOne({ orderReference: staleRef })
+        ).toBeNull();
+    });
+
+    // ── Re-bind картки (rebindPendingAt) ─────────────────────────────────
+
+    it('Approved при rebindPendingAt: верифікація картки, без руху періоду і без платежу', async () => {
+        const periodEnd = new Date(Date.now() + 12 * 86_400_000);
+        const user = await createUser({
+            planCode: 'bookkeeper',
+            subscriptionStatus: SUBSCRIPTION_STATUS.ACTIVE,
+            hasActiveSubscription: true,
+            currentPeriodEnd: periodEnd,
+            rebindPendingAt: new Date(),
+        });
+        const newRef = buildSubscriptionOrderReference(user._id.toString());
+        await userModel.findByIdAndUpdate(user._id, {
+            $set: { 'billing.orderReference': newRef },
+        });
+
+        await feed(
+            approvedEvent(newRef, {
+                recToken: 'tok_rebound',
+                cardMask: '55****2222',
+            })
+        );
+
+        const updated = await userModel.findById(user._id).lean();
+        // Прапорець знято, токен/маску оновлено.
+        expect(updated!.billing!.rebindPendingAt).toBeNull();
+        expect(updated!.billing!.recToken).toBe('tok_rebound');
+        expect(updated!.billing!.cardMask).toBe('55****2222');
+        // Це верифікація, не списання: період НЕ продовжено, статус не змінено.
+        expect(updated!.billing!.currentPeriodEnd!.getTime()).toBe(
+            periodEnd.getTime()
+        );
+        expect(updated!.billing!.subscriptionStatus).toBe(
+            SUBSCRIPTION_STATUS.ACTIVE
+        );
+        // Платіж в історію не пишеться (грошового руху не було).
+        expect(await paymentRecordModel.countDocuments({})).toBe(0);
+    });
+
+    // ── Crash-orphan pending подія ───────────────────────────────────────
+
+    it('crash-orphan pending не ack-ається і не переобробляється (чекає sweep + передоставку)', async () => {
+        const user = await createUser();
+        const ref = buildOneOffOrderReference(user._id.toString(), 'brand');
+        const access = findOneOffAccess('brand')!;
+        const event = approvedEvent(ref, { amount: access.priceAmount });
+
+        // Сирота урваної обробки: pending-запис існує, ефекти НЕ застосовано
+        // (живий творець утримував би білінг-лок — у тесті його немає).
+        await webhookEventModel.create({
+            provider: 'wayforpay',
+            providerEventId: event.providerEventId,
+            receivedAt: new Date(),
+            occurredAt: event.occurredAt,
+            type: event.transactionStatus,
+            userId: user._id.toString(),
+            oneOffCode: 'brand',
+            status: 'pending',
+        });
+
+        const accept = await feed(event);
+
+        // Без ack — WayForPay передоставлятиме, доки sweep не прибере orphan.
+        expect(accept).toBeNull();
+        // Грант НЕ застосовано вдруге наосліп.
+        const updated = await userModel.findById(user._id).lean();
+        expect(updated!.billing).toBeNull();
+        expect(await paymentRecordModel.countDocuments({})).toBe(0);
+        // Orphan-запис лишився pending (його прибере sweep, не роутер).
+        const orphan = await webhookEventModel
+            .findOne({ providerEventId: event.providerEventId })
+            .lean();
+        expect(orphan!.status).toBe('pending');
     });
 });

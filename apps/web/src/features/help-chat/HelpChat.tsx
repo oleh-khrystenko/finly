@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
 import { Bot, Send, BookOpen, AlertCircle, Sparkles } from 'lucide-react';
-import { HELP_CHAT_EVENT, HELP_CHAT_MESSAGE_MAX_LENGTH } from '@finly/types';
+import {
+    HELP_CHAT_EVENT,
+    HELP_CHAT_HISTORY_CONTENT_MAX_LENGTH,
+    HELP_CHAT_HISTORY_MAX_MESSAGES,
+    HELP_CHAT_MESSAGE_MAX_LENGTH,
+} from '@finly/types';
 
 import UiButton from '@/shared/ui/UiButton';
 import UiLink from '@/shared/ui/UiLink';
@@ -30,9 +35,11 @@ const SUGGESTIONS = [
     'Чи безпечно ділитися сторінкою оплати?',
 ];
 
+// `rate-limit` — це per-IP ліміт з добовим вікном (HelpChatRateLimitGuard,
+// 24h), не хвилинний throttle: не обіцяємо «зачекайте хвилину».
 const NOTICE_TEXT: Record<'rate-limit' | 'error', string> = {
     'rate-limit':
-        'Забагато запитань поспіль. Зачекайте хвилину і спробуйте знову.',
+        'Ліміт запитань на сьогодні вичерпано. Спробуйте завтра або перегляньте статті довідки.',
     error: 'Не вдалося отримати відповідь. Спробуйте ще раз.',
 };
 
@@ -72,9 +79,21 @@ export function HelpChat() {
         setNotice(null);
         setInput('');
 
+        // Обрізаємо під контракт ДО відправки: Zod на API (`.max(20)` повідомлень,
+        // `.max(4000)` на повідомлення) ВІДХИЛЯЄ довший payload, а не тримить
+        // його. Без цього після ~11-го питання кожен запит отримував би 400
+        // назавжди (історія росте на 2 повідомлення за хід), а довга відповідь
+        // асистента ламала б усі наступні запити сесії.
         const history: HelpChatHistoryItem[] = messages
             .filter((m) => m.content.trim().length > 0)
-            .map((m) => ({ role: m.role, content: m.content }));
+            .map((m) => ({
+                role: m.role,
+                content: m.content.slice(
+                    0,
+                    HELP_CHAT_HISTORY_CONTENT_MAX_LENGTH
+                ),
+            }))
+            .slice(-HELP_CHAT_HISTORY_MAX_MESSAGES);
 
         const userMsgId = nextId('user');
         const assistantMsgId = nextId('assistant');
@@ -107,7 +126,10 @@ export function HelpChat() {
                         setMessages((prev) =>
                             prev.map((m) =>
                                 m.id === assistantMsgId
-                                    ? { ...m, content: m.content + event.content }
+                                    ? {
+                                          ...m,
+                                          content: m.content + event.content,
+                                      }
                                     : m
                             )
                         );
@@ -224,7 +246,9 @@ export function HelpChat() {
                                     {msg.content ? (
                                         msg.role === 'assistant' ? (
                                             <div className="prose-chat">
-                                                <Markdown>{msg.content}</Markdown>
+                                                <Markdown>
+                                                    {msg.content}
+                                                </Markdown>
                                             </div>
                                         ) : (
                                             msg.content

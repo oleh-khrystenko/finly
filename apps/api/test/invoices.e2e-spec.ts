@@ -14,6 +14,7 @@ import { createReplSetMongo } from '../src/test-utils/mongo';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 import { REDIS_CLIENT } from '../src/common/modules/redis.module';
 import { RedisCounterService } from '../src/common/services/redis-counter.service';
+import { RedisLockService } from '../src/common/services/redis-lock.service';
 // Import order matters: AuthModule ↔ UsersModule ↔ StorageModule — це
 // pre-existing JS-cycle (`CLAUDE.md` Known Complexities `AuthModule ↔
 // UsersModule circular`). Якщо AccountsModule / BusinessesModule / InvoicesModule
@@ -102,8 +103,20 @@ jest.mock('../src/config/env', () => ({
                 incrementSliding: jest.fn(async () => 1),
             },
         },
+        {
+            provide: RedisLockService,
+            // Pass-through: e2e — один процес без конкурентних create;
+            // fake-Redis не має eval для compare-and-delete release.
+            useValue: {
+                withLock: async (
+                    _key: string,
+                    _ttlMs: number,
+                    fn: () => Promise<unknown>
+                ) => fn(),
+            },
+        },
     ],
-    exports: [REDIS_CLIENT, RedisCounterService],
+    exports: [REDIS_CLIENT, RedisCounterService, RedisLockService],
 })
 class TestRedisModule {}
 
@@ -268,7 +281,32 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
     // ─── Helpers ───
 
-    async function createUser(): Promise<UserDocument> {
+    // Sprint 19 — slug-редагування вимагає рівня не нижче brand.
+    const ACTIVE_BRAND_BILLING = {
+        provider: 'wayforpay',
+        orderReference: null,
+        recToken: null,
+        cardMask: null,
+        planCode: 'brand',
+        currency: 'UAH',
+        subscriptionStatus: 'ACTIVE',
+        providerSubscriptionStatus: null,
+        currentPeriodEnd: null,
+        cancelAtPeriodEnd: false,
+        hasActiveSubscription: true,
+        lastProviderEventAt: null,
+        scheduledPlanCode: null,
+        scheduledChangeDate: null,
+        rebindPendingAt: null,
+        oneOffLevel: null,
+        oneOffAccessUntil: null,
+        oneOffOrderReference: null,
+        reconcileRequiredAt: null,
+    };
+
+    async function createUser(
+        overrides: Partial<UserDocument> = {}
+    ): Promise<UserDocument> {
         return userModel.create({
             email: `user-${new Types.ObjectId().toString()}@test.com`,
             profile: {
@@ -278,6 +316,7 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
             },
             executions: { balance: 0, freeReportUsed: false },
             worksAsBookkeeper: false,
+            ...overrides,
         });
     }
 
@@ -724,6 +763,73 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
     // ─── PATCH ───
 
     describe('PATCH /businesses/me/:slug/invoices/:invoiceSlug', () => {
+        it('Sprint 19 — зміна slug без тарифу (Free) → 403 SLUG_EDIT_REQUIRES_PLAN', async () => {
+            const user = await createUser(); // без білінгу → рівень none
+            const { slug, accountSlug } = await createBusinessFor(user);
+            const create = await supertest(app.getHttpServer())
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
+                .set('Authorization', bearerFor(user))
+                .send({
+                    amount: 100,
+                    amountLocked: false,
+                    paymentPurpose: 'X',
+                    validUntil: null,
+                    slugInput: { kind: 'random' },
+                });
+            const invoiceSlug = (create.body as { data: { slug: string } }).data
+                .slug;
+
+            const res = await supertest(app.getHttpServer())
+                .patch(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`
+                )
+                .set('Authorization', bearerFor(user))
+                .send({ slug: 'oplata-konsultacii' })
+                .expect(403);
+            expect((res.body as { error: { code: string } }).error.code).toBe(
+                'SLUG_EDIT_REQUIRES_PLAN'
+            );
+
+            // Slug не змінено: стара адреса досі резолвиться у кабінеті.
+            await supertest(app.getHttpServer())
+                .get(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}`
+                )
+                .set('Authorization', bearerFor(user))
+                .expect(200);
+        });
+
+        it('reset-slug без тарифу → 200, свіжий авто-slug (гігієна номера, не платна фіча)', async () => {
+            const user = await createUser();
+            const { slug, accountSlug } = await createBusinessFor(user);
+            const create = await supertest(app.getHttpServer())
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`
+                )
+                .set('Authorization', bearerFor(user))
+                .send({
+                    amount: 100,
+                    amountLocked: false,
+                    paymentPurpose: 'X',
+                    validUntil: null,
+                    slugInput: { kind: 'random' },
+                });
+            const invoiceSlug = (create.body as { data: { slug: string } }).data
+                .slug;
+
+            const res = await supertest(app.getHttpServer())
+                .post(
+                    `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices/${invoiceSlug}/reset-slug`
+                )
+                .set('Authorization', bearerFor(user))
+                .send({})
+                .expect(200);
+            const newSlug = (res.body as { data: { slug: string } }).data.slug;
+            expect(newSlug).not.toBe(invoiceSlug);
+        });
+
         it('inline-edit paymentPurpose — 200', async () => {
             const user = await createUser();
             const { slug, accountSlug } = await createBusinessFor(user);
@@ -852,7 +958,7 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
         });
 
         it('Sprint 15 — PATCH slug перейменовує інвойс (vanity) + старе посилання редіректить', async () => {
-            const user = await createUser();
+            const user = await createUser({ billing: ACTIVE_BRAND_BILLING });
             const { slug, accountSlug } = await createBusinessFor(user);
             const create = await supertest(app.getHttpServer())
                 .post(

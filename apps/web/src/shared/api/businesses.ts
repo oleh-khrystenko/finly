@@ -4,6 +4,8 @@ import type {
     BusinessWithCounts,
     CreateBusinessRequest,
     PublicBusinessView,
+    SlugAvailabilityResponse,
+    SlugReservationView,
     UpdateBusinessRequest,
 } from '@finly/types';
 
@@ -74,6 +76,32 @@ export async function updateBusiness(
 export async function resetBusinessSlug(slug: string): Promise<Business> {
     const { data } = await apiClient.post<{ data: Business }>(
         `/businesses/me/${encodeURIComponent(slug)}/reset-slug`
+    );
+    return data.data;
+}
+
+/**
+ * Sprint 20 — live-перевірка доступності бажаного бізнес-slug (усі рівні).
+ */
+export async function checkBusinessSlugAvailability(
+    slug: string,
+    desired: string
+): Promise<SlugAvailabilityResponse> {
+    const { data } = await apiClient.get<{ data: SlugAvailabilityResponse }>(
+        `/businesses/me/${encodeURIComponent(slug)}/slug-availability`,
+        { params: { slug: desired } }
+    );
+    return data.data;
+}
+
+/** Sprint 20 — холд бажаного вільного бізнес-slug за користувачем (free-flow). */
+export async function reserveBusinessSlug(
+    slug: string,
+    desired: string
+): Promise<SlugReservationView> {
+    const { data } = await apiClient.post<{ data: SlugReservationView }>(
+        `/businesses/me/${encodeURIComponent(slug)}/slug-reservation`,
+        { slug: desired }
     );
     return data.data;
 }

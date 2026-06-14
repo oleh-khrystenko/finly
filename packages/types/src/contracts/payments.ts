@@ -9,24 +9,49 @@ export const PAYMENT_TYPE = {
 
 export type PaymentType = (typeof PAYMENT_TYPE)[keyof typeof PAYMENT_TYPE];
 
-// --- Plan/Pack Code Identifiers ---
+// --- Plan/One-off Code Identifiers ---
 // Structural identifiers used in DB records, i18n keys, image filenames.
 // Adding a new plan requires: code here + entry у статичному каталозі нижче +
 // i18n keys + image assets.
 
-export const SUBSCRIPTION_PLAN_CODES = ['starter', 'pro'] as const;
+export const SUBSCRIPTION_PLAN_CODES = ['brand', 'bookkeeper'] as const;
 export type SubscriptionPlanCode = (typeof SUBSCRIPTION_PLAN_CODES)[number];
 
-export const EXECUTION_PACK_CODES = ['basic', 'max'] as const;
-export type ExecutionPackCode = (typeof EXECUTION_PACK_CODES)[number];
+// Коди дзеркалять рівні доступу (one-off = «купити рівень на місяць»). Збіг із
+// `SUBSCRIPTION_PLAN_CODES` навмисний: продукти розрізняються `kind` у
+// orderReference, не кодом. Без дефісів — order-reference сегментує по `-`.
+export const ONE_OFF_ACCESS_CODES = ['brand', 'bookkeeper'] as const;
+export type OneOffAccessCode = (typeof ONE_OFF_ACCESS_CODES)[number];
+
+// --- Access level (єдине джерело істини рівня доступу) ---
+// Впорядкований рівень none < brand < bookkeeper. Реальний рівень користувача
+// обчислюється з білінг-стану як максимум активної підписки і активного one-off;
+// усі замки питають «рівень не нижче потрібного». Підписка `brand`/`bookkeeper`
+// дає однойменний рівень; one-off дзеркалить ті самі рівні з датою закінчення.
+
+export const ACCESS_LEVELS = ['none', 'brand', 'bookkeeper'] as const;
+export type AccessLevel = (typeof ACCESS_LEVELS)[number];
+
+const ACCESS_LEVEL_RANK: Record<AccessLevel, number> = {
+    none: 0,
+    brand: 1,
+    bookkeeper: 2,
+};
+
+export function isAccessLevelAtLeast(
+    actual: AccessLevel,
+    required: AccessLevel
+): boolean {
+    return ACCESS_LEVEL_RANK[actual] >= ACCESS_LEVEL_RANK[required];
+}
+
+export function maxAccessLevel(a: AccessLevel, b: AccessLevel): AccessLevel {
+    return ACCESS_LEVEL_RANK[a] >= ACCESS_LEVEL_RANK[b] ? a : b;
+}
 
 // --- Billing-wide constants ---
 // Один продукт = одна валюта (гривня). WayForPay multi-currency поза скоупом.
 export const BILLING_CURRENCY = 'UAH';
-
-// Безкоштовний пробний місяць: підписка створюється з відкладеним першим
-// списанням (dateBegin = now + N місяців), стан TRIALING до першого успіху.
-export const SUBSCRIPTION_TRIAL_MONTHS = 1;
 
 export type BillingInterval = 'month' | 'year';
 
@@ -38,77 +63,81 @@ export interface SubscriptionPlanItem {
     priceAmount: number; // копійки
     currency: string;
     interval: BillingInterval;
-    executions: number;
+    level: AccessLevel;
     displayOrder: number;
     featured: boolean;
 }
 
-export interface ExecutionPackItem {
-    code: ExecutionPackCode;
+export interface OneOffAccessItem {
+    code: OneOffAccessCode;
     name: string;
     priceAmount: number; // копійки
     currency: string;
-    executions: number;
+    level: AccessLevel;
+    durationMonths: number;
     displayOrder: number;
     featured: boolean;
 }
 
 export interface PaymentsCatalog {
     subscriptionPlans: SubscriptionPlanItem[];
-    executionPacks: ExecutionPackItem[];
+    oneOffAccesses: OneOffAccessItem[];
 }
 
 // --- Static Catalog (єдине джерело істини) ---
 // Ціни у копійках: 49 грн = 4900. WayForPay оперує decimal-сумою у валюті —
-// конверсію копійки↔decimal робить payload-mapper провайдера.
+// конверсію копійки↔decimal робить payload-mapper провайдера. One-off за місяць
+// дорожчий за місяць підписки (підштовхує до підписки).
 
 export const SUBSCRIPTION_PLANS: readonly SubscriptionPlanItem[] = [
     {
-        code: 'starter',
-        name: 'Starter',
+        code: 'brand',
+        name: 'Бренд',
         priceAmount: 4900,
         currency: BILLING_CURRENCY,
         interval: 'month',
-        executions: 10_000,
+        level: 'brand',
         displayOrder: 0,
-        featured: false,
+        featured: true,
     },
     {
-        code: 'pro',
-        name: 'Pro',
-        priceAmount: 14_900,
+        code: 'bookkeeper',
+        name: 'Агенція',
+        priceAmount: 9900,
         currency: BILLING_CURRENCY,
         interval: 'month',
-        executions: 50_000,
+        level: 'bookkeeper',
         displayOrder: 1,
-        featured: true,
+        featured: false,
     },
 ] as const;
 
-export const EXECUTION_PACKS: readonly ExecutionPackItem[] = [
+export const ONE_OFF_ACCESSES: readonly OneOffAccessItem[] = [
     {
-        code: 'basic',
-        name: 'Basic',
-        priceAmount: 2900,
+        code: 'brand',
+        name: 'Бренд на місяць',
+        priceAmount: 6900,
         currency: BILLING_CURRENCY,
-        executions: 5_000,
+        level: 'brand',
+        durationMonths: 1,
         displayOrder: 0,
-        featured: false,
+        featured: true,
     },
     {
-        code: 'max',
-        name: 'Max',
-        priceAmount: 9900,
+        code: 'bookkeeper',
+        name: 'Агенція на місяць',
+        priceAmount: 12_900,
         currency: BILLING_CURRENCY,
-        executions: 18_000,
+        level: 'bookkeeper',
+        durationMonths: 1,
         displayOrder: 1,
-        featured: true,
+        featured: false,
     },
 ] as const;
 
 export const PAYMENTS_CATALOG: PaymentsCatalog = {
     subscriptionPlans: [...SUBSCRIPTION_PLANS],
-    executionPacks: [...EXECUTION_PACKS],
+    oneOffAccesses: [...ONE_OFF_ACCESSES],
 };
 
 export function findSubscriptionPlan(
@@ -117,10 +146,58 @@ export function findSubscriptionPlan(
     return SUBSCRIPTION_PLANS.find((p) => p.code === code);
 }
 
-export function findExecutionPack(
-    code: string
-): ExecutionPackItem | undefined {
-    return EXECUTION_PACKS.find((p) => p.code === code);
+export function findOneOffAccess(code: string): OneOffAccessItem | undefined {
+    return ONE_OFF_ACCESSES.find((p) => p.code === code);
+}
+
+/** Рівень підписки за кодом плану; 'none' для null/невідомого коду. */
+export function levelOfSubscriptionPlan(
+    code: string | null | undefined
+): AccessLevel {
+    if (!code) return 'none';
+    return findSubscriptionPlan(code)?.level ?? 'none';
+}
+
+/** Рівень one-off доступу за кодом; 'none' для null/невідомого коду. */
+export function levelOfOneOffAccess(
+    code: string | null | undefined
+): AccessLevel {
+    if (!code) return 'none';
+    return findOneOffAccess(code)?.level ?? 'none';
+}
+
+/**
+ * Реальний рівень доступу користувача = максимум активної підписки і активного
+ * one-off. Підписка зараховується при `hasActiveSubscription`, АЛЕ не у статусі
+ * `TRIALING`: trial прибрано, тож єдиний TRIALING — це відкладений старт поверх
+ * one-off (підписка ще не списана). Під час defer доступ дає лише оплачений
+ * one-off, не майбутній (можливо вищий) тариф підписки. one-off зараховується
+ * поки `oneOffAccessUntil` у майбутньому (гасне ліниво на read, без cron). Єдине
+ * джерело для API-замків і web-гейтингу.
+ */
+export function deriveAccessLevel(
+    billing: {
+        planCode: string | null;
+        hasActiveSubscription: boolean;
+        subscriptionStatus: string | null;
+        oneOffLevel: AccessLevel | null;
+        oneOffAccessUntil: Date | null;
+    } | null,
+    now: Date
+): AccessLevel {
+    if (!billing) return 'none';
+    const subscriptionCounts =
+        billing.hasActiveSubscription &&
+        billing.subscriptionStatus !== SUBSCRIPTION_STATUS.TRIALING;
+    const subLevel = subscriptionCounts
+        ? levelOfSubscriptionPlan(billing.planCode)
+        : 'none';
+    const oneOffActive =
+        billing.oneOffLevel != null &&
+        billing.oneOffAccessUntil != null &&
+        billing.oneOffAccessUntil.getTime() > now.getTime();
+    const oneOffLevel = oneOffActive ? billing.oneOffLevel! : 'none';
+    return maxAccessLevel(subLevel, oneOffLevel);
 }
 
 // --- Status & Event Enums ---
@@ -153,8 +230,13 @@ export type BillingEventType =
 
 export const PAYMENT_RECORD_TYPE = {
     SUBSCRIPTION: 'subscription', // рекурентне списання підписки
-    PACK: 'pack', // разовий пакет executions
+    ONE_OFF: 'one_off', // разовий доступ на місяць
     PRORATION: 'proration', // негайна доплата при апгрейді
+    // Approved-списання на orderReference, що вже не є чинним для користувача
+    // (рекурент пережив перезапис checkout-ом/re-bind-ом). Гроші рухались, але
+    // грант неможливий — слід для ручного розбору. Окремий тип, щоб запис не
+    // потрапляв у refund-скоуп cancel-у (він фільтрує type=subscription).
+    UNMATCHED: 'unmatched',
 } as const;
 
 export type PaymentRecordType =
@@ -175,8 +257,9 @@ export const PaymentRecordSchema = z.object({
     id: z.string(),
     type: z.enum([
         PAYMENT_RECORD_TYPE.SUBSCRIPTION,
-        PAYMENT_RECORD_TYPE.PACK,
+        PAYMENT_RECORD_TYPE.ONE_OFF,
         PAYMENT_RECORD_TYPE.PRORATION,
+        PAYMENT_RECORD_TYPE.UNMATCHED,
     ]),
     amount: z.number().int(), // копійки
     currency: z.string(),
@@ -199,17 +282,17 @@ export const CreateCheckoutSessionSchema = z
     .object({
         paymentType: z.enum([PAYMENT_TYPE.SUBSCRIPTION, PAYMENT_TYPE.ONE_OFF]),
         planCode: z.string().min(1).optional(),
-        packCode: z.string().min(1).optional(),
+        oneOffCode: z.string().min(1).optional(),
         returnPath: z.string().startsWith('/').max(256).optional(),
     })
     .refine(
         (data) =>
             data.paymentType === PAYMENT_TYPE.SUBSCRIPTION
                 ? !!data.planCode
-                : !!data.packCode,
+                : !!data.oneOffCode,
         {
             message:
-                'planCode required for subscription, packCode required for one_off',
+                'planCode required for subscription, oneOffCode required for one_off',
         }
     );
 
@@ -263,6 +346,14 @@ export const UserBillingSchema = z.object({
     scheduledPlanCode: z.string().nullable(),
     scheduledChangeDate: z.coerce.date().nullable(),
     cardMask: z.string().nullable(),
+    /** Рівень активного one-off доступу + дата його закінчення. */
+    oneOffLevel: z.enum(ACCESS_LEVELS).nullable(),
+    oneOffAccessUntil: z.coerce.date().nullable(),
+    /**
+     * Похідний рівень доступу (max підписки і one-off) на момент відповіді.
+     * Не зберігається — обчислюється `deriveAccessLevel` при серіалізації.
+     */
+    accessLevel: z.enum(ACCESS_LEVELS),
 });
 
 export type UserBilling = z.infer<typeof UserBillingSchema>;

@@ -13,15 +13,23 @@ import {
     type UpdateInvoiceRequest,
 } from '@finly/types';
 import {
+    checkInvoiceSlugAvailability,
     getAccountBySlug,
     getApiMessage,
     getBusinessBySlug,
     getInvoiceBySlug,
+    reserveInvoiceSlug,
     resetInvoiceSlug,
     updateInvoice,
 } from '@/shared/api';
 import { OwnershipBadge } from '@/entities/business';
-import { useAuthStore } from '@/entities/user';
+import {
+    matchActiveSlugReservation,
+    useApplyPendingSlug,
+    useAuthStore,
+    useCanEditSlug,
+} from '@/entities/user';
+import { brandUpsellCtaLabel, startBrandCheckout } from '@/features/billing';
 import { ENV } from '@/shared/config/env';
 import UiButton from '@/shared/ui/UiButton';
 import UiBreadcrumb from '@/shared/ui/UiBreadcrumb';
@@ -82,10 +90,13 @@ export default function InvoiceCabinetPage() {
         invoiceSlug: string;
     }>();
     const userId = useAuthStore((s) => s.user?.id);
+    const reservation = useAuthStore((s) => s.user?.activeSlugReservation ?? null);
+    const isPaid = useCanEditSlug();
     const openDeleteConfirm = useDeleteInvoiceConfirmStore((s) => s.open);
 
     const [data, setData] = useState<LoadedData | null>(null);
     const [error, setError] = useState<ErrorState | null>(null);
+    const [autoEditSlug, setAutoEditSlug] = useState(false);
 
     const paramBiz = params.slug;
     const paramAcc = params.accountSlug;
@@ -170,6 +181,48 @@ export default function InvoiceCabinetPage() {
         },
         [router]
     );
+
+    // Sprint 20 — добивання наміру після оплати (бронь slug документа).
+    const desiredSlug = data
+        ? matchActiveSlugReservation(reservation, {
+              entityType: 'invoice',
+              businessSlug: data.business.slug,
+              accountSlug: data.paramAcc,
+              invoiceSlug: data.invoice.slug,
+          })
+        : null;
+    const applyReservedSlug = useCallback(
+        (slug: string) => {
+            if (!data) return Promise.resolve();
+            return handlePatch(
+                { slug },
+                {
+                    businessSlug: data.business.slug,
+                    accountSlug: data.paramAcc,
+                    invoiceSlug: data.invoice.slug,
+                }
+            );
+        },
+        [data, handlePatch]
+    );
+    const handleSlugTaken = useCallback(() => {
+        toast.error('Це посилання щойно зайняли. Оберіть інше');
+        setAutoEditSlug(true);
+    }, []);
+    useApplyPendingSlug({
+        matches: desiredSlug !== null,
+        desiredSlug,
+        apply: applyReservedSlug,
+        onTaken: handleSlugTaken,
+    });
+    const handleSubscribe = useCallback(() => {
+        if (!data) return Promise.resolve();
+        return startBrandCheckout(
+            `/business/${data.business.slug}/account/${data.paramAcc}/invoice/${data.invoice.slug}`
+        ).catch(() => {
+            toast.error('Не вдалося відкрити оплату. Спробуйте ще раз');
+        });
+    }, [data]);
 
     if (!isDataCurrent && !error) {
         return (
@@ -288,9 +341,33 @@ export default function InvoiceCabinetPage() {
                     businessSlug={business.slug}
                     accountSlug={accountSlug}
                     payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
+                    accessSuspended={business.accessBlockedAt != null}
+                    isPaid={isPaid}
                     defaultMode={account.invoiceSlugPresetDefault}
                     onSave={onSave}
                     onResetSlug={handleResetSlug}
+                    checkSlugAvailability={(slug) =>
+                        checkInvoiceSlugAvailability(
+                            business.slug,
+                            accountSlug,
+                            invoice.slug,
+                            slug
+                        ).then((r) => r.status)
+                    }
+                    reserveSlug={(slug) =>
+                        reserveInvoiceSlug(
+                            business.slug,
+                            accountSlug,
+                            invoice.slug,
+                            slug
+                        )
+                    }
+                    onSubscribe={handleSubscribe}
+                    subscribePriceLabel={brandUpsellCtaLabel()}
+                    initialReservation={
+                        !isPaid && desiredSlug ? reservation : null
+                    }
+                    autoStartSlugEdit={autoEditSlug}
                 />
                 <PaymentDetailsCard
                     invoice={invoice}

@@ -6,6 +6,7 @@ import {
     type LandingDraft,
 } from '@finly/types';
 
+import { resolveAccessLevel } from '../../common/billing/resolve-access-level';
 import { AccountsService } from '../accounts/accounts.service';
 import type { BusinessDocument } from '../businesses/schemas/business.schema';
 import { BusinessesService } from '../businesses/businesses.service';
@@ -52,12 +53,19 @@ export class LandingClaimService {
             claimIdempotencyKey
         );
 
+        // Sprint 19 — рівень доступу claiming-користувача для лімітів create.
+        // Зазвичай 'none' (claim — онбординг нового юзера), але резолвимо
+        // реальний стан, бо повторний claim може робити вже платний користувач.
+        const claimer = await this.usersService.findById(ctx.userId);
+        const actorLevel = resolveAccessLevel(claimer?.billing ?? null);
+
         let business: BusinessDocument;
         try {
             business = await this.businessesService.create(
                 ctx.userId,
                 createDto,
-                ctx.isBookkeeperMode
+                ctx.isBookkeeperMode,
+                actorLevel
             );
         } catch (err) {
             this.logClaimFailure('POST1', ctx.userId, err);

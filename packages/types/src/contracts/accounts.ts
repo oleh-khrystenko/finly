@@ -102,6 +102,15 @@ export const UpdateAccountSchema = z
 export type UpdateAccountRequest = z.infer<typeof UpdateAccountSchema>;
 
 /**
+ * Sprint 20 — бажане ім'я для перевірки доступності і броні у scope рахунку.
+ */
+export const AccountSlugCandidateSchema = z
+    .object({ slug: accountSlugSchema })
+    .strict();
+
+export type AccountSlugCandidate = z.infer<typeof AccountSlugCandidateSchema>;
+
+/**
  * `PublicAccountListItemSchema` — whitelist for `pay.finly.com.ua/{businessSlug}`
  * root-page list (2+ Account варіант) і nested `accounts: []` у
  * `PublicBusinessSchema`. 4 поля.

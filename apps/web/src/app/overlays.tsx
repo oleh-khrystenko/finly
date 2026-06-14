@@ -14,9 +14,6 @@ const AvatarDeleteConfirmDialog = dynamic(
 const TermsReacceptDialog = dynamic(
     () => import('@/features/auth/TermsReacceptDialog')
 );
-const BillingResetDialog = dynamic(
-    () => import('@/features/billing/BillingResetDialog')
-);
 const CancelSubscriptionDialog = dynamic(
     () => import('@/features/billing/CancelSubscriptionDialog')
 );
@@ -55,7 +52,6 @@ export function Overlays() {
             <AvatarUploadDialog />
             <AvatarDeleteConfirmDialog />
             <TermsReacceptDialog />
-            <BillingResetDialog />
             <CancelSubscriptionDialog />
             <ChangePlanDialog />
             <DeleteBusinessConfirmDialog />

@@ -11,11 +11,11 @@ export function LandingContrast() {
             <div className="container mx-auto px-6 py-16 md:py-24">
                 <div className="mx-auto mb-12 max-w-2xl text-center md:mb-16">
                     <h2 className="text-foreground text-3xl font-semibold tracking-tight sm:text-4xl">
-                        Через тиждень — все інакше
+                        Через тиждень все інакше
                     </h2>
                     <p className="text-muted-foreground mt-4 text-base sm:text-lg">
                         Ви даєте клієнту одне посилання або QR. Він відкриває з
-                        телефону — бачить ваше імʼя, призначення, кнопки банків.
+                        телефону і бачить ваше імʼя, призначення, кнопки банків.
                         Тапає свій банк. Тільки підтвердити.
                     </p>
                 </div>
@@ -54,9 +54,13 @@ export function LandingContrast() {
                         </div>
 
                         <ul className="text-muted-foreground mt-auto space-y-2 text-sm">
-                            <Failure>Помилка у цифрах — платіж до іншої людини</Failure>
-                            <Failure>«Нагадайте реквізити ще раз завтра»</Failure>
-                            <Failure>Клієнт відклав — і не повернувся</Failure>
+                            <Failure>
+                                Помилка у цифрах: платіж до іншої людини
+                            </Failure>
+                            <Failure>
+                                «Нагадайте реквізити ще раз завтра»
+                            </Failure>
+                            <Failure>Клієнт відклав і не повернувся</Failure>
                         </ul>
                     </article>
 
@@ -88,7 +92,7 @@ export function LandingContrast() {
                             <div className="text-muted-foreground flex items-center gap-2">
                                 <span className="bg-primary inline-block size-2 rounded-full" />
                                 <span className="font-mono">
-                                    finly.com.ua/ivanenko
+                                    pay.finly.com.ua/ivanenko
                                 </span>
                             </div>
                             <div className="bg-card border-border rounded-md border p-2.5">
@@ -105,9 +109,15 @@ export function LandingContrast() {
                         </div>
 
                         <ul className="text-muted-foreground mt-auto space-y-2 text-sm">
-                            <Success>Без копіювання — система сама заповнює</Success>
-                            <Success>Без помилок у цифрах — це неможливо</Success>
-                            <Success>Без «нагадайте завтра» — посилання вічне</Success>
+                            <Success>
+                                Без копіювання: система сама заповнює
+                            </Success>
+                            <Success>
+                                Без помилок у цифрах: це неможливо
+                            </Success>
+                            <Success>
+                                Без «нагадайте завтра»: посилання вічне
+                            </Success>
                         </ul>
                     </article>
                 </div>

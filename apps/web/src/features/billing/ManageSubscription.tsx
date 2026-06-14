@@ -12,21 +12,28 @@ import { useAuthStore } from '@/entities/user';
 import { updateCard } from '@/shared/api/payments';
 import { getApiMessage } from '@/shared/api/mapApiCode';
 import { extractApiErrorCode } from '@/shared/api';
-import { formatLocalDate, INTL_LOCALE } from '@/shared/lib';
+import { formatLocalDate } from '@/shared/lib';
 import UiButton from '@/shared/ui/UiButton';
 import { useChangePlanDialogStore } from './changePlanDialogStore';
 import { useCancelSubscriptionDialogStore } from './cancelSubscriptionDialogStore';
+import { PLAN_COPY } from './catalogCopy';
 import RecentPayments from './RecentPayments';
 
 function statusBadge(billing: UserBilling): { label: string; cls: string } {
     if (billing.subscriptionStatus === SUBSCRIPTION_STATUS.PAST_DUE) {
-        return { label: 'Прострочено', cls: 'bg-error/15 text-error' };
+        return {
+            label: 'Прострочено',
+            cls: 'bg-destructive/15 text-destructive',
+        };
     }
     if (billing.cancelAtPeriodEnd) {
         return { label: 'Скасовується', cls: 'bg-warning/15 text-warning' };
     }
+    // TRIALING після Sprint 19 — не trial (його прибрано), а відкладений старт
+    // поверх активного one-off: картка привʼязана, перше списання на даті
+    // закінчення one-off доступу.
     if (billing.subscriptionStatus === SUBSCRIPTION_STATUS.TRIALING) {
-        return { label: 'Пробний період', cls: 'bg-primary/15 text-primary' };
+        return { label: 'Очікує старту', cls: 'bg-primary/15 text-primary' };
     }
     return { label: 'Активна', cls: 'bg-success/15 text-success' };
 }
@@ -87,7 +94,7 @@ export default function ManageSubscription({
             </h2>
 
             {isPastDue && (
-                <div className="border-error/30 bg-error/10 text-error rounded-lg border p-4 text-sm">
+                <div className="border-destructive/30 bg-destructive/10 text-destructive rounded-lg border p-4 text-sm">
                     Останнє списання не пройшло. Оновіть картку, щоб зберегти
                     доступ після завершення поточного періоду.
                 </div>
@@ -114,10 +121,9 @@ export default function ManageSubscription({
                           : `Наступне списання ${formatLocalDate(billing.currentPeriodEnd)}`}
                 </p>
 
-                {activePlan && (
+                {activePlan && PLAN_COPY[activePlan.code]?.tagline && (
                     <p className="text-muted-foreground mt-0.5 text-sm">
-                        {activePlan.executions.toLocaleString(INTL_LOCALE)}{' '}
-                        виконань за період
+                        {PLAN_COPY[activePlan.code].tagline}
                     </p>
                 )}
 

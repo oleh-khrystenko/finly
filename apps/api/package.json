@@ -24,7 +24,8 @@
         "migration:invoices-payee-snapshot": "ts-node scripts/migrations/2026-05-08-invoices-payee-snapshot.ts",
         "migration:accounts-null-auto-name": "ts-node scripts/migrations/2026-06-02-accounts-null-auto-name.ts",
         "migration:nested-slug-lower": "ts-node scripts/migrations/2026-06-03-nested-slug-lower.ts",
-        "migration:all": "pnpm migration:slug-lower && pnpm migration:invoices-payee-snapshot && pnpm migration:accounts-null-auto-name && pnpm migration:nested-slug-lower"
+        "migration:slug-customized": "ts-node scripts/migrations/2026-06-10-slug-customized-backfill.ts",
+        "migration:all": "pnpm migration:slug-lower && pnpm migration:invoices-payee-snapshot && pnpm migration:accounts-null-auto-name && pnpm migration:nested-slug-lower && pnpm migration:slug-customized"
     },
     "dependencies": {
         "@anthropic-ai/sdk": "^0.80.0",

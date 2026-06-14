@@ -22,6 +22,7 @@ const baseBusiness: TaxationCapableBusiness = {
     paymentPurposeTemplate: 'Оплата',
     seoIndexEnabled: false,
     deletedAt: null,
+    accessBlockedAt: null,
     createdAt: new Date('2026-05-01'),
     updatedAt: new Date('2026-05-01'),
 };

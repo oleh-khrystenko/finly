@@ -62,6 +62,16 @@ export class Business {
     @Prop({ required: true, lowercase: true, trim: true })
     slugLower!: string;
 
+    /**
+     * Sprint 19 — чи slug вручну кастомізований користувачем (vanity). `false`
+     * для авто-згенерованих (create / reset-slug). Реконсиляція при падінні
+     * нижче brand скидає лише кастомні slug-и до авто (rent-модель: «красиві»
+     * імена повертаються ринку), не чіпаючи й так-авто. Internal-флаг, не у
+     * публічному контракті.
+     */
+    @Prop({ type: Boolean, default: false })
+    slugCustomized!: boolean;
+
     @Prop({ required: true, trim: true })
     name!: string;
 
@@ -127,6 +137,17 @@ export class Business {
      */
     @Prop({ type: Date, default: null })
     deletedAt!: Date | null;
+
+    /**
+     * Sprint 19 — блокування доступу реконсиляцією при втраті рівня (скасування
+     * підписки / сплив one-off). Стемпиться timestamp-ом замість підрахунку на
+     * льоту: публічний рендер дешево дивиться лише на цей флаг (заблокований →
+     * сторінка і QR гаснуть), cabinet показує «доступ призупинено». Знімається
+     * (→ null) реконсиляцією при поверненні доступу в межах нового рівня.
+     * Нічого не видаляється автоматично — користувач може лише видалити вручну.
+     */
+    @Prop({ type: Date, default: null })
+    accessBlockedAt!: Date | null;
 
     /**
      * Sprint 10 §SP-11 — anti-duplicate-Business UUID v4 token для anon-claim

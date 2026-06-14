@@ -39,6 +39,8 @@ export {
     getBusinessBySlug,
     updateBusiness,
     resetBusinessSlug,
+    checkBusinessSlugAvailability,
+    reserveBusinessSlug,
     deleteBusiness,
     getPublicBusinessView,
 } from './businesses';
@@ -48,6 +50,8 @@ export {
     getAccountBySlug,
     updateAccount,
     resetAccountSlug,
+    checkAccountSlugAvailability,
+    reserveAccountSlug,
     deleteAccount,
     getPublicAccountView,
 } from './accounts';
@@ -57,8 +61,10 @@ export {
     getInvoiceBySlug,
     updateInvoice,
     resetInvoiceSlug,
+    checkInvoiceSlugAvailability,
+    reserveInvoiceSlug,
     deleteInvoice,
     getPublicInvoiceView,
 } from './invoices';
 export type { PaginatedInvoices } from './invoices';
-export { clearPendingPostLoginTarget } from './users';
+export { clearPendingPostLoginTarget, releaseSlugReservation } from './users';

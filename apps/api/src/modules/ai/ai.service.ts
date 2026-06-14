@@ -44,8 +44,10 @@ export class AiService {
 
     /**
      * Builds the message list for the anon help assistant. History is untrusted
-     * client input: capped, and a leading assistant message is dropped so the
-     * sequence stays valid for the provider (must start with user).
+     * client input: capped, and all leading assistant messages are dropped so
+     * the sequence stays valid for the provider (must start with user). A
+     * single-drop would let a crafted assistant-only history reach the provider
+     * and burn budget on a guaranteed 400.
      */
     buildHelpChatMessages(
         message: string,
@@ -55,9 +57,8 @@ export class AiService {
             .slice(-HELP_CHAT_HISTORY_MAX_MESSAGES)
             .map((m) => ({ role: m.role, content: m.content }));
 
-        if (trimmed.length > 0 && trimmed[0].role === 'assistant') {
-            trimmed = trimmed.slice(1);
-        }
+        const firstUserIndex = trimmed.findIndex((m) => m.role === 'user');
+        trimmed = firstUserIndex === -1 ? [] : trimmed.slice(firstUserIndex);
 
         return [...trimmed, { role: 'user', content: message }];
     }

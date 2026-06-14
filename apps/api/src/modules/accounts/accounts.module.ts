@@ -16,6 +16,7 @@ import {
 } from '../invoices/schemas/invoice-slug-history.schema';
 import { Invoice, InvoiceSchema } from '../invoices/schemas/invoice.schema';
 import { QrModule } from '../qr/qr.module';
+import { SlugReservationModule } from '../slug-reservation/slug-reservation.module';
 import { AccountAccessGuard } from './account-access.guard';
 import { AccountSlugGeneratorService } from './account-slug-generator.service';
 import { AccountsController } from './accounts.controller';
@@ -72,6 +73,7 @@ import { Account, AccountSchema } from './schemas/account.schema';
         ]),
         BusinessesModule,
         QrModule,
+        SlugReservationModule,
     ],
     controllers: [AccountsController, PublicAccountsController],
     providers: [

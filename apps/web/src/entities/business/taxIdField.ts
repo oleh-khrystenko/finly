@@ -78,25 +78,25 @@ const STATIC_CONFIG_BY_TYPE: Record<BusinessType, TaxIdFieldStatic> = {
     individual: {
         label: 'РНОКПП',
         placeholder: '1234567890',
-        description: '10 цифр — як у довідці ДПС',
+        description: '10 цифр, як у довідці ДПС',
         validator: individualTaxIdZod,
     },
     fop: {
         label: 'РНОКПП',
         placeholder: '1234567890',
-        description: '10 цифр — особистий код з довідки ДПС',
+        description: '10 цифр, особистий код з довідки ДПС',
         validator: individualTaxIdZod,
     },
     tov: {
         label: 'ЄДРПОУ',
         placeholder: '12345678',
-        description: '8 цифр — як у виписці ЄДР',
+        description: '8 цифр, як у виписці ЄДР',
         validator: legalEntityTaxIdZod,
     },
     organization: {
         label: 'ЄДРПОУ',
         placeholder: '12345678',
-        description: '8 цифр — як у виписці ЄДР',
+        description: '8 цифр, як у виписці ЄДР',
         validator: legalEntityTaxIdZod,
     },
 };

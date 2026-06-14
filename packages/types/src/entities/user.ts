@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { UserBillingSchema } from '../contracts/payments';
+import { SlugReservationViewSchema } from '../contracts/slug-reservation';
 import { DEFAULT_USER_ROLE, USER_ROLES } from '../enums/user-role';
 import { validateSameOriginPath } from '../utils/path';
 import { objectIdSchema } from '../validation/common';
@@ -61,6 +62,12 @@ export const UserSchema = z.object({
         firstReminderSentAt: null,
         finalWarningSentAt: null,
     }),
+    /**
+     * Sprint 20 — активна бронь бажаного slug (top-level, не в `billing`:
+     * free-юзери тримають броні, а їхній `billing` — null). Web малює з цього
+     * зворотний відлік і добиває намір після оплати.
+     */
+    activeSlugReservation: SlugReservationViewSchema.nullable().optional(),
 });
 
 export const UserProfileSchema = UserSchema.pick({
@@ -76,6 +83,7 @@ export const UserProfileSchema = UserSchema.pick({
     billing: true,
     termsVersion: true,
     pendingPostLoginTarget: true,
+    activeSlugReservation: true,
 });
 
 export type User = z.infer<typeof UserSchema>;

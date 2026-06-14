@@ -2,9 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FileText, Plus } from 'lucide-react';
-import { AxiosError } from 'axios';
 import { type Invoice } from '@finly/types';
-import { getApiMessage, listInvoices } from '@/shared/api';
+import { extractApiErrorCode, getApiMessage, listInvoices } from '@/shared/api';
 import UiButton from '@/shared/ui/UiButton';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
@@ -61,12 +60,7 @@ interface SectionError {
 }
 
 function extractMessage(err: unknown): string {
-    const code =
-        err instanceof AxiosError
-            ? ((err.response?.data as { error?: { code?: string } } | undefined)
-                  ?.error?.code ?? 'unknown')
-            : 'unknown';
-    return getApiMessage(code, 'invoices');
+    return getApiMessage(extractApiErrorCode(err), 'invoices');
 }
 
 export default function InvoicesSection({
@@ -267,7 +261,7 @@ function EmptyState({ createHref }: { createHref: string }) {
                     Поки немає виставлених рахунків
                 </p>
                 <p className="text-muted-foreground max-w-sm text-base">
-                    Натисніть «Виставити рахунок» — клієнт отримає посилання з
+                    Натисніть «Виставити рахунок», і клієнт отримає посилання з
                     сумою і призначенням, готове для оплати.
                 </p>
             </div>

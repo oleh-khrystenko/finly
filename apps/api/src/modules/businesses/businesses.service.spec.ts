@@ -2,16 +2,22 @@ import { Test } from '@nestjs/testing';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import {
     BadRequestException,
+    ConflictException,
+    ForbiddenException,
     InternalServerErrorException,
     NotFoundException,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
-import { VAT_ALLOWED_TAXATION_SYSTEMS } from '@finly/types';
+import { RESPONSE_CODE, VAT_ALLOWED_TAXATION_SYSTEMS } from '@finly/types';
 import type {
     CreateBusinessRequest,
     UpdateBusinessRequest,
 } from '@finly/types';
 
+import {
+    RedisLockBusyError,
+    RedisLockService,
+} from '../../common/services/redis-lock.service';
 import { Account } from '../accounts/schemas/account.schema';
 import { AccountSlugHistory } from '../accounts/schemas/account-slug-history.schema';
 import { InvoiceSlugCounter } from '../invoices/schemas/invoice-slug-counter.schema';
@@ -21,6 +27,7 @@ import { BusinessesService } from './businesses.service';
 import { BusinessSlugHistory } from './schemas/business-slug-history.schema';
 import type { BusinessDocument } from './schemas/business.schema';
 import { Business } from './schemas/business.schema';
+import { SlugReservationService } from '../slug-reservation/slug-reservation.service';
 import { SlugGeneratorService } from './slug-generator.service';
 
 describe('BusinessesService', () => {
@@ -32,6 +39,7 @@ describe('BusinessesService', () => {
         findOneAndUpdate: jest.Mock;
         exists: jest.Mock;
         deleteOne: jest.Mock;
+        countDocuments: jest.Mock;
     }>;
     // Sprint 14 — BusinessSlugHistory model для slug-rename TX (insert old slug,
     // anti-squatting check, revert-cleanup). Default — порожнє: existing
@@ -66,8 +74,19 @@ describe('BusinessesService', () => {
         generateRandomSlug: jest.Mock;
         isReserved: jest.Mock;
     }>;
+    // Sprint 19 — per-user лок на create. Default — pass-through (лок вільний);
+    // окремий it-блок форсує RedisLockBusyError для 409-кейсу.
+    let lockService: { withLock: jest.Mock };
 
     const userId = new Types.ObjectId();
+    const TEST_USER_ID = '507f1f77bcf86cd799439099';
+
+    const mockSlugReservations = {
+        isNameHeldByOther: jest.fn().mockResolvedValue(false),
+        reserve: jest.fn(),
+        consumeForUser: jest.fn().mockResolvedValue(undefined),
+        getActiveForUser: jest.fn().mockResolvedValue(null),
+    };
 
     const VALID_CREATE: CreateBusinessRequest = {
         type: 'fop',
@@ -86,6 +105,9 @@ describe('BusinessesService', () => {
             findOneAndUpdate: jest.fn(),
             exists: jest.fn(),
             deleteOne: jest.fn(),
+            // Sprint 19 — create-ліміт рахує наявні бізнеси. Default 0 (під
+            // лімітом); тести лімітів перевизначають per-call.
+            countDocuments: jest.fn().mockResolvedValue(0),
         };
         historyModel = {
             create: jest.fn().mockResolvedValue([]),
@@ -129,6 +151,16 @@ describe('BusinessesService', () => {
             isReserved: jest.fn().mockImplementation((slugLower: string) => {
                 return ['api', 'qr', 'host-pay', 'auth'].includes(slugLower);
             }),
+        };
+
+        lockService = {
+            withLock: jest.fn(
+                async (
+                    _key: string,
+                    _ttlMs: number,
+                    fn: () => Promise<unknown>
+                ) => fn()
+            ),
         };
 
         const module = await Test.createTestingModule({
@@ -176,6 +208,11 @@ describe('BusinessesService', () => {
                     useValue: connection,
                 },
                 { provide: SlugGeneratorService, useValue: slugGenerator },
+                { provide: RedisLockService, useValue: lockService },
+                {
+                    provide: SlugReservationService,
+                    useValue: mockSlugReservations,
+                },
             ],
         }).compile();
         service = module.get(BusinessesService);
@@ -184,7 +221,12 @@ describe('BusinessesService', () => {
     describe('create', () => {
         it('створює owned business для звичайного ФОП (worksAsBookkeeper=false)', async () => {
             businessModel.create.mockResolvedValue({} as never);
-            await service.create(userId.toString(), VALID_CREATE, false);
+            await service.create(
+                userId.toString(),
+                VALID_CREATE,
+                false,
+                'bookkeeper'
+            );
 
             const arg = businessModel.create.mock.calls[0]![0];
             expect(arg).toMatchObject({
@@ -198,7 +240,12 @@ describe('BusinessesService', () => {
 
         it('створює ownerless business для бухгалтера (worksAsBookkeeper=true)', async () => {
             businessModel.create.mockResolvedValue({} as never);
-            await service.create(userId.toString(), VALID_CREATE, true);
+            await service.create(
+                userId.toString(),
+                VALID_CREATE,
+                true,
+                'bookkeeper'
+            );
 
             const arg = businessModel.create.mock.calls[0]![0];
             expect(arg.ownerId).toBeNull();
@@ -211,7 +258,12 @@ describe('BusinessesService', () => {
         it('маппить case-preserved slug і lowercase slugLower', async () => {
             slugGenerator.generateRandomSlug.mockResolvedValue('aB3xQ9k7');
             businessModel.create.mockResolvedValue({} as never);
-            await service.create(userId.toString(), VALID_CREATE, false);
+            await service.create(
+                userId.toString(),
+                VALID_CREATE,
+                false,
+                'bookkeeper'
+            );
 
             const arg = businessModel.create.mock.calls[0]![0];
             expect(arg.slug).toBe('aB3xQ9k7');
@@ -222,7 +274,12 @@ describe('BusinessesService', () => {
             const dupErr = Object.assign(new Error('E11000'), { code: 11000 });
             businessModel.create.mockRejectedValue(dupErr);
             await expect(
-                service.create(userId.toString(), VALID_CREATE, false)
+                service.create(
+                    userId.toString(),
+                    VALID_CREATE,
+                    false,
+                    'bookkeeper'
+                )
             ).rejects.toBeInstanceOf(InternalServerErrorException);
         });
 
@@ -232,7 +289,12 @@ describe('BusinessesService', () => {
             });
             businessModel.create.mockRejectedValue(otherErr);
             await expect(
-                service.create(userId.toString(), VALID_CREATE, false)
+                service.create(
+                    userId.toString(),
+                    VALID_CREATE,
+                    false,
+                    'bookkeeper'
+                )
             ).rejects.toThrow('Mongo timeout');
         });
 
@@ -248,7 +310,12 @@ describe('BusinessesService', () => {
 
             it('(a) без claimIdempotencyKey — cabinet-create працює як зараз; findOne не викликається', async () => {
                 businessModel.create.mockResolvedValue({} as never);
-                await service.create(userId.toString(), VALID_CREATE, false);
+                await service.create(
+                    userId.toString(),
+                    VALID_CREATE,
+                    false,
+                    'bookkeeper'
+                );
                 expect(businessModel.findOne).not.toHaveBeenCalled();
                 expect(businessModel.create).toHaveBeenCalledTimes(1);
             });
@@ -260,7 +327,8 @@ describe('BusinessesService', () => {
                 await service.create(
                     userId.toString(),
                     { ...VALID_CREATE, claimIdempotencyKey: KEY },
-                    false
+                    false,
+                    'bookkeeper'
                 );
 
                 // Pre-check ownership-aware filter (owned-mode).
@@ -284,7 +352,8 @@ describe('BusinessesService', () => {
                 await service.create(
                     userId.toString(),
                     { ...VALID_CREATE, claimIdempotencyKey: KEY },
-                    true
+                    true,
+                    'bookkeeper'
                 );
 
                 const findArg = businessModel.findOne.mock.calls[0]![0];
@@ -305,7 +374,8 @@ describe('BusinessesService', () => {
                 const result = await service.create(
                     userId.toString(),
                     { ...VALID_CREATE, claimIdempotencyKey: KEY },
-                    false
+                    false,
+                    'bookkeeper'
                 );
 
                 expect(result).toBe(existingDoc);
@@ -331,7 +401,8 @@ describe('BusinessesService', () => {
                 const result = await service.create(
                     userId.toString(),
                     { ...VALID_CREATE, claimIdempotencyKey: KEY },
-                    false
+                    false,
+                    'bookkeeper'
                 );
 
                 expect(result).toBe(existingDoc);
@@ -350,7 +421,8 @@ describe('BusinessesService', () => {
                     service.create(
                         userId.toString(),
                         { ...VALID_CREATE, claimIdempotencyKey: KEY },
-                        false
+                        false,
+                        'bookkeeper'
                     )
                 ).rejects.toBeInstanceOf(InternalServerErrorException);
             });
@@ -454,7 +526,12 @@ describe('BusinessesService', () => {
 
         it('без coupled-полів — filter без $expr, findOne не викликається', async () => {
             mockUpdateReturn({ name: 'New' });
-            await service.update('IvanEnko', { name: 'New' });
+            await service.update(
+                'IvanEnko',
+                { name: 'New' },
+                'bookkeeper',
+                TEST_USER_ID
+            );
             const filter = businessModel.findOneAndUpdate.mock.calls[0]![0];
             expect(filter).toEqual({ slugLower: 'ivanenko' });
             expect(filter.$expr).toBeUndefined();
@@ -472,7 +549,12 @@ describe('BusinessesService', () => {
 
         it('$expr (isVatPayer=true only): vat-літерал, tax — field-ref', async () => {
             mockUpdateReturn({ isVatPayer: true });
-            await service.update('IvanEnko', { isVatPayer: true });
+            await service.update(
+                'IvanEnko',
+                { isVatPayer: true },
+                'bookkeeper',
+                TEST_USER_ID
+            );
             const filter = businessModel.findOneAndUpdate.mock.calls[0]![0];
             expect(filter.slugLower).toBe('ivanenko');
             expect(filter.$expr).toEqual({
@@ -487,7 +569,12 @@ describe('BusinessesService', () => {
 
         it('$expr (isVatPayer=false only): vat-літерал false, tax — field-ref', async () => {
             mockUpdateReturn({ isVatPayer: false });
-            await service.update('IvanEnko', { isVatPayer: false });
+            await service.update(
+                'IvanEnko',
+                { isVatPayer: false },
+                'bookkeeper',
+                TEST_USER_ID
+            );
             const filter = businessModel.findOneAndUpdate.mock.calls[0]![0];
             expect(filter.$expr).toEqual({
                 $or: [
@@ -501,9 +588,14 @@ describe('BusinessesService', () => {
 
         it('$expr (taxationSystem only): tax-літерал, vat — field-ref', async () => {
             mockUpdateReturn({ taxationSystem: 'simplified-1' });
-            await service.update('IvanEnko', {
-                taxationSystem: 'simplified-1',
-            });
+            await service.update(
+                'IvanEnko',
+                {
+                    taxationSystem: 'simplified-1',
+                },
+                'bookkeeper',
+                TEST_USER_ID
+            );
             const filter = businessModel.findOneAndUpdate.mock.calls[0]![0];
             expect(filter.$expr).toEqual({
                 $or: [
@@ -520,10 +612,15 @@ describe('BusinessesService', () => {
                 isVatPayer: true,
                 taxationSystem: 'simplified-3',
             });
-            await service.update('IvanEnko', {
-                isVatPayer: true,
-                taxationSystem: 'simplified-3',
-            } as UpdateBusinessRequest);
+            await service.update(
+                'IvanEnko',
+                {
+                    isVatPayer: true,
+                    taxationSystem: 'simplified-3',
+                } as UpdateBusinessRequest,
+                'bookkeeper',
+                TEST_USER_ID
+            );
             const filter = businessModel.findOneAndUpdate.mock.calls[0]![0];
             expect(filter.$expr).toEqual({
                 $or: [
@@ -539,7 +636,12 @@ describe('BusinessesService', () => {
             mockUpdateReturn(null);
             mockExistsReturn(true);
             await expect(
-                service.update('IvanEnko', { isVatPayer: true })
+                service.update(
+                    'IvanEnko',
+                    { isVatPayer: true },
+                    'bookkeeper',
+                    TEST_USER_ID
+                )
             ).rejects.toBeInstanceOf(BadRequestException);
             expect(businessModel.exists).toHaveBeenCalledWith({
                 slugLower: 'ivanenko',
@@ -550,7 +652,12 @@ describe('BusinessesService', () => {
             mockUpdateReturn(null);
             mockExistsReturn(true);
             await expect(
-                service.update('IvanEnko', { taxationSystem: 'simplified-1' })
+                service.update(
+                    'IvanEnko',
+                    { taxationSystem: 'simplified-1' },
+                    'bookkeeper',
+                    TEST_USER_ID
+                )
             ).rejects.toBeInstanceOf(BadRequestException);
         });
 
@@ -560,10 +667,15 @@ describe('BusinessesService', () => {
                 isVatPayer: true,
             });
             await expect(
-                service.update('IvanEnko', {
-                    taxationSystem: 'simplified-3',
-                    isVatPayer: true,
-                } as UpdateBusinessRequest)
+                service.update(
+                    'IvanEnko',
+                    {
+                        taxationSystem: 'simplified-3',
+                        isVatPayer: true,
+                    } as UpdateBusinessRequest,
+                    'bookkeeper',
+                    TEST_USER_ID
+                )
             ).resolves.toBeDefined();
             expect(businessModel.exists).not.toHaveBeenCalled();
         });
@@ -571,7 +683,12 @@ describe('BusinessesService', () => {
         it('NotFound (no coupled fields): findOneAndUpdate→null → NotFound без exists()', async () => {
             mockUpdateReturn(null);
             await expect(
-                service.update('IvanEnko', { name: 'X' })
+                service.update(
+                    'IvanEnko',
+                    { name: 'X' },
+                    'bookkeeper',
+                    TEST_USER_ID
+                )
             ).rejects.toBeInstanceOf(NotFoundException);
             expect(businessModel.exists).not.toHaveBeenCalled();
         });
@@ -580,13 +697,23 @@ describe('BusinessesService', () => {
             mockUpdateReturn(null);
             mockExistsReturn(false);
             await expect(
-                service.update('IvanEnko', { isVatPayer: true })
+                service.update(
+                    'IvanEnko',
+                    { isVatPayer: true },
+                    'bookkeeper',
+                    TEST_USER_ID
+                )
             ).rejects.toBeInstanceOf(NotFoundException);
         });
 
         it('lookup для update — case-insensitive по slugLower', async () => {
             mockUpdateReturn({ name: 'X' });
-            await service.update('IvanEnko', { name: 'X' });
+            await service.update(
+                'IvanEnko',
+                { name: 'X' },
+                'bookkeeper',
+                TEST_USER_ID
+            );
             const filter = businessModel.findOneAndUpdate.mock.calls[0]![0];
             expect(filter).toEqual({ slugLower: 'ivanenko' });
         });
@@ -597,9 +724,14 @@ describe('BusinessesService', () => {
             it('non-taxation type + PATCH taxationSystem → 400 TAXATION_NOT_APPLICABLE_FOR_TYPE', async () => {
                 mockExistingType('individual');
                 await expect(
-                    service.update('IvanEnko', {
-                        taxationSystem: 'simplified-3',
-                    })
+                    service.update(
+                        'IvanEnko',
+                        {
+                            taxationSystem: 'simplified-3',
+                        },
+                        'bookkeeper',
+                        TEST_USER_ID
+                    )
                 ).rejects.toMatchObject({
                     response: {
                         code: 'TAXATION_NOT_APPLICABLE_FOR_TYPE',
@@ -611,7 +743,12 @@ describe('BusinessesService', () => {
             it('non-taxation type (organization) + PATCH isVatPayer → 400', async () => {
                 mockExistingType('organization');
                 await expect(
-                    service.update('IvanEnko', { isVatPayer: false })
+                    service.update(
+                        'IvanEnko',
+                        { isVatPayer: false },
+                        'bookkeeper',
+                        TEST_USER_ID
+                    )
                 ).rejects.toMatchObject({
                     response: {
                         code: 'TAXATION_NOT_APPLICABLE_FOR_TYPE',
@@ -622,7 +759,12 @@ describe('BusinessesService', () => {
             it('taxation-required type + PATCH taxationSystem=null → 400 TAXATION_REQUIRED_FOR_TYPE (backward-direction, clear-out заборонено)', async () => {
                 mockExistingType('fop');
                 await expect(
-                    service.update('IvanEnko', { taxationSystem: null })
+                    service.update(
+                        'IvanEnko',
+                        { taxationSystem: null },
+                        'bookkeeper',
+                        TEST_USER_ID
+                    )
                 ).rejects.toMatchObject({
                     response: {
                         code: 'TAXATION_REQUIRED_FOR_TYPE',
@@ -633,7 +775,12 @@ describe('BusinessesService', () => {
             it('taxation-required type + PATCH isVatPayer=null → 400 TAXATION_REQUIRED_FOR_TYPE', async () => {
                 mockExistingType('tov');
                 await expect(
-                    service.update('IvanEnko', { isVatPayer: null })
+                    service.update(
+                        'IvanEnko',
+                        { isVatPayer: null },
+                        'bookkeeper',
+                        TEST_USER_ID
+                    )
                 ).rejects.toMatchObject({
                     response: {
                         code: 'TAXATION_REQUIRED_FOR_TYPE',
@@ -644,9 +791,14 @@ describe('BusinessesService', () => {
             it('fop + PATCH 8-digit ЄДРПОУ → 400 TAX_ID_FORMAT_MISMATCH_TYPE', async () => {
                 mockExistingType('fop');
                 await expect(
-                    service.update('IvanEnko', {
-                        taxId: '12345678', // ЄДРПОУ для tov, не для fop
-                    })
+                    service.update(
+                        'IvanEnko',
+                        {
+                            taxId: '12345678', // ЄДРПОУ для tov, не для fop
+                        },
+                        'bookkeeper',
+                        TEST_USER_ID
+                    )
                 ).rejects.toMatchObject({
                     response: {
                         code: 'TAX_ID_FORMAT_MISMATCH_TYPE',
@@ -657,9 +809,14 @@ describe('BusinessesService', () => {
             it('tov + PATCH 10-digit RNOKPP → 400 TAX_ID_FORMAT_MISMATCH_TYPE', async () => {
                 mockExistingType('tov');
                 await expect(
-                    service.update('IvanEnko', {
-                        taxId: '1234567899', // RNOKPP для fop, не для tov
-                    })
+                    service.update(
+                        'IvanEnko',
+                        {
+                            taxId: '1234567899', // RNOKPP для fop, не для tov
+                        },
+                        'bookkeeper',
+                        TEST_USER_ID
+                    )
                 ).rejects.toMatchObject({
                     response: {
                         code: 'TAX_ID_FORMAT_MISMATCH_TYPE',
@@ -672,7 +829,12 @@ describe('BusinessesService', () => {
                 async (taxationSystem) => {
                     mockExistingType('tov');
                     await expect(
-                        service.update('IvanEnko', { taxationSystem })
+                        service.update(
+                            'IvanEnko',
+                            { taxationSystem },
+                            'bookkeeper',
+                            TEST_USER_ID
+                        )
                     ).rejects.toMatchObject({
                         response: {
                             code: 'TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE',
@@ -690,7 +852,12 @@ describe('BusinessesService', () => {
                     mockExistingType('tov');
                     mockUpdateReturn({ taxationSystem });
                     await expect(
-                        service.update('IvanEnko', { taxationSystem })
+                        service.update(
+                            'IvanEnko',
+                            { taxationSystem },
+                            'bookkeeper',
+                            TEST_USER_ID
+                        )
                     ).resolves.toBeDefined();
                 }
             );
@@ -699,9 +866,14 @@ describe('BusinessesService', () => {
                 mockExistingType('fop');
                 mockUpdateReturn({ taxationSystem: 'simplified-1' });
                 await expect(
-                    service.update('IvanEnko', {
-                        taxationSystem: 'simplified-1',
-                    })
+                    service.update(
+                        'IvanEnko',
+                        {
+                            taxationSystem: 'simplified-1',
+                        },
+                        'bookkeeper',
+                        TEST_USER_ID
+                    )
                 ).resolves.toBeDefined();
             });
 
@@ -709,9 +881,14 @@ describe('BusinessesService', () => {
                 mockExistingType('individual');
                 mockUpdateReturn({ name: 'X' });
                 await expect(
-                    service.update('IvanEnko', {
-                        taxId: '1234567899',
-                    })
+                    service.update(
+                        'IvanEnko',
+                        {
+                            taxId: '1234567899',
+                        },
+                        'bookkeeper',
+                        TEST_USER_ID
+                    )
                 ).resolves.toBeDefined();
             });
 
@@ -723,17 +900,27 @@ describe('BusinessesService', () => {
                     isVatPayer: false,
                 });
                 await expect(
-                    service.update('IvanEnko', {
-                        taxId: '1234567899',
-                        taxationSystem: 'simplified-3',
-                        isVatPayer: false,
-                    } as UpdateBusinessRequest)
+                    service.update(
+                        'IvanEnko',
+                        {
+                            taxId: '1234567899',
+                            taxationSystem: 'simplified-3',
+                            isVatPayer: false,
+                        } as UpdateBusinessRequest,
+                        'bookkeeper',
+                        TEST_USER_ID
+                    )
                 ).resolves.toBeDefined();
             });
 
             it('PATCH name only — findOne не викликається (cross-check skip)', async () => {
                 mockUpdateReturn({ name: 'X' });
-                await service.update('IvanEnko', { name: 'X' });
+                await service.update(
+                    'IvanEnko',
+                    { name: 'X' },
+                    'bookkeeper',
+                    TEST_USER_ID
+                );
                 // beforeEach мокає findOne, але .lean()/.exec() не повинні
                 // викликатись — перевіряємо це опосередковано через
                 // findOne.mock.calls (default mock попередньо викликається у
@@ -745,7 +932,12 @@ describe('BusinessesService', () => {
             it('PATCH-payload без taxation/taxId, але slug не існує → 404 від $expr-flow (preserves old NotFound semantics)', async () => {
                 mockUpdateReturn(null);
                 await expect(
-                    service.update('Missing', { name: 'X' })
+                    service.update(
+                        'Missing',
+                        { name: 'X' },
+                        'bookkeeper',
+                        TEST_USER_ID
+                    )
                 ).rejects.toBeInstanceOf(NotFoundException);
                 // Без taxation/taxId-payload preliminary findOne не викликається —
                 // 404 встановлюється $expr-flow-ом наприкінці update.
@@ -755,7 +947,12 @@ describe('BusinessesService', () => {
             it('PATCH-taxation, але slug не існує → 404 з preliminary findOne', async () => {
                 mockExistingType(null);
                 await expect(
-                    service.update('Missing', { isVatPayer: true })
+                    service.update(
+                        'Missing',
+                        { isVatPayer: true },
+                        'bookkeeper',
+                        TEST_USER_ID
+                    )
                 ).rejects.toBeInstanceOf(NotFoundException);
             });
         });
@@ -795,9 +992,14 @@ describe('BusinessesService', () => {
                     slugLower: 'new-vanity',
                 });
 
-                await service.update('OldSlug', {
-                    slug: 'new-vanity',
-                } as UpdateBusinessRequest);
+                await service.update(
+                    'OldSlug',
+                    {
+                        slug: 'new-vanity',
+                    } as UpdateBusinessRequest,
+                    'bookkeeper',
+                    TEST_USER_ID
+                );
 
                 expect(historyModel.create).toHaveBeenCalledTimes(1);
                 const createArg = historyModel.create.mock
@@ -820,9 +1022,14 @@ describe('BusinessesService', () => {
                 businessModel.exists.mockResolvedValue(null);
                 mockUpdateReturn({ slug: 'abc', slugLower: 'abc' });
 
-                await service.update('XyzSlug', {
-                    slug: 'abc',
-                } as UpdateBusinessRequest);
+                await service.update(
+                    'XyzSlug',
+                    {
+                        slug: 'abc',
+                    } as UpdateBusinessRequest,
+                    'bookkeeper',
+                    TEST_USER_ID
+                );
 
                 expect(historyModel.deleteMany).toHaveBeenCalledTimes(1);
                 const deleteFilter = historyModel.deleteMany.mock
@@ -836,9 +1043,14 @@ describe('BusinessesService', () => {
 
             it('reserved slug → 400 SLUG_RESERVED (history.create НЕ викликається)', async () => {
                 await expect(
-                    service.update('OldSlug', {
-                        slug: 'api',
-                    } as UpdateBusinessRequest)
+                    service.update(
+                        'OldSlug',
+                        {
+                            slug: 'api',
+                        } as UpdateBusinessRequest,
+                        'bookkeeper',
+                        TEST_USER_ID
+                    )
                 ).rejects.toMatchObject({
                     response: { code: 'SLUG_RESERVED' },
                 });
@@ -852,9 +1064,14 @@ describe('BusinessesService', () => {
                 });
 
                 await expect(
-                    service.update('OldSlug', {
-                        slug: 'taken',
-                    } as UpdateBusinessRequest)
+                    service.update(
+                        'OldSlug',
+                        {
+                            slug: 'taken',
+                        } as UpdateBusinessRequest,
+                        'bookkeeper',
+                        TEST_USER_ID
+                    )
                 ).rejects.toMatchObject({
                     response: { code: 'SLUG_TAKEN' },
                 });
@@ -868,9 +1085,14 @@ describe('BusinessesService', () => {
                 });
 
                 await expect(
-                    service.update('OldSlug', {
-                        slug: 'historical',
-                    } as UpdateBusinessRequest)
+                    service.update(
+                        'OldSlug',
+                        {
+                            slug: 'historical',
+                        } as UpdateBusinessRequest,
+                        'bookkeeper',
+                        TEST_USER_ID
+                    )
                 ).rejects.toMatchObject({
                     response: { code: 'SLUG_TAKEN' },
                 });
@@ -879,9 +1101,14 @@ describe('BusinessesService', () => {
             it('case-only rename (oldLower === newLower): history НЕ зачіпається, simple update', async () => {
                 mockUpdateReturn({ slug: 'OldSlug', slugLower: 'oldslug' });
 
-                await service.update('OldSlug', {
-                    slug: 'OLDSLUG',
-                } as UpdateBusinessRequest);
+                await service.update(
+                    'OldSlug',
+                    {
+                        slug: 'OLDSLUG',
+                    } as UpdateBusinessRequest,
+                    'bookkeeper',
+                    TEST_USER_ID
+                );
 
                 // newSlugLower === oldSlugLower → slugRenaming=false, TX-flow skip.
                 expect(historyModel.create).not.toHaveBeenCalled();
@@ -985,6 +1212,219 @@ describe('BusinessesService', () => {
 
             await expect(service.delete(businessFixture)).rejects.toThrow();
             expect(session.endSession).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    describe('Sprint 19 — access gating', () => {
+        const TOV_CREATE: CreateBusinessRequest = {
+            type: 'tov',
+            name: 'ТОВ Ромашка',
+            taxId: '12345678',
+            taxationSystem: 'general',
+            isVatPayer: false,
+            paymentPurposeTemplate: 'Оплата',
+        };
+
+        async function expectForbidden(
+            promise: Promise<unknown>,
+            code: string
+        ): Promise<void> {
+            const err = await promise.catch((e: unknown) => e);
+            expect(err).toBeInstanceOf(ForbiddenException);
+            expect((err as ForbiddenException).getResponse()).toMatchObject({
+                code,
+            });
+        }
+
+        // ── Business creation limits ──────────────────────────────────────
+
+        it('owned ФОП понад 1 → BUSINESS_TYPE_LIMIT_REACHED (інваріант, навіть на bookkeeper)', async () => {
+            businessModel.countDocuments.mockResolvedValue(1);
+            await expectForbidden(
+                service.create(
+                    userId.toString(),
+                    VALID_CREATE,
+                    false,
+                    'bookkeeper'
+                ),
+                RESPONSE_CODE.BUSINESS_TYPE_LIMIT_REACHED
+            );
+            expect(businessModel.create).not.toHaveBeenCalled();
+        });
+
+        it('owned ТОВ понад 1 на none/brand → BUSINESS_LIMIT_REQUIRES_PLAN', async () => {
+            businessModel.countDocuments.mockResolvedValue(1);
+            await expectForbidden(
+                service.create(userId.toString(), TOV_CREATE, false, 'brand'),
+                RESPONSE_CODE.BUSINESS_LIMIT_REQUIRES_PLAN
+            );
+        });
+
+        it('owned ТОВ понад 1 на bookkeeper → дозволено (без ліміту)', async () => {
+            businessModel.countDocuments.mockResolvedValue(5);
+            businessModel.create.mockResolvedValue({} as never);
+            await service.create(
+                userId.toString(),
+                TOV_CREATE,
+                false,
+                'bookkeeper'
+            );
+            expect(businessModel.create).toHaveBeenCalled();
+        });
+
+        it('клієнтські бізнеси понад 10 на none/brand → BUSINESS_LIMIT_REQUIRES_PLAN', async () => {
+            businessModel.countDocuments.mockResolvedValue(10);
+            await expectForbidden(
+                service.create(userId.toString(), VALID_CREATE, true, 'brand'),
+                RESPONSE_CODE.BUSINESS_LIMIT_REQUIRES_PLAN
+            );
+        });
+
+        it('клієнтські бізнеси на bookkeeper → без ліміту (count не питаємо)', async () => {
+            businessModel.create.mockResolvedValue({} as never);
+            await service.create(
+                userId.toString(),
+                VALID_CREATE,
+                true,
+                'bookkeeper'
+            );
+            expect(businessModel.countDocuments).not.toHaveBeenCalled();
+            expect(businessModel.create).toHaveBeenCalled();
+        });
+
+        // ── Create serialization (per-user lock) ──────────────────────────
+
+        it('create йде під per-user локом (count+insert у критичній секції)', async () => {
+            businessModel.create.mockResolvedValue({} as never);
+            await service.create(
+                userId.toString(),
+                VALID_CREATE,
+                false,
+                'bookkeeper'
+            );
+            expect(lockService.withLock).toHaveBeenCalledTimes(1);
+            expect(lockService.withLock.mock.calls[0]![0]).toBe(
+                `business_create:${userId.toString()}`
+            );
+        });
+
+        it('лок зайнятий після всіх ретраїв → 409 BUSINESS_CREATE_IN_PROGRESS', async () => {
+            lockService.withLock.mockRejectedValue(
+                new RedisLockBusyError('business_create:x')
+            );
+            const err = await service
+                .create(userId.toString(), VALID_CREATE, false, 'bookkeeper')
+                .catch((e: unknown) => e);
+            expect(err).toBeInstanceOf(ConflictException);
+            expect((err as ConflictException).getResponse()).toMatchObject({
+                code: RESPONSE_CODE.BUSINESS_CREATE_IN_PROGRESS,
+            });
+            expect(businessModel.create).not.toHaveBeenCalled();
+        }, 10_000);
+
+        it('лок звільнився на ретраї → create проходить', async () => {
+            businessModel.create.mockResolvedValue({} as never);
+            lockService.withLock.mockRejectedValueOnce(
+                new RedisLockBusyError('business_create:x')
+            );
+            await service.create(
+                userId.toString(),
+                VALID_CREATE,
+                false,
+                'bookkeeper'
+            );
+            expect(lockService.withLock).toHaveBeenCalledTimes(2);
+            expect(businessModel.create).toHaveBeenCalled();
+        });
+
+        // ── Slug-edit gate ────────────────────────────────────────────────
+
+        it('slug-rename на none → SLUG_EDIT_REQUIRES_PLAN, до DB-роботи', async () => {
+            await expectForbidden(
+                service.update(
+                    'IvanEnko',
+                    { slug: 'my-vanity' },
+                    'none',
+                    TEST_USER_ID
+                ),
+                RESPONSE_CODE.SLUG_EDIT_REQUIRES_PLAN
+            );
+            // Cheap-reject: resolveSlugRenameContext (findOne) не викликано.
+            expect(businessModel.findOne).not.toHaveBeenCalled();
+        });
+
+        it('case-only зміна slug на none → SLUG_EDIT_REQUIRES_PLAN (display-форма теж платна)', async () => {
+            await expectForbidden(
+                service.update(
+                    'IvanEnko',
+                    { slug: 'IVANENKO' },
+                    'none',
+                    TEST_USER_ID
+                ),
+                RESPONSE_CODE.SLUG_EDIT_REQUIRES_PLAN
+            );
+            expect(businessModel.findOneAndUpdate).not.toHaveBeenCalled();
+        });
+
+        it('case-only зміна slug на brand → проходить + позначає slugCustomized', async () => {
+            businessModel.findOneAndUpdate.mockReturnValue({
+                exec: jest
+                    .fn()
+                    .mockResolvedValue({ slug: 'IVANENKO' } as never),
+            });
+            await service.update(
+                'IvanEnko',
+                { slug: 'IVANENKO' },
+                'brand',
+                TEST_USER_ID
+            );
+            const setArg = businessModel.findOneAndUpdate.mock.calls[0]![1] as {
+                $set: Record<string, unknown>;
+            };
+            expect(setArg.$set.slugCustomized).toBe(true);
+            // slugLower незмінний → history не зачіпається.
+            expect(historyModel.create).not.toHaveBeenCalled();
+        });
+
+        it('PATCH з ідентичним slug — без гейта (no-op, не платний)', async () => {
+            businessModel.findOneAndUpdate.mockReturnValue({
+                exec: jest
+                    .fn()
+                    .mockResolvedValue({ slug: 'IvanEnko' } as never),
+            });
+            await service.update(
+                'IvanEnko',
+                { slug: 'IvanEnko' },
+                'none',
+                TEST_USER_ID
+            );
+            const setArg = businessModel.findOneAndUpdate.mock.calls[0]![1] as {
+                $set: Record<string, unknown>;
+            };
+            expect(setArg.$set.slugCustomized).toBeUndefined();
+        });
+
+        it('slug-rename на brand → гейт пропускає (йде у rename-flow)', async () => {
+            businessModel.exists.mockResolvedValue(null);
+            businessModel.findOne.mockReturnValue({
+                lean: jest.fn().mockReturnValue({
+                    exec: jest
+                        .fn()
+                        .mockResolvedValue({ _id: new Types.ObjectId() }),
+                }),
+            });
+            businessModel.findOneAndUpdate.mockReturnValue({
+                exec: jest.fn().mockResolvedValue({ slug: 'my-vanity' }),
+            });
+
+            await service.update(
+                'IvanEnko',
+                { slug: 'my-vanity' },
+                'brand',
+                TEST_USER_ID
+            );
+            // Гейт пройдено → resolveSlugRenameContext зробив lookup.
+            expect(businessModel.findOne).toHaveBeenCalled();
         });
     });
 });

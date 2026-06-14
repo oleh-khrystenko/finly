@@ -313,7 +313,7 @@ Global prefix: `/api`. Global guards/interceptors: `ThrottlerGuard`, `Onboarding
 - `pnpm --filter @finly/types build|dev|test` — shared contracts
 - `pnpm --filter api migration:slug-lower` — local slugLower migration
 - `docker compose -f docker-compose.dev.yml up --build` — local Redis + apps
-- `docker compose --profile migrations run --rm api-migrations` — production migration container
+- `docker compose --profile migrations run --build --rm api-migrations` — production migration container
 - `docker compose up --build -d` — production-like stack
 
 ## Testing Strategy

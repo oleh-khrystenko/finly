@@ -41,13 +41,12 @@ export class HelpChatRateLimitGuard implements CanActivate {
     }
 
     private extractIp(request: Request): string {
-        return (
-            (request.headers['x-forwarded-for'] as string)
-                ?.split(',')[0]
-                ?.trim() ||
-            request.ip ||
-            'unknown'
-        );
+        // ТІЛЬКИ `request.ip`: Express сам резолвить клієнтський IP з урахуванням
+        // `trust proxy` (TRUST_PROXY_HOPS у main.ts). Ручний парсинг
+        // X-Forwarded-For довіряв би client-controllable заголовку — атакуючий
+        // обходив би per-IP ліміт випадковим XFF і висушував би daily-budget,
+        // або прицільно вичерпував би ключ чужого IP.
+        return request.ip || 'unknown';
     }
 
     private async enforceLimits(request: Request): Promise<void> {

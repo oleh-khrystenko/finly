@@ -2,7 +2,10 @@ import {
     BadRequestException,
     Body,
     Controller,
+    Delete,
     Get,
+    HttpCode,
+    HttpStatus,
     Patch,
     Post,
     Res,
@@ -21,6 +24,10 @@ import { SkipOnboarding } from '../../common/decorators/skip-onboarding.decorato
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { AuthService } from '../auth/auth.service';
+import {
+    SlugReservationService,
+    toSlugReservationView,
+} from '../slug-reservation/slug-reservation.service';
 import { VerifyPasswordDto } from '../auth/dto/verify-password.dto';
 import { AcceptTermsDto } from './dto/accept-terms.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -32,16 +39,25 @@ import { UsersService } from './users.service';
 export class UsersController {
     constructor(
         private readonly usersService: UsersService,
-        private readonly authService: AuthService
+        private readonly authService: AuthService,
+        private readonly slugReservations: SlugReservationService
     ) {}
 
     @Get('me')
     @UseGuards(JwtActiveGuard)
     @SkipOnboarding()
-    getMe(@CurrentUser() user: UserDocument): {
+    async getMe(@CurrentUser() user: UserDocument): Promise<{
         data: Record<string, unknown>;
-    } {
-        return { data: mapUserToProfileResponse(user) };
+    }> {
+        const reservation = await this.slugReservations.getActiveForUser(
+            user._id
+        );
+        return {
+            data: mapUserToProfileResponse(
+                user,
+                reservation ? toSlugReservationView(reservation) : null
+            ),
+        };
     }
 
     @Patch('me')
@@ -64,6 +80,24 @@ export class UsersController {
             profileDto
         );
         return { data: mapUserToProfileResponse(updated!) };
+    }
+
+    /**
+     * Sprint 20 — зняти власну активну бронь slug. Викликає веб-флоу, коли
+     * добивання наміру впало на `SLUG_TAKEN` (ім'я перехопили, поки людина
+     * платила): без цього мертва бронь висіла б у профілі до спливу TTL і
+     * провальне добивання повторювалось би на кожному заході в кабінет.
+     * Idempotent (`deleteMany` на відсутньому — no-op).
+     */
+    @Delete('me/slug-reservation')
+    @UseGuards(JwtActiveGuard)
+    @SkipOnboarding()
+    @HttpCode(HttpStatus.OK)
+    async releaseSlugReservation(
+        @CurrentUser() user: UserDocument
+    ): Promise<{ data: Record<string, unknown> }> {
+        await this.slugReservations.consumeForUser(user._id);
+        return { data: { released: true } };
     }
 
     @Post('me/accept-terms')
