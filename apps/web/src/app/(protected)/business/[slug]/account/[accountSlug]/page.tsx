@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import {
     deriveAccountLabel,
     type AccountWithCounts,
+    type BusinessBrand,
     type BusinessWithCounts,
     type UpdateAccountRequest,
 } from '@finly/types';
@@ -28,6 +29,7 @@ import {
     useCanEditSlug,
 } from '@/entities/user';
 import { brandUpsellCtaLabel, startBrandCheckout } from '@/features/billing';
+import { BrandSection } from '@/features/brand-logo';
 import { ENV } from '@/shared/config/env';
 import UiButton from '@/shared/ui/UiButton';
 import UiBreadcrumb from '@/shared/ui/UiBreadcrumb';
@@ -214,6 +216,11 @@ export default function AccountCabinetPage() {
             toast.error('Не вдалося відкрити оплату. Спробуйте ще раз');
         });
     }, [data]);
+    const handleBrandApplied = useCallback((brand: BusinessBrand | null) => {
+        setData((prev) =>
+            prev ? { ...prev, business: { ...prev.business, brand } } : prev
+        );
+    }, []);
 
     const isDataCurrent =
         data?.paramBiz === paramBiz && data?.paramAcc === paramAcc;
@@ -343,6 +350,13 @@ export default function AccountCabinetPage() {
                     !isPaid && desiredSlug ? reservation : null
                 }
                 autoStartSlugEdit={autoEditSlug}
+            />
+            <BrandSection
+                business={business}
+                isPaid={isPaid}
+                onSubscribe={handleSubscribe}
+                subscribePriceLabel={brandUpsellCtaLabel()}
+                onApplied={handleBrandApplied}
             />
             <InvoicesSection
                 businessSlug={business.slug}

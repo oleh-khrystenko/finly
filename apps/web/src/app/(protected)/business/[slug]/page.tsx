@@ -17,8 +17,9 @@ import {
     resetBusinessSlug,
     updateBusiness,
 } from '@/shared/api';
-import type { BusinessWithCounts } from '@finly/types';
+import type { BusinessBrand, BusinessWithCounts } from '@finly/types';
 import { OwnershipBadge } from '@/entities/business';
+import { BrandSection } from '@/features/brand-logo';
 import {
     matchActiveSlugReservation,
     useApplyPendingSlug,
@@ -188,6 +189,10 @@ export default function BusinessSlugPage() {
         });
     }, [business]);
 
+    const handleBrandApplied = useCallback((brand: BusinessBrand | null) => {
+        setBusiness((prev) => (prev ? { ...prev, brand } : prev));
+    }, []);
+
     if (business === null && !error) {
         return (
             <UiPageContainer className="py-16">
@@ -250,6 +255,13 @@ export default function BusinessSlugPage() {
                     !isPaid && desiredSlug ? reservation : null
                 }
                 autoStartSlugEdit={autoEditSlug}
+            />
+            <BrandSection
+                business={business}
+                isPaid={isPaid}
+                onSubscribe={handleSubscribe}
+                subscribePriceLabel={brandUpsellCtaLabel()}
+                onApplied={handleBrandApplied}
             />
             <AccountsSection businessSlug={business.slug} />
             <RequisitesCard business={business} onSave={handlePatch} />

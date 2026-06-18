@@ -32,6 +32,11 @@ export {
     commitAvatarUpload,
     deleteAvatar,
     uploadToR2,
+    requestBrandLogoUploadUrl,
+    uploadBrandLogoToR2,
+    previewBrandLogo,
+    commitBrandLogo,
+    deleteBrandLogo,
 } from './storage';
 export {
     listBusinesses,
