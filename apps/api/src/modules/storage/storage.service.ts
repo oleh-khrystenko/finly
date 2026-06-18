@@ -37,6 +37,10 @@ export class StorageService {
         return this.storage.getObjectMetadata(key);
     }
 
+    downloadObject(key: string): Promise<Buffer> {
+        return this.storage.downloadObject(key);
+    }
+
     uploadBuffer(input: UploadBufferInput): Promise<void> {
         return this.storage.uploadBuffer(input);
     }

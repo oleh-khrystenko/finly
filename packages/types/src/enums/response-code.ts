@@ -49,6 +49,29 @@ export const RESPONSE_CODE = {
     AVATAR_UPLOAD_NOT_FOUND: 'AVATAR_UPLOAD_NOT_FOUND',
     AVATAR_UPLOAD_INVALID: 'AVATAR_UPLOAD_INVALID',
 
+    // --- brand logo success (Sprint 21) ---
+    /** Бренд активний (доступ ≥ brand): логотип рендериться публічно одразу. */
+    BRAND_UPDATED: 'BRAND_UPDATED',
+    /** Бренд знятий: active + pending очищені, публічно повертається Finly. */
+    BRAND_DELETED: 'BRAND_DELETED',
+
+    // --- brand logo error (Sprint 21) ---
+    /** File key не відповідає формату або namespace-у бізнесу. */
+    BRAND_LOGO_FILE_KEY_INVALID: 'BRAND_LOGO_FILE_KEY_INVALID',
+    /** Presigned-завантаження не знайдено у R2 на commit (TTL минув / не вантажилось). */
+    BRAND_LOGO_UPLOAD_NOT_FOUND: 'BRAND_LOGO_UPLOAD_NOT_FOUND',
+    /** Невірний тип або завелика вага завантаженого файлу (HeadObject-перевірка). */
+    BRAND_LOGO_INVALID: 'BRAND_LOGO_INVALID',
+    /**
+     * Вертикальне зображення (height > width). Приймаємо лише квадрат і
+     * горизонтальний прямокутник — вертикальне не вписується у плашку/смугу.
+     */
+    BRAND_LOGO_ASPECT_INVALID: 'BRAND_LOGO_ASPECT_INVALID',
+    /** Майже білий/світлий логотип: зникне на білій плашці. Поріг емпіричний. */
+    BRAND_LOGO_TOO_LIGHT: 'BRAND_LOGO_TOO_LIGHT',
+    /** Збій сторонніх ops (download / bake / upload) — нейтральний 5xx-код. */
+    BRAND_LOGO_UPLOAD_FAILED: 'BRAND_LOGO_UPLOAD_FAILED',
+
     // --- businesses error (Sprint 3 §3.10) ---
     BUSINESS_NOT_FOUND: 'BUSINESS_NOT_FOUND',
     BUSINESS_ACCESS_DENIED: 'BUSINESS_ACCESS_DENIED',
@@ -330,6 +353,14 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.AVATAR_FILE_KEY_INVALID]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.AVATAR_UPLOAD_NOT_FOUND]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.AVATAR_UPLOAD_INVALID]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BRAND_UPDATED]: RESPONSE_TYPE.SUCCESS,
+    [RESPONSE_CODE.BRAND_DELETED]: RESPONSE_TYPE.SUCCESS,
+    [RESPONSE_CODE.BRAND_LOGO_FILE_KEY_INVALID]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BRAND_LOGO_UPLOAD_NOT_FOUND]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BRAND_LOGO_INVALID]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BRAND_LOGO_ASPECT_INVALID]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BRAND_LOGO_TOO_LIGHT]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BRAND_LOGO_UPLOAD_FAILED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.BUSINESS_NOT_FOUND]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.BUSINESS_ACCESS_DENIED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.SLUG_GENERATION_FAILED]: RESPONSE_TYPE.ERROR,

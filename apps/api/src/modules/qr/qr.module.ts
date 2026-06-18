@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { QrController } from './qr.controller';
 import { QrService } from './qr.service';
+import { QrBrandMarkBaker } from './renderers/qr-brand-mark.baker';
 import { QrImageRenderer } from './renderers/qr-image.renderer';
 import { QrLogoCompositor } from './renderers/qr-logo.compositor';
 
@@ -16,7 +17,7 @@ import { QrLogoCompositor } from './renderers/qr-logo.compositor';
  */
 @Module({
     controllers: [QrController],
-    providers: [QrService, QrImageRenderer, QrLogoCompositor],
-    exports: [QrService],
+    providers: [QrService, QrImageRenderer, QrLogoCompositor, QrBrandMarkBaker],
+    exports: [QrService, QrBrandMarkBaker],
 })
 export class QrModule {}

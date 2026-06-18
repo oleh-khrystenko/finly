@@ -74,6 +74,18 @@ describe('QrService — orchestration (mocked renderers)', () => {
             );
         });
 
+        it('Sprint 21 — centerMark override підмінює Finly-центр кастомними байтами', async () => {
+            const mark = Buffer.from('custom-center');
+            await service.renderForUrl('https://pay.finly.com.ua/x', {
+                centerMark: mark,
+            });
+            expect(logoCompositor.compose).toHaveBeenCalledWith(
+                expect.any(Buffer),
+                mark,
+                expect.any(Object)
+            );
+        });
+
         it('centerFormat=square — квадратний центр (лише лого)', async () => {
             await service.renderForUrl('https://pay.finly.com.ua/x', {
                 centerFormat: 'square',
@@ -90,8 +102,8 @@ describe('QrService — orchestration (mocked renderers)', () => {
             expect(logoCompositor.addBands).toHaveBeenCalledWith(
                 expect.any(Buffer),
                 expect.objectContaining({
-                    topBandPath: undefined,
-                    bottomBandPath: expect.stringContaining('band-slogan.png'),
+                    topBand: undefined,
+                    bottomBand: expect.stringContaining('band-slogan.png'),
                 })
             );
         });
@@ -153,11 +165,28 @@ describe('QrService — orchestration (mocked renderers)', () => {
             expect(logoCompositor.addBands).toHaveBeenCalledWith(
                 expect.any(Buffer),
                 expect.objectContaining({
-                    topBandPath: expect.stringContaining('band-finly.png'),
-                    bottomBandPath: expect.stringContaining(
+                    topBand: expect.stringContaining('band-finly.png'),
+                    bottomBand: expect.stringContaining(
                         'band-nbu-standard.png'
                     ),
                 })
+            );
+        });
+
+        it('Sprint 21 — topBandMark override підмінює Finly-смугу кастомними байтами (центр гривні недоторканий)', async () => {
+            const mark = Buffer.from('custom-band');
+            await service.renderForNbuPayload(VALID_INPUT, '003', {
+                host: NBU_HOST_PRIMARY,
+                topBandMark: mark,
+            });
+            expect(logoCompositor.compose).toHaveBeenCalledWith(
+                expect.any(Buffer),
+                expect.stringContaining('hryvnia-symbol.png'),
+                expect.any(Object)
+            );
+            expect(logoCompositor.addBands).toHaveBeenCalledWith(
+                expect.any(Buffer),
+                expect.objectContaining({ topBand: mark })
             );
         });
 

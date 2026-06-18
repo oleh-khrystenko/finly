@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { BRAND_LOGO } from '../constants/storage';
-import { brandDisplayNameSchema } from '../entities/brand';
+import { brandDisplayNameSchema, type BusinessBrand } from '../entities/brand';
 
 /**
  * File key contract for avatar uploads: `avatars/{userId}/{uuid}.webp`.
@@ -71,4 +71,34 @@ export type CommitBrandDto = z.infer<typeof CommitBrandSchema>;
 export interface BrandLogoUploadUrlResponse {
     uploadUrl: string;
     fileKey: string;
+}
+
+/**
+ * Результат commit-у бренду. Дзеркало slug-upsell «success-with-state, не throw»:
+ *   - `active` — доступ ≥ brand, бренд рендериться публічно одразу (`BRAND_UPDATED`).
+ *   - `pending` — доступ нижче brand, лого збережено у pending-слот, відповідь
+ *     несе пейвол-стан (`BRAND_REQUIRES_PLAN`), а не помилку.
+ */
+export const BRAND_COMMIT_OUTCOME = {
+    ACTIVE: 'active',
+    PENDING: 'pending',
+} as const;
+
+export type BrandCommitOutcome =
+    (typeof BRAND_COMMIT_OUTCOME)[keyof typeof BRAND_COMMIT_OUTCOME];
+
+export interface CommitBrandResponse {
+    outcome: BrandCommitOutcome;
+    /** Оновлений блок бренду бізнесу (для синхронізації кабінету без re-fetch). */
+    brand: BusinessBrand;
+}
+
+/**
+ * Прев'ю обох QR із наданим логотипом без активації. `nbuPngBase64` — `null`,
+ * коли у бізнесі ще немає жодного рахунку (немає валідного НБУ-payload для
+ * рендеру); кабінет тоді показує лише сторінкове прев'ю.
+ */
+export interface BrandPreviewResponse {
+    pagePngBase64: string;
+    nbuPngBase64: string | null;
 }

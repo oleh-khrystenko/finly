@@ -48,6 +48,12 @@ export interface QrUrlRenderOptions extends QrRenderOptions {
      * слоган живе у футері).
      */
     withSlogan?: boolean;
+    /**
+     * Sprint 21 — кастомна бренд-марка отримувача у центр (тип-2): замінює
+     * Finly-центр на пре-композовану марку (логотип + опційна назва). Buffer
+     * з R2 / щойно запечений. `undefined` → дефолтний Finly-центр.
+     */
+    centerMark?: Buffer;
 }
 
 /**
@@ -138,6 +144,12 @@ const BRAND_URL_SQUARE: QrBrand = {
  */
 export interface QrRenderOptions003 extends QrRenderOptions {
     host: AllowedNbuPayloadLinkHost003;
+    /**
+     * Sprint 21 — кастомна бренд-марка отримувача у ВЕРХНЮ смугу (тип-1):
+     * замінює Finly-смугу на пре-композовану марку. Нормативний центр (знак
+     * гривні) і нижня НБУ-смуга недоторкані. `undefined` → дефолтна Finly-смуга.
+     */
+    topBandMark?: Buffer;
 }
 
 const DEFAULT_RENDER_OPTIONS = {
@@ -202,7 +214,9 @@ export class QrService {
             options?.withSlogan === false
                 ? { ...base, bottomBandFile: undefined }
                 : base;
-        return this.renderBranded(url, brand, options);
+        return this.renderBranded(url, brand, options, {
+            center: options?.centerMark,
+        });
     }
 
     /**
@@ -246,7 +260,9 @@ export class QrService {
                       host: (options as QrRenderOptions003 | undefined)?.host,
                   })
                 : buildNbuPayloadLink(version, base64Url);
-        return this.renderBranded(link, BRAND_NBU, options);
+        return this.renderBranded(link, BRAND_NBU, options, {
+            topBand: (options as QrRenderOptions003 | undefined)?.topBandMark,
+        });
     }
 
     /**
@@ -277,7 +293,8 @@ export class QrService {
     private async renderBranded(
         text: string,
         brand: QrBrand,
-        options?: QrRenderOptions
+        options?: QrRenderOptions,
+        overrides?: { center?: Buffer; topBand?: Buffer }
     ): Promise<Buffer> {
         const opts = { ...DEFAULT_RENDER_OPTIONS, ...options };
         // Корекція береться з бренд-дескриптора (тип-1 `Q` за нормативом, тип-2
@@ -288,9 +305,19 @@ export class QrService {
             sizePx: opts.sizePx,
             errorCorrection,
         });
+        // Sprint 21 — override-байти кастомної бренд-марки мають пріоритет над
+        // дефолтним asset-файлом. Тип-2: центр; тип-1: верхня смуга. Нижні смуги
+        // (слоган/НБУ) і нормативний центр гривні лишаються Finly-дефолтом.
+        const centerInput: string | Buffer =
+            overrides?.center ?? join(this.assetsDir, brand.centerAssetFile);
+        const topBandInput: string | Buffer | undefined =
+            overrides?.topBand ??
+            (brand.topBandFile
+                ? join(this.assetsDir, brand.topBandFile)
+                : undefined);
         const withCenter = await this.logoCompositor.compose(
             qrPng,
-            join(this.assetsDir, brand.centerAssetFile),
+            centerInput,
             {
                 qrSizePx: opts.sizePx,
                 idealHeightRatio: brand.centerIdealHeightRatio,
@@ -298,10 +325,8 @@ export class QrService {
         );
         return this.logoCompositor.addBands(withCenter, {
             width: opts.sizePx,
-            topBandPath: brand.topBandFile
-                ? join(this.assetsDir, brand.topBandFile)
-                : undefined,
-            bottomBandPath: brand.bottomBandFile
+            topBand: topBandInput,
+            bottomBand: brand.bottomBandFile
                 ? join(this.assetsDir, brand.bottomBandFile)
                 : undefined,
         });
