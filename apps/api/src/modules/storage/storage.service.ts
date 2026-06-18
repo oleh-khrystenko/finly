@@ -41,6 +41,18 @@ export class StorageService {
         return this.storage.downloadObject(key);
     }
 
+    /**
+     * Завантажує об'єкт за його публічною R2-URL (зворотне до `buildPublicUrl`).
+     * Кидає для не-R2 URL — захист від ходіння у сторонні хости.
+     */
+    downloadByPublicUrl(url: string): Promise<Buffer> {
+        if (!this.isR2Url(url)) {
+            throw new Error(`Not an R2 public URL: ${url}`);
+        }
+        const key = url.slice(ENV.R2_PUBLIC_URL.length + 1);
+        return this.downloadObject(key);
+    }
+
     uploadBuffer(input: UploadBufferInput): Promise<void> {
         return this.storage.uploadBuffer(input);
     }

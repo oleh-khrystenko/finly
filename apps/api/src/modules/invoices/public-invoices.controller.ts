@@ -25,6 +25,7 @@ import { SkipOnboarding } from '../../common/decorators/skip-onboarding.decorato
 import { ENV } from '../../config/env';
 import { AccountsService } from '../accounts/accounts.service';
 import type { AccountDocument } from '../accounts/schemas/account.schema';
+import { BrandMarkCacheService } from '../businesses/brand-mark-cache.service';
 import { BusinessesService } from '../businesses/businesses.service';
 import type { BusinessDocument } from '../businesses/schemas/business.schema';
 import {
@@ -60,7 +61,8 @@ export class PublicInvoicesController {
         private readonly businessesService: BusinessesService,
         private readonly accountsService: AccountsService,
         private readonly invoicesService: InvoicesService,
-        private readonly qrService: QrService
+        private readonly qrService: QrService,
+        private readonly brandMarkCache: BrandMarkCacheService
     ) {}
 
     @SkipOnboarding()
@@ -148,7 +150,12 @@ export class PublicInvoicesController {
             });
         }
         const url = `${ENV.PAY_PUBLIC_URL.replace(/\/$/, '')}/${business.slug}/${account.slug}/${invoice.slug}`;
-        const png = await this.qrService.renderForUrl(url, { sizePx });
+        const centerMark =
+            await this.brandMarkCache.getActiveCenterMark(business);
+        const png = await this.qrService.renderForUrl(url, {
+            sizePx,
+            centerMark: centerMark ?? undefined,
+        });
         res.setHeader('Content-Type', 'image/png');
         applyQrDownloadDisposition(
             res,
@@ -188,9 +195,12 @@ export class PublicInvoicesController {
             });
         }
         const input = buildPayloadInputFromInvoice(business, account, invoice);
+        // Sprint 21 — кастомна верхня смуга активного бренду (null → Finly).
+        const bandMark = await this.brandMarkCache.getActiveBandMark(business);
         const png = await this.qrService.renderForNbuPayload(input, '003', {
             host,
             sizePx,
+            topBandMark: bandMark ?? undefined,
         });
         res.setHeader('Content-Type', 'image/png');
         applyQrDownloadDisposition(

@@ -32,6 +32,7 @@ import {
 } from '../qr/qr-image-request';
 import { QrService } from '../qr/qr.service';
 import type { BusinessDocument } from './schemas/business.schema';
+import { BrandMarkCacheService } from './brand-mark-cache.service';
 import { BusinessesService } from './businesses.service';
 
 /**
@@ -63,7 +64,8 @@ export class PublicBusinessesController {
         private readonly businessesService: BusinessesService,
         @InjectModel(Account.name)
         private readonly accountModel: Model<AccountDocument>,
-        private readonly qrService: QrService
+        private readonly qrService: QrService,
+        private readonly brandMarkCache: BrandMarkCacheService
     ) {}
 
     @SkipOnboarding()
@@ -120,7 +122,13 @@ export class PublicBusinessesController {
         const sizePx = resolveQrSizePxFromQuery(sizeParam);
         const business = await this.getBusinessOrThrow(slug);
         const url = `${ENV.PAY_PUBLIC_URL.replace(/\/$/, '')}/${business.slug}`;
-        const png = await this.qrService.renderForUrl(url, { sizePx });
+        // Sprint 21 — кастомний центр активного бренду (null → дефолтний Finly).
+        const centerMark =
+            await this.brandMarkCache.getActiveCenterMark(business);
+        const png = await this.qrService.renderForUrl(url, {
+            sizePx,
+            centerMark: centerMark ?? undefined,
+        });
         applyQrDownloadDisposition(
             res,
             isQrDownloadRequested(downloadParam),

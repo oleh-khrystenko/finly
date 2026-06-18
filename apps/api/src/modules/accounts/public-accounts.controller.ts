@@ -23,6 +23,7 @@ import {
 import { SkipOnboarding } from '../../common/decorators/skip-onboarding.decorator';
 import { PUBLIC_PAGE_CACHE_CONTROL } from '../../common/http/public-cache';
 import { ENV } from '../../config/env';
+import { BrandMarkCacheService } from '../businesses/brand-mark-cache.service';
 import { BusinessesService } from '../businesses/businesses.service';
 import type { BusinessDocument } from '../businesses/schemas/business.schema';
 import {
@@ -54,7 +55,8 @@ export class PublicAccountsController {
     constructor(
         private readonly businessesService: BusinessesService,
         private readonly accountsService: AccountsService,
-        private readonly qrService: QrService
+        private readonly qrService: QrService,
+        private readonly brandMarkCache: BrandMarkCacheService
     ) {}
 
     @SkipOnboarding()
@@ -116,7 +118,12 @@ export class PublicAccountsController {
             accountSlug
         );
         const url = `${ENV.PAY_PUBLIC_URL.replace(/\/$/, '')}/${business.slug}/${account.slug}`;
-        const png = await this.qrService.renderForUrl(url, { sizePx });
+        const centerMark =
+            await this.brandMarkCache.getActiveCenterMark(business);
+        const png = await this.qrService.renderForUrl(url, {
+            sizePx,
+            centerMark: centerMark ?? undefined,
+        });
         applyQrDownloadDisposition(
             res,
             isQrDownloadRequested(downloadParam),
@@ -151,9 +158,13 @@ export class PublicAccountsController {
             accountSlug
         );
         const input = buildPayloadInputFromAccount(business, account);
+        // Sprint 21 — кастомна верхня смуга активного бренду (null → Finly).
+        // Нормативний центр (знак гривні) і нижня НБУ-смуга недоторкані.
+        const bandMark = await this.brandMarkCache.getActiveBandMark(business);
         const png = await this.qrService.renderForNbuPayload(input, '003', {
             host,
             sizePx,
+            topBandMark: bandMark ?? undefined,
         });
         applyQrDownloadDisposition(
             res,
