@@ -33,6 +33,7 @@ import {
 import { QrService } from '../qr/qr.service';
 import type { BusinessDocument } from './schemas/business.schema';
 import { BrandMarkCacheService } from './brand-mark-cache.service';
+import { buildPublicBrandView } from './brand-public-view';
 import { BusinessesService } from './businesses.service';
 
 /**
@@ -90,6 +91,7 @@ export class PublicBusinessesController {
             name: business.name,
             slug: business.slug,
             seoIndexEnabled: business.seoIndexEnabled,
+            ...buildPublicBrandView(business),
             accounts: accounts.map((a) => ({
                 slug: a.slug,
                 name: a.name,

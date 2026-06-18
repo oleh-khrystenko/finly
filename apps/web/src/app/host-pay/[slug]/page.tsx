@@ -114,6 +114,8 @@ export default async function HostPayPage({ params }: Props) {
             type={view.type}
             name={view.name}
             slug={view.slug}
+            logo={view.logo}
+            brandDisplayName={view.brandDisplayName}
             accounts={view.accounts}
         />
     );

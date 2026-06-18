@@ -5,6 +5,7 @@ import {
     type PublicAccountListItem,
 } from '@finly/types';
 import UiBankLogo from '@/shared/ui/UiBankLogo';
+import UiBrandLogo from '@/shared/ui/UiBrandLogo';
 import UiLink from '@/shared/ui/UiLink';
 import { formatPayeeName } from '@/entities/business';
 
@@ -16,6 +17,9 @@ interface Props {
     type: BusinessType;
     name: string;
     slug: string;
+    /** Sprint 21 — кастомний бренд (присутній лише за активного бренду). */
+    logo?: string;
+    brandDisplayName?: string | null;
     /**
      * Sprint 9 §SP-4: server-side already відрізнив 0/1/2+ → цей view рендериться
      * тільки для `accounts.length === 0` (empty-state) або `>= 2` (list-of-cards).
@@ -55,24 +59,40 @@ export default function PublicBusinessView({
     type,
     name,
     slug,
+    logo,
+    brandDisplayName,
     accounts,
 }: Props) {
     const payeeName = formatPayeeName(type, name);
 
     if (accounts.length === 0) {
-        return <EmptyState payeeName={payeeName} />;
+        return (
+            <EmptyState
+                payeeName={payeeName}
+                logo={logo}
+                brandDisplayName={brandDisplayName}
+            />
+        );
     }
 
     return (
         <div className="mx-auto max-w-xl space-y-8 px-4 py-8">
-            <header className="space-y-1 text-center">
-                <p className="text-muted-foreground text-sm">Отримувач</p>
-                <h1 className="text-foreground text-2xl font-bold tracking-tight break-words md:text-3xl">
-                    {payeeName}
-                </h1>
-                <p className="text-muted-foreground pt-1 text-sm">
-                    Оберіть реквізити для оплати
-                </p>
+            <header className="flex flex-col items-center gap-3 text-center">
+                {logo && (
+                    <UiBrandLogo
+                        src={logo}
+                        alt={brandDisplayName ?? payeeName}
+                    />
+                )}
+                <div className="space-y-1">
+                    <p className="text-muted-foreground text-sm">Отримувач</p>
+                    <h1 className="text-foreground text-2xl font-bold tracking-tight break-words md:text-3xl">
+                        {payeeName}
+                    </h1>
+                    <p className="text-muted-foreground pt-1 text-sm">
+                        Оберіть реквізити для оплати
+                    </p>
+                </div>
             </header>
 
             <ul className="space-y-3">
@@ -167,9 +187,25 @@ function AccountCard({
     );
 }
 
-function EmptyState({ payeeName }: { payeeName: string }) {
+function EmptyState({
+    payeeName,
+    logo,
+    brandDisplayName,
+}: {
+    payeeName: string;
+    logo?: string;
+    brandDisplayName?: string | null;
+}) {
     return (
         <div className="mx-auto max-w-xl px-4 py-16 text-center">
+            {logo && (
+                <div className="mb-3 flex justify-center">
+                    <UiBrandLogo
+                        src={logo}
+                        alt={brandDisplayName ?? payeeName}
+                    />
+                </div>
+            )}
             <p className="text-muted-foreground text-sm">Отримувач</p>
             <h1 className="text-foreground mt-1 text-2xl font-bold tracking-tight break-words md:text-3xl">
                 {payeeName}

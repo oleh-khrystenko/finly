@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { brandDisplayNameSchema } from '../entities/brand';
 import {
     businessNameSchema,
     businessSlugSchema,
@@ -241,6 +242,9 @@ export const PublicInvoiceSchema = z.object({
         type: businessTypeSchema,
         name: businessNameSchema,
         slug: businessSlugSchema,
+        // Sprint 21 — кастомний бренд (лише за активного бренду, інакше Finly).
+        logo: z.string().url().optional(),
+        brandDisplayName: brandDisplayNameSchema.nullable().optional(),
     }),
     account: PublicAccountListItemSchema,
     nbuLinks: z

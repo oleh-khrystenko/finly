@@ -24,6 +24,7 @@ import { SkipOnboarding } from '../../common/decorators/skip-onboarding.decorato
 import { PUBLIC_PAGE_CACHE_CONTROL } from '../../common/http/public-cache';
 import { ENV } from '../../config/env';
 import { BrandMarkCacheService } from '../businesses/brand-mark-cache.service';
+import { buildPublicBrandView } from '../businesses/brand-public-view';
 import { BusinessesService } from '../businesses/businesses.service';
 import type { BusinessDocument } from '../businesses/schemas/business.schema';
 import {
@@ -81,6 +82,7 @@ export class PublicAccountsController {
                 name: business.name,
                 slug: business.slug,
                 seoIndexEnabled: business.seoIndexEnabled,
+                ...buildPublicBrandView(business),
             },
             nbuLinks: {
                 primary: this.qrService.buildNbuPayloadLinkForInput(

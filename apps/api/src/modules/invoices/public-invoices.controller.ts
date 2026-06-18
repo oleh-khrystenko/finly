@@ -26,6 +26,7 @@ import { ENV } from '../../config/env';
 import { AccountsService } from '../accounts/accounts.service';
 import type { AccountDocument } from '../accounts/schemas/account.schema';
 import { BrandMarkCacheService } from '../businesses/brand-mark-cache.service';
+import { buildPublicBrandView } from '../businesses/brand-public-view';
 import { BusinessesService } from '../businesses/businesses.service';
 import type { BusinessDocument } from '../businesses/schemas/business.schema';
 import {
@@ -114,6 +115,7 @@ export class PublicInvoicesController {
                 type: business.type,
                 name: snapshot?.recipientName ?? business.name,
                 slug: business.slug,
+                ...buildPublicBrandView(business),
             },
             account: {
                 slug: account.slug,

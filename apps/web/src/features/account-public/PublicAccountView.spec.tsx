@@ -149,4 +149,32 @@ describe('PublicAccountView (Sprint 9 §SP-4 + §SP-9)', () => {
             );
         });
     });
+
+    describe('Sprint 21 — кастомний логотип бренду', () => {
+        it('без бренду: логотип не рендериться, лишається текстовий заголовок', () => {
+            render(<PublicAccountView {...baseProps} />);
+            expect(
+                screen.queryByAltText('ФОП Іваненко')
+            ).not.toBeInTheDocument();
+            expect(screen.getByText('Отримувач')).toBeInTheDocument();
+        });
+
+        it('активний бренд: логотип показується поряд із заголовком', () => {
+            render(
+                <PublicAccountView
+                    {...baseProps}
+                    business={{
+                        ...baseProps.business,
+                        logo: 'https://media.test/brand-logos/x/a.png',
+                        brandDisplayName: 'Зерно',
+                    }}
+                />
+            );
+            const logo = screen.getByAltText('Зерно');
+            expect(logo).toBeInTheDocument();
+            expect(logo.getAttribute('src')).toContain('brand-logos');
+            // Текстовий заголовок «Отримувач» лишається поряд (не замість).
+            expect(screen.getByText('Отримувач')).toBeInTheDocument();
+        });
+    });
 });
