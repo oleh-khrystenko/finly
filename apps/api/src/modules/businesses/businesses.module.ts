@@ -20,6 +20,7 @@ import { SlugReservationModule } from '../slug-reservation/slug-reservation.modu
 import { StorageModule } from '../storage/storage.module';
 import { UsersModule } from '../users/users.module';
 import { BrandController } from './brand.controller';
+import { BrandCleanupService } from './brand-cleanup.service';
 import { BrandMarkCacheService } from './brand-mark-cache.service';
 import { BrandService } from './brand.service';
 import { BusinessAccessGuard } from './business-access.guard';
@@ -91,6 +92,7 @@ import { SlugGeneratorService } from './slug-generator.service';
         ReconciliationService,
         BrandService,
         BrandMarkCacheService,
+        BrandCleanupService,
     ],
     exports: [
         MongooseModule,

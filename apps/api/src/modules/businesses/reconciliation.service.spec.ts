@@ -650,4 +650,88 @@ describe('ReconciliationService (MongoMemoryReplSet)', () => {
             (_key: string, _ttl: number, fn: () => Promise<unknown>) => fn()
         );
     }, 15_000);
+
+    // ── Brand demote/promote (Sprint 21) ─────────────────────────────────
+
+    const SLOT = {
+        logoUrl: 'https://media/brand-logos/x/a.png',
+        centerMarkUrl: 'https://media/brand-logos/x/c.png',
+        bandMarkUrl: 'https://media/brand-logos/x/b.png',
+        displayName: 'Бренд',
+    };
+
+    async function setBrand(
+        id: Types.ObjectId,
+        brand: Record<string, unknown> | null
+    ): Promise<void> {
+        await businessModel.updateOne({ _id: id }, { $set: { brand } });
+    }
+
+    async function getBrand(
+        id: Types.ObjectId
+    ): Promise<{ active: unknown; pending: unknown } | null> {
+        const doc = await businessModel.findById(id).lean();
+        return (doc?.brand as { active: unknown; pending: unknown }) ?? null;
+    }
+
+    it('нижче brand: активний бренд демоутиться у pending (файл лишається)', async () => {
+        setLevel('none');
+        const id = await seedBusiness({ type: 'fop', owned: true });
+        await setBrand(id, { active: SLOT, pending: null });
+
+        await service.reconcile(userId.toString());
+
+        const brand = await getBrand(id);
+        expect(brand?.active).toBeNull();
+        expect(brand?.pending).toMatchObject({
+            logoUrl: SLOT.logoUrl,
+            centerMarkUrl: SLOT.centerMarkUrl,
+            bandMarkUrl: SLOT.bandMarkUrl,
+        });
+        expect(
+            (brand?.pending as { uploadedAt?: Date }).uploadedAt
+        ).toBeTruthy();
+    });
+
+    it('≥ brand: pending промотується в active (auto-apply після оплати)', async () => {
+        setLevel('brand');
+        const id = await seedBusiness({ type: 'fop', owned: true });
+        await setBrand(id, {
+            active: null,
+            pending: { ...SLOT, uploadedAt: new Date() },
+        });
+
+        await service.reconcile(userId.toString());
+
+        const brand = await getBrand(id);
+        expect(brand?.pending).toBeNull();
+        expect(brand?.active).toMatchObject({ logoUrl: SLOT.logoUrl });
+    });
+
+    it('≥ brand: наявний active не чіпається (ідемпотентно)', async () => {
+        setLevel('brand');
+        const id = await seedBusiness({ type: 'fop', owned: true });
+        await setBrand(id, { active: SLOT, pending: null });
+
+        await service.reconcile(userId.toString());
+
+        const brand = await getBrand(id);
+        expect(brand?.active).toMatchObject({ logoUrl: SLOT.logoUrl });
+        expect(brand?.pending).toBeNull();
+    });
+
+    it('клієнтський бізнес: промоція під рівнем менеджера-бухгалтера', async () => {
+        setLevel('bookkeeper');
+        const id = await seedBusiness({ type: 'tov', owned: false });
+        await setBrand(id, {
+            active: null,
+            pending: { ...SLOT, uploadedAt: new Date() },
+        });
+
+        await service.reconcile(userId.toString());
+
+        const brand = await getBrand(id);
+        expect(brand?.active).toMatchObject({ logoUrl: SLOT.logoUrl });
+        expect(brand?.pending).toBeNull();
+    });
 });

@@ -136,6 +136,16 @@ export const ENV = {
         10
     ),
 
+    /**
+     * Sprint 21 — скільки днів pending-логотип бренду живе без оплати, перш ніж
+     * cron-чистка прибирає його з R2 (orphan неоплачених + демоутовані після
+     * згасання тарифу, яким дали свіже вікно). Повторна підписка у межах вікна
+     * промотує pending назад в active (реконсиляція) — чистка його не зачіпає.
+     */
+    BRAND_PENDING_CLEANUP_DAYS: getNonNegativeIntEnvVar(
+        'BRAND_PENDING_CLEANUP_DAYS'
+    ),
+
     ANTHROPIC_API_KEY: getEnvVar('ANTHROPIC_API_KEY'),
 
     // Public help assistant (Sprint 16) — anon, no executions. Own short

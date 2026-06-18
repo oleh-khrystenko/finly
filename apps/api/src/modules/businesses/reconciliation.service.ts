@@ -260,6 +260,14 @@ export class ReconciliationService {
             );
         }
 
+        const businessIds = [...owned, ...client].map((b) => b._id);
+
+        // Sprint 21 — демоція/промоція кастомного бренду під поточний рівень.
+        // Це і є auto-apply після оплати: грант-вебхук → reconcileSafe →
+        // промоція pending→active без окремого хука; згасання тарифу (cron/
+        // refund/cancel) → демоція active→pending (файл лишається).
+        await this.reconcileBrands(businessIds, level);
+
         // Slug-rent: нижче brand втрачається право на vanity-slug → скидаємо
         // кастомні slug-и бізнесів, реквізитів і рахунків до авто (ім'я
         // повертається ринку). brand/bookkeeper зберігають кастомні.
@@ -268,11 +276,8 @@ export class ReconciliationService {
         // запиту). Обсяг одного прогону обмежений батчем (TTL білінг-локу +
         // латентність webhook-шляху) — хвіст доганяється через стемп нижче.
         let slugRentComplete = true;
-        if (!isAccessLevelAtLeast(level, 'brand')) {
-            const businessIds = [...owned, ...client].map((b) => b._id);
-            if (businessIds.length > 0) {
-                slugRentComplete = await this.runSlugRent(businessIds);
-            }
+        if (!isAccessLevelAtLeast(level, 'brand') && businessIds.length > 0) {
+            slugRentComplete = await this.runSlugRent(businessIds);
         }
 
         // Durable-маркер на білінгу: неповний прогін (батч-ліміт / збої
@@ -298,6 +303,70 @@ export class ReconciliationService {
                 );
             }
         }
+    }
+
+    // ── Brand demote/promote (Sprint 21) ────────────────────────────────
+
+    /**
+     * Тримає слот кастомного бренду в актуальному стані під рівень доступу:
+     *   - ≥ brand: промотує `pending → active` (логотип повертається публічно).
+     *     Це і є auto-apply після оплати — окремий хук не потрібен.
+     *   - < brand: демоутить `active → pending` зі свіжим `uploadedAt` (файл
+     *     лишається; orphan-cron прибере, якщо підписку не поновлять у вікні).
+     *
+     * Атомарні bulk-update з aggregation-pipeline (один запит на весь набір),
+     * ідемпотентні через filter-умови. Інваріант: `active` і `pending` не
+     * співіснують у нормальному потоці (платний commit чистить pending,
+     * deleteOrphanedFiles чистить файли) — тож промоція не перетирає чужий
+     * pending, а демоція не лишає orphan-файлів попереднього pending.
+     */
+    private async reconcileBrands(
+        businessIds: Types.ObjectId[],
+        level: AccessLevel
+    ): Promise<void> {
+        if (businessIds.length === 0) return;
+
+        if (isAccessLevelAtLeast(level, 'brand')) {
+            await this.businessModel.updateMany(
+                {
+                    _id: { $in: businessIds },
+                    'brand.pending': { $ne: null },
+                    'brand.active': null,
+                },
+                [
+                    {
+                        $set: {
+                            'brand.active': {
+                                logoUrl: '$brand.pending.logoUrl',
+                                centerMarkUrl: '$brand.pending.centerMarkUrl',
+                                bandMarkUrl: '$brand.pending.bandMarkUrl',
+                                displayName: '$brand.pending.displayName',
+                            },
+                            'brand.pending': null,
+                        },
+                    },
+                ]
+            );
+            return;
+        }
+
+        await this.businessModel.updateMany(
+            { _id: { $in: businessIds }, 'brand.active': { $ne: null } },
+            [
+                {
+                    $set: {
+                        'brand.pending': {
+                            logoUrl: '$brand.active.logoUrl',
+                            centerMarkUrl: '$brand.active.centerMarkUrl',
+                            bandMarkUrl: '$brand.active.bandMarkUrl',
+                            displayName: '$brand.active.displayName',
+                            uploadedAt: '$$NOW',
+                        },
+                        'brand.active': null,
+                    },
+                },
+            ]
+        );
     }
 
     // ── Slug-rent reset (рівень нижче brand) ─────────────────────────────
