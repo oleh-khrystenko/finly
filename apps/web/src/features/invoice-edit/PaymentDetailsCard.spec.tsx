@@ -18,6 +18,7 @@ const baseBusiness: Business = {
     seoIndexEnabled: false,
     deletedAt: null,
     accessBlockedAt: null,
+    brand: null,
     createdAt: new Date('2026-05-01T10:00:00Z'),
     updatedAt: new Date('2026-05-01T10:00:00Z'),
 };

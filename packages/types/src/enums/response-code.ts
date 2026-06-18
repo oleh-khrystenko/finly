@@ -161,6 +161,14 @@ export const RESPONSE_CODE = {
      */
     SLUG_EDIT_REQUIRES_PLAN: 'SLUG_EDIT_REQUIRES_PLAN',
     /**
+     * Sprint 21 — кастомний брендинг отримувача (логотип у QR + на pay-сторінках)
+     * вимагає рівня доступу не нижче brand. Подвійний бар'єр: на Save (free →
+     * лого зберігається у pending-слот, цей код несе пейвол-стан у УСПІШНІЙ
+     * відповіді commit-у, дзеркало slug-upsell — не throw) і на публічному
+     * рендері (нижче brand → Finly). Upsell на тариф «Бренд».
+     */
+    BRAND_REQUIRES_PLAN: 'BRAND_REQUIRES_PLAN',
+    /**
      * Sprint 19 — доменний інваріант: власник може мати максимум один бізнес
      * типу «фізособа» і один «ФОП». Не апсел (платний тариф не зніме ліміт) —
      * радимо редагувати наявний.
@@ -334,6 +342,7 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.SLUG_RESERVED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.SLUG_TAKEN]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.SLUG_EDIT_REQUIRES_PLAN]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BRAND_REQUIRES_PLAN]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.BUSINESS_TYPE_LIMIT_REACHED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.BUSINESS_LIMIT_REQUIRES_PLAN]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.BUSINESS_CREATE_IN_PROGRESS]: RESPONSE_TYPE.ERROR,

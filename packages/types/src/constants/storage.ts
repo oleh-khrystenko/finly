@@ -29,3 +29,29 @@ export const AVATAR = {
 
 export type AvatarOutputFormat = typeof AVATAR.OUTPUT_FORMAT;
 export type AvatarAllowedMimeType = (typeof AVATAR.ALLOWED_MIME_TYPES)[number];
+
+/**
+ * Sprint 21 — кастомний логотип бренду. На відміну від avatar, логотип
+ * завантажується БЕЗ кропа: оригінальні байти йдуть прямо в R2, тож presigned
+ * PUT підписує реальний `Content-Type` файлу (один з трьох), а не фіксований
+ * webp. Розмір/формат/аспект/«майже білий» валідуються на commit (server-side
+ * `HeadObject` + sharp-метадані), бо presigned PUT не несе верхньої межі
+ * `Content-Length` (S3/R2 трактують підписаний як точний збіг, а сам заголовок
+ * заборонений у Fetch API).
+ */
+export const BRAND_LOGO = {
+    /**
+     * Max raw upload size (1 MB). Велика плашка у центрі сторінкового QR на
+     * корекції H — на межі сканованості; малий файл тримає її компактною.
+     */
+    MAX_FILE_SIZE: 1 * 1024 * 1024,
+    /**
+     * Input MIME, що приймає file-picker і підписує presigned PUT. JPEG без
+     * прозорості (тільки білий фон); PNG/WEBP — прозорий авто-кладеться на білий
+     * на commit. SVG свідомо виключено (XSS-вектор, окрема задача).
+     */
+    ALLOWED_MIME_TYPES: ['image/png', 'image/jpeg', 'image/webp'],
+} as const;
+
+export type BrandLogoAllowedMimeType =
+    (typeof BRAND_LOGO.ALLOWED_MIME_TYPES)[number];
