@@ -67,6 +67,12 @@ export const RESPONSE_CODE = {
      * горизонтальний прямокутник — вертикальне не вписується у плашку/смугу.
      */
     BRAND_LOGO_ASPECT_INVALID: 'BRAND_LOGO_ASPECT_INVALID',
+    /**
+     * Надто витягнутий горизонтальний логотип (width / height > ліміт): не
+     * вписується у верхню смугу НБУ-QR разом із підписом — текст вилазить за
+     * межі. Відхиляємо з ясним повідомленням замість зламаної бренд-марки.
+     */
+    BRAND_LOGO_TOO_WIDE: 'BRAND_LOGO_TOO_WIDE',
     /** Майже білий/світлий логотип: зникне на білій плашці. Поріг емпіричний. */
     BRAND_LOGO_TOO_LIGHT: 'BRAND_LOGO_TOO_LIGHT',
     /** Збій сторонніх ops (download / bake / upload) — нейтральний 5xx-код. */
@@ -359,6 +365,7 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.BRAND_LOGO_UPLOAD_NOT_FOUND]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.BRAND_LOGO_INVALID]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.BRAND_LOGO_ASPECT_INVALID]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BRAND_LOGO_TOO_WIDE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.BRAND_LOGO_TOO_LIGHT]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.BRAND_LOGO_UPLOAD_FAILED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.BUSINESS_NOT_FOUND]: RESPONSE_TYPE.ERROR,

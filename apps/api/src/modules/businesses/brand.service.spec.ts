@@ -135,6 +135,19 @@ describe('BrandService', () => {
         expect(storage.safeDeleteByKey).toHaveBeenCalledWith(FILE_KEY);
     });
 
+    it('надто витягнутий горизонтальний логотип → BRAND_LOGO_TOO_WIDE', async () => {
+        // 1400×100 = 14:1, далеко за межею MAX_ASPECT_RATIO.
+        const logo = await makeImage(1400, 100, 20);
+        const { service, storage } = makeDeps(logo);
+
+        await expect(
+            service.commit(makeBusiness(), FILE_KEY, null, 'brand')
+        ).rejects.toMatchObject({
+            response: { code: RESPONSE_CODE.BRAND_LOGO_TOO_WIDE },
+        });
+        expect(storage.safeDeleteByKey).toHaveBeenCalledWith(FILE_KEY);
+    });
+
     it('майже білий логотип → BRAND_LOGO_TOO_LIGHT', async () => {
         const logo = await makeImage(300, 150, 250);
         const { service } = makeDeps(logo);

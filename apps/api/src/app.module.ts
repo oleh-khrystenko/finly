@@ -61,6 +61,15 @@ import { AiModule } from './modules/ai/ai.module';
                 // рівні). Користувач друкує ім'я і запити йдуть debounce-ом —
                 // 30/min/IP вистачає на нормальний ввід, але стримує перебір.
                 { name: 'slug-availability', ttl: 60000, limit: 30 },
+                // Sprint 21 — живе прев'ю кастомного бренду
+                // (`BrandController.preview`, authorized). Окремий бакет, щоб НЕ
+                // ділити лічильник з анонімним `qr-preview`: інакше скан з того ж
+                // IP (NAT) міг би заблокувати прев'ю платного клієнта і навпаки.
+                // Кожен виклик важкий (download + bake + 2 рендери), але
+                // debounce-флоу живого прев'ю легітимно дає кілька запитів
+                // поспіль — 20/min вистачає на правки лого/назви, стримуючи
+                // перебір. Apply через `@Throttle({ 'brand-preview' })`.
+                { name: 'brand-preview', ttl: 60000, limit: 20 },
             ],
         }),
         ScheduleModule.forRoot(),

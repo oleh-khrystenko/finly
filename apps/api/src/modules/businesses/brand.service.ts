@@ -300,6 +300,13 @@ export class BrandService {
                 message: 'Vertical images are not allowed',
             });
         }
+        if (width / height > BRAND_LOGO.MAX_ASPECT_RATIO) {
+            await this.storage.safeDeleteByKey(fileKey);
+            throw new BadRequestException({
+                code: RESPONSE_CODE.BRAND_LOGO_TOO_WIDE,
+                message: 'Image is too wide and would overflow the brand band',
+            });
+        }
         if (minDarkness > ALMOST_WHITE_MIN_DARKNESS) {
             await this.storage.safeDeleteByKey(fileKey);
             throw new BadRequestException({

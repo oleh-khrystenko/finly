@@ -246,3 +246,27 @@ validateOrphanCleanupSchedule(
     ENV.ORPHAN_REMINDER_FINAL_DAYS,
     ENV.ORPHAN_CLEANUP_DELETION_DAYS
 );
+
+// Sprint 21 — cross-field invariant порогів чистки бренду. Семантика двох
+// бакетів (`BrandCleanupService`): free-pending (неоплачений) живе коротше,
+// демоутований платний (тариф міг згаснути ненадовго) — довше. Якщо пороги
+// інвертувати, демоутований логотип чистився б РАНІШЕ за free, тихо й без
+// падіння. Тримаємо ту саму fail-fast-дисципліну, що orphan-cleanup і
+// magic-link-TTL: `BRAND_PENDING_CLEANUP_DAYS ≤ BRAND_DEMOTED_CLEANUP_DAYS`.
+export function validateBrandCleanupThresholds(
+    pendingDays: number,
+    demotedDays: number
+): void {
+    if (pendingDays > demotedDays) {
+        throw new Error(
+            `❌ BRAND_PENDING_CLEANUP_DAYS (${pendingDays}) must not exceed ` +
+                `BRAND_DEMOTED_CLEANUP_DAYS (${demotedDays}). Demoted (paid) ` +
+                'logos must get at least as long a grace window as unpaid free uploads.'
+        );
+    }
+}
+
+validateBrandCleanupThresholds(
+    ENV.BRAND_PENDING_CLEANUP_DAYS,
+    ENV.BRAND_DEMOTED_CLEANUP_DAYS
+);

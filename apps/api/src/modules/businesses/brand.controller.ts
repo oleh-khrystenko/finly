@@ -85,16 +85,19 @@ export class BrandController {
 
     /**
      * Прев'ю обох QR із наданим логотипом без активації. Доступне всім рівням.
-     * Окремий низький бакет `qr-preview` (10/min): кожен виклик робить download +
-     * bake + два рендери — важче за звичайний роут. Skip інших named-бакетів,
-     * щоб вони не тіньовили поріг (прецедент `slug-availability`).
+     * Власний бакет `brand-preview` (20/min): кожен виклик робить download +
+     * bake + два рендери — важче за звичайний роут. НЕ ділимо лічильник з
+     * анонімним `qr-preview`, щоб скан з того ж IP не блокував прев'ю платного
+     * клієнта. Skip інших named-бакетів, щоб вони не тіньовили поріг
+     * (прецедент `slug-availability`).
      */
     @Post('preview')
     @HttpCode(HttpStatus.OK)
-    @Throttle({ 'qr-preview': { limit: 10, ttl: 60_000 } })
+    @Throttle({ 'brand-preview': { limit: 20, ttl: 60_000 } })
     @SkipThrottle({
         default: true,
         'public-payment': true,
+        'qr-preview': true,
         'help-chat': true,
         'slug-availability': true,
     })
