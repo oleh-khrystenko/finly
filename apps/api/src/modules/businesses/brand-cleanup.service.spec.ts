@@ -85,18 +85,20 @@ describe('BrandCleanupService', () => {
         return _id;
     }
 
-    function pendingAgeDays(days: number) {
+    // Пороги з test-setup: free=7, demoted=90.
+    function pendingAgeDays(days: number, demoted: boolean) {
         return {
             active: null,
             pending: {
                 ...SLOT,
                 uploadedAt: new Date(Date.now() - days * MS_PER_DAY),
+                demoted,
             },
         };
     }
 
-    it('прибирає stale pending (старше за поріг) + видаляє файли', async () => {
-        const id = await seed(pendingAgeDays(10));
+    it('free-pending старше за 7 днів → прибирається + видаляє файли', async () => {
+        const id = await seed(pendingAgeDays(10, false));
 
         await service.runDailyCleanup();
 
@@ -109,14 +111,34 @@ describe('BrandCleanupService', () => {
         expect(storage.safeDeleteByUrl).toHaveBeenCalledWith(SLOT.bandMarkUrl);
     });
 
-    it('не чіпає свіжий pending (у межах вікна)', async () => {
-        const id = await seed(pendingAgeDays(1));
+    it('free-pending у межах 7 днів → не чіпається', async () => {
+        const id = await seed(pendingAgeDays(1, false));
 
         await service.runDailyCleanup();
 
         const doc = await businessModel.findById(id).lean();
         expect(doc?.brand?.pending).not.toBeNull();
         expect(storage.safeDeleteByUrl).not.toHaveBeenCalled();
+    });
+
+    it('демоутований pending 10 днів → НЕ чіпається (довгий поріг 90)', async () => {
+        const id = await seed(pendingAgeDays(10, true));
+
+        await service.runDailyCleanup();
+
+        const doc = await businessModel.findById(id).lean();
+        expect(doc?.brand?.pending).not.toBeNull();
+        expect(storage.safeDeleteByUrl).not.toHaveBeenCalled();
+    });
+
+    it('демоутований pending старше за 90 днів → прибирається', async () => {
+        const id = await seed(pendingAgeDays(100, true));
+
+        await service.runDailyCleanup();
+
+        const doc = await businessModel.findById(id).lean();
+        expect(doc?.brand?.pending).toBeNull();
+        expect(storage.safeDeleteByUrl).toHaveBeenCalledWith(SLOT.logoUrl);
     });
 
     it('не чіпає active (рендериться публічно)', async () => {

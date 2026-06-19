@@ -40,7 +40,11 @@ describe('BrandMarkCacheService', () => {
         const service = makeService(download);
         const business = businessWith({
             active: null,
-            pending: { ...ACTIVE.active, uploadedAt: new Date() },
+            pending: {
+                ...ACTIVE.active,
+                uploadedAt: new Date(),
+                demoted: false,
+            },
         });
 
         expect(await service.getActiveCenterMark(business)).toBeNull();

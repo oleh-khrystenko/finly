@@ -145,6 +145,15 @@ export const ENV = {
     BRAND_PENDING_CLEANUP_DAYS: getNonNegativeIntEnvVar(
         'BRAND_PENDING_CLEANUP_DAYS'
     ),
+    /**
+     * Sprint 21 — поріг чистки ДЕМОУТОВАНОГО (колись активного, оплаченого)
+     * pending-логотипа після згасання тарифу. Довший за
+     * `BRAND_PENDING_CLEANUP_DAYS`: платник міг передумати ненадовго, даємо більше
+     * часу повернутись (повторна підписка промотує лого назад без перезавантаження).
+     */
+    BRAND_DEMOTED_CLEANUP_DAYS: getNonNegativeIntEnvVar(
+        'BRAND_DEMOTED_CLEANUP_DAYS'
+    ),
 
     ANTHROPIC_API_KEY: getEnvVar('ANTHROPIC_API_KEY'),
 

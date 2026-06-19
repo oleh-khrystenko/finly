@@ -77,12 +77,20 @@ describe('brandSlotSchema', () => {
         ).toBe(false);
     });
 
-    it('pendingBrandSlotSchema вимагає uploadedAt', () => {
+    it('pendingBrandSlotSchema вимагає uploadedAt + demoted', () => {
         expect(pendingBrandSlotSchema.safeParse(VALID_SLOT).success).toBe(false);
+        // uploadedAt без demoted — все ще невалідний.
         expect(
             pendingBrandSlotSchema.safeParse({
                 ...VALID_SLOT,
                 uploadedAt: new Date(),
+            }).success
+        ).toBe(false);
+        expect(
+            pendingBrandSlotSchema.safeParse({
+                ...VALID_SLOT,
+                uploadedAt: new Date(),
+                demoted: false,
             }).success
         ).toBe(true);
     });

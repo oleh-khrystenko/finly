@@ -119,6 +119,8 @@ describe('BrandService', () => {
         expect(result.brand.active).toBeNull();
         expect(result.brand.pending).not.toBeNull();
         expect(result.brand.pending?.uploadedAt).toBeInstanceOf(Date);
+        // Free-завантаження — короткий поріг чистки.
+        expect(result.brand.pending?.demoted).toBe(false);
     });
 
     it('вертикальне зображення → BRAND_LOGO_ASPECT_INVALID', async () => {

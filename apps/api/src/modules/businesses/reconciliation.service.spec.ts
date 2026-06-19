@@ -687,6 +687,8 @@ describe('ReconciliationService (MongoMemoryReplSet)', () => {
             logoUrl: SLOT.logoUrl,
             centerMarkUrl: SLOT.centerMarkUrl,
             bandMarkUrl: SLOT.bandMarkUrl,
+            // Демоутований платний логотип помічений для довгого порогу чистки.
+            demoted: true,
         });
         expect(
             (brand?.pending as { uploadedAt?: Date }).uploadedAt

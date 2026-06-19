@@ -81,7 +81,7 @@ describe('BrandSection', () => {
     it('pending бренд: статус «Очікує оплати» + підказка про авто-застосування', () => {
         renderSection({
             active: null,
-            pending: { ...SLOT, uploadedAt: new Date('2026-06-10') },
+            pending: { ...SLOT, uploadedAt: new Date('2026-06-10'), demoted: false },
         });
         expect(screen.getByText('Очікує оплати')).toBeInTheDocument();
         expect(

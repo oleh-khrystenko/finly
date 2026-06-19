@@ -33,6 +33,7 @@ process.env.ORPHAN_REMINDER_FIRST_DAYS ??= '1';
 process.env.ORPHAN_REMINDER_FINAL_DAYS ??= '6';
 process.env.ORPHAN_CLEANUP_DELETION_DAYS ??= '7';
 process.env.BRAND_PENDING_CLEANUP_DAYS ??= '7';
+process.env.BRAND_DEMOTED_CLEANUP_DAYS ??= '90';
 process.env.ANTHROPIC_API_KEY ??= 'test-anthropic-key';
 process.env.HELP_CHAT_MAX_TOKENS ??= '400';
 process.env.HELP_CHAT_IP_LIMIT ??= '20';

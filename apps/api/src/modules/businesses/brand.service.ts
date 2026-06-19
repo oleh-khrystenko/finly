@@ -139,7 +139,8 @@ export class BrandService {
             ? { active: slot, pending: null }
             : {
                   active: previous?.active ?? null,
-                  pending: { ...slot, uploadedAt: new Date() },
+                  // Free-завантаження без оплати — короткий поріг cron-чистки.
+                  pending: { ...slot, uploadedAt: new Date(), demoted: false },
               };
 
         await this.businessModel

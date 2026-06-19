@@ -361,6 +361,8 @@ export class ReconciliationService {
                             bandMarkUrl: '$brand.active.bandMarkUrl',
                             displayName: '$brand.active.displayName',
                             uploadedAt: '$$NOW',
+                            // Демоутований платний логотип — довгий поріг чистки.
+                            demoted: true,
                         },
                         'brand.active': null,
                     },

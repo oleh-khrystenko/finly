@@ -60,8 +60,18 @@ export const brandSlotSchema = z.object({
 export type BrandSlot = z.infer<typeof brandSlotSchema>;
 
 export const pendingBrandSlotSchema = brandSlotSchema.extend({
-    /** Мітка часу завантаження — cron-чистка orphan pending-логотипів неоплачених. */
+    /** Мітка часу завантаження (або демоції) — база відліку cron-чистки. */
     uploadedAt: z.coerce.date(),
+    /**
+     * Походження pending-слота, від якого залежить поріг cron-чистки:
+     *   - `false` — free-завантаження без оплати (короткий поріг
+     *     `BRAND_PENDING_CLEANUP_DAYS`): не оплатив за вікно — прибираємо.
+     *   - `true` — знятий з `active` при згасанні тарифу (довгий поріг
+     *     `BRAND_DEMOTED_CLEANUP_DAYS`): платник міг передумати ненадовго, даємо
+     *     більше часу повернутись; повторна підписка промотує назад без
+     *     перезавантаження.
+     */
+    demoted: z.boolean(),
 });
 
 export type PendingBrandSlot = z.infer<typeof pendingBrandSlotSchema>;

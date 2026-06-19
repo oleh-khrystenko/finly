@@ -46,15 +46,33 @@ export class BrandCleanupService {
 
     @Cron('0 4 * * *', { timeZone: 'Europe/Kyiv' })
     async runDailyCleanup(): Promise<void> {
-        const cutoff = new Date(
-            Date.now() - ENV.BRAND_PENDING_CLEANUP_DAYS * MS_PER_DAY
+        const now = Date.now();
+        const freeCutoff = new Date(
+            now - ENV.BRAND_PENDING_CLEANUP_DAYS * MS_PER_DAY
+        );
+        const demotedCutoff = new Date(
+            now - ENV.BRAND_DEMOTED_CLEANUP_DAYS * MS_PER_DAY
         );
 
+        // Два бакети з різними порогами: free-завантаження (`demoted !== true` —
+        // охоплює false і legacy-відсутнє) за коротким, демоутований платний
+        // (`demoted: true`) за довгим. `$ne: true` критичний — без нього
+        // legacy-pending без поля ніколи б не чистився.
+        const staleFilter = {
+            $or: [
+                {
+                    'brand.pending.demoted': { $ne: true },
+                    'brand.pending.uploadedAt': { $lt: freeCutoff },
+                },
+                {
+                    'brand.pending.demoted': true,
+                    'brand.pending.uploadedAt': { $lt: demotedCutoff },
+                },
+            ],
+        };
+
         const stale = await this.businessModel
-            .find(
-                { 'brand.pending.uploadedAt': { $lt: cutoff } },
-                { 'brand.pending': 1 }
-            )
+            .find(staleFilter, { 'brand.pending': 1 })
             .lean<StalePendingBrand[]>()
             .exec();
 
@@ -68,14 +86,12 @@ export class BrandCleanupService {
             const pending = biz.brand?.pending;
             if (!pending) continue;
             try {
-                // Claim-first: гасимо лише якщо слот усе ще stale (не промотований
-                // конкурентною реконсиляцією між find і цим записом).
+                // Claim-first: гасимо лише якщо слот усе ще stale за тим самим
+                // правилом (не промотований конкурентною реконсиляцією між find
+                // і цим записом).
                 const res = await this.businessModel
                     .updateOne(
-                        {
-                            _id: biz._id,
-                            'brand.pending.uploadedAt': { $lt: cutoff },
-                        },
+                        { _id: biz._id, ...staleFilter },
                         { $set: { 'brand.pending': null } }
                     )
                     .exec();

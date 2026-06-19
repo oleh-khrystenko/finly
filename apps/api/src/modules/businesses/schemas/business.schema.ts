@@ -52,6 +52,14 @@ class BusinessPendingBrandSlot {
 
     @Prop({ type: Date, required: true })
     uploadedAt!: Date;
+
+    /**
+     * Sprint 21 — `true`, якщо слот демоутований з `active` при згасанні тарифу
+     * (довгий поріг cron-чистки); `false` — free-завантаження без оплати
+     * (короткий поріг). Див. `pendingBrandSlotSchema` у `@finly/types`.
+     */
+    @Prop({ type: Boolean, required: true })
+    demoted!: boolean;
 }
 
 /**
