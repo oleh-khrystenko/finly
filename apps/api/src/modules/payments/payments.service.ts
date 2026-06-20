@@ -1564,7 +1564,10 @@ export class PaymentsService {
         const query = returnPath
             ? `?returnPath=${encodeURIComponent(returnPath)}`
             : '';
-        return `${ENV.WEB_URL}/billing/success${query}`;
+        // WayForPay повертає платника на returnUrl крос-сайтовим POST. Ведемо
+        // його на route-handler `/billing-return` (не на сторінку), який
+        // відповідає 303 на `/billing/success`. Деталі — у тому route-handler-і.
+        return `${ENV.WEB_URL}/billing-return${query}`;
     }
 
     private disabled(): BadRequestException {
