@@ -65,9 +65,6 @@ export class PaymentsCleanupService {
         await this.step('expirePastDueSubscriptions', () =>
             this.expirePastDueSubscriptions()
         );
-        await this.step('expireAbandonedRebinds', () =>
-            this.expireAbandonedRebinds()
-        );
         await this.step('expireOneOffAccess', () => this.expireOneOffAccess());
         // Останнім: добиває reconcile-и, відкладені lock-контенцією/збоями —
         // і давні (минулі прогони), і щойно відкладені кроками вище.
@@ -223,12 +220,6 @@ export class PaymentsCleanupService {
      * Рекурент НЕ знімаємо (`REMOVE`): живі ретраї лишаємо WayForPay — пізній
      * успішний ретрай надішле Approved і відновить підписку (`occurredAt` новіший
      * за `lastProviderEventAt`, тож out-of-order guard пропустить його).
-     *
-     * Чистимо `rebindPendingAt`: re-bind, верифікація якого впала (declined на
-     * новому `orderReference` → `PAST_DUE`, прапорець лишається), потрапляє сюди
-     * раніше за `expireAbandonedRebinds`. Без скидання прапорець завис би
-     * назавжди, а пізніший успішний Approved пішов би у re-bind-гілку і не
-     * повернув би `hasActiveSubscription` у true.
      */
     private async expirePastDueSubscriptions(): Promise<void> {
         await this.expireAndReconcile(
@@ -240,32 +231,8 @@ export class PaymentsCleanupService {
             {
                 'billing.hasActiveSubscription': false,
                 'billing.subscriptionStatus': SUBSCRIPTION_STATUS.UNPAID,
-                'billing.rebindPendingAt': null,
             },
             'past-due subscriptions'
-        );
-    }
-
-    /**
-     * `updateCard` знімає стару рекуренту і чекає привʼязки нової картки,
-     * ставлячи `rebindPendingAt`. Якщо користувач кинув checkout, новий рекурент
-     * так і не підтверджено, а період минув — знімаємо доступ самі (інакше
-     * `hasActiveSubscription` лишився б true без жодного списання). Успішна
-     * привʼязка чистить прапорець, тож сюди потрапляють лише кинуті re-bind-и.
-     */
-    private async expireAbandonedRebinds(): Promise<void> {
-        await this.expireAndReconcile(
-            {
-                'billing.hasActiveSubscription': true,
-                'billing.rebindPendingAt': { $ne: null },
-                'billing.currentPeriodEnd': { $lt: new Date() },
-            },
-            {
-                'billing.hasActiveSubscription': false,
-                'billing.subscriptionStatus': SUBSCRIPTION_STATUS.UNPAID,
-                'billing.rebindPendingAt': null,
-            },
-            'abandoned card re-binds'
         );
     }
 

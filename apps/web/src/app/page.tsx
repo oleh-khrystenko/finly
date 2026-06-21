@@ -1,6 +1,8 @@
 import { Metadata } from 'next';
 
 import { QrLandingBlock } from '@/features/qr-landing-preview';
+import { ENV } from '@/shared/config';
+import { JsonLd } from '@/shared/seo/JsonLd';
 import { fetchMetadata } from '@/shared/seo/metadata';
 import { LandingBanks } from '@/widgets/landing-banks';
 import { LandingClosingCta } from '@/widgets/landing-closing-cta';
@@ -26,8 +28,44 @@ export function generateMetadata(): Metadata {
 }
 
 export default function HomePage() {
+    const baseUrl = ENV.NEXT_PUBLIC_BASE_URL.replace(/\/$/, '');
+    const organizationId = `${baseUrl}/#organization`;
+    const softwareId = `${baseUrl}/#software`;
+
     return (
         <>
+            <JsonLd
+                data={{
+                    '@context': 'https://schema.org',
+                    '@graph': [
+                        {
+                            '@type': 'Organization',
+                            '@id': organizationId,
+                            name: 'Finly',
+                            url: baseUrl,
+                            logo: `${baseUrl}/logo/light-theme.svg`,
+                            contactPoint: {
+                                '@type': 'ContactPoint',
+                                email: 'support@finly.com.ua',
+                                contactType: 'customer support',
+                                availableLanguage: 'uk',
+                            },
+                        },
+                        {
+                            '@type': 'SoftwareApplication',
+                            '@id': softwareId,
+                            name: 'Finly',
+                            url: baseUrl,
+                            applicationCategory: 'BusinessApplication',
+                            operatingSystem: 'Web',
+                            inLanguage: 'uk-UA',
+                            provider: { '@id': organizationId },
+                            description:
+                                'SaaS-сервіс для українських ФОП і бухгалтерів: платіжні сторінки, рахунки та QR-коди за стандартом НБУ.',
+                        },
+                    ],
+                }}
+            />
             <Header />
             <LandingNavSetup />
             <main>

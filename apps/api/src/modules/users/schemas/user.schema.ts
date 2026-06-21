@@ -184,11 +184,10 @@ export class User {
         scheduledPlanCode: string | null;
         scheduledChangeDate: Date | null;
         /**
-         * Set when `updateCard` tears down the old recurring and awaits a new
-         * card binding; cleared by the first approved webhook on the new
-         * orderReference. Lets the cleanup cron expire abandoned re-binds whose
-         * period already lapsed (old recurring gone, new one never confirmed),
-         * instead of leaving `hasActiveSubscription` true indefinitely.
+         * Vestigial. The card re-bind flow (updateCard) was dropped for the MVP
+         * because it forced a full re-charge on WayForPay. Kept as an always-null
+         * column to avoid a fixture/build-state cascade; removed together with the
+         * planned self-managed billing redesign that reworks this subdocument.
          */
         rebindPendingAt: Date | null;
         /**

@@ -24,7 +24,6 @@ export {
     createOneOffCheckout,
     cancelSubscription,
     changePlan,
-    updateCard,
     listPayments,
 } from './payments';
 export {

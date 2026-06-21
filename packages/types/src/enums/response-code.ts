@@ -24,7 +24,7 @@ export const RESPONSE_CODE = {
     SUBSCRIPTION_OPERATION_FAILED: 'SUBSCRIPTION_OPERATION_FAILED',
     /**
      * Sprint 17 — конкурентна білінг-мутація. Усі write-операції над підпискою
-     * (checkout, cancel, change-plan, update-card, reset) серіалізовані
+     * (checkout, cancel, change-plan) серіалізовані
      * per-user Redis-локом: WayForPay charge/refund/CHANGE неідемпотентні, тож
      * два паралельні запити (дві вкладки) інакше задвоїли б списання чи
      * повернення. Lock зайнятий → цей код. Recovery: дочекатись і повторити.

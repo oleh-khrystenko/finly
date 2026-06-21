@@ -30,7 +30,6 @@ import { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
 import {
     CancelSubscriptionDto,
     ChangePlanDto,
-    UpdateCardDto,
 } from './dto/manage-subscription.dto';
 import type { PaymentRecordLean } from './schemas/payment-record.schema';
 
@@ -100,19 +99,6 @@ export class PaymentsController {
         const result = await this.paymentsService.changePlan(
             user._id.toString(),
             dto
-        );
-        return { data: result };
-    }
-
-    @UseGuards(JwtActiveGuard)
-    @Post('subscription/update-card')
-    async updateCard(
-        @CurrentUser() user: UserDocument,
-        @Body() dto: UpdateCardDto
-    ): Promise<{ data: { checkoutUrl: string } }> {
-        const result = await this.paymentsService.updateCard(
-            user._id.toString(),
-            dto.returnPath
         );
         return { data: result };
     }

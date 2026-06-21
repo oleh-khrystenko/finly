@@ -1127,45 +1127,6 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
         ).toBeNull();
     });
 
-    // ── Re-bind картки (rebindPendingAt) ─────────────────────────────────
-
-    it('Approved при rebindPendingAt: верифікація картки, без руху періоду і без платежу', async () => {
-        const periodEnd = new Date(Date.now() + 12 * 86_400_000);
-        const user = await createUser({
-            planCode: 'bookkeeper',
-            subscriptionStatus: SUBSCRIPTION_STATUS.ACTIVE,
-            hasActiveSubscription: true,
-            currentPeriodEnd: periodEnd,
-            rebindPendingAt: new Date(),
-        });
-        const newRef = buildSubscriptionOrderReference(user._id.toString());
-        await userModel.findByIdAndUpdate(user._id, {
-            $set: { 'billing.orderReference': newRef },
-        });
-
-        await feed(
-            approvedEvent(newRef, {
-                recToken: 'tok_rebound',
-                cardMask: '55****2222',
-            })
-        );
-
-        const updated = await userModel.findById(user._id).lean();
-        // Прапорець знято, токен/маску оновлено.
-        expect(updated!.billing!.rebindPendingAt).toBeNull();
-        expect(updated!.billing!.recToken).toBe('tok_rebound');
-        expect(updated!.billing!.cardMask).toBe('55****2222');
-        // Це верифікація, не списання: період НЕ продовжено, статус не змінено.
-        expect(updated!.billing!.currentPeriodEnd!.getTime()).toBe(
-            periodEnd.getTime()
-        );
-        expect(updated!.billing!.subscriptionStatus).toBe(
-            SUBSCRIPTION_STATUS.ACTIVE
-        );
-        // Платіж в історію не пишеться (грошового руху не було).
-        expect(await paymentRecordModel.countDocuments({})).toBe(0);
-    });
-
     // ── Crash-orphan pending подія ───────────────────────────────────────
 
     it('crash-orphan pending не ack-ається і не переобробляється (чекає sweep + передоставку)', async () => {

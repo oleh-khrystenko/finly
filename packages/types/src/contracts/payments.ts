@@ -314,12 +314,6 @@ export const ChangePlanSchema = z.object({
 
 export type ChangePlan = z.infer<typeof ChangePlanSchema>;
 
-export const UpdateCardSchema = z.object({
-    returnPath: z.string().startsWith('/').max(256).optional(),
-});
-
-export type UpdateCard = z.infer<typeof UpdateCardSchema>;
-
 /**
  * Public billing shape, що повертається у `getMe`. НЕ містить provider-secret
  * полів (`recToken`) і внутрішніх ordering-полів (`orderReference`,

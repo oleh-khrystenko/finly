@@ -31,7 +31,7 @@ import {
     resolveQrSizePxFromQuery,
 } from '../qr/qr-image-request';
 import { QrService } from '../qr/qr.service';
-import type { BusinessDocument } from './schemas/business.schema';
+import { Business, type BusinessDocument } from './schemas/business.schema';
 import { BrandMarkCacheService } from './brand-mark-cache.service';
 import { buildPublicBrandView } from './brand-public-view';
 import { BusinessesService } from './businesses.service';
@@ -63,11 +63,88 @@ import { BusinessesService } from './businesses.service';
 export class PublicBusinessesController {
     constructor(
         private readonly businessesService: BusinessesService,
+        @InjectModel(Business.name)
+        private readonly businessModel: Model<BusinessDocument>,
         @InjectModel(Account.name)
         private readonly accountModel: Model<AccountDocument>,
         private readonly qrService: QrService,
         private readonly brandMarkCache: BrandMarkCacheService
     ) {}
+
+    /**
+     * Sitemap для opt-in public payment pages. Інвойси не включаємо: вони
+     * hardcoded `noindex`, одноразові й можуть містити чутливий purpose.
+     *
+     * Root business URL включається тільки коли він реально рендериться
+     * (0 або 2+ рахунки). Для бізнесу з рівно одним account canonical surface
+     * фактично per-account URL, бо root дає умовний 307 redirect.
+     */
+    @SkipOnboarding()
+    @Get('sitemap.xml')
+    @Header('Content-Type', 'application/xml; charset=utf-8')
+    @Header('Cache-Control', PUBLIC_PAGE_CACHE_CONTROL)
+    async getSitemap(): Promise<string> {
+        const businesses = await this.businessModel
+            .find({
+                seoIndexEnabled: true,
+                accessBlockedAt: null,
+                deletedAt: null,
+            })
+            .select('_id slug updatedAt')
+            .sort({ createdAt: -1 })
+            .lean<
+                Array<{
+                    _id: unknown;
+                    slug: string;
+                    updatedAt?: Date;
+                }>
+            >()
+            .exec();
+        const businessIds = businesses.map((business) => business._id);
+        const accounts = await this.accountModel
+            .find({
+                businessId: { $in: businessIds },
+                deletedAt: null,
+            })
+            .select('businessId slug updatedAt')
+            .sort({ createdAt: 1 })
+            .lean<
+                Array<{
+                    businessId: unknown;
+                    slug: string;
+                    updatedAt?: Date;
+                }>
+            >()
+            .exec();
+        const accountsByBusiness = new Map<string, typeof accounts>();
+        for (const account of accounts) {
+            const key = String(account.businessId);
+            const bucket = accountsByBusiness.get(key) ?? [];
+            bucket.push(account);
+            accountsByBusiness.set(key, bucket);
+        }
+
+        const baseUrl = ENV.PAY_PUBLIC_URL.replace(/\/$/, '');
+        const urls: Array<{ loc: string; lastmod?: Date }> = [];
+        for (const business of businesses) {
+            const businessAccounts =
+                accountsByBusiness.get(String(business._id)) ?? [];
+            if (businessAccounts.length !== 1) {
+                urls.push({
+                    loc: `${baseUrl}/${business.slug}`,
+                    lastmod: business.updatedAt,
+                });
+            }
+            for (const account of businessAccounts) {
+                urls.push({
+                    loc: `${baseUrl}/${business.slug}/${account.slug}`,
+                    lastmod: account.updatedAt ?? business.updatedAt,
+                });
+            }
+        }
+
+        return buildSitemapXml(urls);
+    }
 
     @SkipOnboarding()
     @Get(':slug')
@@ -150,4 +227,27 @@ export class PublicBusinessesController {
         }
         return business;
     }
+}
+
+export function buildSitemapXml(
+    urls: Array<{ loc: string; lastmod?: Date }>
+): string {
+    const entries = urls
+        .map(({ loc, lastmod }) => {
+            const lastmodTag = lastmod
+                ? `\n    <lastmod>${lastmod.toISOString()}</lastmod>`
+                : '';
+            return `  <url>\n    <loc>${escapeXml(loc)}</loc>${lastmodTag}\n  </url>`;
+        })
+        .join('\n');
+    return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries}\n</urlset>\n`;
+}
+
+function escapeXml(value: string): string {
+    return value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
 }

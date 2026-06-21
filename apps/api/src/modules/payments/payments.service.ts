@@ -197,7 +197,7 @@ export class PaymentsService {
             // перезаписує billing.orderReference, тож пізніше успішне списання
             // старого рекуренту прийшло б вебхуком зі stale-reference і було б
             // проігнороване — гроші списані, доступ не зарахований. Тому перед
-            // перезаписом знімаємо старий рекурент (симетрично updateCard).
+            // перезаписом знімаємо старий рекурент.
             // Guard на recToken: рекурент існує лише після Approved-привʼязки;
             // без нього (кинутий INCOMPLETE-checkout) REMOVE гарантовано падав
             // би і засмічував retry-чергу.
@@ -605,76 +605,6 @@ export class PaymentsService {
         return { scheduled: false };
     }
 
-    async updateCard(
-        userId: string,
-        returnPath?: string
-    ): Promise<{ checkoutUrl: string }> {
-        return this.withBillingLock(userId, () =>
-            this.updateCardLocked(userId, returnPath)
-        );
-    }
-
-    private async updateCardLocked(
-        userId: string,
-        returnPath?: string
-    ): Promise<{ checkoutUrl: string }> {
-        const { user, billing } = await this.requireActiveSubscription(userId);
-        const oldOrderReference = billing.orderReference!;
-
-        const plan = findSubscriptionPlan(billing.planCode ?? '');
-        if (!plan) {
-            throw new BadRequestException({
-                code: RESPONSE_CODE.INVALID_PLAN,
-                message: 'Subscription plan no longer exists',
-            });
-        }
-
-        // Маркер незавершеного re-bind ДО зняття старого рекуренту: збій
-        // будь-якого з наступних кроків (REMOVE, checkout-виклик, фінальний
-        // $set) інакше лишав би hasActiveSubscription=true без рекуренту і поза
-        // всіма sweep-ами назавжди — `expireAbandonedRebinds` ловить лише
-        // rebindPendingAt ≠ null. Конкурентний вебхук не вклиниться: handleWebhook
-        // тримає той самий білінг-лок. Успішна привʼязка (Approved на новому
-        // orderReference) чистить маркер.
-        await this.userModel.findByIdAndUpdate(userId, {
-            $set: { 'billing.rebindPendingAt': new Date() },
-        });
-
-        // Re-bind = cancel old + create new зі збереженням плану і дати
-        // наступного списання (без негайної повторної оплати поточного періоду).
-        await this.removeRecurringWithRetry(oldOrderReference, 'card_rebind');
-
-        const newOrderReference = buildSubscriptionOrderReference(userId);
-        const result = await this.paymentProvider.createSubscriptionCheckout({
-            userId,
-            userEmail: user.email,
-            orderReference: newOrderReference,
-            planName: this.planLabel(plan.code),
-            amount: plan.priceAmount,
-            currency: plan.currency,
-            interval: plan.interval,
-            firstChargeDate: billing.currentPeriodEnd ?? undefined,
-            serviceUrl: this.serviceUrl(),
-            returnUrl: this.returnUrl(returnPath),
-        });
-
-        await this.userModel.findByIdAndUpdate(userId, {
-            $set: {
-                'billing.orderReference': newOrderReference,
-                'billing.recToken': null,
-                'billing.cardMask': null,
-                // Стара рекурента знята, нова ще не підтверджена. Прапорець дає
-                // cleanup-cron експайрити доступ, якщо користувач кине re-bind
-                // і період мине (інакше hasActiveSubscription лишився б true
-                // назавжди без жодного списання). Чистить перший approved-вебхук
-                // на новому orderReference.
-                'billing.rebindPendingAt': new Date(),
-            },
-        });
-
-        return { checkoutUrl: result.checkoutUrl };
-    }
-
     // ── Payment history ──────────────────────────────────────────────────
 
     async listPayments(
@@ -995,23 +925,6 @@ export class PaymentsService {
                     session
                 );
             }
-            return;
-        }
-
-        // Re-bind картки: перший Approved на новому orderReference після
-        // updateCard. Це card-verification, не списання (реальне списання — на
-        // межі періоду), тож період не рухаємо, executions не нараховуємо і
-        // платіж не пишемо — лише оновлюємо токен/маску і знімаємо прапорець.
-        // Без цієї гілки re-bind класифікувався б як charge: подвоїв би
-        // executions і продовжив період на повний інтервал.
-        if (billing.rebindPendingAt != null) {
-            const rebindSet: Record<string, unknown> = {
-                'billing.providerSubscriptionStatus': event.transactionStatus,
-                'billing.rebindPendingAt': null,
-            };
-            if (event.recToken) rebindSet['billing.recToken'] = event.recToken;
-            if (event.cardMask) rebindSet['billing.cardMask'] = event.cardMask;
-            await this.applyBillingUpdate(userId, event, rebindSet, session);
             return;
         }
 

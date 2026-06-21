@@ -20,11 +20,18 @@ import { NextRequest, NextResponse } from 'next/server';
  */
 function redirectToSuccess(request: NextRequest): NextResponse {
     const returnPath = request.nextUrl.searchParams.get('returnPath');
-    const target = new URL('/billing/success', request.url);
-    if (returnPath) {
-        target.searchParams.set('returnPath', returnPath);
-    }
-    return NextResponse.redirect(target, 303);
+    // Відносний Location, а не absolute(request.url): у standalone-режимі за
+    // reverse-proxy `request.url` віддає внутрішній origin контейнера (Docker
+    // container-id), а не публічний host. Браузер резолвить відносний редирект
+    // проти адреси, на яку зробив запит, тож хост лишається коректним за
+    // будь-яким проксі (ngrok локально, nginx на проді).
+    const location = returnPath
+        ? `/billing/success?returnPath=${encodeURIComponent(returnPath)}`
+        : '/billing/success';
+    return new NextResponse(null, {
+        status: 303,
+        headers: { Location: location },
+    });
 }
 
 export function POST(request: NextRequest): NextResponse {

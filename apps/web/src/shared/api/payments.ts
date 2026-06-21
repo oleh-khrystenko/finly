@@ -59,17 +59,6 @@ export async function changePlan(
     return data.data;
 }
 
-export async function updateCard(
-    returnPath?: string
-): Promise<{ checkoutUrl: string }> {
-    const { data } = await apiClient.post<{
-        data: { checkoutUrl: string };
-    }>('/payments/subscription/update-card', {
-        ...(returnPath && { returnPath }),
-    });
-    return data.data;
-}
-
 export async function listPayments(limit?: number): Promise<PaymentRecord[]> {
     const { data } = await apiClient.get<{ data: PaymentRecord[] }>(
         '/payments/payments',

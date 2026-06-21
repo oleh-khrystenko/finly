@@ -6,7 +6,9 @@ import {
     PublicAccountView,
     loadPublicAccountView,
 } from '@/features/account-public';
+import { ENV } from '@/shared/config/env';
 import { isPublicHost } from '@/shared/config/publicHosts';
+import { buildMetadata } from '@/shared/seo/metadata';
 
 /**
  * Sprint 9 §SP-4 — публічна per-account вивіска
@@ -55,9 +57,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const bankLabel =
         view.bankCode !== null ? `${BANK_LABEL[view.bankCode]} ` : '';
     const title = `Оплата на ${businessLabel} (${bankLabel}${view.ibanMask}) — Finly`;
+    const description = `Сторінка для оплати на ${businessLabel}. Оберіть банк і завершіть платіж у мобільному додатку.`;
+    const canonicalUrl = `${ENV.NEXT_PUBLIC_PAY_PUBLIC_URL.replace(/\/$/, '')}/${view.business.slug}/${view.slug}`;
     return {
-        title,
-        description: `Сторінка для оплати на ${businessLabel}. Оберіть банк і завершіть платіж у мобільному додатку.`,
+        ...buildMetadata({
+            title,
+            description,
+            canonicalUrl,
+        }),
         robots: view.business.seoIndexEnabled
             ? { index: true, follow: true }
             : { index: false, follow: false },

@@ -250,13 +250,12 @@ describe('PaymentsCleanupService (in-memory Mongo)', () => {
         expect(reconciledIds()).not.toContain(active._id.toString());
     });
 
-    it('past-due за межею: UNPAID + rebindPendingAt чиститься', async () => {
+    it('past-due за межею: UNPAID', async () => {
         const user = await createUser({
             planCode: 'bookkeeper',
             hasActiveSubscription: true,
             subscriptionStatus: SUBSCRIPTION_STATUS.PAST_DUE,
             currentPeriodEnd: new Date(Date.now() - DAY_MS),
-            rebindPendingAt: new Date(),
         });
 
         await service.runDailyCleanup();
@@ -266,27 +265,7 @@ describe('PaymentsCleanupService (in-memory Mongo)', () => {
             SUBSCRIPTION_STATUS.UNPAID
         );
         expect(updated!.billing!.hasActiveSubscription).toBe(false);
-        expect(updated!.billing!.rebindPendingAt).toBeNull();
         expect(reconciledIds()).toContain(user._id.toString());
-    });
-
-    it('кинутий re-bind за межею періоду: доступ знято', async () => {
-        const user = await createUser({
-            planCode: 'brand',
-            hasActiveSubscription: true,
-            subscriptionStatus: SUBSCRIPTION_STATUS.ACTIVE,
-            currentPeriodEnd: new Date(Date.now() - DAY_MS),
-            rebindPendingAt: new Date(Date.now() - 2 * DAY_MS),
-        });
-
-        await service.runDailyCleanup();
-
-        const updated = await userModel.findById(user._id).lean();
-        expect(updated!.billing!.hasActiveSubscription).toBe(false);
-        expect(updated!.billing!.subscriptionStatus).toBe(
-            SUBSCRIPTION_STATUS.UNPAID
-        );
-        expect(updated!.billing!.rebindPendingAt).toBeNull();
     });
 
     // ── retryPendingReconciles ───────────────────────────────────────────

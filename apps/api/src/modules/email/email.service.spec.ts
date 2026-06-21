@@ -66,6 +66,23 @@ describe('EmailService', () => {
             expect(html).toContain('lang="uk"');
         });
 
+        it('renders current brand colors and no legacy social links', async () => {
+            await emailService.sendMagicLink({
+                email,
+                token,
+                purpose: 'login',
+            });
+
+            const html = getRenderedHtml();
+            expect(html).toContain('background-color:#F8F7F3');
+            expect(html).toContain('background-color:#00733E');
+            expect(html).toContain('finly.com.ua');
+            expect(html).not.toContain('LinkedIn');
+            expect(html).not.toContain('GitHub');
+            expect(html).not.toContain('linkedin.com');
+            expect(html).not.toContain('github.com');
+        });
+
         it('should send register email', async () => {
             await emailService.sendMagicLink({
                 email,

@@ -1,7 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { toast } from 'sonner';
+import { useMemo } from 'react';
 import { CreditCard } from 'lucide-react';
 import {
     SUBSCRIPTION_STATUS,
@@ -9,9 +8,6 @@ import {
     type UserBilling,
 } from '@finly/types';
 import { useAuthStore } from '@/entities/user';
-import { updateCard } from '@/shared/api/payments';
-import { getApiMessage } from '@/shared/api/mapApiCode';
-import { extractApiErrorCode } from '@/shared/api';
 import { formatLocalDate } from '@/shared/lib';
 import UiButton from '@/shared/ui/UiButton';
 import { useChangePlanDialogStore } from './changePlanDialogStore';
@@ -46,7 +42,6 @@ export default function ManageSubscription({
     const billing = useAuthStore((s) => s.user?.billing ?? null);
     const openChangePlan = useChangePlanDialogStore((s) => s.open);
     const openCancel = useCancelSubscriptionDialogStore((s) => s.open);
-    const [cardLoading, setCardLoading] = useState(false);
 
     // Перезавантаження списку списань привʼязане до зміни стану підписки —
     // після cancel/change/re-bind. Прямий токен замість окремого
@@ -76,17 +71,6 @@ export default function ManageSubscription({
         billing.subscriptionStatus === SUBSCRIPTION_STATUS.PAST_DUE;
     const planName = planNameOf(billing.planCode);
 
-    const handleUpdateCard = async () => {
-        setCardLoading(true);
-        try {
-            const { checkoutUrl } = await updateCard('/billing');
-            window.location.assign(checkoutUrl);
-        } catch (err) {
-            toast.error(getApiMessage(extractApiErrorCode(err), 'payments'));
-            setCardLoading(false);
-        }
-    };
-
     return (
         <section className="space-y-5">
             <h2 className="text-foreground text-2xl font-bold">
@@ -95,8 +79,9 @@ export default function ManageSubscription({
 
             {isPastDue && (
                 <div className="border-destructive/30 bg-destructive/10 text-destructive rounded-lg border p-4 text-sm">
-                    Останнє списання не пройшло. Оновіть картку, щоб зберегти
-                    доступ після завершення поточного періоду.
+                    Останнє списання не пройшло. Доступ діятиме до кінця
+                    оплаченого періоду, після чого підписку треба буде оформити
+                    заново.
                 </div>
             )}
 
@@ -160,14 +145,6 @@ export default function ManageSubscription({
                             Змінити план
                         </UiButton>
                     )}
-                    <UiButton
-                        variant="outline"
-                        size="md"
-                        onClick={handleUpdateCard}
-                        loading={cardLoading}
-                    >
-                        Оновити картку
-                    </UiButton>
                     {!billing.cancelAtPeriodEnd && (
                         <UiButton
                             variant="destructive-outline"

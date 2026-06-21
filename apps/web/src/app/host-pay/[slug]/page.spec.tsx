@@ -13,6 +13,19 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import type { PublicBusinessView as PublicBusinessViewData } from '@finly/types';
 
+jest.mock('@/shared/config', () => ({
+    ENV: {
+        NEXT_PUBLIC_BASE_URL: 'https://finly.com.ua',
+        NEXT_PUBLIC_PAY_PUBLIC_URL: 'https://pay.finly.com.ua',
+    },
+}));
+
+jest.mock('@/shared/config/env', () => ({
+    ENV: {
+        NEXT_PUBLIC_PAY_PUBLIC_URL: 'https://pay.finly.com.ua',
+    },
+}));
+
 const mockHeaders = jest.fn();
 const mockNotFound = jest.fn(() => {
     throw new Error('NEXT_NOT_FOUND');
@@ -260,6 +273,18 @@ describe('generateMetadata — SEO robots (§E3)', () => {
             params: Promise.resolve({ slug: 'IvanEnko' }),
         });
         expect(meta.title).toBe('Оплата на ФОП Іваненко — Finly');
+    });
+
+    it('adds canonical and social metadata on pay host', async () => {
+        mockLoadPublicView.mockResolvedValue(makeView());
+        const meta = await generateMetadata({
+            params: Promise.resolve({ slug: 'IvanEnko' }),
+        });
+        expect(meta.alternates?.canonical).toBe(
+            'https://pay.finly.com.ua/IvanEnko'
+        );
+        expect(meta.openGraph?.url).toBe('https://pay.finly.com.ua/IvanEnko');
+        expect(meta.twitter?.card).toBe('summary_large_image');
     });
 
     it('not found → fallback title + noindex (запобігаємо індексацію 404)', async () => {
