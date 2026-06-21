@@ -24,12 +24,12 @@ import {
     type ChangePlan,
     type CreateCheckoutSession,
     type PaymentRecordType,
+    type SubscriptionPlanCode,
 } from '@finly/types';
 import { ENV } from '../../config/env';
 import {
     IPaymentProvider,
     PAYMENT_PROVIDER,
-    type ChargeResult,
     type SubscriptionChange,
 } from './interfaces/payment-provider.interface';
 import { User, UserDocument } from '../users/schemas/user.schema';
@@ -59,6 +59,7 @@ import {
 import {
     ORDER_KIND,
     buildOneOffOrderReference,
+    buildProrationOrderReference,
     buildSubscriptionOrderReference,
     parseOrderReference,
     type ParsedOrderReference,
@@ -408,6 +409,14 @@ export class PaymentsService {
                     if (!result.success) {
                         // Провайдер явно відхилив: гроші не рухались — безпечно
                         // відкотити мітку, повтор спробує знову.
+                        this.logger.warn(
+                            `Refund declined for user ${userId} ` +
+                                `(order ${lastCharge.orderReference}, ` +
+                                `amount ${refundAmount} ` +
+                                `${billing.currency ?? BILLING_CURRENCY}): ` +
+                                `reasonCode=${result.reasonCode ?? '?'} ` +
+                                `reason=${result.reason ?? '?'}`
+                        );
                         await this.paymentRecordModel.updateOne(
                             { _id: lastCharge._id },
                             {
@@ -448,7 +457,7 @@ export class PaymentsService {
     async changePlan(
         userId: string,
         dto: ChangePlan
-    ): Promise<{ scheduled: boolean }> {
+    ): Promise<{ scheduled: boolean; checkoutUrl?: string }> {
         return this.withBillingLock(userId, () =>
             this.changePlanLocked(userId, dto)
         );
@@ -457,8 +466,8 @@ export class PaymentsService {
     private async changePlanLocked(
         userId: string,
         dto: ChangePlan
-    ): Promise<{ scheduled: boolean }> {
-        const { billing } = await this.requireActiveSubscription(userId);
+    ): Promise<{ scheduled: boolean; checkoutUrl?: string }> {
+        const { user, billing } = await this.requireActiveSubscription(userId);
         const orderReference = billing.orderReference!;
 
         const current = findSubscriptionPlan(billing.planCode ?? '');
@@ -493,6 +502,8 @@ export class PaymentsService {
                     'billing.planCode': target.code,
                     'billing.scheduledPlanCode': null,
                     'billing.scheduledChangeDate': null,
+                    'billing.pendingUpgradePlanCode': null,
+                    'billing.pendingUpgradeOrderReference': null,
                 },
             });
             return { scheduled: false };
@@ -514,21 +525,20 @@ export class PaymentsService {
                 $set: {
                     'billing.scheduledPlanCode': target.code,
                     'billing.scheduledChangeDate': billing.currentPeriodEnd,
+                    'billing.pendingUpgradePlanCode': null,
+                    'billing.pendingUpgradeOrderReference': null,
                 },
             });
             return { scheduled: true };
         }
 
-        // Upgrade — одразу. Спершу тиха proration-доплата за збереженим токеном;
-        // ТІЛЬКИ після підтвердженої оплати піднімаємо рекурент і нараховуємо
-        // executions. Без токена silent-доплата неможлива.
-        if (!billing.recToken) {
-            throw new BadRequestException({
-                code: RESPONSE_CODE.PRORATION_PAYMENT_FAILED,
-                message: 'No saved card token for proration',
-            });
-        }
-
+        // Upgrade — негайний, але доплату за залишок періоду НЕ списуємо тихо за
+        // токеном: WayForPay-CHARGE за recToken упирається в 3DS ("Wait 3ds
+        // data"), а пройти його у фоновому server-to-server виклику нема де. Тому
+        // різницю збираємо редиректом на хостовану сторінку WayForPay (там 3DS
+        // працює, як і при першій оплаті). Апгрейд (CHANGE рекуренту + planCode)
+        // застосовує вебхук ТІЛЬКИ після підтвердженої оплати — до того доступ
+        // не піднімаємо (інакше апгрейд був би безкоштовним при кинутій оплаті).
         const ratio = remainingRatio(
             billing.currentPeriodEnd,
             this.planInterval(billing.planCode)
@@ -537,72 +547,51 @@ export class PaymentsService {
             (target.priceAmount - currentPrice) * ratio
         );
 
-        let prorationRef: string | null = null;
-        let prorationCharge: ChargeResult | null = null;
-        if (prorationAmount > 0) {
-            prorationRef = `fin-prorate-${userId}-${Date.now().toString(36)}`;
-            prorationCharge = await this.paymentProvider.chargeByToken({
-                orderReference: prorationRef,
-                recToken: billing.recToken,
-                amount: prorationAmount,
-                currency: target.currency,
-                description: `Доплата за апгрейд плану ${this.planLabel(target.code)}`,
-            });
-            if (!prorationCharge.success) {
-                throw new BadRequestException({
-                    code: RESPONSE_CODE.PRORATION_PAYMENT_FAILED,
-                    message: 'Proration charge declined',
-                });
-            }
-        }
-
-        // Після успішного списання БУДЬ-ЯКИЙ збій (запис платежу чи CHANGE) має
-        // повернути доплату. Інакше повторний апгрейд згенерував би новий
-        // orderReference і списав різницю вдруге, а користувач лишився б зі
-        // сплаченою, але незастосованою доплатою (план/рекурент старі). Тільки
-        // після успішного CHANGE піднімаємо план.
-        try {
-            if (prorationRef && prorationCharge) {
-                await this.recordPayment({
-                    userId,
-                    orderReference: prorationRef,
-                    type: PAYMENT_RECORD_TYPE.PRORATION,
-                    amount: prorationAmount,
-                    currency: target.currency,
-                    status: PAYMENT_RECORD_STATUS.APPROVED,
-                    providerTransactionId: prorationCharge.transactionId,
-                    cardMask: prorationCharge.cardMask ?? billing.cardMask,
-                });
-            }
+        if (prorationAmount <= 0) {
+            // На самій межі періоду доплата округлюється до нуля — збирати нема
+            // що, застосовуємо апгрейд одразу (CHANGE рекуренту + planCode).
             await this.changeRecurringOrThrow(orderReference, {
                 amount: target.priceAmount,
                 currency: target.currency,
                 interval: target.interval,
             });
-        } catch (error) {
-            if (prorationRef && prorationAmount > 0) {
-                await this.refundProration(
-                    prorationRef,
-                    prorationAmount,
-                    target.currency
-                );
-            }
-            throw error;
+            await this.userModel.findByIdAndUpdate(userId, {
+                $set: {
+                    'billing.planCode': target.code,
+                    'billing.scheduledPlanCode': null,
+                    'billing.scheduledChangeDate': null,
+                    'billing.pendingUpgradePlanCode': null,
+                    'billing.pendingUpgradeOrderReference': null,
+                },
+            });
+            await this.reconcileSafe(userId);
+            return { scheduled: false };
         }
 
-        const update: Record<string, unknown> = {
-            'billing.planCode': target.code,
-            'billing.scheduledPlanCode': null,
-            'billing.scheduledChangeDate': null,
-        };
-        await this.userModel.findByIdAndUpdate(userId, { $set: update });
+        const prorationRef = buildProrationOrderReference(userId, target.code);
+        // Маркер наміру: вебхук застосує апгрейд лише на Approved саме цього
+        // orderReference (захист від застосування оплати кинутого/застарілого
+        // checkout-у). Виставляємо ДО створення інвойсу — щоб подія не могла
+        // приземлитись раніше за маркер.
+        await this.userModel.findByIdAndUpdate(userId, {
+            $set: {
+                'billing.pendingUpgradePlanCode': target.code,
+                'billing.pendingUpgradeOrderReference': prorationRef,
+            },
+        });
 
-        // Рівень міг зрости (brand→bookkeeper) — знімаємо блокування з бізнесів
-        // у межах нового рівня. Downgrade scheduled-шлях reconcile не потребує:
-        // план перемкнеться на межі через renewal-вебхук, який reconcile сам.
-        await this.reconcileSafe(userId);
+        const checkout = await this.paymentProvider.createOneOffCheckout({
+            userId,
+            userEmail: user.email,
+            orderReference: prorationRef,
+            productName: `Доплата за апгрейд плану ${this.planLabel(target.code)}`,
+            amount: prorationAmount,
+            currency: target.currency,
+            serviceUrl: this.serviceUrl(),
+            returnUrl: this.returnUrl(dto.returnPath),
+        });
 
-        return { scheduled: false };
+        return { scheduled: false, checkoutUrl: checkout.checkoutUrl };
     }
 
     // ── Payment history ──────────────────────────────────────────────────
@@ -700,17 +689,16 @@ export class PaymentsService {
             return false;
         }
 
-        // Усі side-effects події + перехід webhook-події pending→applied — в
-        // одній транзакції. Flip статусу = атомарний commit-маркер: грант
-        // доступу, billing-update і payment-record комітяться РАЗОМ зі статусом
-        // 'applied' або не комітяться зовсім. Частковий збій (напр. billing-write
-        // кинув після payment-record) відкочує все, лишає подію 'pending', і
-        // catch її видаляє → передоставка WayForPay переобробляє з нуля. Без
-        // транзакції out-of-order CAS на lastProviderEventAt заблокував би
-        // повторний грант, і оплачений доступ губився б назавжди.
-        const session = await this.connection.startSession();
-        try {
-            await session.withTransaction(async () => {
+        // Proration-доплата (апгрейд) має власний шлях: вимагає зовнішнього
+        // CHANGE рекуренту, який не можна тримати всередині Mongo-TX.
+        if (parsed.kind === ORDER_KIND.PRORATION) {
+            await this.applyProrationEvent(
+                event,
+                parsed.targetPlanCode,
+                userId
+            );
+        } else {
+            await this.applyInWebhookTx(event, async (session) => {
                 if (parsed.kind === ORDER_KIND.ONE_OFF) {
                     await this.applyOneOffTransaction(
                         event,
@@ -725,6 +713,33 @@ export class PaymentsService {
                         session
                     );
                 }
+            });
+        }
+        // Доступ міг піднятись (активація підписки / грант one-off / апгрейд) —
+        // знімаємо блокування з бізнесів у межах нового рівня. Після commit-у TX,
+        // тож reconcile бачить актуальний білінг-стан.
+        await this.reconcileSafe(userId);
+        return true;
+    }
+
+    /**
+     * Усі side-effects події + перехід webhook-події pending→applied — в одній
+     * транзакції. Flip статусу = атомарний commit-маркер: грант доступу,
+     * billing-update і payment-record комітяться РАЗОМ зі статусом 'applied' або
+     * не комітяться зовсім. Частковий збій (напр. billing-write кинув після
+     * payment-record) відкочує все, лишає подію 'pending', і catch її видаляє →
+     * передоставка WayForPay переобробляє з нуля. Без транзакції out-of-order CAS
+     * на lastProviderEventAt заблокував би повторний грант, і оплачений доступ
+     * губився б назавжди.
+     */
+    private async applyInWebhookTx(
+        event: BillingWebhookEvent,
+        work: (session: ClientSession) => Promise<void>
+    ): Promise<void> {
+        const session = await this.connection.startSession();
+        try {
+            await session.withTransaction(async () => {
+                await work(session);
                 await this.webhookEventModel.updateOne(
                     {
                         provider: PROVIDER,
@@ -740,11 +755,178 @@ export class PaymentsService {
         } finally {
             await session.endSession();
         }
-        // Доступ міг піднятись (активація підписки / грант one-off) — знімаємо
-        // блокування з бізнесів у межах нового рівня. Після commit-у TX, тож
-        // reconcile бачить актуальний білінг-стан.
-        await this.reconcileSafe(userId);
-        return true;
+    }
+
+    /**
+     * Вебхук proration-доплати (хостований checkout апгрейду). Approved → ТІЛЬКИ
+     * тут реально застосовуємо апгрейд: піднімаємо суму рекуренту (зовнішній
+     * CHANGE — поза Mongo-TX, ідемпотентний) і перемикаємо `planCode`. Збіг
+     * `pendingUpgradeOrderReference` захищає від застосування оплати застарілого/
+     * кинутого checkout-у; невідповідність на Approved = гроші пройшли, апгрейд
+     * не застосовний → слід UNMATCHED на ручний розбір. Declined → знімаємо
+     * pending-маркер (користувач може повторити) + слід DECLINED.
+     */
+    private async applyProrationEvent(
+        event: BillingWebhookEvent,
+        targetPlanCode: SubscriptionPlanCode,
+        userId: string
+    ): Promise<void> {
+        // Зовнішній refund доплати: мітимо запис повернутим. Плану не чіпаємо —
+        // зниження/скасування доступу йдуть окремими потоками.
+        if (event.transactionStatus === WAYFORPAY_TRANSACTION_STATUS.REFUNDED) {
+            await this.applyInWebhookTx(event, (session) =>
+                this.markRefunded(event, session)
+            );
+            return;
+        }
+        // Проміжний колбек (InProcessing/Pending): фінальний статус прийде окремою
+        // подією. Нічого не пишемо, лише ack (flip event у helper-і).
+        if (
+            NON_TERMINAL_TRANSACTION_STATUSES.includes(event.transactionStatus)
+        ) {
+            await this.applyInWebhookTx(event, async () => {});
+            return;
+        }
+
+        const user = await this.userModel.findById(userId).lean();
+        const billing = user?.billing ?? null;
+
+        if (event.transactionStatus !== WAYFORPAY_TRANSACTION_STATUS.APPROVED) {
+            this.logger.warn(
+                `Proration checkout declined for user ${userId} ` +
+                    `(order ${event.orderReference}, event ${event.providerEventId}): ` +
+                    `status=${event.transactionStatus} ` +
+                    `reasonCode=${event.reasonCode ?? '?'} ` +
+                    `amount ${event.amount} ${event.currency}`
+            );
+            await this.applyInWebhookTx(event, async (session) => {
+                await this.recordPayment(
+                    {
+                        userId,
+                        orderReference: event.orderReference,
+                        type: PAYMENT_RECORD_TYPE.PRORATION,
+                        amount: event.amount,
+                        currency: event.currency,
+                        status: PAYMENT_RECORD_STATUS.DECLINED,
+                        providerTransactionId: event.transactionId,
+                        cardMask: event.cardMask,
+                    },
+                    session
+                );
+                await this.clearPendingUpgradeIfMatches(
+                    userId,
+                    event.orderReference,
+                    session
+                );
+            });
+            return;
+        }
+
+        // Approved.
+        const target = findSubscriptionPlan(targetPlanCode);
+        const currentPrice =
+            findSubscriptionPlan(billing?.planCode ?? '')?.priceAmount ?? 0;
+        const notApplicable =
+            !billing ||
+            !billing.hasActiveSubscription ||
+            !billing.orderReference ||
+            billing.pendingUpgradeOrderReference !== event.orderReference ||
+            !target ||
+            target.priceAmount <= currentPrice;
+
+        if (notApplicable || !billing || !target) {
+            this.logger.error(
+                `Proration charged but upgrade not applicable for user ${userId} ` +
+                    `(order ${event.orderReference}, target ${targetPlanCode}, ` +
+                    `amount ${event.amount} ${event.currency}): manual refund review required`
+            );
+            await this.applyInWebhookTx(event, (session) =>
+                this.recordPayment(
+                    {
+                        userId,
+                        orderReference: event.orderReference,
+                        type: PAYMENT_RECORD_TYPE.UNMATCHED,
+                        amount: event.amount,
+                        currency: event.currency,
+                        status: PAYMENT_RECORD_STATUS.APPROVED,
+                        providerTransactionId: event.transactionId,
+                        cardMask: event.cardMask,
+                    },
+                    session
+                )
+            );
+            return;
+        }
+
+        // Піднімаємо суму рекуренту ПЕРЕД локальним апгрейдом. Зовнішній виклик
+        // тримаємо поза Mongo-TX; ідемпотентний → безпечний на передоставці
+        // вебхука (повторний CHANGE на ту саму суму — no-op). Збій CHANGE — поза
+        // applyInWebhookTx, тож вручну відкочуємо pending-подію: без цього вона
+        // лишилась би crash-orphan-ом до stale-sweep і блокувала б негайну
+        // передоставку.
+        try {
+            await this.changeRecurringOrThrow(billing.orderReference!, {
+                amount: target.priceAmount,
+                currency: target.currency,
+                interval: target.interval,
+            });
+        } catch (error) {
+            await this.rollbackPendingWebhookEvent(event.providerEventId);
+            throw error;
+        }
+
+        await this.applyInWebhookTx(event, async (session) => {
+            await this.userModel.updateOne(
+                { _id: userId },
+                {
+                    $set: {
+                        'billing.planCode': target.code,
+                        'billing.pendingUpgradePlanCode': null,
+                        'billing.pendingUpgradeOrderReference': null,
+                        'billing.scheduledPlanCode': null,
+                        'billing.scheduledChangeDate': null,
+                    },
+                },
+                { session }
+            );
+            await this.recordPayment(
+                {
+                    userId,
+                    orderReference: event.orderReference,
+                    type: PAYMENT_RECORD_TYPE.PRORATION,
+                    amount: event.amount,
+                    currency: event.currency,
+                    status: PAYMENT_RECORD_STATUS.APPROVED,
+                    providerTransactionId: event.transactionId,
+                    cardMask: event.cardMask,
+                },
+                session
+            );
+        });
+        this.logger.log(
+            `Proration upgrade applied for user ${userId} → ${target.code} ` +
+                `(event ${event.providerEventId})`
+        );
+    }
+
+    private async clearPendingUpgradeIfMatches(
+        userId: string,
+        orderReference: string,
+        session: ClientSession
+    ): Promise<void> {
+        await this.userModel.updateOne(
+            {
+                _id: userId,
+                'billing.pendingUpgradeOrderReference': orderReference,
+            },
+            {
+                $set: {
+                    'billing.pendingUpgradePlanCode': null,
+                    'billing.pendingUpgradeOrderReference': null,
+                },
+            },
+            { session }
+        );
     }
 
     private async applyOneOffTransaction(
@@ -785,6 +967,13 @@ export class PaymentsService {
             return;
         }
         if (event.transactionStatus !== WAYFORPAY_TRANSACTION_STATUS.APPROVED) {
+            this.logger.warn(
+                `One-off charge declined for user ${userId} ` +
+                    `(order ${event.orderReference}, event ${event.providerEventId}): ` +
+                    `status=${event.transactionStatus} ` +
+                    `reasonCode=${event.reasonCode ?? '?'} ` +
+                    `amount ${event.amount} ${event.currency}`
+            );
             await this.recordPayment(
                 {
                     userId,
@@ -900,6 +1089,13 @@ export class PaymentsService {
             event.transactionStatus !== WAYFORPAY_TRANSACTION_STATUS.APPROVED;
 
         if (declined) {
+            this.logger.warn(
+                `Subscription charge declined for user ${userId} ` +
+                    `(order ${event.orderReference}, event ${event.providerEventId}): ` +
+                    `status=${event.transactionStatus} ` +
+                    `reasonCode=${event.reasonCode ?? '?'} ` +
+                    `amount ${event.amount} ${event.currency}`
+            );
             const updated = await this.applyBillingUpdate(
                 userId,
                 event,
@@ -1346,47 +1542,6 @@ export class PaymentsService {
         }
     }
 
-    /**
-     * Best-effort повернення proration-доплати, коли апгрейд не завершився.
-     * Не кидає: caller і так re-throw-ить початкову помилку CHANGE. Якщо й
-     * refund впав — гроші зависли, логуємо ERROR для ручного розбору.
-     */
-    private async refundProration(
-        orderReference: string,
-        amount: number,
-        currency: string
-    ): Promise<void> {
-        try {
-            const result = await this.paymentProvider.refund({
-                orderReference,
-                amount,
-                currency,
-                comment: 'Повернення доплати: апгрейд плану не завершився',
-            });
-            if (!result.success) {
-                this.logger.error(
-                    `Proration refund declined for ${orderReference} ` +
-                        `(reason ${result.reason ?? '?'}), manual review required`
-                );
-                return;
-            }
-            await this.paymentRecordModel.updateOne(
-                { orderReference },
-                {
-                    $set: {
-                        status: PAYMENT_RECORD_STATUS.REFUNDED,
-                        refundAmount: amount,
-                    },
-                }
-            );
-        } catch (error) {
-            this.logger.error(
-                `Proration refund failed for ${orderReference}, manual review required`,
-                error instanceof Error ? error.stack : String(error)
-            );
-        }
-    }
-
     private freshBilling(partial: {
         orderReference: string;
         planCode: string;
@@ -1413,6 +1568,8 @@ export class PaymentsService {
             lastProviderEventAt: null,
             scheduledPlanCode: null,
             scheduledChangeDate: null,
+            pendingUpgradePlanCode: null,
+            pendingUpgradeOrderReference: null,
             rebindPendingAt: null,
             oneOffLevel: partial.oneOffLevel,
             oneOffAccessUntil: partial.oneOffAccessUntil,
@@ -1449,6 +1606,8 @@ export class PaymentsService {
             lastProviderEventAt: null,
             scheduledPlanCode: null,
             scheduledChangeDate: null,
+            pendingUpgradePlanCode: null,
+            pendingUpgradeOrderReference: null,
             rebindPendingAt: null,
             oneOffLevel: level,
             oneOffAccessUntil: accessUntil,

@@ -54,14 +54,24 @@ export default function ChangePlanDialog() {
         if (!selected) return;
         setLoading(true);
         try {
-            const { scheduled } = await changePlan(selected);
+            const { scheduled, checkoutUrl } = await changePlan(
+                selected,
+                '/billing'
+            );
+            // Апгрейд із доплатою: оплата йде на хостованій сторінці WayForPay
+            // (там працює 3DS). План застосується після оплати по вебхуку, тож
+            // тут лише ведемо користувача на оплату — без тосту й getMe.
+            if (checkoutUrl) {
+                window.location.href = checkoutUrl;
+                return;
+            }
             const me = await getMe();
             useAuthStore.getState().setUser(me);
             close();
             toast.success(
                 scheduled
                     ? 'План зміниться з наступного періоду'
-                    : 'План змінено, доплату списано'
+                    : 'План змінено'
             );
         } catch (err) {
             toast.error(getApiMessage(extractApiErrorCode(err), 'payments'));
@@ -96,7 +106,7 @@ export default function ChangePlanDialog() {
                     {target && (
                         <p className="text-muted-foreground text-sm">
                             {isUpgrade
-                                ? 'Апгрейд застосується одразу: спишемо доплату за залишок періоду за збереженою карткою.'
+                                ? 'Апгрейд застосується після оплати: доплату за залишок періоду внесете на сторінці WayForPay (з підтвердженням картки).'
                                 : 'Зниження плану застосується з наступного періоду, поточний доступ збережеться до межі.'}
                         </p>
                     )}

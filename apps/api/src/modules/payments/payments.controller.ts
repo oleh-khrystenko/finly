@@ -95,7 +95,7 @@ export class PaymentsController {
     async changePlan(
         @CurrentUser() user: UserDocument,
         @Body() dto: ChangePlanDto
-    ): Promise<{ data: { scheduled: boolean } }> {
+    ): Promise<{ data: { scheduled: boolean; checkoutUrl?: string } }> {
         const result = await this.paymentsService.changePlan(
             user._id.toString(),
             dto

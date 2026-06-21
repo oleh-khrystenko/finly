@@ -1,6 +1,7 @@
 import {
     ORDER_KIND,
     buildOneOffOrderReference,
+    buildProrationOrderReference,
     buildSubscriptionOrderReference,
     parseOrderReference,
 } from './order-reference';
@@ -27,6 +28,22 @@ describe('order-reference', () => {
         });
     });
 
+    it('proration round-trip зберігає targetPlanCode', () => {
+        const ref = buildProrationOrderReference(USER_ID, 'bookkeeper');
+        const parsed = parseOrderReference(ref);
+        expect(parsed).toEqual({
+            kind: ORDER_KIND.PRORATION,
+            userId: USER_ID,
+            targetPlanCode: 'bookkeeper',
+        });
+    });
+
+    it('proration ref з невалідним planCode → null', () => {
+        expect(
+            parseOrderReference(`fin-prorate-unknown-${USER_ID}-nonce`)
+        ).toBeNull();
+    });
+
     it('генерує унікальні ref-и (nonce) для того самого користувача', () => {
         const a = buildSubscriptionOrderReference(USER_ID);
         const b = buildSubscriptionOrderReference(USER_ID);
@@ -38,6 +55,9 @@ describe('order-reference', () => {
         expect(buildOneOffOrderReference(USER_ID, 'brand')).toMatch(
             /^fin-oneoff-brand-/
         );
+        expect(
+            buildProrationOrderReference(USER_ID, 'bookkeeper')
+        ).toMatch(/^fin-prorate-bookkeeper-/);
     });
 
     it('повертає null на чужих/невалідних ref-ах', () => {

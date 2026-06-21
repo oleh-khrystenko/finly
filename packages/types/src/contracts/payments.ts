@@ -310,6 +310,12 @@ export type CancelSubscription = z.infer<typeof CancelSubscriptionSchema>;
 
 export const ChangePlanSchema = z.object({
     planCode: z.enum(SUBSCRIPTION_PLAN_CODES),
+    /**
+     * Куди повернути користувача після оплати proration-доплати на хостованій
+     * сторінці WayForPay (апгрейд). Релевантно лише коли зміна плану вимагає
+     * доплати (upgrade); downgrade застосовується без редиректу.
+     */
+    returnPath: z.string().startsWith('/').max(256).optional(),
 });
 
 export type ChangePlan = z.infer<typeof ChangePlanSchema>;

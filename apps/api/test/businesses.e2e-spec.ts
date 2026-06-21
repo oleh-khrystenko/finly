@@ -288,6 +288,8 @@ describe('Businesses E2E', () => {
         lastProviderEventAt: null,
         scheduledPlanCode: null,
         scheduledChangeDate: null,
+        pendingUpgradePlanCode: null,
+        pendingUpgradeOrderReference: null,
         rebindPendingAt: null,
         oneOffLevel: null,
         oneOffAccessUntil: null,

@@ -159,6 +159,8 @@ export class User {
             lastProviderEventAt: { type: Date, default: null },
             scheduledPlanCode: { type: String, default: null },
             scheduledChangeDate: { type: Date, default: null },
+            pendingUpgradePlanCode: { type: String, default: null },
+            pendingUpgradeOrderReference: { type: String, default: null },
             rebindPendingAt: { type: Date, default: null },
             oneOffLevel: { type: String, default: null },
             oneOffAccessUntil: { type: Date, default: null },
@@ -183,6 +185,15 @@ export class User {
         lastProviderEventAt: Date | null;
         scheduledPlanCode: string | null;
         scheduledChangeDate: Date | null;
+        /**
+         * Намір апгрейду, що чекає на оплату proration-доплати на хостованій
+         * сторінці WayForPay. Виставляється при ініціації checkout-у апгрейду;
+         * вебхук застосовує апгрейд (CHANGE рекуренту + `planCode`) лише коли
+         * Approved-подія приходить на саме цей `pendingUpgradeOrderReference`, і
+         * одразу чистить пару. Internal-поля: не серіалізуються у frontend.
+         */
+        pendingUpgradePlanCode: string | null;
+        pendingUpgradeOrderReference: string | null;
         /**
          * Vestigial. The card re-bind flow (updateCard) was dropped for the MVP
          * because it forced a full re-charge on WayForPay. Kept as an always-null

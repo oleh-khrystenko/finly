@@ -264,6 +264,8 @@ describe('Accounts E2E (Sprint 9 §SP-1..§SP-3)', () => {
         lastProviderEventAt: null,
         scheduledPlanCode: null,
         scheduledChangeDate: null,
+        pendingUpgradePlanCode: null,
+        pendingUpgradeOrderReference: null,
         rebindPendingAt: null,
         oneOffLevel: null,
         oneOffAccessUntil: null,

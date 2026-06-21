@@ -297,6 +297,8 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
         lastProviderEventAt: null,
         scheduledPlanCode: null,
         scheduledChangeDate: null,
+        pendingUpgradePlanCode: null,
+        pendingUpgradeOrderReference: null,
         rebindPendingAt: null,
         oneOffLevel: null,
         oneOffAccessUntil: null,

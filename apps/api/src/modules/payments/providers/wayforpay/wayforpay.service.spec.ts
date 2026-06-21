@@ -112,47 +112,6 @@ describe('WayForPayService', () => {
         });
     });
 
-    describe('chargeByToken', () => {
-        it('Approved → success + cardMask, надсилає CHARGE з recToken і підписом', async () => {
-            const fetchMock = mockFetchOnce({
-                transactionStatus: 'Approved',
-                reasonCode: 1100,
-                cardPan: '44****2222',
-                transactionId: 'tx_1',
-            });
-
-            const result = await service.chargeByToken({
-                orderReference: 'fin-prorate-uid-1',
-                recToken: 'tok_abc',
-                amount: 5000,
-                currency: 'UAH',
-                description: 'Доплата',
-            });
-
-            expect(result.success).toBe(true);
-            expect(result.cardMask).toBe('44****2222');
-            const body = JSON.parse(
-                (fetchMock.mock.calls[0][1] as { body: string }).body
-            );
-            expect(body.transactionType).toBe('CHARGE');
-            expect(body.recToken).toBe('tok_abc');
-            expect(body.amount).toBe('50.00');
-            expect(typeof body.merchantSignature).toBe('string');
-        });
-
-        it('Declined → success false', async () => {
-            mockFetchOnce({ transactionStatus: 'Declined', reasonCode: 1101 });
-            const result = await service.chargeByToken({
-                orderReference: 'fin-prorate-uid-2',
-                recToken: 'tok_abc',
-                amount: 5000,
-                currency: 'UAH',
-                description: 'Доплата',
-            });
-            expect(result.success).toBe(false);
-        });
-    });
-
     describe('refund', () => {
         it('Refunded → success', async () => {
             const fetchMock = mockFetchOnce({

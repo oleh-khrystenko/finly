@@ -51,11 +51,15 @@ export async function cancelSubscription(
 }
 
 export async function changePlan(
-    planCode: ChangePlan['planCode']
-): Promise<{ scheduled: boolean }> {
+    planCode: ChangePlan['planCode'],
+    returnPath?: string
+): Promise<{ scheduled: boolean; checkoutUrl?: string }> {
     const { data } = await apiClient.post<{
-        data: { scheduled: boolean };
-    }>('/payments/subscription/change-plan', { planCode });
+        data: { scheduled: boolean; checkoutUrl?: string };
+    }>('/payments/subscription/change-plan', {
+        planCode,
+        ...(returnPath && { returnPath }),
+    });
     return data.data;
 }
 

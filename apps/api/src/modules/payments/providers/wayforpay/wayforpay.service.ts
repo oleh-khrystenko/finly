@@ -6,8 +6,6 @@ import {
 import { ENV } from '../../../../config/env';
 import {
     CheckoutResult,
-    ChargeInput,
-    ChargeResult,
     IPaymentProvider,
     OneOffCheckoutInput,
     RefundInput,
@@ -139,50 +137,6 @@ export class WayForPayService implements IPaymentProvider {
         };
     }
 
-    async chargeByToken(input: ChargeInput): Promise<ChargeResult> {
-        const orderDate = unixNow();
-        const amount = kopecksToAmount(input.amount);
-        const signature = buildPurchaseSignature(this.secret, {
-            merchantAccount: this.merchantAccount,
-            merchantDomainName: this.merchantDomain,
-            orderReference: input.orderReference,
-            orderDate,
-            amount,
-            currency: input.currency,
-            productNames: [input.description],
-            productCounts: [1],
-            productPrices: [amount],
-        });
-
-        const body = {
-            transactionType: 'CHARGE',
-            merchantAccount: this.merchantAccount,
-            merchantAuthType: MERCHANT_AUTH_TYPE,
-            merchantDomainName: this.merchantDomain,
-            merchantSignature: signature,
-            apiVersion: API_VERSION,
-            orderReference: input.orderReference,
-            orderDate,
-            amount,
-            currency: input.currency,
-            productName: [input.description],
-            productPrice: [amount],
-            productCount: [1],
-            recToken: input.recToken,
-        };
-
-        const res = await this.postJson(API_URL, body);
-        const transactionStatus = str(res.transactionStatus);
-        return {
-            success:
-                transactionStatus === WAYFORPAY_TRANSACTION_STATUS.APPROVED,
-            transactionId: rawScalar(res.transactionId) || null,
-            cardMask: str(res.cardPan) ?? null,
-            reasonCode: num(res.reasonCode),
-            reason: str(res.reason) ?? null,
-        };
-    }
-
     async refund(input: RefundInput): Promise<RefundResult> {
         const amount = kopecksToAmount(input.amount);
         const signature = buildRefundSignature(this.secret, {
@@ -205,13 +159,19 @@ export class WayForPayService implements IPaymentProvider {
 
         const res = await this.postJson(API_URL, body);
         const transactionStatus = str(res.transactionStatus);
-        return {
-            success:
-                transactionStatus === WAYFORPAY_TRANSACTION_STATUS.REFUNDED ||
-                transactionStatus === WAYFORPAY_TRANSACTION_STATUS.VOIDED,
-            reasonCode: num(res.reasonCode),
-            reason: str(res.reason) ?? null,
-        };
+        const reasonCode = num(res.reasonCode);
+        const reason = str(res.reason) ?? null;
+        const success =
+            transactionStatus === WAYFORPAY_TRANSACTION_STATUS.REFUNDED ||
+            transactionStatus === WAYFORPAY_TRANSACTION_STATUS.VOIDED;
+        if (!success) {
+            this.logger.warn(
+                `WayForPay REFUND not confirmed for ${input.orderReference}: ` +
+                    `status=${transactionStatus ?? '?'} ` +
+                    `reasonCode=${reasonCode ?? '?'} reason=${reason ?? '?'}`
+            );
+        }
+        return { success, reasonCode, reason };
     }
 
     async getSubscriptionStatus(

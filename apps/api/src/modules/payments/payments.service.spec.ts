@@ -47,13 +47,13 @@ import {
 } from './schemas/payment-record.schema';
 import {
     buildOneOffOrderReference,
+    buildProrationOrderReference,
     buildSubscriptionOrderReference,
 } from './order-reference';
 
 type ProviderMock = {
     createSubscriptionCheckout: jest.Mock;
     createOneOffCheckout: jest.Mock;
-    chargeByToken: jest.Mock;
     refund: jest.Mock;
     getSubscriptionStatus: jest.Mock;
     suspendSubscription: jest.Mock;
@@ -67,7 +67,6 @@ function makeProviderMock(): ProviderMock {
     return {
         createSubscriptionCheckout: jest.fn(),
         createOneOffCheckout: jest.fn(),
-        chargeByToken: jest.fn(),
         refund: jest.fn(),
         getSubscriptionStatus: jest.fn(),
         suspendSubscription: jest.fn().mockResolvedValue(undefined),
@@ -434,13 +433,14 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
         );
     });
 
-    // ── Change plan (upgrade proration) ──────────────────────────────────
+    // ── Change plan (upgrade proration via hosted checkout) ──────────────
 
-    it('upgrade: тиха доплата за токеном і зміна плану', async () => {
+    async function activeBrandUser(): Promise<UserDocument> {
         const user = await createUser({
             orderReference: 'placeholder',
             planCode: 'brand',
             recToken: 'tok_abc',
+            cardMask: '44****1111',
             subscriptionStatus: SUBSCRIPTION_STATUS.ACTIVE,
             hasActiveSubscription: true,
             currentPeriodEnd: new Date(Date.now() + 20 * 86_400_000),
@@ -449,113 +449,132 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
         await userModel.findByIdAndUpdate(user._id, {
             $set: { 'billing.orderReference': ref },
         });
+        return user;
+    }
 
-        provider.chargeByToken.mockResolvedValue({
-            success: true,
-            transactionId: 'tx_bk',
-            cardMask: '44****1111',
-            reasonCode: 1100,
-            reason: 'Ok',
+    it('upgrade: повертає checkoutUrl і ставить pending-маркер, план НЕ змінюється до вебхука', async () => {
+        const user = await activeBrandUser();
+        provider.createOneOffCheckout.mockResolvedValue({
+            checkoutUrl: 'https://wfp/pay/abc',
+            orderReference: 'ignored',
         });
 
         const result = await service.changePlan(user._id.toString(), {
             planCode: 'bookkeeper',
+            returnPath: '/billing',
         });
 
-        expect(result.scheduled).toBe(false);
-        expect(provider.chargeByToken).toHaveBeenCalled();
-        expect(provider.changeSubscription).toHaveBeenCalled();
+        expect(result.checkoutUrl).toBe('https://wfp/pay/abc');
+        // Рекурент НЕ піднімаємо до підтвердженої оплати.
+        expect(provider.changeSubscription).not.toHaveBeenCalled();
+
+        const checkoutArg = provider.createOneOffCheckout.mock.calls[0][0];
+        expect(checkoutArg.orderReference).toMatch(/^fin-prorate-bookkeeper-/);
+        expect(checkoutArg.amount).toBeGreaterThan(0);
 
         const updated = await userModel.findById(user._id).lean();
+        expect(updated!.billing!.planCode).toBe('brand');
+        expect(updated!.billing!.pendingUpgradePlanCode).toBe('bookkeeper');
+        expect(updated!.billing!.pendingUpgradeOrderReference).toBe(
+            checkoutArg.orderReference
+        );
+    });
+
+    it('proration вебхук Approved: застосовує апгрейд, піднімає рекурент, чистить pending', async () => {
+        const user = await activeBrandUser();
+        const prorationRef = buildProrationOrderReference(
+            user._id.toString(),
+            'bookkeeper'
+        );
+        await userModel.findByIdAndUpdate(user._id, {
+            $set: {
+                'billing.pendingUpgradePlanCode': 'bookkeeper',
+                'billing.pendingUpgradeOrderReference': prorationRef,
+            },
+        });
+
+        await feed(approvedEvent(prorationRef, { amount: 4997 }));
+
+        expect(provider.changeSubscription).toHaveBeenCalled();
+        const updated = await userModel.findById(user._id).lean();
         expect(updated!.billing!.planCode).toBe('bookkeeper');
+        expect(updated!.billing!.pendingUpgradePlanCode).toBeNull();
+        expect(updated!.billing!.pendingUpgradeOrderReference).toBeNull();
 
         const proration = await paymentRecordModel.findOne({
             userId: user._id,
             type: PAYMENT_RECORD_TYPE.PRORATION,
         });
-        expect(proration).not.toBeNull();
+        expect(proration!.status).toBe(PAYMENT_RECORD_STATUS.APPROVED);
 
-        // Рівень зріс → reconcile знімає блокування у межах нового тарифу.
         const reconcile = moduleRef.get<{ reconcile: jest.Mock }>(
             ReconciliationService
         ).reconcile;
         expect(reconcile).toHaveBeenCalledWith(user._id.toString());
     });
 
-    it('upgrade: невдала доплата — план не змінюється', async () => {
-        const user = await createUser({
-            orderReference: 'r',
-            planCode: 'brand',
-            recToken: 'tok_abc',
-            subscriptionStatus: SUBSCRIPTION_STATUS.ACTIVE,
-            hasActiveSubscription: true,
-            currentPeriodEnd: new Date(Date.now() + 20 * 86_400_000),
-        });
-        const ref = buildSubscriptionOrderReference(user._id.toString());
+    it('proration вебхук Declined: план не змінюється, pending знято, рекурент не піднято', async () => {
+        const user = await activeBrandUser();
+        const prorationRef = buildProrationOrderReference(
+            user._id.toString(),
+            'bookkeeper'
+        );
         await userModel.findByIdAndUpdate(user._id, {
-            $set: { 'billing.orderReference': ref },
+            $set: {
+                'billing.pendingUpgradePlanCode': 'bookkeeper',
+                'billing.pendingUpgradeOrderReference': prorationRef,
+            },
         });
 
-        provider.chargeByToken.mockResolvedValue({
-            success: false,
-            transactionId: null,
-            cardMask: null,
-            reasonCode: 1101,
-            reason: 'Declined',
-        });
+        await feed(
+            approvedEvent(prorationRef, {
+                transactionStatus: WAYFORPAY_TRANSACTION_STATUS.DECLINED,
+                amount: 4997,
+            })
+        );
 
-        await expect(
-            service.changePlan(user._id.toString(), { planCode: 'bookkeeper' })
-        ).rejects.toThrow();
-
+        expect(provider.changeSubscription).not.toHaveBeenCalled();
         const updated = await userModel.findById(user._id).lean();
         expect(updated!.billing!.planCode).toBe('brand');
-        expect(provider.changeSubscription).not.toHaveBeenCalled();
+        expect(updated!.billing!.pendingUpgradePlanCode).toBeNull();
+        expect(updated!.billing!.pendingUpgradeOrderReference).toBeNull();
+
+        const proration = await paymentRecordModel.findOne({
+            userId: user._id,
+            type: PAYMENT_RECORD_TYPE.PRORATION,
+        });
+        expect(proration!.status).toBe(PAYMENT_RECORD_STATUS.DECLINED);
     });
 
-    it('upgrade: збій CHANGE рекуренту після доплати кидає, план не застосовано', async () => {
-        const user = await createUser({
-            orderReference: 'r',
-            planCode: 'brand',
-            recToken: 'tok_abc',
-            subscriptionStatus: SUBSCRIPTION_STATUS.ACTIVE,
-            hasActiveSubscription: true,
-            currentPeriodEnd: new Date(Date.now() + 20 * 86_400_000),
-        });
-        const ref = buildSubscriptionOrderReference(user._id.toString());
+    it('proration вебхук Approved без збігу pending-маркера: UNMATCHED, апгрейд не застосовано', async () => {
+        const user = await activeBrandUser();
+        // pending-маркер вказує на ІНШИЙ ref (напр. кинутий старіший checkout).
         await userModel.findByIdAndUpdate(user._id, {
-            $set: { 'billing.orderReference': ref },
+            $set: {
+                'billing.pendingUpgradePlanCode': 'bookkeeper',
+                'billing.pendingUpgradeOrderReference':
+                    buildProrationOrderReference(
+                        user._id.toString(),
+                        'bookkeeper'
+                    ),
+            },
         });
+        const staleRef = buildProrationOrderReference(
+            user._id.toString(),
+            'bookkeeper'
+        );
 
-        provider.chargeByToken.mockResolvedValue({
-            success: true,
-            transactionId: 'tx_bk',
-            cardMask: '44****1111',
-            reasonCode: 1100,
-            reason: 'Ok',
-        });
-        provider.changeSubscription.mockRejectedValue(new Error('WFP down'));
-        provider.refund.mockResolvedValue({
-            success: true,
-            reasonCode: 1100,
-            reason: 'Ok',
-        });
+        await feed(approvedEvent(staleRef, { amount: 4997 }));
 
-        await expect(
-            service.changePlan(user._id.toString(), { planCode: 'bookkeeper' })
-        ).rejects.toThrow();
-
-        // Тихий дрейф білінгу неприпустимий: план НЕ застосовано локально.
+        expect(provider.changeSubscription).not.toHaveBeenCalled();
         const updated = await userModel.findById(user._id).lean();
         expect(updated!.billing!.planCode).toBe('brand');
 
-        // Доплату вже списали — мусимо повернути, інакше юзер заплатив за
-        // апгрейд, якого не отримав.
-        expect(provider.refund).toHaveBeenCalled();
-        const proration = await paymentRecordModel
-            .findOne({ type: PAYMENT_RECORD_TYPE.PRORATION })
-            .lean();
-        expect(proration!.status).toBe(PAYMENT_RECORD_STATUS.REFUNDED);
+        const unmatched = await paymentRecordModel.findOne({
+            userId: user._id,
+            type: PAYMENT_RECORD_TYPE.UNMATCHED,
+        });
+        expect(unmatched!.status).toBe(PAYMENT_RECORD_STATUS.APPROVED);
     });
 
     it('cancel withRefund: збій REMOVE ставить orderReference у retry-чергу', async () => {
@@ -622,7 +641,6 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
         });
 
         expect(result.scheduled).toBe(true);
-        expect(provider.chargeByToken).not.toHaveBeenCalled();
         const updated = await userModel.findById(user._id).lean();
         expect(updated!.billing!.scheduledPlanCode).toBe('brand');
         expect(updated!.billing!.planCode).toBe('bookkeeper');
@@ -651,7 +669,6 @@ describe('PaymentsService (MongoMemoryReplSet)', () => {
         expect(result.scheduled).toBe(false);
         // Першого списання ще не було, а TRIALING не дає доступу
         // (deriveAccessLevel) — доплата була б грошима за ніщо.
-        expect(provider.chargeByToken).not.toHaveBeenCalled();
         expect(provider.changeSubscription).toHaveBeenCalled();
 
         const updated = await userModel.findById(user._id).lean();

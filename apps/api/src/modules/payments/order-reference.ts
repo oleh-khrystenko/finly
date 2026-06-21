@@ -1,5 +1,10 @@
 import { randomBytes } from 'crypto';
-import { ONE_OFF_ACCESS_CODES, type OneOffAccessCode } from '@finly/types';
+import {
+    ONE_OFF_ACCESS_CODES,
+    SUBSCRIPTION_PLAN_CODES,
+    type OneOffAccessCode,
+    type SubscriptionPlanCode,
+} from '@finly/types';
 
 /**
  * WayForPay не має customer-обʼєкта і не повертає наші metadata у колбеку —
@@ -7,9 +12,9 @@ import { ONE_OFF_ACCESS_CODES, type OneOffAccessCode } from '@finly/types';
  * платіж) кодуємо в самому orderReference і декодуємо при розборі підписаного
  * колбеку (значення довірене — підпис уже перевірено).
  *
- * Формат: `fin-<kind>-[<oneOffCode>-]<userId>-<nonce>`. Жоден сегмент не містить
- * дефіса: kind ∈ {sub,oneoff}, oneOffCode ∈ {brand,bookkeeper}, userId — 24-hex
- * ObjectId, nonce — hex.
+ * Формат: `fin-<kind>-[<code>-]<userId>-<nonce>`. Жоден сегмент не містить
+ * дефіса: kind ∈ {sub,oneoff,prorate}, code ∈ {brand,bookkeeper} (oneOffCode для
+ * oneoff, targetPlanCode для prorate), userId — 24-hex ObjectId, nonce — hex.
  */
 
 const PREFIX = 'fin';
@@ -17,6 +22,7 @@ const PREFIX = 'fin';
 export const ORDER_KIND = {
     SUBSCRIPTION: 'sub',
     ONE_OFF: 'oneoff',
+    PRORATION: 'prorate',
 } as const;
 
 export type OrderKind = (typeof ORDER_KIND)[keyof typeof ORDER_KIND];
@@ -27,6 +33,11 @@ export type ParsedOrderReference =
           kind: typeof ORDER_KIND.ONE_OFF;
           userId: string;
           oneOffCode: OneOffAccessCode;
+      }
+    | {
+          kind: typeof ORDER_KIND.PRORATION;
+          userId: string;
+          targetPlanCode: SubscriptionPlanCode;
       };
 
 function nonce(): string {
@@ -42,6 +53,13 @@ export function buildOneOffOrderReference(
     oneOffCode: OneOffAccessCode
 ): string {
     return `${PREFIX}-${ORDER_KIND.ONE_OFF}-${oneOffCode}-${userId}-${nonce()}`;
+}
+
+export function buildProrationOrderReference(
+    userId: string,
+    targetPlanCode: SubscriptionPlanCode
+): string {
+    return `${PREFIX}-${ORDER_KIND.PRORATION}-${targetPlanCode}-${userId}-${nonce()}`;
 }
 
 export function parseOrderReference(ref: string): ParsedOrderReference | null {
@@ -61,9 +79,20 @@ export function parseOrderReference(ref: string): ParsedOrderReference | null {
         if (!isOneOffCode(oneOffCode)) return null;
         return { kind: ORDER_KIND.ONE_OFF, userId: parts[3], oneOffCode };
     }
+    if (kind === ORDER_KIND.PRORATION) {
+        // fin - prorate - <targetPlanCode> - <userId> - <nonce>
+        if (parts.length !== 5) return null;
+        const targetPlanCode = parts[2];
+        if (!isSubscriptionPlanCode(targetPlanCode)) return null;
+        return { kind: ORDER_KIND.PRORATION, userId: parts[3], targetPlanCode };
+    }
     return null;
 }
 
 function isOneOffCode(value: string): value is OneOffAccessCode {
     return (ONE_OFF_ACCESS_CODES as readonly string[]).includes(value);
+}
+
+function isSubscriptionPlanCode(value: string): value is SubscriptionPlanCode {
+    return (SUBSCRIPTION_PLAN_CODES as readonly string[]).includes(value);
 }

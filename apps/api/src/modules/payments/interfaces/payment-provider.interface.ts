@@ -44,22 +44,6 @@ export interface CheckoutResult {
     orderReference: string;
 }
 
-export interface ChargeInput {
-    orderReference: string;
-    recToken: string;
-    amount: number; // копійки
-    currency: string;
-    description: string;
-}
-
-export interface ChargeResult {
-    success: boolean;
-    transactionId: string | null;
-    cardMask: string | null;
-    reasonCode: number | null;
-    reason: string | null;
-}
-
 export interface RefundInput {
     orderReference: string;
     amount: number; // копійки
@@ -106,8 +90,6 @@ export interface IPaymentProvider {
         input: SubscriptionCheckoutInput
     ): Promise<CheckoutResult>;
     createOneOffCheckout(input: OneOffCheckoutInput): Promise<CheckoutResult>;
-    /** Ad-hoc списання за збереженим токеном картки (proration-доплата). */
-    chargeByToken(input: ChargeInput): Promise<ChargeResult>;
     refund(input: RefundInput): Promise<RefundResult>;
     getSubscriptionStatus(
         orderReference: string
