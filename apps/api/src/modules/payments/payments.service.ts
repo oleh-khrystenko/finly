@@ -64,6 +64,19 @@ import {
 const WEBHOOK_MONGO_TIMEOUT_MS = 10_000;
 const PROVIDER = 'monobank';
 
+/**
+ * На час дії «оплатити зараз» (resume) dunning-годинник мусить мовчати про цього
+ * користувача, поки він на хостованій сторінці monobank. Інакше `retryDunning`
+ * на черговому проході спише СТАРИЙ токен паралельно з оплатою на новій картці і
+ * дасть друге списання за період: resume-checkout має власний (nonce) reference,
+ * а dunning — детермінований за межею періоду, тож claim-first їх не дедуплікує.
+ * Відсуваємо `nextRetryAt` на це вікно — воно з запасом покриває реальний час
+ * уведення картки. Success-вебхук resume скине його раніше (повернувши ACTIVE);
+ * кинутий checkout само-лікується — по спливу годинник продовжить добивати
+ * прострочку з того самого лічильника спроб (грейс лише трохи довший).
+ */
+const RESUME_DUNNING_HOLD_MS = 30 * 60 * 1000;
+
 @Injectable()
 export class PaymentsService {
     private readonly logger = new Logger(PaymentsService.name);
@@ -249,7 +262,9 @@ export class PaymentsService {
      * свіжий токен. Дія над наявним слотом, тому guard на нову підписку її не
      * стосується. Білінг НЕ скидаємо в INCOMPLETE: підписка лишається живою до
      * межі грейсу; success-вебхук поверне її в ACTIVE. Кинутий checkout → стан
-     * PAST_DUE доживає грейс як і раніше.
+     * PAST_DUE доживає грейс як і раніше. На час checkout-у відсуваємо
+     * `nextRetryAt` (RESUME_DUNNING_HOLD_MS), щоб dunning-годинник не списав
+     * старий токен паралельно з оплатою на новій картці.
      */
     async resumeSubscription(
         userId: string,
@@ -295,6 +310,24 @@ export class PaymentsService {
             serviceUrl: this.serviceUrl(),
             returnUrl: this.returnUrl(dto.returnPath),
         });
+
+        // Роззброюємо dunning-годинник на час хостованого checkout-у: поки
+        // користувач уводить картку, `retryDunning` не сміє списати старий токен
+        // (друге списання за період). Беремо максимум із наявним `nextRetryAt`,
+        // щоб НЕ наблизити повтор, якщо він і так далі за вікно. Робиться під
+        // тим самим per-user локом, тож гонки з планувальником немає.
+        const holdUntilMs = Date.now() + RESUME_DUNNING_HOLD_MS;
+        const existingRetryMs = billing.nextRetryAt
+            ? new Date(billing.nextRetryAt).getTime()
+            : 0;
+        await this.userModel.findByIdAndUpdate(userId, {
+            $set: {
+                'billing.nextRetryAt': new Date(
+                    Math.max(holdUntilMs, existingRetryMs)
+                ),
+            },
+        });
+
         return { checkoutUrl: result.checkoutUrl };
     }
 

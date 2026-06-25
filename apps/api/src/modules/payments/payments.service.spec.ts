@@ -365,6 +365,7 @@ describe('PaymentsService (monobank, mocked)', () => {
                 email: 'u@test.dev',
                 billing: activeBilling({
                     subscriptionStatus: SUBSCRIPTION_STATUS.PAST_DUE,
+                    nextRetryAt: new Date(Date.now() - 1000), // прострочений повтор
                 }),
             };
             provider.createSubscriptionCheckout.mockResolvedValue({
@@ -377,8 +378,52 @@ describe('PaymentsService (monobank, mocked)', () => {
             expect(provider.createSubscriptionCheckout).toHaveBeenCalledTimes(
                 1
             );
-            // білінг не скидається в INCOMPLETE під час resume
-            expect(userModel.findByIdAndUpdate).not.toHaveBeenCalled();
+            // Єдина мутація — відсув nextRetryAt; білінг НЕ скидається в INCOMPLETE.
+            expect(userModel.findByIdAndUpdate).toHaveBeenCalledTimes(1);
+            const set = userModel.findByIdAndUpdate.mock.calls[0][1].$set;
+            expect(Object.keys(set)).toEqual(['billing.nextRetryAt']);
+        });
+
+        it('resume відсуває прострочений dunning-повтор у майбутнє (захист від подвійного списання)', async () => {
+            currentUser = {
+                email: 'u@test.dev',
+                billing: activeBilling({
+                    subscriptionStatus: SUBSCRIPTION_STATUS.PAST_DUE,
+                    nextRetryAt: new Date(Date.now() - 60_000), // повтор уже настав
+                }),
+            };
+            provider.createSubscriptionCheckout.mockResolvedValue({
+                checkoutUrl: 'https://pay.mbnk.biz/x',
+                invoiceId: 'inv-9',
+                orderReference: 'ref',
+            });
+            await service.resumeSubscription(USER, {});
+            const set = userModel.findByIdAndUpdate.mock.calls[0][1].$set;
+            // Повтор зсунуто щонайменше на ~29 хв уперед: годинник не спишe старий
+            // токен, поки користувач на хостованій сторінці monobank.
+            const deferred = set['billing.nextRetryAt'] as Date;
+            expect(deferred.getTime()).toBeGreaterThan(Date.now() + 29 * 60_000);
+        });
+
+        it('resume не наближує повтор, якщо він і так далі за вікно (беремо max)', async () => {
+            const farRetry = new Date(Date.now() + 6 * 60 * 60_000); // +6 год
+            currentUser = {
+                email: 'u@test.dev',
+                billing: activeBilling({
+                    subscriptionStatus: SUBSCRIPTION_STATUS.PAST_DUE,
+                    nextRetryAt: farRetry,
+                }),
+            };
+            provider.createSubscriptionCheckout.mockResolvedValue({
+                checkoutUrl: 'https://pay.mbnk.biz/x',
+                invoiceId: 'inv-9',
+                orderReference: 'ref',
+            });
+            await service.resumeSubscription(USER, {});
+            const set = userModel.findByIdAndUpdate.mock.calls[0][1].$set;
+            expect((set['billing.nextRetryAt'] as Date).getTime()).toBe(
+                farRetry.getTime()
+            );
         });
     });
 

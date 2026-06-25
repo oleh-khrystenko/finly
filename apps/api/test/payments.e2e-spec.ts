@@ -608,9 +608,14 @@ describe('Payments E2E (monobank self-managed)', () => {
         );
     });
 
-    it('resume у прострочці → checkoutUrl, білінг не скинуто', async () => {
+    it('resume у прострочці → checkoutUrl, білінг не скинуто, dunning-повтор відсунуто', async () => {
         const user = await createUser(
-            activeBilling({ subscriptionStatus: SUBSCRIPTION_STATUS.PAST_DUE })
+            activeBilling({
+                subscriptionStatus: SUBSCRIPTION_STATUS.PAST_DUE,
+                // Повтор уже настав: без відсуву dunning-годинник списав би старий
+                // токен паралельно з оплатою resume (друге списання за період).
+                nextRetryAt: new Date(Date.now() - 60_000),
+            })
         );
         const res = await supertest(app.getHttpServer())
             .post('/api/payments/subscription/resume')
@@ -622,6 +627,9 @@ describe('Payments E2E (monobank self-managed)', () => {
         ).toContain('mbnk');
         const billing = await billingOf(user._id);
         expect(billing?.subscriptionStatus).toBe(SUBSCRIPTION_STATUS.PAST_DUE);
+        // Повтор зсунуто у майбутнє → retryDunning не підбере його, поки користувач
+        // на хостованій сторінці monobank.
+        expect(billing?.nextRetryAt?.getTime()).toBeGreaterThan(Date.now());
     });
 
     // ─── Cancel ───
