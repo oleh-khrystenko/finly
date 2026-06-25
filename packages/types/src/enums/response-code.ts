@@ -25,12 +25,6 @@ export const RESPONSE_CODE = {
      */
     SUBSCRIPTION_NOT_PAST_DUE: 'SUBSCRIPTION_NOT_PAST_DUE',
     /**
-     * Sprint 22 — звірка списання за токеном дала суперечливий/нерозв'язний
-     * результат (гроші могли рухатись, але стан звести не вдалося). Підписка
-     * позначена на ручний розбір; користувачу нейтральна помилка.
-     */
-    BILLING_NEEDS_MANUAL_REVIEW: 'BILLING_NEEDS_MANUAL_REVIEW',
-    /**
      * Sprint 17/22 — конкурентна білінг-мутація. Усі write-операції над підпискою
      * (checkout, resume, cancel) і billing-clock-списання серіалізовані per-user
      * Redis-локом: списання monobank за токеном неідемпотентне, тож два паралельні
@@ -354,7 +348,6 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.NO_ACTIVE_SUBSCRIPTION]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVALID_PLAN]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.SUBSCRIPTION_NOT_PAST_DUE]: RESPONSE_TYPE.ERROR,
-    [RESPONSE_CODE.BILLING_NEEDS_MANUAL_REVIEW]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.BILLING_OPERATION_IN_PROGRESS]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.AI_RATE_LIMIT_EXCEEDED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.AI_MESSAGE_TOO_LONG]: RESPONSE_TYPE.ERROR,

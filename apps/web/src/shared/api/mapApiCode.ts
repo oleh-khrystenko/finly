@@ -45,8 +45,6 @@ const ERRORS: Record<string, MessageDict> = {
         invalid_plan: 'Невідомий план. Оновіть сторінку і спробуйте знову.',
         subscription_not_past_due:
             'Оплата зараз доступна лише коли списання не пройшло.',
-        billing_needs_manual_review:
-            'Платіж потребує перевірки. Ми розберемося і звʼяжемося з вами.',
         billing_operation_in_progress:
             'Попередня операція з підпискою ще виконується. Зачекайте і спробуйте знову.',
         payment_type_disabled: 'Цей тип оплати наразі недоступний.',
