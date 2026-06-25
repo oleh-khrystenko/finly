@@ -434,6 +434,54 @@ describe('Payments E2E (monobank self-managed)', () => {
         expect(approved).toBe(1);
     });
 
+    it('дубль success-вебхука дозбирає cardToken, що прийшов лише в ньому', async () => {
+        const user = await createUser(
+            activeBilling({
+                subscriptionStatus: SUBSCRIPTION_STATUS.INCOMPLETE,
+                hasActiveSubscription: false,
+                cardToken: null,
+                currentPeriodEnd: null,
+                nextChargeAt: null,
+            })
+        );
+        const ref = buildSubscriptionOrderReference(user._id.toString());
+
+        // Перший success: токен картки ще не випущено (walletData порожній).
+        await postWebhook(
+            makeEvent({
+                orderReference: ref,
+                providerEventId: 'inv-bf:success',
+                invoiceId: 'inv-bf',
+                cardToken: null,
+            })
+        ).expect(200);
+        const afterFirst = await billingOf(user._id);
+        expect(afterFirst?.subscriptionStatus).toBe(SUBSCRIPTION_STATUS.ACTIVE);
+        expect(afterFirst?.cardToken).toBeNull();
+
+        // Другий success — той самий providerEventId (дубль), але вже з токеном.
+        await postWebhook(
+            makeEvent({
+                orderReference: ref,
+                providerEventId: 'inv-bf:success',
+                invoiceId: 'inv-bf',
+                cardToken: 'tok-late',
+            })
+        ).expect(200);
+        const afterSecond = await billingOf(user._id);
+        expect(afterSecond?.cardToken).toBe('tok-late');
+
+        // Дозбір не подвоює оплату й не зрушує межу періоду.
+        expect(afterSecond?.currentPeriodEnd).toEqual(
+            afterFirst?.currentPeriodEnd
+        );
+        const approved = await paymentRecordModel.countDocuments({
+            userId: user._id,
+            status: PAYMENT_RECORD_STATUS.APPROVED,
+        });
+        expect(approved).toBe(1);
+    });
+
     // ─── billing-clock: renewal ───
 
     it('billing-clock продовжує підписку за токеном: межа просувається', async () => {

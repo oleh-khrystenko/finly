@@ -1027,7 +1027,10 @@ export class PaymentsService {
             userId,
             parsed.kind === ORDER_KIND.ONE_OFF ? parsed.oneOffCode : null
         );
-        if (insert === 'applied') return true;
+        if (insert === 'applied') {
+            await this.backfillMissingCardToken(event, parsed);
+            return true;
+        }
         if (insert === 'pending') {
             this.logger.warn(
                 `Webhook ${event.providerEventId} is a pending crash-orphan, not acked`
@@ -1050,6 +1053,47 @@ export class PaymentsService {
         // Доступ міг піднятись (активація / грант one-off) — знімаємо блокування.
         await this.reconcileSafe(userId);
         return true;
+    }
+
+    /**
+     * monobank шле кілька success-вебхуків на одну оплату: перший без
+     * `walletData` (токен картки ще не випущено), наступний — уже з ним. Усі
+     * мають однаковий `providerEventId` (`invoiceId:success`), тож дедуп
+     * відкидає пізніший як дубль — разом із `cardToken`, який лише в ньому.
+     * Без токена продовження неможливе (`chargeDueSubscription` мовчки виходить
+     * на guard `!cardToken`). Тож на дубль-події дозбираємо саме відсутній
+     * токен: вузький idempotent-патч (фільтр `cardToken: null` не перезапише
+     * наявний і не подвоїть оплату), без руху `lastProviderEventAt` — токен
+     * картки не stateful, він той самий незалежно від порядку доставки.
+     */
+    private async backfillMissingCardToken(
+        event: BillingWebhookEvent,
+        parsed: ParsedOrderReference
+    ): Promise<void> {
+        if (parsed.kind === ORDER_KIND.ONE_OFF) return;
+        if (!event.cardToken) return;
+        try {
+            const res = await this.userModel.updateOne(
+                {
+                    _id: parsed.userId,
+                    billing: { $ne: null },
+                    'billing.cardToken': null,
+                },
+                { $set: { 'billing.cardToken': event.cardToken } }
+            );
+            if (res.modifiedCount > 0) {
+                this.logger.log(
+                    `Backfilled card token for user ${parsed.userId} from ` +
+                        `duplicate event ${event.providerEventId}`
+                );
+            }
+        } catch (error) {
+            this.logger.error(
+                `Failed to backfill card token for user ${parsed.userId} ` +
+                    `(${event.providerEventId})`,
+                error instanceof Error ? error.stack : String(error)
+            );
+        }
     }
 
     /**
