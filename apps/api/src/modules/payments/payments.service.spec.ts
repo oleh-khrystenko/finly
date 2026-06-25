@@ -5,7 +5,10 @@ import {
     SUBSCRIPTION_STATUS,
 } from '@finly/types';
 import { PaymentsService } from './payments.service';
-import { IPaymentProvider } from './interfaces/payment-provider.interface';
+import {
+    IPaymentProvider,
+    ProviderRequestError,
+} from './interfaces/payment-provider.interface';
 
 /**
  * Sprint 22 — money-машина self-managed білінгу на mock-ах. Ключові інваріанти:
@@ -27,6 +30,8 @@ describe('PaymentsService (monobank, mocked)', () => {
         create: jest.Mock;
         findOne: jest.Mock;
         updateOne: jest.Mock;
+        deleteOne: jest.Mock;
+        exists: jest.Mock;
         find: jest.Mock;
     };
     let webhookEventModel: Record<string, jest.Mock>;
@@ -133,9 +138,14 @@ describe('PaymentsService (monobank, mocked)', () => {
         };
         paymentRecordModel = {
             create: jest.fn().mockResolvedValue({}),
-            findOne: jest.fn(),
+            // За замовчуванням — жодної незакритої спроби (resume-inflight guard).
+            findOne: jest.fn(() => ({
+                lean: jest.fn().mockResolvedValue(null),
+            })),
             // modifiedCount=1 → settle-гейт «цей виклик здійснив перехід».
             updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+            deleteOne: jest.fn().mockResolvedValue({ deletedCount: 1 }),
+            exists: jest.fn().mockResolvedValue(null),
             find: jest.fn(),
         };
         webhookEventModel = {
@@ -317,6 +327,36 @@ describe('PaymentsService (monobank, mocked)', () => {
             await service.chargeDueSubscription(USER);
             expect(provider.chargeByToken).not.toHaveBeenCalled();
         });
+
+        it('провайдер відхилив до списання (4xx) → знімає claim для повтору, БЕЗ manual-review', async () => {
+            provider.chargeByToken.mockRejectedValue(
+                new ProviderRequestError('monobank HTTP 429', true)
+            );
+
+            await service.chargeDueSubscription(USER);
+
+            // claim знято (deleteOne з guard providerTransactionId:null), розклад
+            // і доступ не чіпали → наступний прохід переспробує.
+            expect(paymentRecordModel.deleteOne).toHaveBeenCalledTimes(1);
+            expect(paymentRecordModel.deleteOne.mock.calls[0][0]).toMatchObject({
+                status: PAYMENT_RECORD_STATUS.PENDING,
+                providerTransactionId: null,
+            });
+            expect(userModel.updateOne).not.toHaveBeenCalled();
+        });
+
+        it('невідомий результат (таймаут/5xx) → manual-review, планувальник зупинено', async () => {
+            provider.chargeByToken.mockRejectedValue(
+                new ProviderRequestError('monobank request failed: timeout', false)
+            );
+
+            await service.chargeDueSubscription(USER);
+
+            expect(paymentRecordModel.deleteOne).not.toHaveBeenCalled();
+            const set = lastSet(userModel.updateOne);
+            expect(set['billing.needsManualReview']).toBe(true);
+            expect(set['billing.nextChargeAt']).toBeNull();
+        });
     });
 
     describe('cancelSubscription', () => {
@@ -403,6 +443,40 @@ describe('PaymentsService (monobank, mocked)', () => {
             // токен, поки користувач на хостованій сторінці monobank.
             const deferred = set['billing.nextRetryAt'] as Date;
             expect(deferred.getTime()).toBeGreaterThan(Date.now() + 29 * 60_000);
+        });
+
+        it('resume при незакритій спробі продовження → не відкриває другий checkout (захист від подвійного списання)', async () => {
+            currentUser = {
+                email: 'u@test.dev',
+                billing: activeBilling({
+                    subscriptionStatus: SUBSCRIPTION_STATUS.PAST_DUE,
+                }),
+            };
+            // Висить нетермінальна спроба продовження з invoiceId.
+            const boundaryMs = new Date('2026-06-01T12:00:00.000Z').getTime();
+            const inflightRef = `fin-sub-${USER}-${boundaryMs}`;
+            paymentRecordModel.findOne.mockReturnValue({
+                lean: jest.fn().mockResolvedValue({
+                    _id: 'rec-inflight',
+                    orderReference: inflightRef,
+                    status: PAYMENT_RECORD_STATUS.PENDING,
+                    providerTransactionId: 'inv-inflight',
+                }),
+            });
+            // Звірка статусу ще не дала фіналу (списання в обробці).
+            provider.getInvoiceStatus.mockResolvedValue(null);
+            // Спроба лишилась PENDING після звірки.
+            paymentRecordModel.exists.mockResolvedValue({ _id: 'rec-inflight' });
+
+            await expect(
+                service.resumeSubscription(USER, {})
+            ).rejects.toMatchObject({
+                response: {
+                    code: RESPONSE_CODE.BILLING_OPERATION_IN_PROGRESS,
+                },
+            });
+            // Головне: другий checkout НЕ відкрито, поки попереднє списання живе.
+            expect(provider.createSubscriptionCheckout).not.toHaveBeenCalled();
         });
 
         it('resume не наближує повтор, якщо він і так далі за вікно (беремо max)', async () => {

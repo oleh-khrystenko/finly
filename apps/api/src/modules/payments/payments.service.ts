@@ -29,6 +29,7 @@ import {
     ChargeResult,
     IPaymentProvider,
     PAYMENT_PROVIDER,
+    ProviderRequestError,
 } from './interfaces/payment-provider.interface';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import {
@@ -298,6 +299,54 @@ export class PaymentsService {
                 message: 'Invalid planCode',
             });
         }
+
+        // Перш ніж відкривати новий хостований checkout — звести будь-яку
+        // незакриту спробу продовження billing-clock-а. Нетермінальний результат
+        // списання лишає PENDING-claim з invoiceId; якщо паралельно оплатити на
+        // новій картці, обидва можуть осісти success → подвійне списання за
+        // період (advanceRenewedPeriod захищає лише СТАН, не гроші). Тому спершу
+        // доводимо спробу запитом статусу, і лише на чистому фіналі пускаємо
+        // resume. Робиться під тим самим per-user локом, тож гонки немає.
+        const inflight = await this.paymentRecordModel
+            .findOne({
+                userId: new Types.ObjectId(userId),
+                type: PAYMENT_RECORD_TYPE.SUBSCRIPTION,
+                status: PAYMENT_RECORD_STATUS.PENDING,
+            })
+            .lean();
+        if (inflight) {
+            await this.reconcileClaimedRenewal(
+                userId,
+                inflight.orderReference,
+                plan
+            );
+            const refreshed = await this.userModel.findById(userId).lean();
+            if (
+                refreshed?.billing?.subscriptionStatus !==
+                SUBSCRIPTION_STATUS.PAST_DUE
+            ) {
+                // Спроба осіла успіхом (підписка вже ACTIVE) або вичерпала грейс
+                // (UNPAID) — гасити борг немає чого / нема як.
+                throw new BadRequestException({
+                    code: RESPONSE_CODE.SUBSCRIPTION_NOT_PAST_DUE,
+                    message: 'Subscription is not past due',
+                });
+            }
+            const stillPending = await this.paymentRecordModel.exists({
+                userId: new Types.ObjectId(userId),
+                type: PAYMENT_RECORD_TYPE.SUBSCRIPTION,
+                status: PAYMENT_RECORD_STATUS.PENDING,
+            });
+            if (stillPending) {
+                // Спроба ще не дійшла термінального статусу — не ризикуємо
+                // паралельним списанням, просимо зачекати і повторити.
+                throw new ConflictException({
+                    code: RESPONSE_CODE.BILLING_OPERATION_IN_PROGRESS,
+                    message: 'Billing operation already in progress',
+                });
+            }
+        }
+
         const orderReference = buildSubscriptionOrderReference(userId);
         const result = await this.paymentProvider.createSubscriptionCheckout({
             userId,
@@ -444,7 +493,25 @@ export class PaymentsService {
                 serviceUrl: this.serviceUrl(),
             });
         } catch (error) {
-            // Результат списання НЕВІДОМИЙ (транспортний збій): гроші могли
+            if (
+                error instanceof ProviderRequestError &&
+                error.chargeDefinitelyNotApplied
+            ) {
+                // Провайдер відхилив запит ДО списання (HTTP 4xx, напр.
+                // rate-limit): гроші не рухались. Знімаємо claim, щоб наступний
+                // прохід billing-clock переспробував із тим самим детермінованим
+                // reference. Розклад і доступ НЕ чіпаємо — без manual-review-
+                // вклинення і безстрокового безкоштовного доступу на транзитній
+                // відмові.
+                this.logger.warn(
+                    `chargeByToken rejected without debit for ${orderReference}, ` +
+                        `releasing claim for retry next pass: ` +
+                        (error instanceof Error ? error.message : String(error))
+                );
+                await this.releaseRenewalClaim(orderReference);
+                return;
+            }
+            // Результат списання НЕВІДОМИЙ (таймаут / мережа / 5xx): гроші могли
             // рухатись, тож НЕ списуємо повторно. claim-запис лишається PENDING
             // без invoiceId — доказ спроби. Зупиняємо планувальник для цього
             // користувача (`nextChargeAt=null` → випадає з due-вибірки, без
@@ -857,6 +924,21 @@ export class PaymentsService {
             if (isDuplicateKeyError(error)) return 'exists';
             throw error;
         }
+    }
+
+    /**
+     * Знімає невикористаний claim-запис спроби продовження (PENDING без
+     * invoiceId). Викликається коли провайдер ВІДХИЛИВ списання до дебету (HTTP
+     * 4xx) — гроші не рухались, тож спробу слід просто повторити наступним
+     * проходом. Фільтр `providerTransactionId: null` гарантує, що ми не видалимо
+     * запис, для якого вже отримано invoiceId (там результат міг застосуватись).
+     */
+    private async releaseRenewalClaim(orderReference: string): Promise<void> {
+        await this.paymentRecordModel.deleteOne({
+            orderReference,
+            status: PAYMENT_RECORD_STATUS.PENDING,
+            providerTransactionId: null,
+        });
     }
 
     /**

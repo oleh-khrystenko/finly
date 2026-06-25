@@ -69,6 +69,23 @@ export interface WebhookParseResult {
     event: BillingWebhookEvent | null;
 }
 
+/**
+ * Помилка виклику провайдера. `chargeDefinitelyNotApplied` — true ЛИШЕ коли
+ * провайдер відповів кодом-відмовою рівня запиту (HTTP 4xx): інструкцію відхилено
+ * ДО будь-якого списання, гроші точно не рухались, тож спробу можна безпечно
+ * повторити. Для таймауту, мережевого збою чи 5xx результат НЕВІДОМИЙ (false) —
+ * повторне списання заборонене (money-safety: гроші могли піти).
+ */
+export class ProviderRequestError extends Error {
+    constructor(
+        message: string,
+        readonly chargeDefinitelyNotApplied: boolean
+    ) {
+        super(message);
+        this.name = 'ProviderRequestError';
+    }
+}
+
 export interface IPaymentProvider {
     createSubscriptionCheckout(
         input: SubscriptionCheckoutInput

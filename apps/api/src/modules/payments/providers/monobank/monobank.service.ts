@@ -7,6 +7,7 @@ import {
     CheckoutResult,
     IPaymentProvider,
     OneOffCheckoutInput,
+    ProviderRequestError,
     SubscriptionCheckoutInput,
     WebhookParseResult,
 } from '../../interfaces/payment-provider.interface';
@@ -278,14 +279,22 @@ export class MonobankService implements IPaymentProvider {
                     : err instanceof Error
                       ? err.message
                       : 'network error';
-            throw new Error(`monobank ${path} request failed: ${reason}`);
+            // Відповіді немає (таймаут / мережа): результат списання НЕВІДОМИЙ.
+            throw new ProviderRequestError(
+                `monobank ${path} request failed: ${reason}`,
+                false
+            );
         }
         const json: unknown = await res.json().catch(() => null);
         const record = asRecord(json) ?? {};
         if (!res.ok) {
-            throw new Error(
+            // HTTP 4xx — запит відхилено рівня валідації/ліміту, списання НЕ
+            // відбулось (безпечно повторити). 5xx — серверний збій провайдера,
+            // результат НЕВІДОМИЙ (гроші могли піти), повтор заборонений.
+            throw new ProviderRequestError(
                 `monobank ${path} HTTP ${res.status}: ` +
-                    `${str(record.errText) ?? str(record.errCode) ?? 'unknown'}`
+                    `${str(record.errText) ?? str(record.errCode) ?? 'unknown'}`,
+                res.status < 500
             );
         }
         return record;
