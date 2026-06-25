@@ -83,8 +83,8 @@ export default function ManageSubscription({
             {isPastDue && (
                 <div className="border-destructive/30 bg-destructive/10 text-destructive rounded-lg border p-4 text-sm">
                     Останнє списання не пройшло. Доступ діятиме до кінця
-                    грейс-вікна. Натисніть «Оплатити зараз», щоб погасити борг і
-                    зберегти підписку.
+                    пільгового періоду. Натисніть «Оплатити зараз», щоб погасити
+                    борг і зберегти підписку.
                 </div>
             )}
 

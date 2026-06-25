@@ -31,11 +31,11 @@ export const RESPONSE_CODE = {
      */
     BILLING_NEEDS_MANUAL_REVIEW: 'BILLING_NEEDS_MANUAL_REVIEW',
     /**
-     * Sprint 17 — конкурентна білінг-мутація. Усі write-операції над підпискою
-     * (checkout, cancel, change-plan) серіалізовані
-     * per-user Redis-локом: WayForPay charge/refund/CHANGE неідемпотентні, тож
-     * два паралельні запити (дві вкладки) інакше задвоїли б списання чи
-     * повернення. Lock зайнятий → цей код. Recovery: дочекатись і повторити.
+     * Sprint 17/22 — конкурентна білінг-мутація. Усі write-операції над підпискою
+     * (checkout, resume, cancel) і billing-clock-списання серіалізовані per-user
+     * Redis-локом: списання monobank за токеном неідемпотентне, тож два паралельні
+     * запити (дві вкладки) чи гонка з планувальником інакше задвоїли б списання за
+     * період. Lock зайнятий → цей код. Recovery: дочекатись і повторити.
      */
     BILLING_OPERATION_IN_PROGRESS: 'BILLING_OPERATION_IN_PROGRESS',
 
