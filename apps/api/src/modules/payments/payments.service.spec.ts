@@ -72,6 +72,51 @@ describe('PaymentsService (monobank, mocked)', () => {
         };
     }
 
+    function makeCatalogMock() {
+        const sub: Record<string, unknown> = {
+            brand: {
+                code: 'brand',
+                name: 'Бренд',
+                priceAmount: 4900,
+                currency: 'UAH',
+                interval: 'month',
+                level: 'brand',
+                displayOrder: 0,
+                featured: true,
+            },
+            bookkeeper: {
+                code: 'bookkeeper',
+                name: 'Агенція',
+                priceAmount: 9900,
+                currency: 'UAH',
+                interval: 'month',
+                level: 'bookkeeper',
+                displayOrder: 1,
+                featured: false,
+            },
+        };
+        const oneOff: Record<string, unknown> = {
+            brand: {
+                code: 'brand',
+                name: 'Бренд на місяць',
+                priceAmount: 6900,
+                currency: 'UAH',
+                level: 'brand',
+                durationMonths: 1,
+                displayOrder: 0,
+                featured: true,
+            },
+        };
+        return {
+            getSubscriptionPlan: (code: string) => sub[code],
+            getOneOffAccess: (code: string) => oneOff[code],
+            getCatalog: () => ({
+                subscriptionPlans: Object.values(sub),
+                oneOffAccesses: Object.values(oneOff),
+            }),
+        };
+    }
+
     beforeEach(() => {
         provider = {
             createSubscriptionCheckout: jest.fn(),
@@ -121,6 +166,7 @@ describe('PaymentsService (monobank, mocked)', () => {
                 endSession: jest.fn().mockResolvedValue(undefined),
             }),
         };
+        const catalog = makeCatalogMock();
 
         service = new PaymentsService(
             provider,
@@ -130,6 +176,7 @@ describe('PaymentsService (monobank, mocked)', () => {
             connection as never,
             usersService as never,
             emailService as never,
+            catalog as never,
             reconciliation as never,
             locks as never
         );
@@ -349,6 +396,7 @@ describe('PaymentsService (monobank, mocked)', () => {
             {} as never,
             usersService as never,
             emailService as never,
+            makeCatalogMock() as never,
             reconciliation as never,
             locks as never
         );

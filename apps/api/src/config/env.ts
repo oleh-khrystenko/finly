@@ -105,6 +105,24 @@ export const ENV = {
         'BILLING_DUNNING_RETRY_INTERVAL_HOURS'
     ),
 
+    // Sprint 22 — ЦІНИ у ГРИВНЯХ (цілі). Єдине джерело ціни для всього продукту:
+    // `CatalogService` накладає їх на каталог, а той живить і публічний
+    // ендпоінт (web рендерить з нього), і суму реального списання у
+    // `PaymentsService`. Зміна = відредагувати тут + перезапустити API (без
+    // ребілду web). Конверсію у копійки робить CatalogService (×100).
+    BILLING_PRICE_SUBSCRIPTION_BRAND: getNonNegativeIntEnvVar(
+        'BILLING_PRICE_SUBSCRIPTION_BRAND'
+    ),
+    BILLING_PRICE_SUBSCRIPTION_BOOKKEEPER: getNonNegativeIntEnvVar(
+        'BILLING_PRICE_SUBSCRIPTION_BOOKKEEPER'
+    ),
+    BILLING_PRICE_ONEOFF_BRAND: getNonNegativeIntEnvVar(
+        'BILLING_PRICE_ONEOFF_BRAND'
+    ),
+    BILLING_PRICE_ONEOFF_BOOKKEEPER: getNonNegativeIntEnvVar(
+        'BILLING_PRICE_ONEOFF_BOOKKEEPER'
+    ),
+
     AUTH_PASSWORD_MIN_LENGTH: parseInt(
         getEnvVar('AUTH_PASSWORD_MIN_LENGTH'),
         10
@@ -203,6 +221,20 @@ if (
             `BILLING_DUNNING_RETRY_INTERVAL_HOURS (${ENV.BILLING_DUNNING_RETRY_INTERVAL_HOURS}) ` +
             'must both be ≥ 1.'
     );
+}
+
+// Sprint 22 — ціна 0 грн = безкоштовний/зламаний charge. Кожен тариф ≥ 1 грн.
+const billingPrices = {
+    BILLING_PRICE_SUBSCRIPTION_BRAND: ENV.BILLING_PRICE_SUBSCRIPTION_BRAND,
+    BILLING_PRICE_SUBSCRIPTION_BOOKKEEPER:
+        ENV.BILLING_PRICE_SUBSCRIPTION_BOOKKEEPER,
+    BILLING_PRICE_ONEOFF_BRAND: ENV.BILLING_PRICE_ONEOFF_BRAND,
+    BILLING_PRICE_ONEOFF_BOOKKEEPER: ENV.BILLING_PRICE_ONEOFF_BOOKKEEPER,
+};
+for (const [name, value] of Object.entries(billingPrices)) {
+    if (value < 1) {
+        throw new Error(`❌ ${name} (${value}) must be ≥ 1 (гривні).`);
+    }
 }
 
 // Sprint 10 §10.1 — dedup-overwrite-flow (sendMagicLink SP-8) припускає, що

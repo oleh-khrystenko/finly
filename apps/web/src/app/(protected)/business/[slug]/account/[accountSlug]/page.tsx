@@ -28,7 +28,7 @@ import {
     useAuthStore,
     useCanEditSlug,
 } from '@/entities/user';
-import { brandUpsellCtaLabel, startBrandCheckout } from '@/features/billing';
+import { useBrandSubscribeLabel, startBrandCheckout } from '@/features/billing';
 import { BrandSection } from '@/features/brand-logo';
 import { ENV } from '@/shared/config/env';
 import UiButton from '@/shared/ui/UiButton';
@@ -96,6 +96,7 @@ export default function AccountCabinetPage() {
     const userId = useAuthStore((s) => s.user?.id);
     const reservation = useAuthStore((s) => s.user?.activeSlugReservation ?? null);
     const isPaid = useCanEditSlug();
+    const subscribeLabel = useBrandSubscribeLabel();
     const openDeleteConfirm = useDeleteAccountConfirmStore((s) => s.open);
 
     const [data, setData] = useState<LoadedData | null>(null);
@@ -345,7 +346,7 @@ export default function AccountCabinetPage() {
                     reserveAccountSlug(business.slug, account.slug, slug)
                 }
                 onSubscribe={handleSubscribe}
-                subscribePriceLabel={brandUpsellCtaLabel()}
+                subscribePriceLabel={subscribeLabel}
                 initialReservation={
                     !isPaid && desiredSlug ? reservation : null
                 }
@@ -355,7 +356,7 @@ export default function AccountCabinetPage() {
                 business={business}
                 isPaid={isPaid}
                 onSubscribe={handleSubscribe}
-                subscribePriceLabel={brandUpsellCtaLabel()}
+                subscribePriceLabel={subscribeLabel}
                 onApplied={handleBrandApplied}
             />
             <InvoicesSection

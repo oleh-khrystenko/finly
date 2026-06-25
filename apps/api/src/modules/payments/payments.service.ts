@@ -16,8 +16,6 @@ import {
     PAYMENT_TYPE,
     RESPONSE_CODE,
     SUBSCRIPTION_STATUS,
-    findOneOffAccess,
-    findSubscriptionPlan,
     type AccessLevel,
     type BillingInterval,
     type BillingWebhookEvent,
@@ -44,6 +42,7 @@ import {
 } from './schemas/payment-record.schema';
 import { UsersService } from '../users/users.service';
 import { EmailService } from '../email/email.service';
+import { CatalogService } from './catalog.service';
 import { ReconciliationService } from '../businesses/reconciliation.service';
 import {
     BILLING_LOCK_TTL_MS,
@@ -88,6 +87,8 @@ export class PaymentsService {
         private readonly usersService: UsersService,
 
         private readonly emailService: EmailService,
+
+        private readonly catalog: CatalogService,
 
         private readonly reconciliation: ReconciliationService,
 
@@ -173,7 +174,7 @@ export class PaymentsService {
                     message: 'Already subscribed',
                 });
             }
-            const plan = findSubscriptionPlan(planCode ?? '');
+            const plan = this.catalog.getSubscriptionPlan(planCode ?? '');
             if (!plan) {
                 throw new BadRequestException({
                     code: RESPONSE_CODE.INVALID_PLAN,
@@ -219,7 +220,7 @@ export class PaymentsService {
             return { checkoutUrl: result.checkoutUrl };
         }
 
-        const access = findOneOffAccess(oneOffCode ?? '');
+        const access = this.catalog.getOneOffAccess(oneOffCode ?? '');
         if (!access) {
             throw new BadRequestException({
                 code: RESPONSE_CODE.INVALID_PLAN,
@@ -275,7 +276,7 @@ export class PaymentsService {
                 message: 'Subscription is not past due',
             });
         }
-        const plan = findSubscriptionPlan(billing.planCode ?? '');
+        const plan = this.catalog.getSubscriptionPlan(billing.planCode ?? '');
         if (!plan) {
             throw new BadRequestException({
                 code: RESPONSE_CODE.INVALID_PLAN,
@@ -374,7 +375,7 @@ export class PaymentsService {
         ) {
             return;
         }
-        const plan = findSubscriptionPlan(b.planCode);
+        const plan = this.catalog.getSubscriptionPlan(b.planCode);
         if (!plan) {
             this.logger.error(
                 `Cannot charge user ${userId}: unknown planCode ${b.planCode}`
@@ -794,7 +795,7 @@ export class PaymentsService {
             const user = await this.userModel.findById(userId).lean();
             const b = user?.billing;
             if (!b || !b.planCode) return;
-            const plan = findSubscriptionPlan(b.planCode);
+            const plan = this.catalog.getSubscriptionPlan(b.planCode);
             if (!plan) return;
             await this.reconcileClaimedRenewal(userId, orderReference, plan);
         });
@@ -994,7 +995,7 @@ export class PaymentsService {
             return;
         }
 
-        const access = findOneOffAccess(oneOffCode);
+        const access = this.catalog.getOneOffAccess(oneOffCode);
         if (!access) {
             this.logger.warn(`Unknown oneOffCode ${oneOffCode} in webhook`);
             return;
@@ -1111,7 +1112,7 @@ export class PaymentsService {
             return;
         }
 
-        const plan = findSubscriptionPlan(billing.planCode ?? '');
+        const plan = this.catalog.getSubscriptionPlan(billing.planCode ?? '');
         const interval = plan?.interval ?? 'month';
 
         if (event.status !== MONOBANK_INVOICE_STATUS.SUCCESS) {
@@ -1428,11 +1429,11 @@ export class PaymentsService {
     }
 
     private planLabel(code: string): string {
-        return `Підписка ${findSubscriptionPlan(code)?.name ?? code}`;
+        return `Підписка ${this.catalog.getSubscriptionPlan(code)?.name ?? code}`;
     }
 
     private oneOffLabel(code: string): string {
-        return findOneOffAccess(code)?.name ?? code;
+        return this.catalog.getOneOffAccess(code)?.name ?? code;
     }
 
     private serviceUrl(): string {

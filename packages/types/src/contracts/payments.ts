@@ -84,10 +84,11 @@ export interface PaymentsCatalog {
     oneOffAccesses: OneOffAccessItem[];
 }
 
-// --- Static Catalog (єдине джерело істини) ---
-// Ціни у копійках: 49 грн = 4900. WayForPay оперує decimal-сумою у валюті —
-// конверсію копійки↔decimal робить payload-mapper провайдера. One-off за місяць
-// дорожчий за місяць підписки (підштовхує до підписки).
+// --- Static Catalog (структура — джерело істини) ---
+// Структура (коди, рівні, інтервал, назви) — джерело істини. `priceAmount` тут —
+// лише ДЕФОЛТ (копійки: 49 грн = 4900); у рантаймі ціну накладає API з ENV
+// (`CatalogService`, Sprint 22) — і на ендпоінт каталогу, і на суму списання.
+// One-off за місяць дорожчий за місяць підписки (підштовхує до підписки).
 
 export const SUBSCRIPTION_PLANS: readonly SubscriptionPlanItem[] = [
     {
