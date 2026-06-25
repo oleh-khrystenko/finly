@@ -95,8 +95,9 @@ export const ENV = {
     BILLING_DEMO_MODE: billingDemoMode,
 
     // Sprint 22 — dunning billing-clock: скільки спроб списання у прострочці до
-    // зняття доступу і інтервал між повторами. Грейс ≈ MAX × INTERVAL (план Q5:
-    // помірне вікно ~7 днів, ~3 повтори).
+    // зняття доступу і інтервал між повторами. Грейс ≈ (MAX−1) × INTERVAL.
+    // Дефолт 10 × 24год ≈ 9 днів: частий перший повтор ловить швидке поповнення
+    // картки, довге вікно перекриває зарплатну хвилю.
     BILLING_DUNNING_MAX_ATTEMPTS: getNonNegativeIntEnvVar(
         'BILLING_DUNNING_MAX_ATTEMPTS'
     ),
