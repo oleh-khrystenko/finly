@@ -85,16 +85,20 @@ export interface PaymentsCatalog {
 }
 
 // --- Static Catalog (структура — джерело істини) ---
-// Структура (коди, рівні, інтервал, назви) — джерело істини. `priceAmount` тут —
-// лише ДЕФОЛТ (копійки: 49 грн = 4900); у рантаймі ціну накладає API з ENV
-// (`CatalogService`, Sprint 22) — і на ендпоінт каталогу, і на суму списання.
-// One-off за місяць дорожчий за місяць підписки (підштовхує до підписки).
+// Структура (коди, рівні, інтервал, назви) — джерело істини. ЦІНИ ТУТ НЕМАЄ:
+// `priceAmount` завжди `PRICE_FROM_ENV` (0) і у рантаймі НЕ використовується —
+// реальну ціну накладає API з ENV (`CatalogService`, Sprint 22) і на ендпоінт
+// каталогу, і на суму списання. Тримаємо 0, щоб ніхто випадково не «правив ціну»
+// тут (пошук конкретного числа нічого не знайде).
+
+/** Sentinel: ціни немає у статичному конфізі — джерело ціни лише ENV (API). */
+const PRICE_FROM_ENV = 0;
 
 export const SUBSCRIPTION_PLANS: readonly SubscriptionPlanItem[] = [
     {
         code: 'brand',
         name: 'Бренд',
-        priceAmount: 4900,
+        priceAmount: PRICE_FROM_ENV,
         currency: BILLING_CURRENCY,
         interval: 'month',
         level: 'brand',
@@ -104,7 +108,7 @@ export const SUBSCRIPTION_PLANS: readonly SubscriptionPlanItem[] = [
     {
         code: 'bookkeeper',
         name: 'Агенція',
-        priceAmount: 9900,
+        priceAmount: PRICE_FROM_ENV,
         currency: BILLING_CURRENCY,
         interval: 'month',
         level: 'bookkeeper',
@@ -117,7 +121,7 @@ export const ONE_OFF_ACCESSES: readonly OneOffAccessItem[] = [
     {
         code: 'brand',
         name: 'Бренд на місяць',
-        priceAmount: 6900,
+        priceAmount: PRICE_FROM_ENV,
         currency: BILLING_CURRENCY,
         level: 'brand',
         durationMonths: 1,
@@ -127,7 +131,7 @@ export const ONE_OFF_ACCESSES: readonly OneOffAccessItem[] = [
     {
         code: 'bookkeeper',
         name: 'Агенція на місяць',
-        priceAmount: 12_900,
+        priceAmount: PRICE_FROM_ENV,
         currency: BILLING_CURRENCY,
         level: 'bookkeeper',
         durationMonths: 1,
