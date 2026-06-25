@@ -15,12 +15,12 @@ process.env.GOOGLE_CALLBACK_URL ??=
     'http://localhost:4000/api/auth/google/callback';
 process.env.RESEND_API_KEY ??= 're_test_placeholder';
 process.env.RESEND_FROM_EMAIL ??= 'Finly <test@test.dev>';
-process.env.WAYFORPAY_MERCHANT_ACCOUNT ??= 'test_merch_n1';
-process.env.WAYFORPAY_MERCHANT_SECRET_KEY ??= 'flk3409refn54t54t*FNJRET';
-process.env.WAYFORPAY_MERCHANT_DOMAIN ??= 'finly.com.ua';
+process.env.MONOBANK_TOKEN ??= 'test-monobank-token';
 process.env.PAYMENTS_SUBSCRIPTION_ENABLED ??= 'true';
 process.env.PAYMENTS_ONE_OFF_ENABLED ??= 'true';
 process.env.BILLING_DEMO_MODE ??= 'true';
+process.env.BILLING_DUNNING_MAX_ATTEMPTS ??= '4';
+process.env.BILLING_DUNNING_RETRY_INTERVAL_HOURS ??= '48';
 process.env.AUTH_PASSWORD_MIN_LENGTH ??= '8';
 process.env.AUTH_LOCKOUT_THRESHOLDS ??= '5:1,10:5,20:15';
 process.env.AUTH_LOGIN_ATTEMPTS_TTL_MIN ??= '15';

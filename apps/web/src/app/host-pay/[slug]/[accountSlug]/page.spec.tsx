@@ -259,7 +259,11 @@ describe('generateMetadata', () => {
         expect(meta.openGraph?.url).toBe(
             'https://pay.finly.com.ua/IvanEnko/aBc12345'
         );
-        expect(meta.twitter?.card).toBe('summary_large_image');
+        expect(
+            meta.twitter && 'card' in meta.twitter
+                ? meta.twitter.card
+                : undefined
+        ).toBe('summary_large_image');
     });
 
     it('§SP-9 null-fallback — bankCode=null → bank-label-prefix drop, ibanMask лишається', async () => {

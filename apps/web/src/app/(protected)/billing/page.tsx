@@ -105,7 +105,7 @@ export default function BillingPage() {
                 <UiPageHeading>Тариф</UiPageHeading>
                 <p className="text-muted-foreground mt-2">
                     Керуйте підпискою та доступом. Усі платежі безпечно
-                    обробляються через WayForPay.
+                    обробляються через monobank.
                 </p>
             </div>
 
@@ -130,8 +130,6 @@ export default function BillingPage() {
                     </p>
                     <p className="text-muted-foreground mt-1 text-sm">
                         Діє до {formatLocalDate(oneOffUntil)}.
-                        {PAYMENTS_SUBSCRIPTION_ENABLED &&
-                            ' Оформлення підписки нижче перенесе перше списання на цю дату.'}
                     </p>
                 </div>
             )}

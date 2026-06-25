@@ -3,17 +3,14 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
 import { PaymentsCleanupService } from './payments-cleanup.service';
+import { BillingClockService } from './billing-clock.service';
 import { CatalogService } from './catalog.service';
 import { paymentProviderProvider } from './providers/payment-provider.provider';
-import { WayForPayService } from './providers/wayforpay/wayforpay.service';
+import { MonobankService } from './providers/monobank/monobank.service';
 import {
     ProcessedWebhookEvent,
     ProcessedWebhookEventSchema,
 } from './schemas/processed-webhook-event.schema';
-import {
-    FailedRecurringRemoval,
-    FailedRecurringRemovalSchema,
-} from './schemas/failed-recurring-removal.schema';
 import {
     PaymentRecord,
     PaymentRecordSchema,
@@ -29,10 +26,6 @@ import { BusinessesModule } from '../businesses/businesses.module';
                 schema: ProcessedWebhookEventSchema,
             },
             {
-                name: FailedRecurringRemoval.name,
-                schema: FailedRecurringRemovalSchema,
-            },
-            {
                 name: PaymentRecord.name,
                 schema: PaymentRecordSchema,
             },
@@ -45,8 +38,9 @@ import { BusinessesModule } from '../businesses/businesses.module';
     providers: [
         PaymentsService,
         PaymentsCleanupService,
+        BillingClockService,
         CatalogService,
-        WayForPayService,
+        MonobankService,
         paymentProviderProvider,
     ],
     exports: [PaymentsService, CatalogService],

@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { CreditCard } from 'lucide-react';
 import {
     SUBSCRIPTION_STATUS,
@@ -9,8 +10,9 @@ import {
 } from '@finly/types';
 import { useAuthStore } from '@/entities/user';
 import { formatLocalDate } from '@/shared/lib';
+import { resumeSubscription } from '@/shared/api/payments';
+import { extractApiErrorCode, getApiMessage } from '@/shared/api';
 import UiButton from '@/shared/ui/UiButton';
-import { useChangePlanDialogStore } from './changePlanDialogStore';
 import { useCancelSubscriptionDialogStore } from './cancelSubscriptionDialogStore';
 import { PLAN_COPY } from './catalogCopy';
 import RecentPayments from './RecentPayments';
@@ -25,12 +27,6 @@ function statusBadge(billing: UserBilling): { label: string; cls: string } {
     if (billing.cancelAtPeriodEnd) {
         return { label: 'Скасовується', cls: 'bg-warning/15 text-warning' };
     }
-    // TRIALING після Sprint 19 — не trial (його прибрано), а відкладений старт
-    // поверх активного one-off: картка привʼязана, перше списання на даті
-    // закінчення one-off доступу.
-    if (billing.subscriptionStatus === SUBSCRIPTION_STATUS.TRIALING) {
-        return { label: 'Очікує старту', cls: 'bg-primary/15 text-primary' };
-    }
     return { label: 'Активна', cls: 'bg-success/15 text-success' };
 }
 
@@ -40,13 +36,11 @@ export default function ManageSubscription({
     catalog: PaymentsCatalog | null;
 }) {
     const billing = useAuthStore((s) => s.user?.billing ?? null);
-    const openChangePlan = useChangePlanDialogStore((s) => s.open);
     const openCancel = useCancelSubscriptionDialogStore((s) => s.open);
+    const [resuming, setResuming] = useState(false);
 
-    // Перезавантаження списку списань привʼязане до зміни стану підписки —
-    // після cancel/change/re-bind. Прямий токен замість окремого
-    // useState+useEffect уникає зайвого fetch на первинному mount.
-    const reloadKey = `${billing?.subscriptionStatus}|${billing?.planCode}|${billing?.cancelAtPeriodEnd}|${billing?.scheduledPlanCode}`;
+    // Перезавантаження списку списань привʼязане до зміни стану підписки.
+    const reloadKey = `${billing?.subscriptionStatus}|${billing?.planCode}|${billing?.cancelAtPeriodEnd}`;
 
     const activePlan = useMemo(
         () =>
@@ -71,17 +65,26 @@ export default function ManageSubscription({
         billing.subscriptionStatus === SUBSCRIPTION_STATUS.PAST_DUE;
     const planName = planNameOf(billing.planCode);
 
+    const handleResume = async () => {
+        setResuming(true);
+        try {
+            const { checkoutUrl } = await resumeSubscription();
+            window.location.assign(checkoutUrl);
+        } catch (err) {
+            toast.error(getApiMessage(extractApiErrorCode(err), 'payments'));
+            setResuming(false);
+        }
+    };
+
     return (
         <section className="space-y-5">
-            <h2 className="text-foreground text-2xl font-bold">
-                Ваша підписка
-            </h2>
+            <h2 className="text-foreground text-2xl font-bold">Ваша підписка</h2>
 
             {isPastDue && (
                 <div className="border-destructive/30 bg-destructive/10 text-destructive rounded-lg border p-4 text-sm">
                     Останнє списання не пройшло. Доступ діятиме до кінця
-                    оплаченого періоду, після чого підписку треба буде оформити
-                    заново.
+                    грейс-вікна. Натисніть «Оплатити зараз», щоб погасити борг і
+                    зберегти підписку.
                 </div>
             )}
 
@@ -100,10 +103,9 @@ export default function ManageSubscription({
                 <p className="text-muted-foreground mt-1 text-sm">
                     {billing.cancelAtPeriodEnd
                         ? `Доступ діє до ${formatLocalDate(billing.currentPeriodEnd)}`
-                        : billing.subscriptionStatus ===
-                            SUBSCRIPTION_STATUS.TRIALING
-                          ? `Перше списання ${formatLocalDate(billing.currentPeriodEnd)}`
-                          : `Наступне списання ${formatLocalDate(billing.currentPeriodEnd)}`}
+                        : isPastDue
+                          ? 'Повторюємо списання найближчими днями'
+                          : `Наступне списання ${formatLocalDate(billing.nextChargeAt)}`}
                 </p>
 
                 {activePlan && PLAN_COPY[activePlan.code]?.tagline && (
@@ -119,30 +121,22 @@ export default function ManageSubscription({
                     </p>
                 )}
 
-                {billing.scheduledPlanCode && (
-                    <p className="text-muted-foreground mt-0.5 text-sm">
-                        Перехід на{' '}
-                        <span className="font-bold">
-                            {planNameOf(billing.scheduledPlanCode)}
-                        </span>{' '}
-                        з {formatLocalDate(billing.scheduledChangeDate)}
+                {!billing.cancelAtPeriodEnd && (
+                    <p className="text-muted-foreground mt-3 text-xs">
+                        Щоб змінити тариф, скасуйте підписку і оформіть нову
+                        після завершення оплаченого періоду.
                     </p>
                 )}
 
                 <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                    {!billing.cancelAtPeriodEnd && (
+                    {isPastDue && (
                         <UiButton
-                            variant="outline"
+                            variant="filled"
                             size="md"
-                            onClick={() =>
-                                openChangePlan({
-                                    plans: catalog?.subscriptionPlans ?? [],
-                                    currentPlanCode: billing.planCode,
-                                })
-                            }
-                            disabled={!catalog}
+                            onClick={handleResume}
+                            loading={resuming}
                         >
-                            Змінити план
+                            Оплатити зараз
                         </UiButton>
                     )}
                     {!billing.cancelAtPeriodEnd && (

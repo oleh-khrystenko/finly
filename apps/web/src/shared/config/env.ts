@@ -54,7 +54,7 @@ export const PAYMENTS_ONE_OFF_ENABLED =
     ) === 'true';
 
 // Демо-банер на сторінці білінгу (тестова картка, "кошти не списуються").
-// Тільки для sandbox-стадії WayForPay; у проді МУСИТЬ бути 'false', інакше
+// Тільки для sandbox-стадії monobank; у проді МУСИТЬ бути 'false', інакше
 // реальним користувачам показується хибне твердження про відсутність списань.
 export const BILLING_DEMO_MODE =
     assertEnv(

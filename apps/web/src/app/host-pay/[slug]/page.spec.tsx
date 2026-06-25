@@ -284,7 +284,11 @@ describe('generateMetadata — SEO robots (§E3)', () => {
             'https://pay.finly.com.ua/IvanEnko'
         );
         expect(meta.openGraph?.url).toBe('https://pay.finly.com.ua/IvanEnko');
-        expect(meta.twitter?.card).toBe('summary_large_image');
+        expect(
+            meta.twitter && 'card' in meta.twitter
+                ? meta.twitter.card
+                : undefined
+        ).toBe('summary_large_image');
     });
 
     it('not found → fallback title + noindex (запобігаємо індексацію 404)', async () => {

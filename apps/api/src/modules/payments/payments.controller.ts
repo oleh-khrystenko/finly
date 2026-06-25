@@ -3,12 +3,14 @@ import {
     Body,
     Controller,
     Get,
+    Headers,
     HttpCode,
     HttpStatus,
     Param,
     Post,
     Query,
     Req,
+    ServiceUnavailableException,
     UseGuards,
 } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
@@ -27,15 +29,12 @@ import { ENV } from '../../config/env';
 import { PaymentsService } from './payments.service';
 import { CatalogService } from './catalog.service';
 import { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
-import {
-    CancelSubscriptionDto,
-    ChangePlanDto,
-} from './dto/manage-subscription.dto';
+import { ResumeSubscriptionDto } from './dto/manage-subscription.dto';
 import type { PaymentRecordLean } from './schemas/payment-record.schema';
 
 const DEFAULT_PAYMENTS_LIMIT = 10;
 const MAX_PAYMENTS_LIMIT = 50;
-const SUPPORTED_PROVIDERS = new Set(['wayforpay']);
+const SUPPORTED_PROVIDERS = new Set(['monobank']);
 
 @Controller('payments')
 export class PaymentsController {
@@ -76,13 +75,13 @@ export class PaymentsController {
     }
 
     @UseGuards(JwtActiveGuard)
-    @Post('subscription/cancel')
+    @Post('subscription/resume')
     @HttpCode(HttpStatus.OK)
-    async cancelSubscription(
+    async resumeSubscription(
         @CurrentUser() user: UserDocument,
-        @Body() dto: CancelSubscriptionDto
-    ): Promise<{ data: { refundedAmount: number | null } }> {
-        const result = await this.paymentsService.cancelSubscription(
+        @Body() dto: ResumeSubscriptionDto
+    ): Promise<{ data: { checkoutUrl: string } }> {
+        const result = await this.paymentsService.resumeSubscription(
             user._id.toString(),
             dto
         );
@@ -90,17 +89,13 @@ export class PaymentsController {
     }
 
     @UseGuards(JwtActiveGuard)
-    @Post('subscription/change-plan')
+    @Post('subscription/cancel')
     @HttpCode(HttpStatus.OK)
-    async changePlan(
-        @CurrentUser() user: UserDocument,
-        @Body() dto: ChangePlanDto
-    ): Promise<{ data: { scheduled: boolean; checkoutUrl?: string } }> {
-        const result = await this.paymentsService.changePlan(
-            user._id.toString(),
-            dto
-        );
-        return { data: result };
+    async cancelSubscription(
+        @CurrentUser() user: UserDocument
+    ): Promise<{ data: { ok: true } }> {
+        await this.paymentsService.cancelSubscription(user._id.toString());
+        return { data: { ok: true } };
     }
 
     @UseGuards(JwtActiveGuard)
@@ -123,8 +118,9 @@ export class PaymentsController {
     @HttpCode(HttpStatus.OK)
     async handleWebhook(
         @Param('provider') provider: string,
+        @Headers('x-sign') signature: string | undefined,
         @Req() req: RawBodyRequest<Request>
-    ): Promise<Record<string, unknown>> {
+    ): Promise<{ ok: true }> {
         if (!SUPPORTED_PROVIDERS.has(provider)) {
             throw new BadRequestException({
                 code: RESPONSE_CODE.VALIDATION_ERROR,
@@ -138,11 +134,18 @@ export class PaymentsController {
                 message: 'Missing raw body',
             });
         }
-        const accept = await this.paymentsService.handleWebhook(rawBody);
-        // Невалідний підпис → accept null. Віддаємо порожній об'єкт (200), щоб
-        // не зливати інформацію про причину; валідний колбек отримує підписаний
-        // accept, без якого WayForPay шле повтори.
-        return accept ?? {};
+        const acked = await this.paymentsService.handleWebhook(
+            rawBody,
+            signature
+        );
+        if (!acked) {
+            // Crash-orphan / lock-busy: non-2xx → monobank передоставить подію.
+            throw new ServiceUnavailableException({
+                code: RESPONSE_CODE.INTERNAL_ERROR,
+                message: 'Webhook deferred, will retry',
+            });
+        }
+        return { ok: true };
     }
 }
 

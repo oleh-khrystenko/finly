@@ -23,7 +23,7 @@ export {
     createSubscriptionCheckout,
     createOneOffCheckout,
     cancelSubscription,
-    changePlan,
+    resumeSubscription,
     listPayments,
 } from './payments';
 export {

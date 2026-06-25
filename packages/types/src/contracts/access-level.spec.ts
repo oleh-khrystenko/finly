@@ -110,20 +110,20 @@ describe('deriveAccessLevel', () => {
         expect(level).toBe('bookkeeper');
     });
 
-    it('відкладений TRIALING поверх one-off: рівень = one-off, не майбутній тариф', () => {
-        // Brand-one-off + bookkeeper-підписка на відкладеному старті (ще не
-        // списана) → доступ лише brand, не безкоштовний bookkeeper до списання.
+    it('PAST_DUE підписка (грейс dunning) зараховується — доступ тримається', () => {
+        // Прострочка в межах грейсу лишається живою: hasActiveSubscription=true,
+        // доступ не гасне, поки billing-clock не вичерпав спроби.
         const level = deriveAccessLevel(
             {
                 planCode: 'bookkeeper',
                 hasActiveSubscription: true,
-                subscriptionStatus: SUBSCRIPTION_STATUS.TRIALING,
-                oneOffLevel: 'brand',
-                oneOffAccessUntil: FUTURE,
+                subscriptionStatus: SUBSCRIPTION_STATUS.PAST_DUE,
+                oneOffLevel: null,
+                oneOffAccessUntil: null,
             },
             NOW
         );
-        expect(level).toBe('brand');
+        expect(level).toBe('bookkeeper');
     });
 
     it('ACTIVE підписка (після списання) зараховується повністю', () => {

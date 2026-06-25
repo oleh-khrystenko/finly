@@ -1,22 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 /**
- * Міст повернення з WayForPay (returnUrl).
+ * Міст повернення з хостованої сторінки оплати (returnUrl).
  *
- * WayForPay повертає платника на returnUrl авто-сабмітом форми, тобто
- * **крос-сайтовим POST**. Це створює два дефекти, якщо вести POST прямо на
- * сторінку `/billing/success`:
- *   1. App Router трактує POST на сторінку (`page.tsx`) як виклик Server
- *      Action і, не знайшовши його, віддає "Server action not found".
- *   2. Крос-сайтовий POST не несе `bid_refresh` (SameSite=Lax), тож `proxy.ts`
- *      вважає сесію простроченою і робить 307-redirect на
- *      `/auth/signin?reason=session-expired` (307 зберігає метод → знову POST
- *      на сторінку → знову "Server action not found").
- *
- * Цей route-handler ловить POST/GET на непахищеному шляху `/billing-return` і
- * відповідає **303 See Other** на `/billing/success`. 303 примусово
- * перетворює наступний перехід на GET (top-level navigation), який уже несе
- * cookie сесії й коректно рендерить сторінку успіху.
+ * monobank повертає платника GET-редиректом на `redirectUrl`; провайдер може
+ * змінити форму повернення (WayForPay історично слав крос-сайтовий POST). Щоб не
+ * залежати від методу, ведемо повернення на непахищений `/billing-return`, який
+ * відповідає **303 See Other** на `/billing/success`. 303 примусово перетворює
+ * наступний перехід на GET top-level navigation (несе cookie сесії, не трактується
+ * App Router-ом як Server Action) і коректно рендерить сторінку успіху. POST-гілка
+ * лишається захистом на випадок form-сабміт-повернення.
  */
 function redirectToSuccess(request: NextRequest): NextResponse {
     const returnPath = request.nextUrl.searchParams.get('returnPath');

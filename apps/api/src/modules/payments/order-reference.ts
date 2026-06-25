@@ -1,20 +1,16 @@
 import { randomBytes } from 'crypto';
-import {
-    ONE_OFF_ACCESS_CODES,
-    SUBSCRIPTION_PLAN_CODES,
-    type OneOffAccessCode,
-    type SubscriptionPlanCode,
-} from '@finly/types';
+import { ONE_OFF_ACCESS_CODES, type OneOffAccessCode } from '@finly/types';
 
 /**
- * WayForPay не має customer-обʼєкта і не повертає наші metadata у колбеку —
- * лише `orderReference`. Тому маршрутизацію вебхука (кому нарахувати, що це за
- * платіж) кодуємо в самому orderReference і декодуємо при розборі підписаного
- * колбеку (значення довірене — підпис уже перевірено).
+ * monobank не має customer-обʼєкта і повертає у вебхуку лише наш `reference`
+ * (проштовхнутий у `merchantPaymInfo.reference`). Тому маршрутизацію вебхука
+ * (кому нарахувати, що це за платіж) кодуємо в самому reference і декодуємо при
+ * розборі підписаної події (значення довірене — підпис уже перевірено).
  *
- * Формат: `fin-<kind>-[<code>-]<userId>-<nonce>`. Жоден сегмент не містить
- * дефіса: kind ∈ {sub,oneoff,prorate}, code ∈ {brand,bookkeeper} (oneOffCode для
- * oneoff, targetPlanCode для prorate), userId — 24-hex ObjectId, nonce — hex.
+ * Формат: `fin-<kind>-[<code>-]<userId>-<suffix>`. Жоден сегмент не містить
+ * дефіса: kind ∈ {sub,oneoff}, code ∈ {brand,bookkeeper} (oneOffCode для oneoff),
+ * userId — 24-hex ObjectId, suffix — hex-nonce (checkout) або epoch-мітка періоду
+ * (детермінований ідентифікатор продовження billing-clock — claim-first).
  */
 
 const PREFIX = 'fin';
@@ -22,7 +18,6 @@ const PREFIX = 'fin';
 export const ORDER_KIND = {
     SUBSCRIPTION: 'sub',
     ONE_OFF: 'oneoff',
-    PRORATION: 'prorate',
 } as const;
 
 export type OrderKind = (typeof ORDER_KIND)[keyof typeof ORDER_KIND];
@@ -33,19 +28,28 @@ export type ParsedOrderReference =
           kind: typeof ORDER_KIND.ONE_OFF;
           userId: string;
           oneOffCode: OneOffAccessCode;
-      }
-    | {
-          kind: typeof ORDER_KIND.PRORATION;
-          userId: string;
-          targetPlanCode: SubscriptionPlanCode;
       };
 
 function nonce(): string {
     return randomBytes(8).toString('hex');
 }
 
+/** Checkout/resume підписки — випадковий nonce (кожна сесія унікальна). */
 export function buildSubscriptionOrderReference(userId: string): string {
     return `${PREFIX}-${ORDER_KIND.SUBSCRIPTION}-${userId}-${nonce()}`;
+}
+
+/**
+ * Продовження billing-clock — ДЕТЕРМІНОВАНИЙ ідентифікатор за межею періоду:
+ * однакова межа → однаковий reference. Це claim-first ключ: повторний прохід
+ * cron-а (після краху чи пропуску) не списує вдруге, бо натикається на вже
+ * наявний запис спроби з тим самим reference.
+ */
+export function buildRenewalOrderReference(
+    userId: string,
+    periodBoundary: Date
+): string {
+    return `${PREFIX}-${ORDER_KIND.SUBSCRIPTION}-${userId}-${periodBoundary.getTime()}`;
 }
 
 export function buildOneOffOrderReference(
@@ -55,20 +59,13 @@ export function buildOneOffOrderReference(
     return `${PREFIX}-${ORDER_KIND.ONE_OFF}-${oneOffCode}-${userId}-${nonce()}`;
 }
 
-export function buildProrationOrderReference(
-    userId: string,
-    targetPlanCode: SubscriptionPlanCode
-): string {
-    return `${PREFIX}-${ORDER_KIND.PRORATION}-${targetPlanCode}-${userId}-${nonce()}`;
-}
-
 export function parseOrderReference(ref: string): ParsedOrderReference | null {
     const parts = ref.split('-');
     if (parts[0] !== PREFIX) return null;
 
     const kind = parts[1];
     if (kind === ORDER_KIND.SUBSCRIPTION) {
-        // fin - sub - <userId> - <nonce>
+        // fin - sub - <userId> - <suffix>
         if (parts.length !== 4) return null;
         return { kind: ORDER_KIND.SUBSCRIPTION, userId: parts[2] };
     }
@@ -79,20 +76,9 @@ export function parseOrderReference(ref: string): ParsedOrderReference | null {
         if (!isOneOffCode(oneOffCode)) return null;
         return { kind: ORDER_KIND.ONE_OFF, userId: parts[3], oneOffCode };
     }
-    if (kind === ORDER_KIND.PRORATION) {
-        // fin - prorate - <targetPlanCode> - <userId> - <nonce>
-        if (parts.length !== 5) return null;
-        const targetPlanCode = parts[2];
-        if (!isSubscriptionPlanCode(targetPlanCode)) return null;
-        return { kind: ORDER_KIND.PRORATION, userId: parts[3], targetPlanCode };
-    }
     return null;
 }
 
 function isOneOffCode(value: string): value is OneOffAccessCode {
     return (ONE_OFF_ACCESS_CODES as readonly string[]).includes(value);
-}
-
-function isSubscriptionPlanCode(value: string): value is SubscriptionPlanCode {
-    return (SUBSCRIPTION_PLAN_CODES as readonly string[]).includes(value);
 }

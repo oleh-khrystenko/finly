@@ -1,27 +1,23 @@
-import { BillingInterval, BillingWebhookEvent } from '@finly/types';
+import { BillingWebhookEvent } from '@finly/types';
 
 /**
- * Абстракція провайдера білінгу. Reshape під WayForPay (Sprint 17): без
- * priceId/customerId/portal; з операціями над рекурентом, ad-hoc Charge за
- * токеном і вебхук-розбором, що повертає підписаний accept-handshake.
- *
- * Інтерфейс лишається досить загальним, щоб під ним могла жити і чиста Модель B
- * (власний шедулер через recToken+Charge), якщо sandbox змусить перемкнутись.
+ * Абстракція провайдера білінгу. Sprint 22 — monobank «Плата» без власного
+ * рекуренту: розклад веде наш billing-clock, провайдер зведений до чотирьох
+ * можливостей — хостований checkout із захопленням токена, разове списання за
+ * токеном (merchant-initiated, без 3DS), запит статусу рахунку для звірки і
+ * розбір/верифікація вебхука. Жодного suspend/resume/remove/change/refund.
  */
 
 export interface SubscriptionCheckoutInput {
     userId: string;
     userEmail: string;
+    /** Наш reference (маршрутизація вебхука), проштовхується у merchantPaymInfo. */
     orderReference: string;
+    /** Стабільний per-user гаманець monobank, до якого привʼязується токен. */
+    walletId: string;
     planName: string;
     amount: number; // копійки
     currency: string;
-    interval: BillingInterval;
-    /**
-     * Дата першого списання. undefined → негайно. У майбутньому → відкладене
-     * (trial або re-bind картки зі збереженням дати наступного списання).
-     */
-    firstChargeDate?: Date;
     /** Server-to-server callback URL (вебхук). */
     serviceUrl: string;
     /** Куди повертається користувач після оплати. */
@@ -41,48 +37,36 @@ export interface OneOffCheckoutInput {
 
 export interface CheckoutResult {
     checkoutUrl: string;
+    invoiceId: string;
     orderReference: string;
 }
 
-export interface RefundInput {
+export interface ChargeByTokenInput {
+    /** Детермінований reference спроби (claim-first ключ). */
     orderReference: string;
+    cardToken: string;
     amount: number; // копійки
     currency: string;
-    comment: string;
+    productName: string;
+    /** Вебхук на фінальний статус (вторинний — основний шлях через результат/статус). */
+    serviceUrl: string;
 }
 
-export interface RefundResult {
-    success: boolean;
-    reasonCode: number | null;
-    reason: string | null;
-}
-
-export interface SubscriptionStatusResult {
-    /** Raw lifecycle WayForPay: Active / Suspended / Removed / Created / ... */
+export interface ChargeResult {
+    /** monobank invoiceId — ключ для подальшого запиту статусу. */
+    invoiceId: string;
+    /** Статус рахунку monobank (success / failure / processing / ...). */
     status: string;
-    nextPaymentDate: Date | null;
-    lastPayedDate: Date | null;
-    dateEnd: Date | null;
-}
-
-export interface SubscriptionChange {
-    amount?: number; // копійки
-    currency?: string;
-    interval?: BillingInterval;
-    nextPaymentDate?: Date;
-    endDate?: Date;
+    cardMask: string | null;
+    /** Свіжий токен картки, якщо провайдер його ротував. */
+    cardToken: string | null;
+    failureReason: string | null;
+    errCode: string | null;
 }
 
 export interface WebhookParseResult {
     /** null, якщо підпис невалідний або подію треба ігнорувати. */
     event: BillingWebhookEvent | null;
-    /**
-     * Підписане тіло accept-handshake (JSON-обʼєкт), яке контролер віддає назад
-     * WayForPay. Присутнє для будь-якого валідного-за-підписом колбеку (навіть
-     * якщо event ігнорується сервісом) — інакше WayForPay шле повтори. null лише
-     * на невалідному підписі.
-     */
-    acceptResponse: Record<string, unknown> | null;
 }
 
 export interface IPaymentProvider {
@@ -90,18 +74,24 @@ export interface IPaymentProvider {
         input: SubscriptionCheckoutInput
     ): Promise<CheckoutResult>;
     createOneOffCheckout(input: OneOffCheckoutInput): Promise<CheckoutResult>;
-    refund(input: RefundInput): Promise<RefundResult>;
-    getSubscriptionStatus(
+    chargeByToken(input: ChargeByTokenInput): Promise<ChargeResult>;
+    /**
+     * Запит статусу рахунку для звірки сумнівних списань. Нормалізує відповідь у
+     * `BillingWebhookEvent` — той самий shape, що й вебхук, тож сервіс зводить
+     * стан одним кодом незалежно від джерела. null, якщо рахунок не знайдено.
+     */
+    getInvoiceStatus(
+        invoiceId: string,
         orderReference: string
-    ): Promise<SubscriptionStatusResult>;
-    suspendSubscription(orderReference: string): Promise<void>;
-    resumeSubscription(orderReference: string): Promise<void>;
-    removeSubscription(orderReference: string): Promise<void>;
-    changeSubscription(
-        orderReference: string,
-        change: SubscriptionChange
-    ): Promise<void>;
-    parseWebhook(rawBody: Buffer): Promise<WebhookParseResult>;
+    ): Promise<BillingWebhookEvent | null>;
+    /**
+     * Розбір і верифікація вебхука. `signature` — заголовок `X-Sign` (base64
+     * ECDSA-SHA256 над сирим тілом). Без acceptResponse: monobank достатньо 200.
+     */
+    parseWebhook(
+        rawBody: Buffer,
+        signature: string | undefined
+    ): Promise<WebhookParseResult>;
 }
 
 export const PAYMENT_PROVIDER = Symbol('PAYMENT_PROVIDER');

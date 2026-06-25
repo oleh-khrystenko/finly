@@ -58,7 +58,7 @@ export const ENV = {
     TRUST_PROXY_HOPS: getNonNegativeIntEnvVar('TRUST_PROXY_HOPS'),
     /**
      * Cabinet origin (`finly.com.ua` prod, `localhost:3000` dev). Використовується
-     * для CORS, OAuth callback, magic-link redirect, WayForPay return/service
+     * для CORS, OAuth callback, magic-link redirect, monobank return/service
      * URL, email-template посилань на кабінет — усі шляхи, що ведуть
      * авторизованого ФОП назад у його кабінет.
      */
@@ -84,17 +84,25 @@ export const ENV = {
     RESEND_API_KEY: getEnvVar('RESEND_API_KEY'),
     RESEND_FROM_EMAIL: getEnvVar('RESEND_FROM_EMAIL'),
 
-    // WayForPay (Sprint 17) — merchant-реквізити білінгу. `merchantDomainName`
-    // має збігатись з доменом, зареєстрованим у кабінеті WayForPay, інакше
-    // підпис Purchase/CREATE_INVOICE відхиляється. Sandbox: test_merch_n1 /
-    // flk3409refn54t54t*FNJRET.
-    WAYFORPAY_MERCHANT_ACCOUNT: getEnvVar('WAYFORPAY_MERCHANT_ACCOUNT'),
-    WAYFORPAY_MERCHANT_SECRET_KEY: getEnvVar('WAYFORPAY_MERCHANT_SECRET_KEY'),
-    WAYFORPAY_MERCHANT_DOMAIN: getEnvVar('WAYFORPAY_MERCHANT_DOMAIN'),
+    // monobank «Плата» (Sprint 22) — merchant X-Token із кабінету monobank
+    // (або тестовий токен з api.monobank.ua). Єдиний секрет провайдера:
+    // checkout, списання за токеном і запит статусу автентифікуються ним;
+    // вебхуки верифікуються публічним ключем з GET /api/merchant/pubkey.
+    MONOBANK_TOKEN: getEnvVar('MONOBANK_TOKEN'),
 
     PAYMENTS_SUBSCRIPTION_ENABLED: subscriptionEnabled,
     PAYMENTS_ONE_OFF_ENABLED: oneOffEnabled,
     BILLING_DEMO_MODE: billingDemoMode,
+
+    // Sprint 22 — dunning billing-clock: скільки спроб списання у прострочці до
+    // зняття доступу і інтервал між повторами. Грейс ≈ MAX × INTERVAL (план Q5:
+    // помірне вікно ~7 днів, ~3 повтори).
+    BILLING_DUNNING_MAX_ATTEMPTS: getNonNegativeIntEnvVar(
+        'BILLING_DUNNING_MAX_ATTEMPTS'
+    ),
+    BILLING_DUNNING_RETRY_INTERVAL_HOURS: getNonNegativeIntEnvVar(
+        'BILLING_DUNNING_RETRY_INTERVAL_HOURS'
+    ),
 
     AUTH_PASSWORD_MIN_LENGTH: parseInt(
         getEnvVar('AUTH_PASSWORD_MIN_LENGTH'),
@@ -179,6 +187,20 @@ if (!ENV.PAYMENTS_SUBSCRIPTION_ENABLED && !ENV.PAYMENTS_ONE_OFF_ENABLED) {
     throw new Error(
         '❌ At least one payment type must be enabled. ' +
             'Set PAYMENTS_SUBSCRIPTION_ENABLED or PAYMENTS_ONE_OFF_ENABLED to "true".'
+    );
+}
+
+// Sprint 22 — dunning мусить мати щонайменше одну спробу і ненульовий інтервал,
+// інакше прострочка або миттєво знімала б доступ (MAX=0), або повтори злипались
+// би в один момент (INTERVAL=0), руйнуючи грейс-вікно.
+if (
+    ENV.BILLING_DUNNING_MAX_ATTEMPTS < 1 ||
+    ENV.BILLING_DUNNING_RETRY_INTERVAL_HOURS < 1
+) {
+    throw new Error(
+        `❌ BILLING_DUNNING_MAX_ATTEMPTS (${ENV.BILLING_DUNNING_MAX_ATTEMPTS}) and ` +
+            `BILLING_DUNNING_RETRY_INTERVAL_HOURS (${ENV.BILLING_DUNNING_RETRY_INTERVAL_HOURS}) ` +
+            'must both be ≥ 1.'
     );
 }
 

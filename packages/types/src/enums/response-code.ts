@@ -17,10 +17,19 @@ export const RESPONSE_CODE = {
     NO_BILLING_ACCOUNT: 'NO_BILLING_ACCOUNT',
     PAYMENT_TYPE_DISABLED: 'PAYMENT_TYPE_DISABLED',
     NO_ACTIVE_SUBSCRIPTION: 'NO_ACTIVE_SUBSCRIPTION',
-    SAME_PLAN: 'SAME_PLAN',
     INVALID_PLAN: 'INVALID_PLAN',
-    REFUND_FAILED: 'REFUND_FAILED',
-    SUBSCRIPTION_OPERATION_FAILED: 'SUBSCRIPTION_OPERATION_FAILED',
+    /**
+     * Sprint 22 — дія «оплатити зараз» (resume) застосовна лише до підписки у
+     * стані прострочки (PAST_DUE). Викликана на активній чи відсутній підписці —
+     * цей код. Recovery: дія недоступна, поки списання не відхилено.
+     */
+    SUBSCRIPTION_NOT_PAST_DUE: 'SUBSCRIPTION_NOT_PAST_DUE',
+    /**
+     * Sprint 22 — звірка списання за токеном дала суперечливий/нерозв'язний
+     * результат (гроші могли рухатись, але стан звести не вдалося). Підписка
+     * позначена на ручний розбір; користувачу нейтральна помилка.
+     */
+    BILLING_NEEDS_MANUAL_REVIEW: 'BILLING_NEEDS_MANUAL_REVIEW',
     /**
      * Sprint 17 — конкурентна білінг-мутація. Усі write-операції над підпискою
      * (checkout, cancel, change-plan) серіалізовані
@@ -343,10 +352,9 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.NO_BILLING_ACCOUNT]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.PAYMENT_TYPE_DISABLED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.NO_ACTIVE_SUBSCRIPTION]: RESPONSE_TYPE.ERROR,
-    [RESPONSE_CODE.SAME_PLAN]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVALID_PLAN]: RESPONSE_TYPE.ERROR,
-    [RESPONSE_CODE.REFUND_FAILED]: RESPONSE_TYPE.ERROR,
-    [RESPONSE_CODE.SUBSCRIPTION_OPERATION_FAILED]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.SUBSCRIPTION_NOT_PAST_DUE]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BILLING_NEEDS_MANUAL_REVIEW]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.BILLING_OPERATION_IN_PROGRESS]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.AI_RATE_LIMIT_EXCEEDED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.AI_MESSAGE_TOO_LONG]: RESPONSE_TYPE.ERROR,

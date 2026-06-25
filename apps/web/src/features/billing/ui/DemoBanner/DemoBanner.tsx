@@ -7,10 +7,10 @@ export function DemoBanner() {
                 <FlaskConical className="text-warning mt-0.5 h-5 w-5 shrink-0" />
                 <div>
                     <p className="text-foreground font-semibold">
-                        Демо WayForPay у тестовому режимі
+                        Демо monobank у тестовому режимі
                     </p>
                     <p className="text-muted-foreground mt-1 text-sm">
-                        Це демо живої інтеграції з WayForPay. Реальні кошти не
+                        Це демо живої інтеграції з monobank. Реальні кошти не
                         списуються.
                     </p>
                     <code className="bg-muted text-muted-foreground mt-3 block rounded px-3 py-2 font-mono text-xs">
