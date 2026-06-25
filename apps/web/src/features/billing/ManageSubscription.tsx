@@ -122,7 +122,7 @@ export default function ManageSubscription({
                 )}
 
                 {!billing.cancelAtPeriodEnd && (
-                    <p className="text-muted-foreground mt-3 text-xs">
+                    <p className="text-muted-foreground mt-3 text-sm">
                         Щоб змінити тариф, скасуйте підписку і оформіть нову
                         після завершення оплаченого періоду.
                     </p>
