@@ -4,7 +4,10 @@ import { notFound } from 'next/navigation';
 import {
     getAllArticleSlugs,
     getArticleBySlug,
+    getCategoryById,
 } from '@/entities/help-article';
+import { ENV } from '@/shared/config';
+import { JsonLd } from '@/shared/seo/JsonLd';
 import { HelpArticleView } from '@/features/help-center';
 import { fetchMetadata } from '@/shared/seo/metadata';
 
@@ -39,6 +42,66 @@ export default async function HelpArticlePage({
     const { slug } = await params;
     const article = getArticleBySlug(slug);
     if (!article) notFound();
+    const category = getCategoryById(article.categoryId);
+    const baseUrl = ENV.NEXT_PUBLIC_BASE_URL.replace(/\/$/, '');
+    const articleUrl = `${baseUrl}/help/${article.slug}`;
 
-    return <HelpArticleView article={article} />;
+    return (
+        <>
+            <JsonLd
+                data={{
+                    '@context': 'https://schema.org',
+                    '@graph': [
+                        {
+                            '@type': 'BreadcrumbList',
+                            itemListElement: [
+                                {
+                                    '@type': 'ListItem',
+                                    position: 1,
+                                    name: 'Довідка',
+                                    item: `${baseUrl}/help`,
+                                },
+                                ...(category
+                                    ? [
+                                          {
+                                              '@type': 'ListItem',
+                                              position: 2,
+                                              name: category.title,
+                                              item: `${baseUrl}/help#cat-${category.id}`,
+                                          },
+                                      ]
+                                    : []),
+                                {
+                                    '@type': 'ListItem',
+                                    position: category ? 3 : 2,
+                                    name: article.title,
+                                    item: articleUrl,
+                                },
+                            ],
+                        },
+                        {
+                            '@type': 'Article',
+                            headline: article.title,
+                            description: article.description,
+                            inLanguage: 'uk-UA',
+                            url: articleUrl,
+                            mainEntityOfPage: articleUrl,
+                            isPartOf: {
+                                '@type': 'WebSite',
+                                name: 'Finly',
+                                url: baseUrl,
+                            },
+                            publisher: {
+                                '@type': 'Organization',
+                                name: 'Finly',
+                                url: baseUrl,
+                                logo: `${baseUrl}/logo/light-theme.svg`,
+                            },
+                        },
+                    ],
+                }}
+            />
+            <HelpArticleView article={article} />
+        </>
+    );
 }

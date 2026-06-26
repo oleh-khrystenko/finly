@@ -12,6 +12,73 @@ import { applyJsonTransform } from '../../../common/mongoose/json-transform';
 export type BusinessDocument = HydratedDocument<Business>;
 
 /**
+ * Sprint 21 — слот кастомного бренду отримувача. Тримає оригінальний логотип
+ * (показ на pay-сторінках) і дві пре-композовані бренд-марки (bake-on-commit)
+ * під дві позиції QR-рендеру. `displayName` — косметичний підпис; не платіжні
+ * дані, у QR-payload не йде. Контракт shape — `@finly/types` `brandSlotSchema`.
+ */
+@Schema({ _id: false })
+class BusinessBrandSlot {
+    @Prop({ required: true })
+    logoUrl!: string;
+
+    @Prop({ required: true })
+    centerMarkUrl!: string;
+
+    @Prop({ required: true })
+    bandMarkUrl!: string;
+
+    @Prop({ type: String, default: null })
+    displayName!: string | null;
+}
+
+/**
+ * Pending-слот: ті самі поля плюс `uploadedAt` — мітка для cron-чистки orphan
+ * pending-логотипів неоплачених (`pendingBrandSlotSchema` у `@finly/types`).
+ */
+@Schema({ _id: false })
+class BusinessPendingBrandSlot {
+    @Prop({ required: true })
+    logoUrl!: string;
+
+    @Prop({ required: true })
+    centerMarkUrl!: string;
+
+    @Prop({ required: true })
+    bandMarkUrl!: string;
+
+    @Prop({ type: String, default: null })
+    displayName!: string | null;
+
+    @Prop({ type: Date, required: true })
+    uploadedAt!: Date;
+
+    /**
+     * Sprint 21 — `true`, якщо слот демоутований з `active` при згасанні тарифу
+     * (довгий поріг cron-чистки); `false` — free-завантаження без оплати
+     * (короткий поріг). Див. `pendingBrandSlotSchema` у `@finly/types`.
+     */
+    @Prop({ type: Boolean, required: true })
+    demoted!: boolean;
+}
+
+/**
+ * Sprint 21 — блок бренду з двома окремими слотами. `active` рендериться
+ * публічно (лише коли рівень доступу не нижче brand — гейтинг на рендері);
+ * `pending` чекає оплати або повернення доступу. Демоція active→pending при
+ * втраті доступу і промоція назад — на реконсиляції (стан слотів тримає вона,
+ * публічний анонімний рендер entitlement наживо не резолвить).
+ */
+@Schema({ _id: false })
+class BusinessBrand {
+    @Prop({ type: BusinessBrandSlot, default: null })
+    active!: BusinessBrandSlot | null;
+
+    @Prop({ type: BusinessPendingBrandSlot, default: null })
+    pending!: BusinessPendingBrandSlot | null;
+}
+
+/**
  * Sprint 9 §SP-1 — `requisites`-subdoc видалено. `iban` переїхав на окрему
  * сутність `Account`; `taxId` — top-level поле Business (юр-property платника,
  * не банківського рахунку). `invoiceSlugPresetDefault` теж переїхав на Account
@@ -150,6 +217,16 @@ export class Business {
     accessBlockedAt!: Date | null;
 
     /**
+     * Sprint 21 — кастомний брендинг отримувача. `null` — бренду немає, скрізь
+     * Finly. Два слоти (`active`/`pending`) — щоб перенести намір через checkout
+     * (як slug-upsell, без броні й таймера) і пережити згасання тарифу без
+     * втрати файлу. Стан слотів тримає реконсиляція; публічний рендер довіряє
+     * `active`-слоту, не резолвить entitlement наживо.
+     */
+    @Prop({ type: BusinessBrand, default: null })
+    brand!: BusinessBrand | null;
+
+    /**
      * Sprint 10 §SP-11 — anti-duplicate-Business UUID v4 token для anon-claim
      * flow. Frontend генерує `crypto.randomUUID()` на CTA-click "Зберегти у
      * кабінет" і прокидає у `POST /businesses/me` (через magic-link Redis-record-у
@@ -182,6 +259,11 @@ applyJsonTransform(BusinessSchema);
 BusinessSchema.index({ slugLower: 1 }, { unique: true });
 BusinessSchema.index({ ownerId: 1 }, { sparse: true });
 BusinessSchema.index({ managers: 1 });
+
+// Sprint 21 — cron-чистка orphan pending-логотипів неоплачених шукає бізнеси з
+// `brand.pending.uploadedAt` старішим за поріг. Sparse: переважна більшість
+// бізнесів без pending-бренду взагалі не потрапляють в index.
+BusinessSchema.index({ 'brand.pending.uploadedAt': 1 }, { sparse: true });
 
 // Sprint 10 §SP-11 — partial-unique `(ownerId, claimIdempotencyKey)` для
 // anon-claim dedup. `partialFilterExpression: { claimIdempotencyKey: { $type:

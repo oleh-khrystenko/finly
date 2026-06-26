@@ -8,26 +8,19 @@ const FALLBACK_TITLE = 'Finly — веди справи, а не папери';
 const FALLBACK_DESCRIPTION =
     'Finly — сервіс для українських ФОП та їх бухгалтерів.';
 
-export function fetchMetadata({
-    page,
-    href,
-    meta,
+interface BuildMetadataProps {
+    title: string;
+    description: string;
+    canonicalUrl: string;
+    noindex?: boolean;
+}
+
+export function buildMetadata({
+    title,
+    description,
+    canonicalUrl,
     noindex,
-}: MetaProps): Metadata {
-    let title = FALLBACK_TITLE;
-    let description = FALLBACK_DESCRIPTION;
-
-    if (page === null && meta) {
-        title = meta.title;
-        description = meta.description;
-    } else if (meta) {
-        title = meta.title;
-        description = meta.description;
-    }
-
-    const path = href === 'landing' ? '' : `/${href}`;
-    const canonicalUrl = `${BASE_URL}${path}`;
-
+}: BuildMetadataProps): Metadata {
     return {
         title,
         description,
@@ -60,4 +53,33 @@ export function fetchMetadata({
             images: [`${BASE_URL}/images/og-banner-v2.png`],
         },
     };
+}
+
+export function fetchMetadata({
+    page,
+    href,
+    meta,
+    baseUrl,
+    noindex,
+}: MetaProps): Metadata {
+    let title = FALLBACK_TITLE;
+    let description = FALLBACK_DESCRIPTION;
+
+    if (page === null && meta) {
+        title = meta.title;
+        description = meta.description;
+    } else if (meta) {
+        title = meta.title;
+        description = meta.description;
+    }
+
+    const path = href === 'landing' ? '' : `/${href}`;
+    const canonicalUrl = `${(baseUrl ?? BASE_URL).replace(/\/$/, '')}${path}`;
+
+    return buildMetadata({
+        title,
+        description,
+        canonicalUrl,
+        noindex,
+    });
 }

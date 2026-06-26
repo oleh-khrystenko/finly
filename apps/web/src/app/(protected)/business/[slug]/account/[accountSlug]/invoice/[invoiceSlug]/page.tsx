@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import {
     type AccountWithCounts,
     type AutoSlugMode,
+    type BusinessBrand,
     type BusinessWithCounts,
     type Invoice,
     type UpdateInvoiceRequest,
@@ -29,7 +30,8 @@ import {
     useAuthStore,
     useCanEditSlug,
 } from '@/entities/user';
-import { brandUpsellCtaLabel, startBrandCheckout } from '@/features/billing';
+import { useBrandSubscribeLabel, startBrandCheckout } from '@/features/billing';
+import { BrandSection } from '@/features/brand-logo';
 import { ENV } from '@/shared/config/env';
 import UiButton from '@/shared/ui/UiButton';
 import UiBreadcrumb from '@/shared/ui/UiBreadcrumb';
@@ -92,6 +94,7 @@ export default function InvoiceCabinetPage() {
     const userId = useAuthStore((s) => s.user?.id);
     const reservation = useAuthStore((s) => s.user?.activeSlugReservation ?? null);
     const isPaid = useCanEditSlug();
+    const subscribeLabel = useBrandSubscribeLabel();
     const openDeleteConfirm = useDeleteInvoiceConfirmStore((s) => s.open);
 
     const [data, setData] = useState<LoadedData | null>(null);
@@ -223,6 +226,11 @@ export default function InvoiceCabinetPage() {
             toast.error('Не вдалося відкрити оплату. Спробуйте ще раз');
         });
     }, [data]);
+    const handleBrandApplied = useCallback((brand: BusinessBrand | null) => {
+        setData((prev) =>
+            prev ? { ...prev, business: { ...prev.business, brand } } : prev
+        );
+    }, []);
 
     if (!isDataCurrent && !error) {
         return (
@@ -363,11 +371,18 @@ export default function InvoiceCabinetPage() {
                         )
                     }
                     onSubscribe={handleSubscribe}
-                    subscribePriceLabel={brandUpsellCtaLabel()}
+                    subscribePriceLabel={subscribeLabel}
                     initialReservation={
                         !isPaid && desiredSlug ? reservation : null
                     }
                     autoStartSlugEdit={autoEditSlug}
+                />
+                <BrandSection
+                    business={business}
+                    isPaid={isPaid}
+                    onSubscribe={handleSubscribe}
+                    subscribePriceLabel={subscribeLabel}
+                    onApplied={handleBrandApplied}
                 />
                 <PaymentDetailsCard
                     invoice={invoice}

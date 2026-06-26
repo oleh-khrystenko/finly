@@ -25,6 +25,12 @@ export interface IStorageProvider {
 
     getObjectMetadata(key: string): Promise<ObjectMetadata>;
 
+    /**
+     * Завантажує повний вміст об'єкта у Buffer. Кидає, якщо об'єкта немає
+     * (caller валідує наявність через `getObjectMetadata` перед викликом).
+     */
+    downloadObject(key: string): Promise<Buffer>;
+
     deleteObject(key: string): Promise<void>;
 
     uploadBuffer(input: UploadBufferInput): Promise<void>;

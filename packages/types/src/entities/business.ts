@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { businessBrandSchema } from './brand';
 import { MVP_BANKS } from '../constants/banks';
 import { BUSINESS_TYPES, requiresTaxation } from '../enums/business-type';
 import {
@@ -179,6 +180,14 @@ export const BusinessSchema = z
          * публічна сторінка і QR неактивні.
          */
         accessBlockedAt: z.coerce.date().nullable(),
+        /**
+         * Sprint 21 — кастомний брендинг отримувача (логотип у обидва QR + на
+         * публічних pay-сторінках). Два слоти: `active` рендериться публічно
+         * (лише коли рівень доступу не нижче brand), `pending` чекає оплати або
+         * повернення доступу. `null` — бренду немає, скрізь показується Finly.
+         * Контракт слотів — `@finly/types` `businessBrandSchema`.
+         */
+        brand: businessBrandSchema.nullable(),
         createdAt: z.coerce.date(),
         updatedAt: z.coerce.date(),
     })

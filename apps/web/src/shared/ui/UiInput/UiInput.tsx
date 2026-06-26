@@ -54,7 +54,7 @@ const UiInput = forwardRef<HTMLInputElement, UiInputProps>((props, ref) => {
     const describedBy = error ? errorId : description ? descriptionId : undefined;
 
     const iconClass = composeClasses(
-        'shrink-0 text-muted-foreground',
+        'shrink-0 text-muted-foreground flex items-center justify-center',
         iconSizeStyles[size]
     );
 
@@ -104,11 +104,7 @@ const UiInput = forwardRef<HTMLInputElement, UiInputProps>((props, ref) => {
                     aria-describedby={describedBy}
                     className="placeholder:text-muted-foreground w-full bg-transparent outline-none disabled:cursor-not-allowed"
                 />
-                {IconRight && (
-                    <span className={iconClass} aria-hidden>
-                        {IconRight}
-                    </span>
-                )}
+                {IconRight && <span className={iconClass}>{IconRight}</span>}
             </div>
             {error ? (
                 <p id={errorId} className="text-destructive mt-1 text-sm">

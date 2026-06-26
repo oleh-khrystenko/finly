@@ -186,29 +186,15 @@ SSL/TLS → Origin Server → Create Certificate:
 
 > **Backup:** Atlas M10+ робить continuous backup (24h restore window). У §08 playbook `mongodump` опціональний — можна вимкнути, якщо довіряєте провайдер-snapshot-ам.
 
-## 4. Payments provider — Stripe (placeholder до міграції на локального UA-провайдера)
+## 4. Payments provider — WayForPay
 
-**Контекст.** Поточна реалізація `PAYMENT_PROVIDER`-абстракції (`apps/api/src/modules/payments/providers/stripe.service.ts`) — Stripe. Stripe не приймає платежі від українських ФОП-карток у production-сценаріях Finly, тому MVP-launch не активує buyer-facing checkout-flow. Заміна на локального провайдера (LiqPay / Fondy / WayForPay / Monobank Acquiring — рішення відкладене) — окремий майбутній спринт.
+Поточна runtime-реалізація платежів — WayForPay (`apps/api/src/modules/payments`). Stripe у прод-сценарії більше не використовується.
 
-**Що це означає для deploy-у.** Env vars `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` усе ще required (`apps/api/src/config/env.ts` fail-fast), `CatalogService` warm-fetch на startup ходить у Stripe (інакше API не стартує), `ThrottlerModule` тримає `webhook` route відкритим. Тобто **валідні Stripe credentials у `.env` обовʼязкові навіть якщо buyer-facing UI checkout-flow вимкнена**. Використовуємо **Stripe test-mode** як placeholder — це бесплатно, фейкові тестові карти не приймають реальних грошей, але дозволяють `CatalogService` і `webhook` route жити.
-
-1. Stripe Dashboard → акаунт у Live mode залишається **неактивованим** (skip Activate).
-2. Toggle у top-left → **Test mode**.
-3. Developers → API keys → `Secret key (test)` → `.env` `STRIPE_SECRET_KEY` (`sk_test_...`).
-4. Products → у test-режимі створи Subscription + One-off products з `metadata.planCode` + `metadata.executions` + `metadata.featured` — фактичні значення з dev-каталогу (`pnpm --filter api -- ts-node scripts/dump-stripe-catalog.ts` як reference; якщо такого скрипта немає — переглянь у Stripe dev-dashboard). Без цього `CatalogService.warm` крашить API на старті.
-5. Developers → Webhooks → **Add endpoint**:
-   - URL: `https://finly.com.ua/api/payments/webhook/stripe`
-   - **Реальний whitelist** (`providers/stripe.service.ts:88-96`):
-     - `checkout.session.completed`
-     - `checkout.session.async_payment_succeeded`
-     - `customer.subscription.updated`
-     - `customer.subscription.deleted`
-   - Інші events Stripe доставить, але `StripeService.handleWebhook` ігнорує їх (повертає 200) — підписуй тільки whitelist, щоб не засмічувати Logs.
-   - Signing secret → `.env` `STRIPE_WEBHOOK_SECRET` (`whsec_...`).
-
-> **Продуктова поведінка.** Buyer-facing CTA (`Subscribe to plan`, `Buy executions`) має бути приховано / disabled на frontend до моменту міграції. Це окреме рішення поза цим чек-листом — переконайся, що його ухвалено перед запуском, інакше користувач натисне Subscribe → отримає Stripe test-checkout, який нічого не активує.
->
-> **На момент міграції** — нова локальна платіжка реалізує `IPaymentProvider`, реєструється у `payment-provider.provider.ts` замість `StripeService`. Env vars Stripe лишаються до перехідного періоду (rollback safety) або видаляються через окремий env-cleanup PR.
+1. WayForPay merchant cabinet → отримати `merchantAccount`, `merchantSecretKey` і merchant domain.
+2. У WayForPay merchant domain має збігатися з `.env` `WAYFORPAY_MERCHANT_DOMAIN=finly.com.ua`.
+3. Webhook/service URL: `https://finly.com.ua/api/payments/webhook/wayforpay`.
+4. Return URL для користувача йде через web-origin `https://finly.com.ua/billing-return`.
+5. Для sandbox/staging можна лишити тестові merchant credentials; для live payments `BILLING_DEMO_MODE=false` і `NEXT_PUBLIC_BILLING_DEMO_MODE=false`.
 
 ## 5. Google OAuth (production credentials)
 
@@ -304,16 +290,17 @@ GOOGLE_CALLBACK_URL=https://finly.com.ua/api/auth/google/callback
 RESEND_API_KEY=<з §6>
 RESEND_FROM_EMAIL=Finly <no-reply@finly.com.ua>
 
-STRIPE_SECRET_KEY=sk_test_<з §4 — Stripe test-mode placeholder, не live>
-STRIPE_WEBHOOK_SECRET=whsec_<з §4 — test-mode webhook signing secret>
-# Hoча buyer-facing checkout-CTA вимкнено на frontend (див. §4),
-# `env.ts` фейл-фастить якщо обидва toggle = false, тому лишаємо true/true.
+WAYFORPAY_MERCHANT_ACCOUNT=<з §4>
+WAYFORPAY_MERCHANT_SECRET_KEY=<з §4>
+WAYFORPAY_MERCHANT_DOMAIN=finly.com.ua
 PAYMENTS_SUBSCRIPTION_ENABLED=true
 PAYMENTS_ONE_OFF_ENABLED=true
+BILLING_DEMO_MODE=false
 
 ANTHROPIC_API_KEY=sk-ant-<з §8>
-AI_CHAT_MAX_TOKENS=300
-AI_CHAT_IP_LIMIT=5
+HELP_CHAT_MAX_TOKENS=800
+HELP_CHAT_IP_LIMIT=20
+HELP_CHAT_DAILY_BUDGET=1000
 
 AUTH_PASSWORD_MIN_LENGTH=8
 AUTH_LOCKOUT_THRESHOLDS=5:1,10:5,20:15
@@ -333,6 +320,8 @@ R2_ACCESS_KEY_ID=<з §7>
 R2_SECRET_ACCESS_KEY=<з §7>
 R2_BUCKET_NAME=finly-media
 R2_PUBLIC_URL=https://media.finly.com.ua
+BRAND_PENDING_CLEANUP_DAYS=30
+BRAND_DEMOTED_CLEANUP_DAYS=90
 
 # ─── Frontend (build args + runtime) ───
 API_INTERNAL_URL=http://api:4000
@@ -341,6 +330,7 @@ NEXT_PUBLIC_API_URL=/api
 NEXT_PUBLIC_PAY_PUBLIC_URL=https://pay.finly.com.ua
 NEXT_PUBLIC_PAYMENTS_SUBSCRIPTION_ENABLED=true
 NEXT_PUBLIC_PAYMENTS_ONE_OFF_ENABLED=true
+NEXT_PUBLIC_BILLING_DEMO_MODE=false
 NEXT_PUBLIC_STORAGE_HOSTNAME=media.finly.com.ua
 ```
 
@@ -351,7 +341,10 @@ NEXT_PUBLIC_STORAGE_HOSTNAME=media.finly.com.ua
 Після того, як `01..08` пройдено й перший `docker compose up -d --build` показав `(healthy)`:
 
 - [ ] `curl -sS -I https://finly.com.ua/` → `200`, заголовки `strict-transport-security`, `x-frame-options: DENY`, `content-encoding: zstd|gzip`, БЕЗ `server: Caddy`.
-- [ ] `curl -sS -o /dev/null -w "%{http_code}\n" https://pay.finly.com.ua/` → **`404`** (підтверджує host-isolation: public host віддає лише `/{biz}` / `/{biz}/{acc}` / `/{biz}/{acc}/{inv}` патерни — `apps/web/src/proxy.ts` Branch B; `200` на root зламав би інваріант ізоляції).
+- [ ] `curl -sS -I https://pay.finly.com.ua/` → `200`, сторінка має `noindex, follow` і пояснює, що потрібне повне платіжне посилання.
+- [ ] `curl -sS https://pay.finly.com.ua/api/businesses/public/sitemap.xml` → XML sitemap; порожній `<urlset>` допустимий, якщо ще немає бізнесів із `seoIndexEnabled=true`.
+- [ ] `curl -sS https://finly.com.ua/robots.txt` → містить `https://finly.com.ua/sitemap.xml` і `https://pay.finly.com.ua/api/businesses/public/sitemap.xml`.
+- [ ] Google Search Console → Domain property `finly.com.ua` verified via DNS TXT; submitted sitemaps: `https://finly.com.ua/sitemap.xml` and `https://pay.finly.com.ua/api/businesses/public/sitemap.xml`.
 - [ ] `curl -sS -I https://www.finly.com.ua/` → `301` → `https://finly.com.ua/`.
 - [ ] `curl -sS https://finly.com.ua/api/health` → `200` (API healthcheck через web reverse-proxy).
 - [ ] Cabinet login → magic-link приходить (Resend dashboard → Logs → status 200).
@@ -361,6 +354,6 @@ NEXT_PUBLIC_STORAGE_HOSTNAME=media.finly.com.ua
 - [ ] R2 avatar upload — кабінет → Profile → upload .jpg → перевірити `media.finly.com.ua/avatars/...` 200.
 - [ ] `docker compose ps` — усі контейнери `Up`. Healthcheck-блоків у `docker-compose.yml` немає (deploy перевіряє через `curl` у `deploy.yml`), але всі три сервіси мають бути в стані `running`, не `restarting`.
 - [ ] `journalctl -u caddy -n 50` — без `400/502` репорту.
-- [ ] **Payments**: NOT included у smoke-test. Buyer-facing CTA має бути вимкнено на frontend (див. §4) — спроба натиснути Subscribe має бути неможлива, або веде у явне "Платежі тимчасово недоступні" повідомлення.
+- [ ] **Payments**: WayForPay checkout/webhook перевіряються окремо від базового SEO/host smoke-test.
 
 Якщо все зелене — рухайся до `99-runbook.md` як reference для incident-response. Інакше — кожна failure-row має конкретний log location у §99.

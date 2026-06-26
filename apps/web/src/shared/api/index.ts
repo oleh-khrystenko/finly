@@ -23,8 +23,7 @@ export {
     createSubscriptionCheckout,
     createOneOffCheckout,
     cancelSubscription,
-    changePlan,
-    updateCard,
+    resumeSubscription,
     listPayments,
 } from './payments';
 export {
@@ -32,6 +31,11 @@ export {
     commitAvatarUpload,
     deleteAvatar,
     uploadToR2,
+    requestBrandLogoUploadUrl,
+    uploadBrandLogoToR2,
+    previewBrandLogo,
+    commitBrandLogo,
+    deleteBrandLogo,
 } from './storage';
 export {
     listBusinesses,

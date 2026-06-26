@@ -1,4 +1,8 @@
-import { getNonNegativeIntEnvVar, validateOrphanCleanupSchedule } from './env';
+import {
+    getNonNegativeIntEnvVar,
+    validateBrandCleanupThresholds,
+    validateOrphanCleanupSchedule,
+} from './env';
 
 describe('validateOrphanCleanupSchedule (Sprint 12 §12.1a)', () => {
     it('passes on default schedule 1 < 6 < 7', () => {
@@ -60,6 +64,22 @@ describe('validateOrphanCleanupSchedule (Sprint 12 §12.1a)', () => {
     it('rejects degenerate all-equal (default-like fallback collapse)', () => {
         expect(() => validateOrphanCleanupSchedule(2, 2, 2)).toThrow(
             /schedule must satisfy/
+        );
+    });
+});
+
+describe('validateBrandCleanupThresholds (Sprint 21)', () => {
+    it('passes when pending < demoted (default 30 < 90)', () => {
+        expect(() => validateBrandCleanupThresholds(30, 90)).not.toThrow();
+    });
+
+    it('passes when pending === demoted (boundary)', () => {
+        expect(() => validateBrandCleanupThresholds(30, 30)).not.toThrow();
+    });
+
+    it('rejects inverted pending > demoted', () => {
+        expect(() => validateBrandCleanupThresholds(90, 30)).toThrow(
+            /BRAND_PENDING_CLEANUP_DAYS/
         );
     });
 });

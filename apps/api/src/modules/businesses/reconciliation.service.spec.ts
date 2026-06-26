@@ -446,88 +446,6 @@ describe('ReconciliationService (MongoMemoryReplSet)', () => {
         expect(after!.slugCustomized).toBe(false);
     });
 
-    // ── Deferred-старт підписки поверх one-off ───────────────────────────
-
-    /**
-     * Білінг у вікні «one-off сплив, перше deferred-списання ще не прийшло»:
-     * TRIALING + currentPeriodEnd у межах grace, one-off-поля ще стоять з датою
-     * у минулому (cron їх у вікні не чистить).
-     */
-    function deferredStartBilling(periodEndOffsetMs: number) {
-        const periodEnd = new Date(Date.now() + periodEndOffsetMs);
-        return {
-            planCode: 'brand',
-            hasActiveSubscription: true,
-            subscriptionStatus: 'TRIALING',
-            currentPeriodEnd: periodEnd,
-            oneOffLevel: 'brand',
-            oneOffAccessUntil: periodEnd,
-        };
-    }
-
-    it('вікно deferred-старту: reconcile відкладається зі стемпом, нічого не блокує і не скидає', async () => {
-        // one-off сплив годину тому, перше списання підписки ще не прийшло.
-        usersService.findById.mockResolvedValue({
-            billing: deferredStartBilling(-60 * 60 * 1000),
-        });
-        const oldest = await seedBusiness({
-            type: 'tov',
-            owned: true,
-            slugCustomized: true,
-        });
-        const newer = await seedBusiness({ type: 'tov', owned: true });
-
-        await service.reconcile(userId.toString());
-
-        expect(await isBlocked(oldest)).toBe(false);
-        expect(await isBlocked(newer)).toBe(false);
-        const doc = await businessModel.findById(oldest).lean();
-        expect(doc!.slugCustomized).toBe(true);
-        expect(usersService.stampBillingReconcileRequired).toHaveBeenCalledWith(
-            userId.toString()
-        );
-        expect(
-            usersService.clearBillingReconcileRequired
-        ).not.toHaveBeenCalled();
-    });
-
-    it('кинутий deferred-checkout (grace минув): reconcile проходить як звичайний сплив', async () => {
-        // currentPeriodEnd старіший за 3-денний grace → вікно закрите.
-        usersService.findById.mockResolvedValue({
-            billing: deferredStartBilling(-4 * 24 * 60 * 60 * 1000),
-        });
-        const oldest = await seedBusiness({
-            type: 'tov',
-            owned: true,
-            slugCustomized: true,
-        });
-        const newer = await seedBusiness({ type: 'tov', owned: true });
-
-        await service.reconcile(userId.toString());
-
-        expect(await isBlocked(newer)).toBe(true);
-        const doc = await businessModel.findById(oldest).lean();
-        expect(doc!.slugCustomized).toBe(false);
-    });
-
-    it('refund one-off під час TRIALING (one-off-поля зачищені): reconcile проходить на none', async () => {
-        // Refund-вебхук чистить one-off-поля — рівень none легітимний.
-        usersService.findById.mockResolvedValue({
-            billing: {
-                ...deferredStartBilling(60 * 60 * 1000),
-                oneOffLevel: null,
-                oneOffAccessUntil: null,
-            },
-        });
-        const oldest = await seedBusiness({ type: 'tov', owned: true });
-        const newer = await seedBusiness({ type: 'tov', owned: true });
-
-        await service.reconcile(userId.toString());
-
-        expect(await isBlocked(oldest)).toBe(false);
-        expect(await isBlocked(newer)).toBe(true);
-    });
-
     // ── Неповний slug-rent прогін (збій per-entity reset-а) ──────────────
 
     it('збій одного slug-reset-а: прогін неповний → стемп, без clear; решта батча не зривається', async () => {
@@ -650,4 +568,90 @@ describe('ReconciliationService (MongoMemoryReplSet)', () => {
             (_key: string, _ttl: number, fn: () => Promise<unknown>) => fn()
         );
     }, 15_000);
+
+    // ── Brand demote/promote (Sprint 21) ─────────────────────────────────
+
+    const SLOT = {
+        logoUrl: 'https://media/brand-logos/x/a.png',
+        centerMarkUrl: 'https://media/brand-logos/x/c.png',
+        bandMarkUrl: 'https://media/brand-logos/x/b.png',
+        displayName: 'Бренд',
+    };
+
+    async function setBrand(
+        id: Types.ObjectId,
+        brand: Record<string, unknown> | null
+    ): Promise<void> {
+        await businessModel.updateOne({ _id: id }, { $set: { brand } });
+    }
+
+    async function getBrand(
+        id: Types.ObjectId
+    ): Promise<{ active: unknown; pending: unknown } | null> {
+        const doc = await businessModel.findById(id).lean();
+        return (doc?.brand as { active: unknown; pending: unknown }) ?? null;
+    }
+
+    it('нижче brand: активний бренд демоутиться у pending (файл лишається)', async () => {
+        setLevel('none');
+        const id = await seedBusiness({ type: 'fop', owned: true });
+        await setBrand(id, { active: SLOT, pending: null });
+
+        await service.reconcile(userId.toString());
+
+        const brand = await getBrand(id);
+        expect(brand?.active).toBeNull();
+        expect(brand?.pending).toMatchObject({
+            logoUrl: SLOT.logoUrl,
+            centerMarkUrl: SLOT.centerMarkUrl,
+            bandMarkUrl: SLOT.bandMarkUrl,
+            // Демоутований платний логотип помічений для довгого порогу чистки.
+            demoted: true,
+        });
+        expect(
+            (brand?.pending as { uploadedAt?: Date }).uploadedAt
+        ).toBeTruthy();
+    });
+
+    it('≥ brand: pending промотується в active (auto-apply після оплати)', async () => {
+        setLevel('brand');
+        const id = await seedBusiness({ type: 'fop', owned: true });
+        await setBrand(id, {
+            active: null,
+            pending: { ...SLOT, uploadedAt: new Date() },
+        });
+
+        await service.reconcile(userId.toString());
+
+        const brand = await getBrand(id);
+        expect(brand?.pending).toBeNull();
+        expect(brand?.active).toMatchObject({ logoUrl: SLOT.logoUrl });
+    });
+
+    it('≥ brand: наявний active не чіпається (ідемпотентно)', async () => {
+        setLevel('brand');
+        const id = await seedBusiness({ type: 'fop', owned: true });
+        await setBrand(id, { active: SLOT, pending: null });
+
+        await service.reconcile(userId.toString());
+
+        const brand = await getBrand(id);
+        expect(brand?.active).toMatchObject({ logoUrl: SLOT.logoUrl });
+        expect(brand?.pending).toBeNull();
+    });
+
+    it('клієнтський бізнес: промоція під рівнем менеджера-бухгалтера', async () => {
+        setLevel('bookkeeper');
+        const id = await seedBusiness({ type: 'tov', owned: false });
+        await setBrand(id, {
+            active: null,
+            pending: { ...SLOT, uploadedAt: new Date() },
+        });
+
+        await service.reconcile(userId.toString());
+
+        const brand = await getBrand(id);
+        expect(brand?.active).toMatchObject({ logoUrl: SLOT.logoUrl });
+        expect(brand?.pending).toBeNull();
+    });
 });

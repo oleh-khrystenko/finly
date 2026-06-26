@@ -17,17 +17,19 @@ export const RESPONSE_CODE = {
     NO_BILLING_ACCOUNT: 'NO_BILLING_ACCOUNT',
     PAYMENT_TYPE_DISABLED: 'PAYMENT_TYPE_DISABLED',
     NO_ACTIVE_SUBSCRIPTION: 'NO_ACTIVE_SUBSCRIPTION',
-    SAME_PLAN: 'SAME_PLAN',
     INVALID_PLAN: 'INVALID_PLAN',
-    PRORATION_PAYMENT_FAILED: 'PRORATION_PAYMENT_FAILED',
-    REFUND_FAILED: 'REFUND_FAILED',
-    SUBSCRIPTION_OPERATION_FAILED: 'SUBSCRIPTION_OPERATION_FAILED',
     /**
-     * Sprint 17 — конкурентна білінг-мутація. Усі write-операції над підпискою
-     * (checkout, cancel, change-plan, update-card, reset) серіалізовані
-     * per-user Redis-локом: WayForPay charge/refund/CHANGE неідемпотентні, тож
-     * два паралельні запити (дві вкладки) інакше задвоїли б списання чи
-     * повернення. Lock зайнятий → цей код. Recovery: дочекатись і повторити.
+     * Sprint 22 — дія «оплатити зараз» (resume) застосовна лише до підписки у
+     * стані прострочки (PAST_DUE). Викликана на активній чи відсутній підписці —
+     * цей код. Recovery: дія недоступна, поки списання не відхилено.
+     */
+    SUBSCRIPTION_NOT_PAST_DUE: 'SUBSCRIPTION_NOT_PAST_DUE',
+    /**
+     * Sprint 17/22 — конкурентна білінг-мутація. Усі write-операції над підпискою
+     * (checkout, resume, cancel) і billing-clock-списання серіалізовані per-user
+     * Redis-локом: списання monobank за токеном неідемпотентне, тож два паралельні
+     * запити (дві вкладки) чи гонка з планувальником інакше задвоїли б списання за
+     * період. Lock зайнятий → цей код. Recovery: дочекатись і повторити.
      */
     BILLING_OPERATION_IN_PROGRESS: 'BILLING_OPERATION_IN_PROGRESS',
 
@@ -48,6 +50,35 @@ export const RESPONSE_CODE = {
     AVATAR_FILE_KEY_INVALID: 'AVATAR_FILE_KEY_INVALID',
     AVATAR_UPLOAD_NOT_FOUND: 'AVATAR_UPLOAD_NOT_FOUND',
     AVATAR_UPLOAD_INVALID: 'AVATAR_UPLOAD_INVALID',
+
+    // --- brand logo success (Sprint 21) ---
+    /** Бренд активний (доступ ≥ brand): логотип рендериться публічно одразу. */
+    BRAND_UPDATED: 'BRAND_UPDATED',
+    /** Бренд знятий: active + pending очищені, публічно повертається Finly. */
+    BRAND_DELETED: 'BRAND_DELETED',
+
+    // --- brand logo error (Sprint 21) ---
+    /** File key не відповідає формату або namespace-у бізнесу. */
+    BRAND_LOGO_FILE_KEY_INVALID: 'BRAND_LOGO_FILE_KEY_INVALID',
+    /** Presigned-завантаження не знайдено у R2 на commit (TTL минув / не вантажилось). */
+    BRAND_LOGO_UPLOAD_NOT_FOUND: 'BRAND_LOGO_UPLOAD_NOT_FOUND',
+    /** Невірний тип або завелика вага завантаженого файлу (HeadObject-перевірка). */
+    BRAND_LOGO_INVALID: 'BRAND_LOGO_INVALID',
+    /**
+     * Вертикальне зображення (height > width). Приймаємо лише квадрат і
+     * горизонтальний прямокутник — вертикальне не вписується у плашку/смугу.
+     */
+    BRAND_LOGO_ASPECT_INVALID: 'BRAND_LOGO_ASPECT_INVALID',
+    /**
+     * Надто витягнутий горизонтальний логотип (width / height > ліміт): не
+     * вписується у верхню смугу НБУ-QR разом із підписом — текст вилазить за
+     * межі. Відхиляємо з ясним повідомленням замість зламаної бренд-марки.
+     */
+    BRAND_LOGO_TOO_WIDE: 'BRAND_LOGO_TOO_WIDE',
+    /** Майже білий/світлий логотип: зникне на білій плашці. Поріг емпіричний. */
+    BRAND_LOGO_TOO_LIGHT: 'BRAND_LOGO_TOO_LIGHT',
+    /** Збій сторонніх ops (download / bake / upload) — нейтральний 5xx-код. */
+    BRAND_LOGO_UPLOAD_FAILED: 'BRAND_LOGO_UPLOAD_FAILED',
 
     // --- businesses error (Sprint 3 §3.10) ---
     BUSINESS_NOT_FOUND: 'BUSINESS_NOT_FOUND',
@@ -160,6 +191,14 @@ export const RESPONSE_CODE = {
      * і незмінний. Upsell на платний тариф.
      */
     SLUG_EDIT_REQUIRES_PLAN: 'SLUG_EDIT_REQUIRES_PLAN',
+    /**
+     * Sprint 21 — кастомний брендинг отримувача (логотип у QR + на pay-сторінках)
+     * вимагає рівня доступу не нижче brand. Подвійний бар'єр: на Save (free →
+     * лого зберігається у pending-слот, цей код несе пейвол-стан у УСПІШНІЙ
+     * відповіді commit-у, дзеркало slug-upsell — не throw) і на публічному
+     * рендері (нижче brand → Finly). Upsell на тариф «Бренд».
+     */
+    BRAND_REQUIRES_PLAN: 'BRAND_REQUIRES_PLAN',
     /**
      * Sprint 19 — доменний інваріант: власник може мати максимум один бізнес
      * типу «фізособа» і один «ФОП». Не апсел (платний тариф не зніме ліміт) —
@@ -307,11 +346,8 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.NO_BILLING_ACCOUNT]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.PAYMENT_TYPE_DISABLED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.NO_ACTIVE_SUBSCRIPTION]: RESPONSE_TYPE.ERROR,
-    [RESPONSE_CODE.SAME_PLAN]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVALID_PLAN]: RESPONSE_TYPE.ERROR,
-    [RESPONSE_CODE.PRORATION_PAYMENT_FAILED]: RESPONSE_TYPE.ERROR,
-    [RESPONSE_CODE.REFUND_FAILED]: RESPONSE_TYPE.ERROR,
-    [RESPONSE_CODE.SUBSCRIPTION_OPERATION_FAILED]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.SUBSCRIPTION_NOT_PAST_DUE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.BILLING_OPERATION_IN_PROGRESS]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.AI_RATE_LIMIT_EXCEEDED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.AI_MESSAGE_TOO_LONG]: RESPONSE_TYPE.ERROR,
@@ -322,6 +358,15 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.AVATAR_FILE_KEY_INVALID]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.AVATAR_UPLOAD_NOT_FOUND]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.AVATAR_UPLOAD_INVALID]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BRAND_UPDATED]: RESPONSE_TYPE.SUCCESS,
+    [RESPONSE_CODE.BRAND_DELETED]: RESPONSE_TYPE.SUCCESS,
+    [RESPONSE_CODE.BRAND_LOGO_FILE_KEY_INVALID]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BRAND_LOGO_UPLOAD_NOT_FOUND]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BRAND_LOGO_INVALID]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BRAND_LOGO_ASPECT_INVALID]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BRAND_LOGO_TOO_WIDE]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BRAND_LOGO_TOO_LIGHT]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BRAND_LOGO_UPLOAD_FAILED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.BUSINESS_NOT_FOUND]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.BUSINESS_ACCESS_DENIED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.SLUG_GENERATION_FAILED]: RESPONSE_TYPE.ERROR,
@@ -334,6 +379,7 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.SLUG_RESERVED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.SLUG_TAKEN]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.SLUG_EDIT_REQUIRES_PLAN]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BRAND_REQUIRES_PLAN]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.BUSINESS_TYPE_LIMIT_REACHED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.BUSINESS_LIMIT_REQUIRES_PLAN]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.BUSINESS_CREATE_IN_PROGRESS]: RESPONSE_TYPE.ERROR,

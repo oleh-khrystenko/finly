@@ -11,6 +11,7 @@ In the Cloudflare dashboard for `<DOMAIN>`:
 | A | @ | `<IPV4>` | proxied (orange cloud) |
 | AAAA | @ | `<IPV6>` | proxied |
 | CNAME | www | `<DOMAIN>` | proxied |
+| CNAME | pay | `<DOMAIN>` | proxied |
 
 SSL/TLS → Overview → set to **Full (strict)**. `Always Use HTTPS` ON, `Automatic HTTPS Rewrites` ON, `Min TLS Version` 1.2.
 
@@ -123,7 +124,7 @@ sudo -u caddy test -r /opt/<PROJECT>/Caddyfile && echo OK
 - **HSTS** — pin HTTPS for a year. Cloudflare in front does not auto-send HSTS; this is the source.
 - **`X-Frame-Options: DENY`** — the legacy clickjacking protection. CSP `frame-ancestors` superseded it; ship both for old browsers.
 - **`Referrer-Policy: strict-origin-when-cross-origin`** — modern default. Stops leaking full URLs to third parties.
-- **`Permissions-Policy`** — disable browser APIs the app doesn't use (camera, mic, geolocation). Whitelist what you need (`payment=(self)` for Stripe.js).
+- **`Permissions-Policy`** — disable browser APIs the app doesn't use (camera, mic, geolocation). Browser payment API is limited to same-origin with `payment=(self)`.
 - **`Cross-Origin-Opener-Policy: same-origin`** — opt into `crossOriginIsolated` posture (needed for some workers). Safe default.
 - **`-Server`** — strip the server identity so the response no longer says "Server: Caddy".
 

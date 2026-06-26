@@ -58,7 +58,7 @@ export const ENV = {
     TRUST_PROXY_HOPS: getNonNegativeIntEnvVar('TRUST_PROXY_HOPS'),
     /**
      * Cabinet origin (`finly.com.ua` prod, `localhost:3000` dev). Використовується
-     * для CORS, OAuth callback, magic-link redirect, WayForPay return/service
+     * для CORS, OAuth callback, magic-link redirect, monobank return/service
      * URL, email-template посилань на кабінет — усі шляхи, що ведуть
      * авторизованого ФОП назад у його кабінет.
      */
@@ -84,17 +84,44 @@ export const ENV = {
     RESEND_API_KEY: getEnvVar('RESEND_API_KEY'),
     RESEND_FROM_EMAIL: getEnvVar('RESEND_FROM_EMAIL'),
 
-    // WayForPay (Sprint 17) — merchant-реквізити білінгу. `merchantDomainName`
-    // має збігатись з доменом, зареєстрованим у кабінеті WayForPay, інакше
-    // підпис Purchase/CREATE_INVOICE відхиляється. Sandbox: test_merch_n1 /
-    // flk3409refn54t54t*FNJRET.
-    WAYFORPAY_MERCHANT_ACCOUNT: getEnvVar('WAYFORPAY_MERCHANT_ACCOUNT'),
-    WAYFORPAY_MERCHANT_SECRET_KEY: getEnvVar('WAYFORPAY_MERCHANT_SECRET_KEY'),
-    WAYFORPAY_MERCHANT_DOMAIN: getEnvVar('WAYFORPAY_MERCHANT_DOMAIN'),
+    // monobank «Плата» (Sprint 22) — merchant X-Token із кабінету monobank
+    // (або тестовий токен з api.monobank.ua). Єдиний секрет провайдера:
+    // checkout, списання за токеном і запит статусу автентифікуються ним;
+    // вебхуки верифікуються публічним ключем з GET /api/merchant/pubkey.
+    MONOBANK_TOKEN: getEnvVar('MONOBANK_TOKEN'),
 
     PAYMENTS_SUBSCRIPTION_ENABLED: subscriptionEnabled,
     PAYMENTS_ONE_OFF_ENABLED: oneOffEnabled,
     BILLING_DEMO_MODE: billingDemoMode,
+
+    // Sprint 22 — dunning billing-clock: скільки спроб списання у прострочці до
+    // зняття доступу і інтервал між повторами. Грейс ≈ (MAX−1) × INTERVAL.
+    // Дефолт 10 × 24год ≈ 9 днів: частий перший повтор ловить швидке поповнення
+    // картки, довге вікно перекриває зарплатну хвилю.
+    BILLING_DUNNING_MAX_ATTEMPTS: getNonNegativeIntEnvVar(
+        'BILLING_DUNNING_MAX_ATTEMPTS'
+    ),
+    BILLING_DUNNING_RETRY_INTERVAL_HOURS: getNonNegativeIntEnvVar(
+        'BILLING_DUNNING_RETRY_INTERVAL_HOURS'
+    ),
+
+    // Sprint 22 — ЦІНИ у ГРИВНЯХ (цілі). Єдине джерело ціни для всього продукту:
+    // `CatalogService` накладає їх на каталог, а той живить і публічний
+    // ендпоінт (web рендерить з нього), і суму реального списання у
+    // `PaymentsService`. Зміна = відредагувати тут + перезапустити API (без
+    // ребілду web). Конверсію у копійки робить CatalogService (×100).
+    BILLING_PRICE_SUBSCRIPTION_BRAND: getNonNegativeIntEnvVar(
+        'BILLING_PRICE_SUBSCRIPTION_BRAND'
+    ),
+    BILLING_PRICE_SUBSCRIPTION_BOOKKEEPER: getNonNegativeIntEnvVar(
+        'BILLING_PRICE_SUBSCRIPTION_BOOKKEEPER'
+    ),
+    BILLING_PRICE_ONEOFF_BRAND: getNonNegativeIntEnvVar(
+        'BILLING_PRICE_ONEOFF_BRAND'
+    ),
+    BILLING_PRICE_ONEOFF_BOOKKEEPER: getNonNegativeIntEnvVar(
+        'BILLING_PRICE_ONEOFF_BOOKKEEPER'
+    ),
 
     AUTH_PASSWORD_MIN_LENGTH: parseInt(
         getEnvVar('AUTH_PASSWORD_MIN_LENGTH'),
@@ -136,6 +163,25 @@ export const ENV = {
         10
     ),
 
+    /**
+     * Sprint 21 — скільки днів pending-логотип бренду живе без оплати, перш ніж
+     * cron-чистка прибирає його з R2 (orphan неоплачених + демоутовані після
+     * згасання тарифу, яким дали свіже вікно). Повторна підписка у межах вікна
+     * промотує pending назад в active (реконсиляція) — чистка його не зачіпає.
+     */
+    BRAND_PENDING_CLEANUP_DAYS: getNonNegativeIntEnvVar(
+        'BRAND_PENDING_CLEANUP_DAYS'
+    ),
+    /**
+     * Sprint 21 — поріг чистки ДЕМОУТОВАНОГО (колись активного, оплаченого)
+     * pending-логотипа після згасання тарифу. Довший за
+     * `BRAND_PENDING_CLEANUP_DAYS`: платник міг передумати ненадовго, даємо більше
+     * часу повернутись (повторна підписка промотує лого назад без перезавантаження).
+     */
+    BRAND_DEMOTED_CLEANUP_DAYS: getNonNegativeIntEnvVar(
+        'BRAND_DEMOTED_CLEANUP_DAYS'
+    ),
+
     ANTHROPIC_API_KEY: getEnvVar('ANTHROPIC_API_KEY'),
 
     // Public help assistant (Sprint 16) — anon, no executions. Own short
@@ -161,6 +207,34 @@ if (!ENV.PAYMENTS_SUBSCRIPTION_ENABLED && !ENV.PAYMENTS_ONE_OFF_ENABLED) {
         '❌ At least one payment type must be enabled. ' +
             'Set PAYMENTS_SUBSCRIPTION_ENABLED or PAYMENTS_ONE_OFF_ENABLED to "true".'
     );
+}
+
+// Sprint 22 — dunning мусить мати щонайменше одну спробу і ненульовий інтервал,
+// інакше прострочка або миттєво знімала б доступ (MAX=0), або повтори злипались
+// би в один момент (INTERVAL=0), руйнуючи грейс-вікно.
+if (
+    ENV.BILLING_DUNNING_MAX_ATTEMPTS < 1 ||
+    ENV.BILLING_DUNNING_RETRY_INTERVAL_HOURS < 1
+) {
+    throw new Error(
+        `❌ BILLING_DUNNING_MAX_ATTEMPTS (${ENV.BILLING_DUNNING_MAX_ATTEMPTS}) and ` +
+            `BILLING_DUNNING_RETRY_INTERVAL_HOURS (${ENV.BILLING_DUNNING_RETRY_INTERVAL_HOURS}) ` +
+            'must both be ≥ 1.'
+    );
+}
+
+// Sprint 22 — ціна 0 грн = безкоштовний/зламаний charge. Кожен тариф ≥ 1 грн.
+const billingPrices = {
+    BILLING_PRICE_SUBSCRIPTION_BRAND: ENV.BILLING_PRICE_SUBSCRIPTION_BRAND,
+    BILLING_PRICE_SUBSCRIPTION_BOOKKEEPER:
+        ENV.BILLING_PRICE_SUBSCRIPTION_BOOKKEEPER,
+    BILLING_PRICE_ONEOFF_BRAND: ENV.BILLING_PRICE_ONEOFF_BRAND,
+    BILLING_PRICE_ONEOFF_BOOKKEEPER: ENV.BILLING_PRICE_ONEOFF_BOOKKEEPER,
+};
+for (const [name, value] of Object.entries(billingPrices)) {
+    if (value < 1) {
+        throw new Error(`❌ ${name} (${value}) must be ≥ 1 (гривні).`);
+    }
 }
 
 // Sprint 10 §10.1 — dedup-overwrite-flow (sendMagicLink SP-8) припускає, що
@@ -226,4 +300,28 @@ validateOrphanCleanupSchedule(
     ENV.ORPHAN_REMINDER_FIRST_DAYS,
     ENV.ORPHAN_REMINDER_FINAL_DAYS,
     ENV.ORPHAN_CLEANUP_DELETION_DAYS
+);
+
+// Sprint 21 — cross-field invariant порогів чистки бренду. Семантика двох
+// бакетів (`BrandCleanupService`): free-pending (неоплачений) живе коротше,
+// демоутований платний (тариф міг згаснути ненадовго) — довше. Якщо пороги
+// інвертувати, демоутований логотип чистився б РАНІШЕ за free, тихо й без
+// падіння. Тримаємо ту саму fail-fast-дисципліну, що orphan-cleanup і
+// magic-link-TTL: `BRAND_PENDING_CLEANUP_DAYS ≤ BRAND_DEMOTED_CLEANUP_DAYS`.
+export function validateBrandCleanupThresholds(
+    pendingDays: number,
+    demotedDays: number
+): void {
+    if (pendingDays > demotedDays) {
+        throw new Error(
+            `❌ BRAND_PENDING_CLEANUP_DAYS (${pendingDays}) must not exceed ` +
+                `BRAND_DEMOTED_CLEANUP_DAYS (${demotedDays}). Demoted (paid) ` +
+                'logos must get at least as long a grace window as unpaid free uploads.'
+        );
+    }
+}
+
+validateBrandCleanupThresholds(
+    ENV.BRAND_PENDING_CLEANUP_DAYS,
+    ENV.BRAND_DEMOTED_CLEANUP_DAYS
 );

@@ -1,5 +1,6 @@
 import {
     DeleteObjectCommand,
+    GetObjectCommand,
     HeadObjectCommand,
     PutObjectCommand,
     S3Client,
@@ -77,6 +78,19 @@ export class CloudflareR2Service implements IStorageProvider {
             }
             throw err;
         }
+    }
+
+    async downloadObject(key: string): Promise<Buffer> {
+        const result = await this.client.send(
+            new GetObjectCommand({ Bucket: this.bucket, Key: key })
+        );
+        if (!result.Body) {
+            throw new Error(`R2 object "${key}" has no body`);
+        }
+        // AWS SDK v3 Node stream → Buffer. `transformToByteArray` доступний на
+        // Body у Node-runtime (sdk-stream-mixin), уникає ручного stream-pump.
+        const bytes = await result.Body.transformToByteArray();
+        return Buffer.from(bytes);
     }
 
     async deleteObject(key: string): Promise<void> {

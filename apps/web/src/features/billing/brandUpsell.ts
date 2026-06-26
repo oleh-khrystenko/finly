@@ -1,25 +1,59 @@
-import { SUBSCRIPTION_PLANS } from '@finly/types';
-import { createSubscriptionCheckout } from '@/shared/api';
+import { useEffect, useState } from 'react';
+import { createSubscriptionCheckout, getCatalog } from '@/shared/api/payments';
 
 /**
- * Sprint 20 — спільний апсел на тариф «Свій бренд» (slug-flow на трьох
- * сторінках). Ціна деривується з каталогу (`SUBSCRIPTION_PLANS`), а не
- * хардкодиться, щоб не розійтися з білінгом.
+ * Sprint 20/22 — спільний апсел на тариф «Бренд» (slug-flow на трьох сторінках).
+ * Ціна тепер env-керована на боці API, тож web НІКОЛИ її не хардкодить — тягне з
+ * каталог-ендпоінта (єдине джерело). Кеш на сесію, щоб не смикати API на кожній
+ * сторінці.
  */
-const BRAND_PLAN = SUBSCRIPTION_PLANS.find((p) => p.code === 'brand');
-
-/** Підпис primary CTA: «Підписатись · 49 грн/міс». */
-export function brandUpsellCtaLabel(): string {
-    const amount = BRAND_PLAN ? Math.round(BRAND_PLAN.priceAmount / 100) : 0;
-    return `Підписатись · ${amount} грн/міс`;
+let catalogPromise: ReturnType<typeof getCatalog> | null = null;
+function loadCatalogOnce(): ReturnType<typeof getCatalog> {
+    // Кешуємо лише УСПІШНИЙ результат: при збої скидаємо проміс, щоб наступний
+    // вхід на сторінку спробував знову, а не залип без ціни на всю сесію.
+    return (catalogPromise ??= getCatalog().catch((err) => {
+        catalogPromise = null;
+        throw err;
+    }));
 }
 
 /**
- * Прямий checkout підписки «Свій бренд» з поверненням на `returnPath` (сторінка
+ * Підпис primary CTA: «Підписатись · 49 грн/міс». Поки ціна вантажиться або при
+ * збої — без числа («Підписатись»): краще без ціни, ніж показати суму, що
+ * розходиться з реальним списанням.
+ */
+export function useBrandSubscribeLabel(): string {
+    const [grn, setGrn] = useState<number | null>(null);
+    useEffect(() => {
+        let active = true;
+        loadCatalogOnce()
+            .then((catalog) => {
+                const brand = catalog.subscriptionPlans.find(
+                    (p) => p.code === 'brand'
+                );
+                if (active && brand) {
+                    setGrn(Math.round(brand.priceAmount / 100));
+                }
+            })
+            .catch(() => {
+                /* лишаємо без числа — каталог недоступний */
+            });
+        return () => {
+            active = false;
+        };
+    }, []);
+    return grn == null ? 'Підписатись' : `Підписатись · ${grn} грн/міс`;
+}
+
+/**
+ * Прямий checkout підписки «Бренд» з поверненням на `returnPath` (сторінка
  * сутності, де чекає бронь). Після оплати намір застосовується автоматично
  * (`useApplyPendingSlug`). Кидає — caller показує toast і лишає бронь чинною.
  */
 export async function startBrandCheckout(returnPath: string): Promise<void> {
-    const { checkoutUrl } = await createSubscriptionCheckout('brand', returnPath);
+    const { checkoutUrl } = await createSubscriptionCheckout(
+        'brand',
+        returnPath
+    );
     window.location.href = checkoutUrl;
 }

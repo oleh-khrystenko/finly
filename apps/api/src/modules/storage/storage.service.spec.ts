@@ -16,6 +16,7 @@ function mockStorageProvider(): jest.Mocked<IStorageProvider> {
     return {
         generatePresignedUploadUrl: jest.fn(),
         getObjectMetadata: jest.fn(),
+        downloadObject: jest.fn(),
         deleteObject: jest.fn(),
         uploadBuffer: jest.fn(),
     };

@@ -6,7 +6,7 @@
 
 ## Поточний стан
 
-QR/НБУ-флоу та document storage ще **не реалізовані**. Цей репозиторій містить тех-фундамент: monorepo-monolith на Next.js 16 + NestJS 11 з auth, Stripe payments, AI chat (Anthropic), executions ledger, R2 avatar storage, i18n, theming та модульною архітектурою. Структура та сервіси нижче описують саме цей фундамент.
+Реалізовано public payment pages, QR/НБУ payloads, рахунки, інвойси, WayForPay billing, R2 avatar/brand storage, public help AI і модульну архітектуру на Next.js 16 + NestJS 11. Reports module лишається scaffold-only.
 
 ---
 
@@ -17,25 +17,20 @@ finly/
 ├── apps/
 │   ├── web/                  # Frontend (Next.js 16, React 19)
 │   │   └── src/
-│   │       ├── app/[locale]/
-│   │       │   ├── auth/             # Signin, callback, verify, reset-password
-│   │       │   ├── (protected)/      # Dashboard, profile, billing, ai-chat
-│   │       │   ├── privacy/          # Privacy policy
-│   │       │   ├── terms/            # Terms of service
-│   │       │   └── page.tsx          # Root landing
-│   │       ├── features/             # Auth, billing, profile, change-lang, change-theme
-│   │       ├── entities/             # User, navigation, brand
-│   │       ├── widgets/              # Header
-│   │       └── shared/               # API client, UI, config, styles, i18n
+│   │       ├── app/                  # Root App Router, auth, protected, host-pay
+│   │       ├── features/             # Auth, billing, public views, profile workflows
+│   │       ├── entities/             # Domain slices
+│   │       ├── widgets/              # Composed UI blocks
+│   │       └── shared/               # API client, UI, config, styles, SEO helpers
 │   └── api/                  # Backend (NestJS 11)
 │       └── src/
 │           ├── modules/
 │           │   ├── auth/             # Google OAuth, Magic Link, Password, JWT
 │           │   ├── users/            # CRUD, profile, soft-delete, executions ledger
-│           │   ├── payments/         # Stripe subscriptions + one-off execution packs
-│           │   ├── ai/               # Streaming chat (Anthropic SSE)
-│           │   ├── storage/          # Cloudflare R2 avatar pipeline
-│           │   ├── reports/          # Skeleton
+│           │   ├── payments/         # WayForPay billing + webhook idempotency
+│           │   ├── ai/               # Public help chat (Anthropic SSE)
+│           │   ├── storage/          # Cloudflare R2 transport
+│           │   ├── reports/          # Scaffold-only
 │           │   └── email/            # Resend transactional emails
 │           └── common/               # Guards, filters, decorators, Redis provider
 ├── packages/
@@ -51,15 +46,15 @@ finly/
 
 ## Технології
 
-| Шар      | Технологія                                                                        |
-| -------- | --------------------------------------------------------------------------------- |
-| Monorepo | Turborepo + pnpm workspaces                                                       |
-| Frontend | Next.js 16 (App Router), React 19, Zustand, TailwindCSS 4, next-intl, next-themes |
-| Backend  | NestJS 11, Mongoose (MongoDB), Passport (JWT + Google OAuth), ioredis (Redis)     |
-| Payments | Stripe (subscriptions + one-off credit packs, webhook idempotency)                |
-| Shared   | Zod 4 (single source of truth), TypeScript 5.9 (strict)                           |
-| Email    | Resend                                                                            |
-| Тести    | Jest 30, Supertest, MongoMemoryServer                                             |
+| Шар      | Технологія                                                                    |
+| -------- | ----------------------------------------------------------------------------- |
+| Monorepo | Turborepo + pnpm workspaces                                                   |
+| Frontend | Next.js 16 (App Router), React 19, Zustand, TailwindCSS 4, next-themes        |
+| Backend  | NestJS 11, Mongoose (MongoDB), Passport (JWT + Google OAuth), ioredis (Redis) |
+| Payments | WayForPay (subscriptions, one-off access, webhook idempotency)                |
+| Shared   | Zod 4 (single source of truth), TypeScript 5.9 (strict)                       |
+| Email    | Resend                                                                        |
+| Тести    | Jest 30, Supertest, MongoMemoryServer                                         |
 
 ---
 
@@ -67,8 +62,8 @@ finly/
 
 - **Auth**: Google OAuth, Magic Link, Password login, brute force protection, token rotation з reuse detection
 - **Users**: Profile management, preferred language, account soft-delete з 30-day grace period, scheduled cleanup
-- **Payments**: Stripe subscriptions, one-off credit packs, two-phase webhook idempotency, billing portal
-- **i18n**: uk/en, server + client, email templates двома мовами
+- **Payments**: WayForPay subscriptions, one-off access, two-phase webhook idempotency
+- **Public pay host**: `pay.finly.com.ua` / `pay.finly.local:3000` з host-aware routing
 - **Theming**: Light / Dark / System (next-themes)
 - **UI**: Feature-Sliced Design, Headless UI, Radix, polymorphic components
 
@@ -89,8 +84,12 @@ finly/
 ```env
 # Обов'язкові
 NODE_ENV=development
+PORT=4000
 WEB_PORT=3000
 API_PORT=4000
+TRUST_PROXY_HOPS=0
+WEB_URL=http://localhost:3000
+PAY_PUBLIC_URL=http://pay.finly.local:3000
 
 # MongoDB — MUST бути replica-set (cascade-delete у Sprint 4 використовує
 # `session.withTransaction`). `docker-compose.dev.yml` Mongo не запускає —
@@ -112,33 +111,44 @@ GOOGLE_CALLBACK_URL=http://localhost:4000/api/auth/google/callback
 
 # Resend
 RESEND_API_KEY=your-resend-api-key
+RESEND_FROM_EMAIL=Finly <onboarding@resend.dev>
 
-# Stripe
-STRIPE_SECRET_KEY=your-stripe-secret-key
-STRIPE_WEBHOOK_SECRET=your-stripe-webhook-secret
-STRIPE_PRICE_ID_SUBSCRIPTION=your-stripe-price-id
+# WayForPay
+WAYFORPAY_MERCHANT_ACCOUNT=test_merch_n1
+WAYFORPAY_MERCHANT_SECRET_KEY=flk3409refn54t54t*FNJRET
+WAYFORPAY_MERCHANT_DOMAIN=finly.com.ua
 
-# Stripe credit packs (потрібні при PAYMENTS_ONE_OFF_ENABLED=true)
-# STRIPE_PRICE_ID_CREDITS_5=price_xxx
-# STRIPE_PRICE_ID_CREDITS_10=price_xxx
-# STRIPE_PRICE_ID_CREDITS_20=price_xxx
+PAYMENTS_SUBSCRIPTION_ENABLED=true
+PAYMENTS_ONE_OFF_ENABLED=true
+BILLING_DEMO_MODE=true
+
+ANTHROPIC_API_KEY=sk-ant-your-anthropic-api-key
+HELP_CHAT_MAX_TOKENS=800
+HELP_CHAT_IP_LIMIT=20
+HELP_CHAT_DAILY_BUDGET=1000
 
 # Web
+API_INTERNAL_URL=http://localhost:4000
 NEXT_PUBLIC_BASE_URL=http://localhost:3000
-NEXT_PUBLIC_API_URL=http://localhost:4000/api
+NEXT_PUBLIC_API_URL=/api
+NEXT_PUBLIC_PAY_PUBLIC_URL=http://pay.finly.local:3000
+NEXT_PUBLIC_PAYMENTS_SUBSCRIPTION_ENABLED=true
+NEXT_PUBLIC_PAYMENTS_ONE_OFF_ENABLED=true
+NEXT_PUBLIC_BILLING_DEMO_MODE=true
+NEXT_PUBLIC_STORAGE_HOSTNAME=media.finly.com.ua
 ```
 
 Повний список змінних: [apps/api/src/config/env.ts](apps/api/src/config/env.ts), [apps/web/src/shared/config/env.ts](apps/web/src/shared/config/env.ts).
 
 ### 2. Додай запис у `/etc/hosts` для public-домену
 
-Public payment-page (`pay.finly.com.ua` у prod) у dev слухає `pay.finly.local:3000` — той самий Next.js container, що cabinet, але інший host-header (host-aware routing у `apps/web/src/middleware.ts`, whitelist у `apps/web/src/shared/config/publicHosts.ts`). Без локального DNS-запису браузер падає з `DNS_PROBE_FINISHED_NXDOMAIN` ще до того, як Next.js отримає запит.
+Public payment-page (`pay.finly.com.ua` у prod) у dev слухає `pay.finly.local:3000` — той самий Next.js container, що cabinet, але інший host-header (host-aware routing у `apps/web/src/proxy.ts`, whitelist у `apps/web/src/shared/config/publicHosts.ts`). Без локального DNS-запису браузер падає з `DNS_PROBE_FINISHED_NXDOMAIN` ще до того, як Next.js отримає запит.
 
 ```bash
 echo '127.0.0.1 pay.finly.local' | sudo tee -a /etc/hosts
 ```
 
-Після цього `http://pay.finly.local:3000/{slug}` резолвиться у localhost, middleware ідентифікує host як public і робить rewrite на internal `/host-pay/{slug}`.
+Після цього `http://pay.finly.local:3000/{slug}` резолвиться у localhost, proxy ідентифікує host як public і робить rewrite на internal `/host-pay/{slug}`.
 
 > **Prod.** Запис у `/etc/hosts` не потрібен — `pay.finly.com.ua` має мати DNS-A/CNAME-record на той самий сервер, що `finly.com.ua`, і reverse-proxy (nginx/Caddy) проксує обидва host-header-и на один Next.js container.
 

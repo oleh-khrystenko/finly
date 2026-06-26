@@ -1,6 +1,7 @@
 'use client';
 
 import { BANK_LABEL, type BankCode, type BusinessType } from '@finly/types';
+import UiBrandLogo from '@/shared/ui/UiBrandLogo';
 import UiPaymentOptions from '@/shared/ui/UiPaymentOptions';
 import UiPayeeCard from '@/shared/ui/UiPayeeCard';
 import { formatPayeeName } from '@/entities/business';
@@ -13,12 +14,14 @@ interface Props {
         bankCode: BankCode | null;
         ibanMask: string;
     };
-    /** Nested business view (whitelist 4 поля). */
+    /** Nested business view (whitelist + опційний бренд Sprint 21). */
     business: {
         type: BusinessType;
         name: string;
         slug: string;
         seoIndexEnabled: boolean;
+        logo?: string;
+        brandDisplayName?: string | null;
     };
     /**
      * NBU payload-link URLs. ОС handle через app-link → відкриває банк-додаток
@@ -68,11 +71,19 @@ export default function PublicAccountView({
 
     return (
         <div className="mx-auto max-w-md space-y-6 px-4 py-8 md:max-w-2xl">
-            <header className="space-y-1 text-center">
-                <p className="text-muted-foreground text-sm">Отримувач</p>
-                <h1 className="text-foreground text-2xl font-bold tracking-tight break-words md:text-3xl">
-                    {payeeName}
-                </h1>
+            <header className="flex flex-col items-center gap-3 text-center">
+                {business.logo && (
+                    <UiBrandLogo
+                        src={business.logo}
+                        alt={business.brandDisplayName ?? payeeName}
+                    />
+                )}
+                <div className="space-y-1">
+                    <p className="text-muted-foreground text-sm">Отримувач</p>
+                    <h1 className="text-foreground text-2xl font-bold tracking-tight break-words md:text-3xl">
+                        {payeeName}
+                    </h1>
+                </div>
             </header>
 
             <UiPayeeCard

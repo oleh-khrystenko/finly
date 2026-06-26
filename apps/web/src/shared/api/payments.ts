@@ -1,7 +1,6 @@
 import { apiClient } from './client';
 import {
     PAYMENT_TYPE,
-    type ChangePlan,
     type PaymentRecord,
     type PaymentsCatalog,
 } from '@finly/types';
@@ -41,30 +40,21 @@ export async function createOneOffCheckout(
     return data.data;
 }
 
-export async function cancelSubscription(
-    withRefund: boolean
-): Promise<{ refundedAmount: number | null }> {
-    const { data } = await apiClient.post<{
-        data: { refundedAmount: number | null };
-    }>('/payments/subscription/cancel', { withRefund });
-    return data.data;
+/** Скасування у кінці періоду (єдиний режим). Тіла немає. */
+export async function cancelSubscription(): Promise<void> {
+    await apiClient.post('/payments/subscription/cancel');
 }
 
-export async function changePlan(
-    planCode: ChangePlan['planCode']
-): Promise<{ scheduled: boolean }> {
-    const { data } = await apiClient.post<{
-        data: { scheduled: boolean };
-    }>('/payments/subscription/change-plan', { planCode });
-    return data.data;
-}
-
-export async function updateCard(
+/**
+ * Відновлення під час прострочки («оплатити зараз»): переоформлює checkout-флоу
+ * підписки, гасить борг і захоплює свіжий токен. Повертає URL хостованої сторінки.
+ */
+export async function resumeSubscription(
     returnPath?: string
 ): Promise<{ checkoutUrl: string }> {
     const { data } = await apiClient.post<{
         data: { checkoutUrl: string };
-    }>('/payments/subscription/update-card', {
+    }>('/payments/subscription/resume', {
         ...(returnPath && { returnPath }),
     });
     return data.data;

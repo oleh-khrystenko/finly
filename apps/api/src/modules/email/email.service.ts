@@ -22,7 +22,17 @@ import {
 } from './templates/deletion-reminder';
 import { ProfileCompletionReminderEmail } from './templates/profile-completion-reminder';
 import { ProfileCompletionFinalWarningEmail } from './templates/profile-completion-final-warning';
+import {
+    SubscriptionPastDueEmail,
+    SUBSCRIPTION_PAST_DUE_SUBJECT,
+} from './templates/subscription-past-due';
+import {
+    SubscriptionEndedEmail,
+    SUBSCRIPTION_ENDED_SUBJECT,
+} from './templates/subscription-ended';
 import { EMAIL_TEXT, PROFILE_COMPLETION_CTA_PATH } from './translations';
+
+const BILLING_CTA_PATH = '/billing';
 
 const DATE_LOCALE = 'uk-UA';
 
@@ -133,6 +143,48 @@ export class EmailService {
         );
     }
 
+    /** Sprint 22 — лист прострочки dunning (доступ ще живий, є грейс-вікно). */
+    async sendSubscriptionPastDue(params: {
+        email: string;
+        planName: string;
+        amount: number; // копійки
+        currency: string;
+        attempt: number;
+        maxAttempts: number;
+    }): Promise<void> {
+        const { email, planName, amount, currency, attempt, maxAttempts } =
+            params;
+        await this.send({
+            to: email,
+            subject: SUBSCRIPTION_PAST_DUE_SUBJECT,
+            react: SubscriptionPastDueEmail({
+                planName,
+                amountLabel: formatAmount(amount, currency),
+                attempt,
+                maxAttempts,
+                billingUrl: `${ENV.WEB_URL}${BILLING_CTA_PATH}`,
+            }),
+        });
+        this.logger.log(`Subscription past-due notice sent to ${email}`);
+    }
+
+    /** Sprint 22 — лист про зняття доступу після вичерпання грейсу dunning. */
+    async sendSubscriptionEnded(params: {
+        email: string;
+        planName: string;
+    }): Promise<void> {
+        const { email, planName } = params;
+        await this.send({
+            to: email,
+            subject: SUBSCRIPTION_ENDED_SUBJECT,
+            react: SubscriptionEndedEmail({
+                planName,
+                billingUrl: `${ENV.WEB_URL}${BILLING_CTA_PATH}`,
+            }),
+        });
+        this.logger.log(`Subscription ended notice sent to ${email}`);
+    }
+
     private formatDate(date: Date): string {
         return date.toLocaleDateString(DATE_LOCALE, {
             year: 'numeric',
@@ -178,4 +230,13 @@ export class EmailService {
 
         return link;
     }
+}
+
+/** Копійки → людська сума з гривневою позначкою (₴ у копії — «грн»). */
+function formatAmount(kopecks: number, currency: string): string {
+    const value = kopecks / 100;
+    const rounded = Number.isInteger(value)
+        ? value.toString()
+        : value.toFixed(2);
+    return currency === 'UAH' ? `${rounded} грн` : `${rounded} ${currency}`;
 }
