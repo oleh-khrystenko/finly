@@ -5,6 +5,7 @@ import {
     accountNameSchema,
     accountSlugSchema,
 } from '../entities/account';
+import { brandDisplayNameSchema } from '../entities/brand';
 import {
     bankCodeSchema,
     businessNameSchema,
@@ -153,6 +154,10 @@ export const PublicAccountViewSchema = z.object({
         name: businessNameSchema,
         slug: businessSlugSchema,
         seoIndexEnabled: z.boolean(),
+        // Sprint 21 — кастомний бренд (присутні лише за активного бренду; інакше
+        // Finly). `.optional()` тримає whitelist-форму без brand.
+        logo: z.string().url().optional(),
+        brandDisplayName: brandDisplayNameSchema.nullable().optional(),
     }),
     nbuLinks: z.object({
         primary: z.string().url(),

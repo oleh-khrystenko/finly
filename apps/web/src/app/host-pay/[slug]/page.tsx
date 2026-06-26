@@ -3,7 +3,9 @@ import { headers } from 'next/headers';
 import { notFound, permanentRedirect, redirect } from 'next/navigation';
 import { BUSINESS_TYPE_LABEL } from '@finly/types';
 import { PublicBusinessView, loadPublicView } from '@/features/business-public';
+import { ENV } from '@/shared/config/env';
 import { isPublicHost } from '@/shared/config/publicHosts';
+import { buildMetadata } from '@/shared/seo/metadata';
 
 /**
  * Sprint 3 §3.9 + Sprint 9 §SP-4 — публічна root-вивіска бізнесу
@@ -70,9 +72,15 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     // від h1). H1 уніфікований до нейтрального формулювання, meta-tag тримає
     // type-key-word-у для пошукової видачі ("Оплата на ФОП Іваненко — Finly").
     const heading = `${BUSINESS_TYPE_LABEL[view.type]} ${view.name}`;
+    const title = `Оплата на ${heading} — Finly`;
+    const description = `Сторінка для оплати на ${heading}. Оберіть рахунок і завершіть платіж у мобільному додатку.`;
+    const canonicalUrl = `${ENV.NEXT_PUBLIC_PAY_PUBLIC_URL.replace(/\/$/, '')}/${view.slug}`;
     return {
-        title: `Оплата на ${heading} — Finly`,
-        description: `Сторінка для оплати на ${heading}. Оберіть рахунок і завершіть платіж у мобільному додатку.`,
+        ...buildMetadata({
+            title,
+            description,
+            canonicalUrl,
+        }),
         // Sprint 3 рішення E3 — `noindex` за замовчуванням, ФОП opt-in
         // через toggle `seoIndexEnabled` у кабінеті.
         robots: view.seoIndexEnabled
@@ -114,6 +122,8 @@ export default async function HostPayPage({ params }: Props) {
             type={view.type}
             name={view.name}
             slug={view.slug}
+            logo={view.logo}
+            brandDisplayName={view.brandDisplayName}
             accounts={view.accounts}
         />
     );

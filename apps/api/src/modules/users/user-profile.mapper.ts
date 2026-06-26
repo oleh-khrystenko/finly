@@ -19,10 +19,10 @@ import type { UserDocument } from './schemas/user.schema';
  * отримують sane defaults на read-time без міграції БД.
  *
  * Billing шейп — `UserBillingSchema` (public). Свідомо НЕ містить
- * provider-secret поля `recToken` і внутрішніх ordering-полів
- * (`orderReference`, `lastProviderEventAt`, `providerSubscriptionStatus`):
- * вони лишаються тільки на боці API. Кожне поле — explicit pick, тож секрети
- * не протікають за замовчуванням.
+ * provider-secret поля `cardToken`/`walletId` і внутрішніх полів
+ * (`lastProviderEventAt`, `dunningAttempts`, `nextRetryAt`): вони лишаються
+ * тільки на боці API. Кожне поле — explicit pick, тож секрети не протікають за
+ * замовчуванням.
  */
 export function mapUserToProfileResponse(
     user: UserDocument,
@@ -55,10 +55,9 @@ export function mapUserToProfileResponse(
                   subscriptionStatus: user.billing
                       .subscriptionStatus as UserBilling['subscriptionStatus'],
                   currentPeriodEnd: user.billing.currentPeriodEnd,
+                  nextChargeAt: user.billing.nextChargeAt ?? null,
                   cancelAtPeriodEnd: user.billing.cancelAtPeriodEnd,
                   hasActiveSubscription: user.billing.hasActiveSubscription,
-                  scheduledPlanCode: user.billing.scheduledPlanCode ?? null,
-                  scheduledChangeDate: user.billing.scheduledChangeDate ?? null,
                   cardMask: user.billing.cardMask ?? null,
                   oneOffLevel:
                       (user.billing.oneOffLevel as AccessLevel | null) ?? null,

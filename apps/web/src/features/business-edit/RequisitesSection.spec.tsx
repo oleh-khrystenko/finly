@@ -34,6 +34,7 @@ function makeBusiness(
         seoIndexEnabled: false,
         deletedAt: null,
         accessBlockedAt: null,
+        brand: null,
         createdAt: new Date('2026-05-01'),
         updatedAt: new Date('2026-05-01'),
     };

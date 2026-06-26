@@ -2,6 +2,7 @@ jest.mock('@/shared/config', () => ({
     ENV: {
         NEXT_PUBLIC_API_URL: 'http://localhost:4000/api',
         NEXT_PUBLIC_BASE_URL: 'http://localhost:3000',
+        NEXT_PUBLIC_PAY_PUBLIC_URL: 'http://pay.localhost:3000',
     },
 }));
 
@@ -39,5 +40,21 @@ describe('fetchMetadata', () => {
         expect(meta.title).toBe('Terms');
         expect(meta.alternates?.canonical).toContain('/terms');
         expect(meta.openGraph?.title).toBe('Terms');
+    });
+
+    it('supports a custom canonical origin for public payment pages', () => {
+        const meta = fetchMetadata({
+            page: 'public-business',
+            href: 'IvanEnko',
+            baseUrl: 'https://pay.finly.com.ua/',
+            meta: {
+                title: 'Оплата на ФОП Іваненко — Finly',
+                description: 'Public payment page',
+            },
+        });
+
+        expect(meta.alternates?.canonical).toBe(
+            'https://pay.finly.com.ua/IvanEnko'
+        );
     });
 });

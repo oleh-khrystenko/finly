@@ -84,16 +84,21 @@ export interface PaymentsCatalog {
     oneOffAccesses: OneOffAccessItem[];
 }
 
-// --- Static Catalog (єдине джерело істини) ---
-// Ціни у копійках: 49 грн = 4900. WayForPay оперує decimal-сумою у валюті —
-// конверсію копійки↔decimal робить payload-mapper провайдера. One-off за місяць
-// дорожчий за місяць підписки (підштовхує до підписки).
+// --- Static Catalog (структура — джерело істини) ---
+// Структура (коди, рівні, інтервал, назви) — джерело істини. ЦІНИ ТУТ НЕМАЄ:
+// `priceAmount` завжди `PRICE_FROM_ENV` (0) і у рантаймі НЕ використовується —
+// реальну ціну накладає API з ENV (`CatalogService`, Sprint 22) і на ендпоінт
+// каталогу, і на суму списання. Тримаємо 0, щоб ніхто випадково не «правив ціну»
+// тут (пошук конкретного числа нічого не знайде).
+
+/** Sentinel: ціни немає у статичному конфізі — джерело ціни лише ENV (API). */
+const PRICE_FROM_ENV = 0;
 
 export const SUBSCRIPTION_PLANS: readonly SubscriptionPlanItem[] = [
     {
         code: 'brand',
         name: 'Бренд',
-        priceAmount: 4900,
+        priceAmount: PRICE_FROM_ENV,
         currency: BILLING_CURRENCY,
         interval: 'month',
         level: 'brand',
@@ -103,7 +108,7 @@ export const SUBSCRIPTION_PLANS: readonly SubscriptionPlanItem[] = [
     {
         code: 'bookkeeper',
         name: 'Агенція',
-        priceAmount: 9900,
+        priceAmount: PRICE_FROM_ENV,
         currency: BILLING_CURRENCY,
         interval: 'month',
         level: 'bookkeeper',
@@ -116,7 +121,7 @@ export const ONE_OFF_ACCESSES: readonly OneOffAccessItem[] = [
     {
         code: 'brand',
         name: 'Бренд на місяць',
-        priceAmount: 6900,
+        priceAmount: PRICE_FROM_ENV,
         currency: BILLING_CURRENCY,
         level: 'brand',
         durationMonths: 1,
@@ -126,7 +131,7 @@ export const ONE_OFF_ACCESSES: readonly OneOffAccessItem[] = [
     {
         code: 'bookkeeper',
         name: 'Агенція на місяць',
-        priceAmount: 12_900,
+        priceAmount: PRICE_FROM_ENV,
         currency: BILLING_CURRENCY,
         level: 'bookkeeper',
         durationMonths: 1,
@@ -168,12 +173,11 @@ export function levelOfOneOffAccess(
 
 /**
  * Реальний рівень доступу користувача = максимум активної підписки і активного
- * one-off. Підписка зараховується при `hasActiveSubscription`, АЛЕ не у статусі
- * `TRIALING`: trial прибрано, тож єдиний TRIALING — це відкладений старт поверх
- * one-off (підписка ще не списана). Під час defer доступ дає лише оплачений
- * one-off, не майбутній (можливо вищий) тариф підписки. one-off зараховується
- * поки `oneOffAccessUntil` у майбутньому (гасне ліниво на read, без cron). Єдине
- * джерело для API-замків і web-гейтингу.
+ * one-off. Підписка зараховується при `hasActiveSubscription` (живий слот:
+ * ACTIVE або прострочка в межах грейсу — доступ тримається, поки billing-clock
+ * не вичерпав спроби). one-off зараховується поки `oneOffAccessUntil` у
+ * майбутньому (гасне ліниво на read, без cron). Єдине джерело для API-замків і
+ * web-гейтингу.
  */
 export function deriveAccessLevel(
     billing: {
@@ -186,10 +190,7 @@ export function deriveAccessLevel(
     now: Date
 ): AccessLevel {
     if (!billing) return 'none';
-    const subscriptionCounts =
-        billing.hasActiveSubscription &&
-        billing.subscriptionStatus !== SUBSCRIPTION_STATUS.TRIALING;
-    const subLevel = subscriptionCounts
+    const subLevel = billing.hasActiveSubscription
         ? levelOfSubscriptionPlan(billing.planCode)
         : 'none';
     const oneOffActive =
@@ -203,11 +204,15 @@ export function deriveAccessLevel(
 // --- Status & Event Enums ---
 
 export const SUBSCRIPTION_STATUS = {
+    /** Підписка активна, billing-clock спише її у `nextChargeAt`. */
     ACTIVE: 'ACTIVE',
-    TRIALING: 'TRIALING',
+    /** Списання продовження відхилено, доступ тримається на грейс-вікно dunning. */
     PAST_DUE: 'PAST_DUE',
+    /** Скасована користувачем у кінці періоду або після вичерпання грейсу. */
     CANCELED: 'CANCELED',
+    /** Checkout створено, перше списання ще не підтверджене. */
     INCOMPLETE: 'INCOMPLETE',
+    /** Грейс dunning вичерпано без оплати — доступ знято. */
     UNPAID: 'UNPAID',
     UNKNOWN: 'UNKNOWN',
 } as const;
@@ -229,13 +234,11 @@ export type BillingEventType =
 // Джерело історії грошових списань і refund. Наповнюється з вебхуків.
 
 export const PAYMENT_RECORD_TYPE = {
-    SUBSCRIPTION: 'subscription', // рекурентне списання підписки
+    SUBSCRIPTION: 'subscription', // списання підписки (перше або продовження billing-clock)
     ONE_OFF: 'one_off', // разовий доступ на місяць
-    PRORATION: 'proration', // негайна доплата при апгрейді
-    // Approved-списання на orderReference, що вже не є чинним для користувача
-    // (рекурент пережив перезапис checkout-ом/re-bind-ом). Гроші рухались, але
-    // грант неможливий — слід для ручного розбору. Окремий тип, щоб запис не
-    // потрапляв у refund-скоуп cancel-у (він фільтрує type=subscription).
+    // Success-списання, яке неможливо звести з чинним станом користувача
+    // (наприклад, гроші пройшли, але підписку вже скасовано/перезаписано). Слід
+    // для ручного розбору; окремий тип тримає його поза звичайною історією.
     UNMATCHED: 'unmatched',
 } as const;
 
@@ -258,7 +261,6 @@ export const PaymentRecordSchema = z.object({
     type: z.enum([
         PAYMENT_RECORD_TYPE.SUBSCRIPTION,
         PAYMENT_RECORD_TYPE.ONE_OFF,
-        PAYMENT_RECORD_TYPE.PRORATION,
         PAYMENT_RECORD_TYPE.UNMATCHED,
     ]),
     amount: z.number().int(), // копійки
@@ -298,27 +300,20 @@ export const CreateCheckoutSessionSchema = z
 
 export type CreateCheckoutSession = z.infer<typeof CreateCheckoutSessionSchema>;
 
-export const CancelSubscriptionSchema = z.object({
-    /**
-     * true → скасування з поверненням за невикористаний період (refund +
-     * REMOVE одразу). false → у кінці періоду (лишається активною до межі).
-     */
-    withRefund: z.boolean(),
-});
-
-export type CancelSubscription = z.infer<typeof CancelSubscriptionSchema>;
-
-export const ChangePlanSchema = z.object({
-    planCode: z.enum(SUBSCRIPTION_PLAN_CODES),
-});
-
-export type ChangePlan = z.infer<typeof ChangePlanSchema>;
-
-export const UpdateCardSchema = z.object({
+/**
+ * Скасування — єдиний режим: у кінці періоду. Без поля `withRefund` (refund
+ * прибрано зі скоупу MVP) і без зміни тарифу (через скасування + нове
+ * оформлення). Тіла запиту немає.
+ *
+ * Відновлення під час прострочки («оплатити зараз») переоформлює checkout-флоу
+ * підписки через `CreateCheckoutSessionSchema` (resume-ендпоінт), тож власної
+ * схеми не потребує.
+ */
+export const ResumeSubscriptionSchema = z.object({
     returnPath: z.string().startsWith('/').max(256).optional(),
 });
 
-export type UpdateCard = z.infer<typeof UpdateCardSchema>;
+export type ResumeSubscription = z.infer<typeof ResumeSubscriptionSchema>;
 
 /**
  * Public billing shape, що повертається у `getMe`. НЕ містить provider-secret
@@ -332,7 +327,6 @@ export const UserBillingSchema = z.object({
     subscriptionStatus: z
         .enum([
             SUBSCRIPTION_STATUS.ACTIVE,
-            SUBSCRIPTION_STATUS.TRIALING,
             SUBSCRIPTION_STATUS.PAST_DUE,
             SUBSCRIPTION_STATUS.CANCELED,
             SUBSCRIPTION_STATUS.INCOMPLETE,
@@ -341,10 +335,13 @@ export const UserBillingSchema = z.object({
         ])
         .nullable(),
     currentPeriodEnd: z.coerce.date().nullable(),
+    /**
+     * Дата наступного списання нашим billing-clock (вісь планувальника). Активна
+     * підписка завжди має її в майбутньому; скасування і зняття доступу прибирають.
+     */
+    nextChargeAt: z.coerce.date().nullable(),
     cancelAtPeriodEnd: z.boolean(),
     hasActiveSubscription: z.boolean(),
-    scheduledPlanCode: z.string().nullable(),
-    scheduledChangeDate: z.coerce.date().nullable(),
     cardMask: z.string().nullable(),
     /** Рівень активного one-off доступу + дата його закінчення. */
     oneOffLevel: z.enum(ACCESS_LEVELS).nullable(),
@@ -359,49 +356,62 @@ export const UserBillingSchema = z.object({
 export type UserBilling = z.infer<typeof UserBillingSchema>;
 
 /**
- * Нормалізована подія транзакції WayForPay, яку провайдер віддає сервісу після
- * розбору і верифікації підпису вебхука. Провайдер НЕ класифікує семантику
- * білінгу (підписка vs пакет vs proration) — це робить сервіс, декодуючи
- * `orderReference` і звіряючи з `billing.orderReference`. Сюди потрапляють лише
- * факти транзакції.
- *
- * `amount`/`refundAmount` — копійки-integer (конвертовані з WayForPay decimal
- * payload-mapper-ом). `recToken` — secret-токен картки, захоплений при
- * створенні підписки; сервіс зберігає, у frontend не віддає.
+ * Статуси рахунку monobank «Плата» (`GET /api/merchant/invoice/status` і той
+ * самий shape у вебхуку). `hold` не виникає при `paymentType: 'debit'`, але
+ * лишається у переліку для повноти. Термінальні: success / failure / reversed /
+ * expired; нетермінальні (проміжні): created / processing / hold.
  */
-export const WAYFORPAY_TRANSACTION_STATUS = {
-    APPROVED: 'Approved',
-    DECLINED: 'Declined',
-    REFUNDED: 'Refunded',
-    VOIDED: 'Voided',
-    IN_PROCESSING: 'InProcessing',
-    PENDING: 'Pending',
-    EXPIRED: 'Expired',
+export const MONOBANK_INVOICE_STATUS = {
+    CREATED: 'created',
+    PROCESSING: 'processing',
+    HOLD: 'hold',
+    SUCCESS: 'success',
+    FAILURE: 'failure',
+    REVERSED: 'reversed',
+    EXPIRED: 'expired',
 } as const;
 
-export type WayforpayTransactionStatus =
-    (typeof WAYFORPAY_TRANSACTION_STATUS)[keyof typeof WAYFORPAY_TRANSACTION_STATUS];
+export type MonobankInvoiceStatus =
+    (typeof MONOBANK_INVOICE_STATUS)[keyof typeof MONOBANK_INVOICE_STATUS];
 
+/** Нетермінальні статуси: фінальний прийде окремою подією / запитом статусу. */
+export const MONOBANK_NON_TERMINAL_STATUSES: readonly MonobankInvoiceStatus[] = [
+    MONOBANK_INVOICE_STATUS.CREATED,
+    MONOBANK_INVOICE_STATUS.PROCESSING,
+    MONOBANK_INVOICE_STATUS.HOLD,
+];
+
+/**
+ * Нормалізована подія списання monobank, яку провайдер віддає сервісу після
+ * розбору і верифікації підпису вебхука АБО запиту статусу рахунку. Провайдер НЕ
+ * класифікує семантику білінгу (підписка vs пакет) — це робить сервіс, декодуючи
+ * `orderReference` (наш `reference`, проштовхнутий у `merchantPaymInfo`). Сюди
+ * потрапляють лише факти транзакції.
+ *
+ * `amount` — копійки-integer (monobank оперує мінорними одиницями напряму).
+ * `cardToken` — secret-токен картки, захоплений при першому хостованому checkout;
+ * сервіс зберігає для продовжень, у frontend не віддає.
+ */
 export const BillingWebhookEventSchema = z.object({
     /**
-     * Ключ дедуплікації. `txn:${transactionId}:${transactionStatus}` —
-     * per-transaction id WayForPay плюс статус: один transactionId проходить
-     * кілька статус-переходів (InProcessing → Approved), і кожен має оброблятись
-     * окремо, інакше фінальний Approved відкинувся б як дубль проміжного
-     * колбеку. Fallback `${orderReference}:${transactionStatus}:${processingDate}`
-     * лише для рідких колбеків без transactionId.
+     * Ключ дедуплікації: `${invoiceId}:${status}`. Один invoiceId проходить
+     * кілька статус-переходів (processing → success), і кожен оброблюється
+     * окремо, інакше фінальний success відкинувся б як дубль проміжного.
      */
     providerEventId: z.string(),
+    /** Наш `reference` (маршрутизація вебхука: кому і що нарахувати). */
     orderReference: z.string(),
+    /** monobank invoiceId — ключ для запиту статусу і звірки сумнівних списань. */
+    invoiceId: z.string(),
     occurredAt: z.coerce.date(),
-    /** Raw lifecycle WayForPay: Approved / Declined / Refunded / ... */
-    transactionStatus: z.string(),
+    /** Raw статус рахунку monobank: success / failure / processing / ... */
+    status: z.string(),
     amount: z.number().int(), // копійки
     currency: z.string(),
-    transactionId: z.string().nullable(),
+    cardToken: z.string().nullable(),
     cardMask: z.string().nullable(),
-    recToken: z.string().nullable(),
-    reasonCode: z.number().nullable(),
+    failureReason: z.string().nullable(),
+    errCode: z.string().nullable(),
     raw: z.record(z.string(), z.unknown()),
 });
 

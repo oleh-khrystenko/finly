@@ -55,22 +55,26 @@ export interface QrBandOptions {
      * Смуги resize-яться до цієї ширини зі збереженням аспекту.
      */
     width: number;
-    /** Asset верхньої смуги (опційно — тип-2 не має верхньої). */
-    topBandPath?: string;
-    /** Asset нижньої смуги (опційно). */
-    bottomBandPath?: string;
+    /**
+     * Верхня смуга (опційно — тип-2 не має верхньої). Локальний шлях до
+     * build-time asset-у АБО Buffer (Sprint 21 — кастомна бренд-марка з R2 /
+     * щойно запечена). `sharp(input)` приймає обидва нативно.
+     */
+    topBand?: string | Buffer;
+    /** Нижня смуга (опційно). Шлях до asset-у або Buffer. */
+    bottomBand?: string | Buffer;
 }
 
 /**
  * Накладає центральний asset у центр QR-PNG через `sharp` composite-pipeline.
  *
- * **Параметризація центру (Sprint 14).** Вибір asset-у живе у caller-і:
+ * **Параметризація центру (Sprint 14 → 21).** Вибір asset-у живе у caller-і:
  * `QrService` тримає тип-рівневі `QrBrand`-дескриптори (нормативний круг
- * гривні для тип-1, Finly-центр для тип-2) і пробрасує `logoPath` у
- * `renderBranded`. Compositor — generic over `logoPath: string`: майбутній
- * клієнтський брендинг (шар C, окремий спринт) підмінить asset-файл (напр.
- * R2 key через file-resolver) без зміни renderer-а. Назва класу
- * (`Compositor`) залишається generic.
+ * гривні для тип-1, Finly-центр для тип-2) і пробрасує джерело у `renderBranded`.
+ * Compositor — generic over `logo: string | Buffer`: Sprint 21 (клієнтський
+ * брендинг, «шар C») пробрасує сюди байти пре-композованої бренд-марки (з R2
+ * або щойно запеченої), не лише локальний шлях. `sharp(input)` приймає обидва
+ * нативно. Назва класу (`Compositor`) залишається generic.
  *
  * Чому окремий клас від `QrImageRenderer`:
  *   - `qrcode` не вміє комбінувати з image overlay (тільки чистий QR).
@@ -92,7 +96,7 @@ export interface QrBandOptions {
 export class QrLogoCompositor {
     async compose(
         qrPng: Buffer,
-        logoPath: string,
+        logo: string | Buffer,
         opts: QrLogoComposeOptions
     ): Promise<Buffer> {
         if (opts.idealHeightRatio <= 0 || opts.idealHeightRatio > 1) {
@@ -106,7 +110,7 @@ export class QrLogoCompositor {
 
         let resizedLogo: Buffer;
         try {
-            const meta = await sharp(logoPath).metadata();
+            const meta = await sharp(logo).metadata();
             if (!meta.width || !meta.height) {
                 throw new Error('asset has no dimensions');
             }
@@ -131,7 +135,7 @@ export class QrLogoCompositor {
                 heightPx = widthPx / aspect;
             }
 
-            resizedLogo = await sharp(logoPath)
+            resizedLogo = await sharp(logo)
                 .resize(Math.round(widthPx), Math.round(heightPx), {
                     fit: 'contain',
                     background: { r: 255, g: 255, b: 255, alpha: 1 },
@@ -168,15 +172,15 @@ export class QrLogoCompositor {
      * масштабування. Без жодної смуги — повертає вхід без змін (no-op).
      */
     async addBands(qrImage: Buffer, opts: QrBandOptions): Promise<Buffer> {
-        if (!opts.topBandPath && !opts.bottomBandPath) {
+        if (!opts.topBand && !opts.bottomBand) {
             return qrImage;
         }
         try {
-            const top = opts.topBandPath
-                ? await this.resizeBand(opts.topBandPath, opts.width)
+            const top = opts.topBand
+                ? await this.resizeBand(opts.topBand, opts.width)
                 : null;
-            const bottom = opts.bottomBandPath
-                ? await this.resizeBand(opts.bottomBandPath, opts.width)
+            const bottom = opts.bottomBand
+                ? await this.resizeBand(opts.bottomBand, opts.width)
                 : null;
 
             const composites: sharp.OverlayOptions[] = [];
@@ -218,10 +222,10 @@ export class QrLogoCompositor {
     }
 
     private async resizeBand(
-        bandPath: string,
+        band: string | Buffer,
         width: number
     ): Promise<{ buffer: Buffer; height: number }> {
-        const { data, info } = await sharp(bandPath)
+        const { data, info } = await sharp(band)
             .resize({ width, withoutEnlargement: false })
             .png()
             .toBuffer({ resolveWithObject: true });

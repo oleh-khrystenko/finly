@@ -2,14 +2,15 @@ import { randomBytes } from 'crypto';
 import { ONE_OFF_ACCESS_CODES, type OneOffAccessCode } from '@finly/types';
 
 /**
- * WayForPay не має customer-обʼєкта і не повертає наші metadata у колбеку —
- * лише `orderReference`. Тому маршрутизацію вебхука (кому нарахувати, що це за
- * платіж) кодуємо в самому orderReference і декодуємо при розборі підписаного
- * колбеку (значення довірене — підпис уже перевірено).
+ * monobank не має customer-обʼєкта і повертає у вебхуку лише наш `reference`
+ * (проштовхнутий у `merchantPaymInfo.reference`). Тому маршрутизацію вебхука
+ * (кому нарахувати, що це за платіж) кодуємо в самому reference і декодуємо при
+ * розборі підписаної події (значення довірене — підпис уже перевірено).
  *
- * Формат: `fin-<kind>-[<oneOffCode>-]<userId>-<nonce>`. Жоден сегмент не містить
- * дефіса: kind ∈ {sub,oneoff}, oneOffCode ∈ {brand,bookkeeper}, userId — 24-hex
- * ObjectId, nonce — hex.
+ * Формат: `fin-<kind>-[<code>-]<userId>-<suffix>`. Жоден сегмент не містить
+ * дефіса: kind ∈ {sub,oneoff}, code ∈ {brand,bookkeeper} (oneOffCode для oneoff),
+ * userId — 24-hex ObjectId, suffix — hex-nonce (checkout) або epoch-мітка періоду
+ * (детермінований ідентифікатор продовження billing-clock — claim-first).
  */
 
 const PREFIX = 'fin';
@@ -33,8 +34,22 @@ function nonce(): string {
     return randomBytes(8).toString('hex');
 }
 
+/** Checkout/resume підписки — випадковий nonce (кожна сесія унікальна). */
 export function buildSubscriptionOrderReference(userId: string): string {
     return `${PREFIX}-${ORDER_KIND.SUBSCRIPTION}-${userId}-${nonce()}`;
+}
+
+/**
+ * Продовження billing-clock — ДЕТЕРМІНОВАНИЙ ідентифікатор за межею періоду:
+ * однакова межа → однаковий reference. Це claim-first ключ: повторний прохід
+ * cron-а (після краху чи пропуску) не списує вдруге, бо натикається на вже
+ * наявний запис спроби з тим самим reference.
+ */
+export function buildRenewalOrderReference(
+    userId: string,
+    periodBoundary: Date
+): string {
+    return `${PREFIX}-${ORDER_KIND.SUBSCRIPTION}-${userId}-${periodBoundary.getTime()}`;
 }
 
 export function buildOneOffOrderReference(
@@ -50,7 +65,7 @@ export function parseOrderReference(ref: string): ParsedOrderReference | null {
 
     const kind = parts[1];
     if (kind === ORDER_KIND.SUBSCRIPTION) {
-        // fin - sub - <userId> - <nonce>
+        // fin - sub - <userId> - <suffix>
         if (parts.length !== 4) return null;
         return { kind: ORDER_KIND.SUBSCRIPTION, userId: parts[2] };
     }

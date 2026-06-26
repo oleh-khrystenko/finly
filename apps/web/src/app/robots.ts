@@ -3,6 +3,7 @@ import type { MetadataRoute } from 'next';
 import { ENV } from '@/shared/config';
 
 const BASE_URL = ENV.NEXT_PUBLIC_BASE_URL;
+const PAY_PUBLIC_URL = ENV.NEXT_PUBLIC_PAY_PUBLIC_URL;
 
 /**
  * Robots policy. Public content (landing, help, legal) is crawlable; the
@@ -17,6 +18,9 @@ export default function robots(): MetadataRoute.Robots {
             allow: '/',
             disallow: ['/auth/', '/business', '/profile', '/billing'],
         },
-        sitemap: `${BASE_URL}/sitemap.xml`,
+        sitemap: [
+            `${BASE_URL}/sitemap.xml`,
+            `${PAY_PUBLIC_URL}/api/businesses/public/sitemap.xml`,
+        ],
     };
 }

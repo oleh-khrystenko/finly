@@ -24,7 +24,7 @@
         X-Frame-Options DENY
         # Modern default — stop leaking full URLs on cross-origin nav
         Referrer-Policy strict-origin-when-cross-origin
-        # Disable browser APIs the app doesn't use; allow `payment=(self)` for Stripe.js
+        # Disable browser APIs the app doesn't use; keep browser payment API same-origin only.
         Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(self)"
         # Isolate browsing context from cross-origin `window.opener` references.
         # NOT enough for `crossOriginIsolated` capabilities (SharedArrayBuffer,

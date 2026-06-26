@@ -28,21 +28,6 @@ export function BaseLayout({ children }: BaseLayoutProps) {
                     </Section>
                     {children}
                     <Hr style={divider} />
-                    <Section style={footerSection}>
-                        <Link
-                            href="https://www.linkedin.com/in/oleh-khrystenko"
-                            style={socialLink}
-                        >
-                            LinkedIn
-                        </Link>
-                        <span style={socialDot}>&middot;</span>
-                        <Link
-                            href="https://github.com/oleh-khrystenko"
-                            style={socialLink}
-                        >
-                            GitHub
-                        </Link>
-                    </Section>
                     <Text style={siteLink}>
                         <Link
                             href="https://finly.com.ua"
@@ -94,28 +79,12 @@ const tagline: React.CSSProperties = {
 };
 
 const divider: React.CSSProperties = {
-    borderColor: EMAIL_COLORS.background,
+    borderColor: EMAIL_COLORS.border,
     margin: '32px 0 24px',
 };
 
-const footerSection: React.CSSProperties = {
-    textAlign: 'center' as const,
-};
-
-const socialLink: React.CSSProperties = {
-    color: EMAIL_COLORS.mutedForeground,
-    fontSize: '13px',
-    textDecoration: 'none',
-};
-
-const socialDot: React.CSSProperties = {
-    color: EMAIL_COLORS.mutedForeground,
-    margin: '0 8px',
-    fontSize: '13px',
-};
-
 const siteLink: React.CSSProperties = {
-    margin: '8px 0 0',
+    margin: '0',
 };
 
 const siteLinkAnchor: React.CSSProperties = {

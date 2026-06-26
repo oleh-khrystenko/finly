@@ -11,6 +11,19 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import type { PublicAccountView as PublicAccountViewData } from '@finly/types';
 
+jest.mock('@/shared/config', () => ({
+    ENV: {
+        NEXT_PUBLIC_BASE_URL: 'https://finly.com.ua',
+        NEXT_PUBLIC_PAY_PUBLIC_URL: 'https://pay.finly.com.ua',
+    },
+}));
+
+jest.mock('@/shared/config/env', () => ({
+    ENV: {
+        NEXT_PUBLIC_PAY_PUBLIC_URL: 'https://pay.finly.com.ua',
+    },
+}));
+
 const mockHeaders = jest.fn();
 const mockNotFound = jest.fn(() => {
     throw new Error('NEXT_NOT_FOUND');
@@ -231,8 +244,32 @@ describe('generateMetadata', () => {
         );
     });
 
+    it('adds canonical and social metadata on pay host', async () => {
+        mockLoadPublicAccountView.mockResolvedValue(makeView());
+
+        const meta = await generateMetadata({
+            params: Promise.resolve({
+                slug: 'IvanEnko',
+                accountSlug: 'aBc12345',
+            }),
+        });
+        expect(meta.alternates?.canonical).toBe(
+            'https://pay.finly.com.ua/IvanEnko/aBc12345'
+        );
+        expect(meta.openGraph?.url).toBe(
+            'https://pay.finly.com.ua/IvanEnko/aBc12345'
+        );
+        expect(
+            meta.twitter && 'card' in meta.twitter
+                ? meta.twitter.card
+                : undefined
+        ).toBe('summary_large_image');
+    });
+
     it('§SP-9 null-fallback — bankCode=null → bank-label-prefix drop, ibanMask лишається', async () => {
-        mockLoadPublicAccountView.mockResolvedValue(makeView({ bankCode: null }));
+        mockLoadPublicAccountView.mockResolvedValue(
+            makeView({ bankCode: null })
+        );
 
         const meta = await generateMetadata({
             params: Promise.resolve({

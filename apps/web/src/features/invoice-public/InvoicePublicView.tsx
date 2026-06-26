@@ -1,6 +1,7 @@
 'use client';
 
 import { BANK_LABEL, type BankCode, type BusinessType } from '@finly/types';
+import UiBrandLogo from '@/shared/ui/UiBrandLogo';
 import UiPaymentOptions from '@/shared/ui/UiPaymentOptions';
 import UiPayeeCard from '@/shared/ui/UiPayeeCard';
 import { formatPayeeName } from '@/entities/business';
@@ -17,11 +18,13 @@ interface Props {
     paymentPurpose: string;
     validUntil: Date | null;
     invoiceSlug: string;
-    /** Nested business view. */
+    /** Nested business view (+ опційний бренд Sprint 21). */
     business: {
         type: BusinessType;
         name: string;
         slug: string;
+        logo?: string;
+        brandDisplayName?: string | null;
     };
     /**
      * Nested account view (Sprint 9 §SP-6). Клієнт бачить через який рахунок
@@ -100,7 +103,13 @@ export default function InvoicePublicView({
 
     return (
         <div className="mx-auto max-w-md space-y-6 px-4 py-8 md:max-w-2xl">
-            <header className="text-center">
+            <header className="flex flex-col items-center gap-3 text-center">
+                {business.logo && (
+                    <UiBrandLogo
+                        src={business.logo}
+                        alt={business.brandDisplayName ?? payeeName}
+                    />
+                )}
                 {/*
                  * `break-words` — захист від довгого user-controlled тексту
                  * (`heading` з amount) на 320px-екрані: без break-rule довгий

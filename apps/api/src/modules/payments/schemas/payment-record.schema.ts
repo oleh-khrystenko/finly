@@ -12,14 +12,16 @@ export type PaymentRecordDocument = HydratedDocument<PaymentRecord>;
 export type PaymentRecordLean = PaymentRecord & { _id: Types.ObjectId };
 
 /**
- * Sprint 17 — легка колекція грошових списань. Джерело історії для кабінету
- * (останні N) і для refund (запис, який повертаємо). Наповнюється з вебхуків
- * WayForPay. Містить provider-internal поля (`orderReference`,
- * `providerTransactionId`), тож у frontend мапиться явно через
- * `PaymentRecordSchema` (не через toJSON) — як ledger `ExecutionTransaction`.
+ * Sprint 17/22 — легка колекція грошових списань. Джерело історії для кабінету
+ * (останні N) і claim-first запис спроби billing-clock: PENDING-рядок
+ * створюється ДО виклику monobank, унікальний індекс (orderReference у статусі
+ * pending) гарантує одну спробу на період — повторний прохід cron-а не списує
+ * вдруге, а звіряє статус. `providerTransactionId` тримає monobank `invoiceId`
+ * (ключ для запиту статусу). Містить provider-internal поля, тож у frontend
+ * мапиться явно через `PaymentRecordSchema` (не через toJSON).
  *
- * `amount`/`refundAmount` — копійки-integer (доменний інваріант); конверсію
- * у decimal для WayForPay робить payload-mapper провайдера.
+ * `amount`/`refundAmount` — копійки-integer (доменний інваріант; monobank оперує
+ * мінорними одиницями напряму, конверсії немає).
  */
 @Schema({ timestamps: true })
 export class PaymentRecord {
@@ -65,3 +67,13 @@ export const PaymentRecordSchema = SchemaFactory.createForClass(PaymentRecord);
 
 PaymentRecordSchema.index({ userId: 1, createdAt: -1 });
 PaymentRecordSchema.index({ providerTransactionId: 1 }, { sparse: true });
+// Claim-first: щонайбільше один PENDING-запис на reference. Конкурентний/
+// повторний прохід billing-clock натикається на 11000 і йде шляхом звірки
+// статусу замість повторного списання.
+PaymentRecordSchema.index(
+    { orderReference: 1 },
+    {
+        unique: true,
+        partialFilterExpression: { status: PAYMENT_RECORD_STATUS.PENDING },
+    }
+);

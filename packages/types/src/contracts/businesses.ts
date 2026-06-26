@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { brandDisplayNameSchema } from '../entities/brand';
 import {
     businessNameSchema,
     businessPaymentPurposeTemplateSchema,
@@ -331,6 +332,18 @@ export const PublicBusinessSchema = z.object({
     slug: businessSlugSchema,
     seoIndexEnabled: z.boolean(),
     accounts: z.array(PublicAccountListItemSchema),
+    /**
+     * Sprint 21 — кастомний бренд отримувача (свідомо публічний). Присутні лише
+     * коли активний бренд бізнесу рендериться (рівень доступу не нижче brand);
+     * інакше поля відсутні й публічно показується Finly. `logo` — оригінальний
+     * логотип (R2 URL) для показу на pay-сторінках; `brandDisplayName` —
+     * косметичний підпис (`null` для лого-тільки). `.optional()` критичний:
+     * whitelist-інваріант «рівно 5 ключів» при no-brand тримається лише коли
+     * поля відсутні у виводі, а не `null`. Реквізити (IBAN, taxId) лишаються
+     * прихованими, як було.
+     */
+    logo: z.string().url().optional(),
+    brandDisplayName: brandDisplayNameSchema.nullable().optional(),
 });
 
 export type PublicBusinessView = z.infer<typeof PublicBusinessSchema>;

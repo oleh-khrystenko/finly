@@ -7,15 +7,16 @@ export function DemoBanner() {
                 <FlaskConical className="text-warning mt-0.5 h-5 w-5 shrink-0" />
                 <div>
                     <p className="text-foreground font-semibold">
-                        Демо WayForPay у тестовому режимі
+                        Демо monobank у тестовому режимі
                     </p>
                     <p className="text-muted-foreground mt-1 text-sm">
-                        Це демо живої інтеграції з WayForPay. Реальні кошти не
-                        списуються.
+                        Це демо живої інтеграції з monobank. Реальні кошти не
+                        списуються. На сторінці оплати monobank підійде будь-яка
+                        картка.
                     </p>
-                    <code className="bg-muted text-muted-foreground mt-3 block rounded px-3 py-2 font-mono text-xs">
-                        Тестова картка: 4242 4242 4242 4242 · Будь-яка майбутня
-                        дата · Будь-який CVC
+                    <code className="bg-muted text-muted-foreground mt-3 block rounded px-3 py-2 font-mono text-sm">
+                        Приклад: 4242 4242 4242 4242 · будь-яка майбутня дата ·
+                        будь-який CVC
                     </code>
                 </div>
             </div>

@@ -1,7 +1,8 @@
 import { ONE_OFF_ACCESS_CODES, SUBSCRIPTION_PLAN_CODES } from '@finly/types';
+import { ENV } from '../../config/env';
 import { CatalogService } from './catalog.service';
 
-describe('CatalogService (static config)', () => {
+describe('CatalogService (env-driven prices)', () => {
     const service = new CatalogService();
 
     it('віддає всі плани підписки і one-off доступи з конфігу', () => {
@@ -39,5 +40,29 @@ describe('CatalogService (static config)', () => {
         a.subscriptionPlans.pop();
         const b = service.getCatalog();
         expect(b.subscriptionPlans.length).toBe(SUBSCRIPTION_PLAN_CODES.length);
+    });
+
+    it('getSubscriptionPlan/getOneOffAccess повертають env-ціну, undefined для невідомого', () => {
+        expect(service.getSubscriptionPlan('brand')?.priceAmount).toBe(
+            ENV.BILLING_PRICE_SUBSCRIPTION_BRAND * 100
+        );
+        expect(service.getOneOffAccess('bookkeeper')?.priceAmount).toBe(
+            ENV.BILLING_PRICE_ONEOFF_BOOKKEEPER * 100
+        );
+        expect(service.getSubscriptionPlan('legacy')).toBeUndefined();
+        expect(service.getOneOffAccess('legacy')).toBeUndefined();
+    });
+
+    it('ціна деривується з ENV (зміна гривень → зміна копійок)', () => {
+        const original = ENV.BILLING_PRICE_SUBSCRIPTION_BRAND;
+        const env = ENV as { BILLING_PRICE_SUBSCRIPTION_BRAND: number };
+        try {
+            env.BILLING_PRICE_SUBSCRIPTION_BRAND = 59;
+            expect(service.getSubscriptionPlan('brand')?.priceAmount).toBe(
+                5900
+            );
+        } finally {
+            env.BILLING_PRICE_SUBSCRIPTION_BRAND = original;
+        }
     });
 });

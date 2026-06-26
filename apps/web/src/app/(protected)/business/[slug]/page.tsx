@@ -17,15 +17,16 @@ import {
     resetBusinessSlug,
     updateBusiness,
 } from '@/shared/api';
-import type { BusinessWithCounts } from '@finly/types';
+import type { BusinessBrand, BusinessWithCounts } from '@finly/types';
 import { OwnershipBadge } from '@/entities/business';
+import { BrandSection } from '@/features/brand-logo';
 import {
     matchActiveSlugReservation,
     useApplyPendingSlug,
     useAuthStore,
     useCanEditSlug,
 } from '@/entities/user';
-import { brandUpsellCtaLabel, startBrandCheckout } from '@/features/billing';
+import { useBrandSubscribeLabel, startBrandCheckout } from '@/features/billing';
 import { ENV } from '@/shared/config/env';
 import UiButton from '@/shared/ui/UiButton';
 import UiBreadcrumb from '@/shared/ui/UiBreadcrumb';
@@ -64,6 +65,7 @@ export default function BusinessSlugPage() {
     const userId = useAuthStore((s) => s.user?.id);
     const reservation = useAuthStore((s) => s.user?.activeSlugReservation ?? null);
     const isPaid = useCanEditSlug();
+    const subscribeLabel = useBrandSubscribeLabel();
     const openDeleteConfirm = useDeleteBusinessConfirmStore((s) => s.open);
 
     const [business, setBusiness] = useState<BusinessWithCounts | null>(null);
@@ -188,6 +190,10 @@ export default function BusinessSlugPage() {
         });
     }, [business]);
 
+    const handleBrandApplied = useCallback((brand: BusinessBrand | null) => {
+        setBusiness((prev) => (prev ? { ...prev, brand } : prev));
+    }, []);
+
     if (business === null && !error) {
         return (
             <UiPageContainer className="py-16">
@@ -245,11 +251,18 @@ export default function BusinessSlugPage() {
                 }
                 reserveSlug={(slug) => reserveBusinessSlug(business.slug, slug)}
                 onSubscribe={handleSubscribe}
-                subscribePriceLabel={brandUpsellCtaLabel()}
+                subscribePriceLabel={subscribeLabel}
                 initialReservation={
                     !isPaid && desiredSlug ? reservation : null
                 }
                 autoStartSlugEdit={autoEditSlug}
+            />
+            <BrandSection
+                business={business}
+                isPaid={isPaid}
+                onSubscribe={handleSubscribe}
+                subscribePriceLabel={subscribeLabel}
+                onApplied={handleBrandApplied}
             />
             <AccountsSection businessSlug={business.slug} />
             <RequisitesCard business={business} onSave={handlePatch} />

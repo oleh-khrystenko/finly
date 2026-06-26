@@ -17,9 +17,6 @@ const TermsReacceptDialog = dynamic(
 const CancelSubscriptionDialog = dynamic(
     () => import('@/features/billing/CancelSubscriptionDialog')
 );
-const ChangePlanDialog = dynamic(
-    () => import('@/features/billing/ChangePlanDialog')
-);
 const DeleteBusinessConfirmDialog = dynamic(
     () => import('@/features/business-edit/DeleteBusinessConfirmDialog')
 );
@@ -44,6 +41,9 @@ const SlugPresetWarningDialog = dynamic(
 const MobileMenuSheet = dynamic(
     () => import('@/widgets/header/MobileMenuSheet')
 );
+const BrandLogoUploadDialog = dynamic(
+    () => import('@/features/brand-logo/BrandLogoUploadDialog')
+);
 
 export function Overlays() {
     return (
@@ -53,7 +53,6 @@ export function Overlays() {
             <AvatarDeleteConfirmDialog />
             <TermsReacceptDialog />
             <CancelSubscriptionDialog />
-            <ChangePlanDialog />
             <DeleteBusinessConfirmDialog />
             <DeleteInvoiceConfirmDialog />
             <DeleteAccountConfirmDialog />
@@ -62,6 +61,7 @@ export function Overlays() {
             <ResetInvoiceSlugConfirmDialog />
             <SlugPresetWarningDialog />
             <MobileMenuSheet />
+            <BrandLogoUploadDialog />
         </>
     );
 }

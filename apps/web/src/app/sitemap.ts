@@ -7,9 +7,11 @@ const BASE_URL = ENV.NEXT_PUBLIC_BASE_URL;
 
 /**
  * Sitemap for the cabinet host (finly.com.ua). Lists the public, indexable
- * pages: landing, legal, and the whole help-center. Help URLs are derived from
- * the same article source of truth (`getAllArticleSlugs`), so a new article is
+ * pages: landing and the whole help-center. Help URLs are derived from the
+ * same article source of truth (`getAllArticleSlugs`), so a new article is
  * picked up automatically and the sitemap never drifts from the content.
+ *
+ * Legal pages stay out while they carry `noindex` pending lawyer review.
  */
 export default function sitemap(): MetadataRoute.Sitemap {
     const helpArticles: MetadataRoute.Sitemap = getAllArticleSlugs().map(
@@ -24,11 +26,5 @@ export default function sitemap(): MetadataRoute.Sitemap {
         { url: BASE_URL, changeFrequency: 'monthly', priority: 1 },
         { url: `${BASE_URL}/help`, changeFrequency: 'monthly', priority: 0.7 },
         ...helpArticles,
-        {
-            url: `${BASE_URL}/privacy`,
-            changeFrequency: 'yearly',
-            priority: 0.3,
-        },
-        { url: `${BASE_URL}/terms`, changeFrequency: 'yearly', priority: 0.3 },
     ];
 }

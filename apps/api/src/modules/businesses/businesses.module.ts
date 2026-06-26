@@ -17,7 +17,12 @@ import {
 import { Invoice, InvoiceSchema } from '../invoices/schemas/invoice.schema';
 import { QrModule } from '../qr/qr.module';
 import { SlugReservationModule } from '../slug-reservation/slug-reservation.module';
+import { StorageModule } from '../storage/storage.module';
 import { UsersModule } from '../users/users.module';
+import { BrandController } from './brand.controller';
+import { BrandCleanupService } from './brand-cleanup.service';
+import { BrandMarkCacheService } from './brand-mark-cache.service';
+import { BrandService } from './brand.service';
 import { BusinessAccessGuard } from './business-access.guard';
 import { BusinessesController } from './businesses.controller';
 import { BusinessesService } from './businesses.service';
@@ -73,19 +78,28 @@ import { SlugGeneratorService } from './slug-generator.service';
         UsersModule,
         QrModule,
         SlugReservationModule,
+        StorageModule,
     ],
-    controllers: [BusinessesController, PublicBusinessesController],
+    controllers: [
+        BusinessesController,
+        BrandController,
+        PublicBusinessesController,
+    ],
     providers: [
         BusinessesService,
         SlugGeneratorService,
         BusinessAccessGuard,
         ReconciliationService,
+        BrandService,
+        BrandMarkCacheService,
+        BrandCleanupService,
     ],
     exports: [
         MongooseModule,
         BusinessesService,
         BusinessAccessGuard,
         ReconciliationService,
+        BrandMarkCacheService,
     ],
 })
 export class BusinessesModule {}
