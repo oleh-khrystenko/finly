@@ -26,7 +26,8 @@
         "migration:nested-slug-lower": "ts-node scripts/migrations/2026-06-03-nested-slug-lower.ts",
         "migration:slug-customized": "ts-node scripts/migrations/2026-06-10-slug-customized-backfill.ts",
         "migration:businesses-brand": "ts-node scripts/migrations/2026-06-18-businesses-brand-null.ts",
-        "migration:all": "pnpm migration:slug-lower && pnpm migration:invoices-payee-snapshot && pnpm migration:accounts-null-auto-name && pnpm migration:nested-slug-lower && pnpm migration:slug-customized && pnpm migration:businesses-brand"
+        "migration:all": "pnpm migration:slug-lower && pnpm migration:invoices-payee-snapshot && pnpm migration:accounts-null-auto-name && pnpm migration:nested-slug-lower && pnpm migration:slug-customized && pnpm migration:businesses-brand",
+        "ops:reset-billing": "ts-node scripts/ops/2026-06-26-reset-billing.ts"
     },
     "dependencies": {
         "@anthropic-ai/sdk": "^0.80.0",
