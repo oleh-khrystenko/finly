@@ -31,6 +31,7 @@ import {
 import { useBrandSubscribeLabel, startBrandCheckout } from '@/features/billing';
 import { BrandSection } from '@/features/brand-logo';
 import { ENV } from '@/shared/config/env';
+import { qrBrandVersion } from '@/shared/lib';
 import UiButton from '@/shared/ui/UiButton';
 import UiBreadcrumb from '@/shared/ui/UiBreadcrumb';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
@@ -330,6 +331,7 @@ export default function AccountCabinetPage() {
             <PublicSection
                 account={account}
                 businessSlug={business.slug}
+                brandVersion={qrBrandVersion(business.brand?.active?.logoUrl)}
                 payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
                 accessSuspended={business.accessBlockedAt != null}
                 isPaid={isPaid}

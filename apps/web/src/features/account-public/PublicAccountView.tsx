@@ -4,6 +4,7 @@ import { BANK_LABEL, type BankCode, type BusinessType } from '@finly/types';
 import UiBrandLogo from '@/shared/ui/UiBrandLogo';
 import UiPaymentOptions from '@/shared/ui/UiPaymentOptions';
 import UiPayeeCard from '@/shared/ui/UiPayeeCard';
+import { qrBrandVersion } from '@/shared/lib';
 import { formatPayeeName } from '@/entities/business';
 
 interface Props {
@@ -66,8 +67,11 @@ export default function PublicAccountView({
     const payeeName = formatPayeeName(business.type, business.name);
 
     const qrBase = `${apiBase}/businesses/public/${encodeURIComponent(business.slug)}/account/${encodeURIComponent(account.slug)}/qr`;
-    const qrPrimary = `${qrBase}/nbu.png?host=primary`;
-    const qrLegacy = `${qrBase}/nbu.png?host=legacy`;
+    // cache-bust QR-картинки версією бренду (`qrBrandVersion`): зміна логотипа
+    // дає новий токен → новий URL → свіже зображення замість закешованого.
+    const brandVersion = qrBrandVersion(business.logo);
+    const qrPrimary = `${qrBase}/nbu.png?host=primary&v=${brandVersion}`;
+    const qrLegacy = `${qrBase}/nbu.png?host=legacy&v=${brandVersion}`;
 
     return (
         <div className="mx-auto max-w-md space-y-6 px-4 py-8 md:max-w-2xl">
