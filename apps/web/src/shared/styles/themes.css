@@ -50,6 +50,15 @@
      * що рендериться на екрані. L навмисно темніший за `--background` обох
      * тем (0.975 у light / 0.18 у dark) — фрейм видимий на обох hero-фонах. */
     --device-frame: oklch(0.1 0.008 65);
+
+    /* Brand plate — theme-invariant світла підложка під завантажений логотип
+     * отримувача (pay-сторінки). Логотип навмисне зроблений під білий фон QR,
+     * тож йому ЗАВЖДИ потрібна світла поверхня незалежно від UI-теми (як
+     * --device-frame). Не чисто білий, а м'який off-white (L=0.98) — на темній
+     * темі не б'є по очах. Межа адаптується: ледь помітна у light (зливається
+     * з фоном), виражена у dark (читається як картка). */
+    --brand-plate: oklch(0.98 0.005 85);
+    --brand-plate-border: oklch(0.95 0.008 85);
 }
 
 .dark {
@@ -92,6 +101,12 @@
 
     /* Device frame — той самий near-black, що у light. Theme-invariant. */
     --device-frame: oklch(0.1 0.008 65);
+
+    /* Brand plate — приглушеніший off-white (L=0.94), щоб світла картка не била
+     * по очах на темному фоні. Достатньо світла для темного друку логотипа, але
+     * стрибок контрасту з фоном (0.18) уже м'який. Межа в тон плити. */
+    --brand-plate: oklch(0.94 0.006 85);
+    --brand-plate-border: oklch(0.88 0.006 85);
 }
 
 @theme inline {
@@ -116,6 +131,8 @@
     --color-success-foreground: var(--success-foreground);
     --color-warning: var(--warning);
     --color-device-frame: var(--device-frame);
+    --color-brand-plate: var(--brand-plate);
+    --color-brand-plate-border: var(--brand-plate-border);
     --color-liquid-glass-border: var(--liquid-glass-border);
     --radius-sm: calc(var(--radius) - 4px);
     --radius-md: calc(var(--radius) - 2px);
