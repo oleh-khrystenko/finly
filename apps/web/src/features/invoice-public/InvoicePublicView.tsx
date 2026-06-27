@@ -112,6 +112,7 @@ export default function InvoicePublicView({
                     <UiBrandLogo
                         src={business.logo}
                         alt={business.brandDisplayName ?? payeeName}
+                        displayName={business.brandDisplayName}
                     />
                 )}
                 {/*

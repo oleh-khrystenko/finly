@@ -80,6 +80,7 @@ export default function PublicAccountView({
                     <UiBrandLogo
                         src={business.logo}
                         alt={business.brandDisplayName ?? payeeName}
+                        displayName={business.brandDisplayName}
                     />
                 )}
                 <div className="space-y-1">

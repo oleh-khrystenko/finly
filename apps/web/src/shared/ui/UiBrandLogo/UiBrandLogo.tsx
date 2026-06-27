@@ -14,10 +14,19 @@ import type { UiBrandLogoProps } from './types';
  * темі він зливається. Тема-незалежна світла пластина (`--brand-plate`) дає йому
  * сталу світлу поверхню в обох темах: у light межа ледь помітна (зливається з
  * фоном), у dark — світла картка з чітким краєм.
+ *
+ * Опційний `displayName` — косметичний підпис поряд з лого. Колір
+ * `--brand-plate-foreground` тема-незалежний (плашка завжди світла, тож текст
+ * завжди темний).
  */
-export default function UiBrandLogo({ src, alt, className }: UiBrandLogoProps) {
+export default function UiBrandLogo({
+    src,
+    alt,
+    displayName,
+    className,
+}: UiBrandLogoProps) {
     return (
-        <span className="bg-brand-plate border-brand-plate-border inline-flex items-center justify-center rounded-xl border px-5 py-4 dark:shadow-md">
+        <span className="bg-brand-plate border-brand-plate-border text-brand-plate-foreground inline-flex max-w-full items-center justify-center gap-3 rounded-xl border px-5 py-4 dark:shadow-md">
             <Image
                 src={src}
                 alt={alt}
@@ -25,10 +34,15 @@ export default function UiBrandLogo({ src, alt, className }: UiBrandLogoProps) {
                 height={96}
                 unoptimized
                 className={composeClasses(
-                    'h-14 w-auto max-w-[220px] object-contain',
+                    'h-14 w-auto max-w-[220px] shrink-0 object-contain',
                     className
                 )}
             />
+            {displayName && (
+                <span className="max-w-56 text-xl leading-tight font-semibold break-words">
+                    {displayName}
+                </span>
+            )}
         </span>
     );
 }

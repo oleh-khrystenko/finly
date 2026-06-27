@@ -59,6 +59,10 @@
      * з фоном), виражена у dark (читається як картка). */
     --brand-plate: oklch(0.98 0.005 85);
     --brand-plate-border: oklch(0.95 0.008 85);
+    /* Підпис бренду на плашці. Тема-незалежний (= світлий --foreground): плашка
+     * завжди світла, тож текст завжди темний. У .dark не перевизначається на
+     * світлий — інакше зник би на світлій плашці. */
+    --brand-plate-foreground: oklch(0.2 0.018 65);
 }
 
 .dark {
@@ -133,6 +137,7 @@
     --color-device-frame: var(--device-frame);
     --color-brand-plate: var(--brand-plate);
     --color-brand-plate-border: var(--brand-plate-border);
+    --color-brand-plate-foreground: var(--brand-plate-foreground);
     --color-liquid-glass-border: var(--liquid-glass-border);
     --radius-sm: calc(var(--radius) - 4px);
     --radius-md: calc(var(--radius) - 2px);
