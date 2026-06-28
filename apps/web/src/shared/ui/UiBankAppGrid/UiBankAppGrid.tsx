@@ -1,6 +1,7 @@
 'use client';
 
 import { useSyncExternalStore } from 'react';
+import { ArrowUpRight } from 'lucide-react';
 import {
     BANK_APP_LAUNCH,
     BANK_LABEL,
@@ -93,7 +94,7 @@ export default function UiBankAppGrid({
     return (
         <div
             className={composeClasses(
-                'grid grid-cols-2 gap-3 md:grid-cols-3',
+                'grid grid-cols-1 gap-3 md:grid-cols-3',
                 className
             )}
         >
@@ -105,12 +106,18 @@ export default function UiBankAppGrid({
                         type="button"
                         onClick={() => handleSelect(bank)}
                         aria-label={`Оплатити через ${label}`}
-                        className="border-border bg-card text-foreground hover:border-foreground/30 hover:bg-muted/50 focus-visible:ring-ring flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-3 text-left transition-colors focus:outline-none focus-visible:ring-2"
+                        className="group border-border bg-card text-foreground hover:border-foreground/30 hover:bg-muted/50 focus-visible:ring-ring flex cursor-pointer items-center justify-between gap-2.5 rounded-lg border px-3 py-3 text-left transition-colors focus:outline-none focus-visible:ring-2"
                     >
-                        <UiBankLogo bank={bank} className="size-10" />
-                        <span className="min-w-0 truncate text-sm leading-tight font-medium">
-                            {label}
+                        <span className="flex min-w-0 items-center gap-2.5">
+                            <UiBankLogo bank={bank} className="size-10" />
+                            <span className="min-w-0 truncate text-sm leading-tight font-medium">
+                                {label}
+                            </span>
                         </span>
+                        <ArrowUpRight
+                            aria-hidden
+                            className="text-muted-foreground size-4 shrink-0 transition-transform duration-150 group-active:translate-x-0.5 group-active:-translate-y-0.5 md:hidden"
+                        />
                     </button>
                 );
             })}
