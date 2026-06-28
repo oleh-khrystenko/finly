@@ -26,7 +26,7 @@ export default function UiBrandLogo({
     className,
 }: UiBrandLogoProps) {
     return (
-        <span className="bg-brand-plate border-brand-plate-border text-brand-plate-foreground inline-flex max-w-full items-center justify-center gap-3 rounded-xl border px-5 py-4 dark:shadow-md">
+        <span className="bg-brand-plate border-brand-plate-border text-brand-plate-foreground inline-flex max-w-full items-center justify-center gap-1 rounded-xl border px-5 py-4 dark:shadow-md">
             <Image
                 src={src}
                 alt={alt}
@@ -39,7 +39,7 @@ export default function UiBrandLogo({
                 )}
             />
             {displayName && (
-                <span className="max-w-56 text-xl leading-tight font-semibold break-words">
+                <span className="max-w-56 text-4xl leading-tight font-semibold break-words">
                     {displayName}
                 </span>
             )}
