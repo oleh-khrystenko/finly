@@ -10,7 +10,7 @@ import UiBankLogo from '@/shared/ui/UiBankLogo';
 import { DecorativeQr } from './DecorativeQr';
 
 /**
- * Hero-сцена на основі реального фото iPhone (`/landing/phone-hero.webp`).
+ * Hero-сцена на основі реального фото iPhone (`/landing/phone-hero-{dark,light}.webp`).
  *
  * Фото зняте під кутом, екран — зелений chroma-key. Замість плаского mockup-у
  * ми проєктуємо живий платіжний UI **на сам екран фото** через `matrix3d`-
@@ -141,12 +141,12 @@ export function HeroDevice() {
     }, []);
 
     return (
-        <div className="relative right-0 w-full lg:absolute lg:max-w-3/5">
+        <div className="relative right-0 w-full lg:absolute lg:top-0 lg:aspect-4/3 lg:h-full lg:w-auto">
             {/* Вікно. На мобільному — портретний кадр 3:4, що наближає телефон
                 майже на весь екран і клипає поля; з sm — повне фото 4:3. Маска-
                 фейд живе тут, бо краї мають танути на видимих межах вікна (на
                 мобільному верх+низ, з sm — лише низ). */}
-            <div className="relative aspect-3/4 overflow-hidden mask-t-from-90% mask-b-from-90% sm:aspect-4/3 sm:mask-t-from-70% sm:mask-b-from-70%">
+            <div className="relative aspect-3/4 overflow-hidden mask-t-from-96% mask-b-from-96% sm:aspect-4/3 sm:mask-t-from-70% sm:mask-b-from-70% dark:mask-t-from-90% dark:mask-b-from-90%">
                 {/* Кадр = повне фото 4:3 (накладка екрана відкалібрована саме
                     під нього, тож зум робимо через збільшення кадру, не crop).
                     На мобільному absolute, збільшений ×2.1 і відцентрований на
@@ -156,13 +156,31 @@ export function HeroDevice() {
                     ref={frameRef}
                     className="absolute top-1/2 left-1/2 aspect-4/3 w-[210%] -translate-x-[47%] -translate-y-[46%] sm:relative sm:top-0 sm:left-0 sm:w-full sm:translate-x-0 sm:translate-y-0"
                 >
+                    {/* Фото — за темою (class-based dark:, чистий CSS-свап без
+                        JS і блимання). Світле фото має світлі краї, тож маска
+                        тане у світлий фон без сірого; темне — у темний. Обидва
+                        фото — той самий кадр, зелений екран у тих самих
+                        координатах, тож матриця/кути спільні.
+
+                        `priority` — лише на світлому (тема `:root` за
+                        замовчуванням): preload ігнорує `display:none`, тож
+                        позначити обидва — це форс-завантаження ~1 МБ прихованого
+                        кадру. Кадр поточної теми у в'юпорті й так тягнеться одразу
+                        (eager loading), просто без preload-link. */}
                     <Image
-                        src="/landing/phone-hero.webp"
+                        src="/landing/phone-hero-light.webp"
                         alt="iPhone із платіжною сторінкою Finly: сума й QR-код для оплати у будь-якому банку"
                         fill
                         priority
                         sizes="(max-width: 1024px) 100vw, 60vw"
-                        className="object-cover"
+                        className="object-cover dark:hidden"
+                    />
+                    <Image
+                        src="/landing/phone-hero-dark.webp"
+                        alt="iPhone із платіжною сторінкою Finly: сума й QR-код для оплати у будь-якому банку"
+                        fill
+                        sizes="(max-width: 1024px) 100vw, 60vw"
+                        className="hidden object-cover dark:block"
                     />
 
                     {/* Проєкція живого екрана на зелений chroma-key. */}
@@ -183,8 +201,10 @@ export function HeroDevice() {
                 </div>
             </div>
 
-            {/* Floating-картки — AR-шар над фото (sm+, щоб не тіснити mobile). */}
-            <div className="animate-fadeIn absolute top-[5%] -right-2 z-20 hidden rotate-3 sm:block">
+            {/* Floating-картки — AR-шар над фото, завжди видимі. На мобільному
+                трохи всередину (overflow-hidden секції обрізав би виступ), з sm
+                легкий виступ за кадр. */}
+            <div className="animate-fadeIn absolute top-[5%] right-2 z-20 rotate-3 sm:right-[28%]">
                 <div className="animate-floatBob border-border bg-card flex items-center gap-2 rounded-xl border px-3 py-2 shadow-xl">
                     <UiBankLogo bank="monobank" className="size-7" />
                     <div className="leading-tight">
@@ -198,7 +218,7 @@ export function HeroDevice() {
                 </div>
             </div>
 
-            <div className="animate-fadeIn absolute bottom-[6%] -left-2 z-20 hidden -rotate-2 sm:block">
+            <div className="animate-fadeIn absolute bottom-[3%] left-2 z-20 -rotate-2 sm:bottom-[12%] sm:left-[18%]">
                 <div className="animate-floatBob border-border bg-card flex items-center gap-2.5 rounded-xl border px-3 py-2.5 shadow-xl">
                     <span className="bg-success text-success-foreground flex size-7 shrink-0 items-center justify-center rounded-full">
                         <Check className="size-4" strokeWidth={3} />

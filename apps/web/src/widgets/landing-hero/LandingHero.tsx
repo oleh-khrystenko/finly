@@ -23,7 +23,7 @@ export function LandingHero() {
         <section className="relative overflow-hidden lg:min-h-160">
             <HeroDevice />
 
-            <div className="relative z-10 container mx-auto px-6 pt-6 pb-12 lg:pt-24 lg:max-w-136 lg:pb-32 xl:max-w-160">
+            <div className="relative z-10 container mx-auto px-6 pt-6 pb-12 lg:pt-24 lg:max-w-136 lg:pb-24 xl:max-w-160">
                 <div className="border-border bg-card/60 text-muted-foreground mb-6 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs backdrop-blur">
                     <span className="bg-primary inline-block size-1.5 rounded-full" />
                     Стандарт НБУ, постанова №97
