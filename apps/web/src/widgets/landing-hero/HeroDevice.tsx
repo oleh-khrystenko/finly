@@ -255,9 +255,9 @@ function ScreenContent() {
                 екрана, тож завжди чорна (theme-invariant), у px-просторі канваса. */}
             <div
                 aria-hidden
-                className="absolute top-[14px] left-1/2 flex h-[34px] w-[118px] -translate-x-1/2 items-center justify-end rounded-full bg-black pr-2.5"
+                className="absolute top-3.5 left-1/2 flex h-9 w-30 -translate-x-1/2 items-center justify-end rounded-full bg-black pr-2.5"
             >
-                <span className="size-[11px] rounded-full bg-white/10 ring-1 ring-white/[0.07] ring-inset" />
+                <span className="size-3 rounded-full bg-white/10 ring-1 ring-white/5 ring-inset" />
             </div>
 
             {/* Сума — якір цінності. */}
@@ -276,7 +276,7 @@ function ScreenContent() {
             {/* QR — центральний герой. Білий тайл + scan-промінь. */}
             <div className="relative mx-auto">
                 <div className="relative overflow-hidden rounded-3xl bg-white p-4 shadow-2xl">
-                    <DecorativeQr className="aspect-square w-[196px]" />
+                    <DecorativeQr className="aspect-square w-48" />
                     <div
                         aria-hidden
                         className="qr-scan-beam pointer-events-none absolute inset-x-0 top-0 h-1/5"
@@ -290,7 +290,7 @@ function ScreenContent() {
 
             {/* Рейка банків — сигнал «будь-який банк». */}
             <div className="relative text-center">
-                <p className="text-[12px] font-medium tracking-[0.12em] text-white/45 uppercase">
+                <p className="text-xs font-medium tracking-[0.12em] text-white/45 uppercase">
                     Будь-який банк
                 </p>
                 <div className="mt-3 flex items-center justify-center gap-2.5">
