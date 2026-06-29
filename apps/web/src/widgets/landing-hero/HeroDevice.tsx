@@ -32,15 +32,16 @@ import { DecorativeQr } from './DecorativeQr';
 // скруглень) і перетнуто — це справжні кути екрана з урахуванням нахилу.
 // Порядок: TL, TR, BL, BR.
 const SCREEN_CORNERS = [
-    [0.374, 0.0905], // top-left
+    [0.374, 0.09], // top-left
     [0.601, 0.0705], // top-right
-    [0.345, 0.821], // bottom-left
-    [0.5718, 0.8537], // bottom-right
+    [0.34, 0.822], // bottom-left
+    [0.5725, 0.854], // bottom-right
 ] as const;
 
-// Дизайн-канвас екрана. Пропорція ≈ видимому чотирикутнику (0.37), тож QR
-// лишається квадратним після проєкції.
-const SCREEN_W = 300;
+// Дизайн-канвас екрана. Ширину підігнано під реальне відношення екранного
+// чотирикутника (~0.40 w/h), інакше проєкція розтягує контент по горизонталі
+// (QR виходить сплюснутим). 326/812 ≈ 0.401.
+const SCREEN_W = 380;
 const SCREEN_H = 812;
 
 const RAIL_BANKS: readonly BankCode[] = [
@@ -223,7 +224,7 @@ export function HeroDevice() {
  */
 function ScreenContent() {
     return (
-        <div className="bg-device-frame relative flex h-full w-full flex-col justify-between overflow-hidden rounded-[46px] px-6 pt-22 pb-17">
+        <div className="bg-device-frame relative flex h-full w-full flex-col justify-between overflow-hidden rounded-[52px] px-6 pt-22 pb-17">
             {/* Зелений radial зверху — підхоплює світло фото. */}
             <div
                 aria-hidden
