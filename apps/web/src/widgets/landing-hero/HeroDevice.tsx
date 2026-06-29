@@ -141,12 +141,12 @@ export function HeroDevice() {
     }, []);
 
     return (
-        <div className="relative right-0 w-full lg:absolute lg:top-0 lg:aspect-4/3 lg:h-full lg:w-auto">
+        <div className="relative right-0 w-full lg:absolute lg:top-0 lg:-right-[20%] xl:-right-[10%] 2xl:right-0 lg:aspect-4/3 lg:h-full lg:w-auto">
             {/* Вікно. На мобільному — портретний кадр 3:4, що наближає телефон
                 майже на весь екран і клипає поля; з sm — повне фото 4:3. Маска-
                 фейд живе тут, бо краї мають танути на видимих межах вікна (на
                 мобільному верх+низ, з sm — лише низ). */}
-            <div className="relative aspect-3/4 overflow-hidden mask-t-from-96% mask-b-from-96% sm:aspect-4/3 sm:mask-t-from-70% sm:mask-b-from-70% dark:mask-t-from-90% dark:mask-b-from-90%">
+            <div className="relative aspect-3/4 overflow-hidden mask-t-from-96% mask-b-from-96% sm:aspect-4/3 sm:mask-t-from-70% sm:mask-b-from-70% lg:mask-l-from-60% dark:mask-t-from-90% dark:mask-b-from-90% lg:dark:mask-t-from-60% lg:dark:mask-b-from-60%">
                 {/* Кадр = повне фото 4:3 (накладка екрана відкалібрована саме
                     під нього, тож зум робимо через збільшення кадру, не crop).
                     На мобільному absolute, збільшений ×2.1 і відцентрований на
@@ -204,7 +204,7 @@ export function HeroDevice() {
             {/* Floating-картки — AR-шар над фото, завжди видимі. На мобільному
                 трохи всередину (overflow-hidden секції обрізав би виступ), з sm
                 легкий виступ за кадр. */}
-            <div className="animate-fadeIn absolute top-[5%] right-2 z-20 rotate-3 sm:right-[28%]">
+            <div className="animate-fadeIn absolute top-[5%] right-2 z-20 rotate-3 sm:right-[28%] lg:right-[32%] xl:right-[28%]">
                 <div className="animate-floatBob border-border bg-card flex items-center gap-2 rounded-xl border px-3 py-2 shadow-xl">
                     <UiBankLogo bank="monobank" className="size-7" />
                     <div className="leading-tight">
@@ -218,7 +218,7 @@ export function HeroDevice() {
                 </div>
             </div>
 
-            <div className="animate-fadeIn absolute bottom-[3%] left-2 z-20 -rotate-2 sm:bottom-[12%] sm:left-[18%]">
+            <div className="animate-fadeIn absolute bottom-[3%] left-2 z-20 -rotate-2 sm:bottom-[12%] sm:left-[18%] lg:left-[24%]">
                 <div className="animate-floatBob border-border bg-card flex items-center gap-2.5 rounded-xl border px-3 py-2.5 shadow-xl">
                     <span className="bg-success text-success-foreground flex size-7 shrink-0 items-center justify-center rounded-full">
                         <Check className="size-4" strokeWidth={3} />

@@ -29,7 +29,7 @@ export function LandingHero() {
                     Стандарт НБУ, постанова №97
                 </div>
 
-                <h1 className="text-foreground text-4xl leading-[1.05] font-semibold tracking-tight sm:text-5xl lg:text-6xl">
+                <h1 className="text-foreground text-4xl leading-[1.05] font-semibold tracking-tight sm:text-5xl xl:text-6xl">
                     Ваш клієнт хоче заплатити.
                     <br />
                     <span className="text-muted-foreground">
