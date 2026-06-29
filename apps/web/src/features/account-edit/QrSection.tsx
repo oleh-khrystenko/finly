@@ -7,6 +7,8 @@ import UiQrPanel from '@/shared/ui/UiQrPanel';
 interface Props {
     account: Account;
     businessSlug: string;
+    /** Версія бренду для cache-bust QR-картинки (`qrBrandVersion`). */
+    brandVersion: string;
     apiBase?: string;
 }
 
@@ -27,6 +29,7 @@ interface Props {
 export default function QrSection({
     account,
     businessSlug,
+    brandVersion,
     apiBase = '/api',
 }: Props) {
     const base = `${apiBase}/businesses/public/${encodeURIComponent(businessSlug)}/account/${encodeURIComponent(account.slug)}/qr`;
@@ -35,6 +38,7 @@ export default function QrSection({
         <div className="space-y-4">
             <UiQrPanel
                 endpoint={`${base}/business.png`}
+                params={{ v: brandVersion }}
                 title="QR-вивіска на сторінку реквізитів"
                 description="Роздрукуйте на вивісці, чеку чи візитці. Клієнт наведе камеру й одразу опиниться на сторінці реквізитів."
                 alt="QR на публічну сторінку реквізитів"
@@ -45,7 +49,7 @@ export default function QrSection({
             />
             <UiQrPanel
                 endpoint={`${base}/nbu.png`}
-                params={{ host: 'primary' }}
+                params={{ host: 'primary', v: brandVersion }}
                 title="QR для оплати в банку"
                 description="Клієнт сканує код банк-додатком і одразу бачить заповнений платіж."
                 alt="QR за стандартом НБУ для оплати в банку"
@@ -57,7 +61,7 @@ export default function QrSection({
             <UiDisclosure label="Запасний QR для старіших банків">
                 <UiQrPanel
                     endpoint={`${base}/nbu.png`}
-                    params={{ host: 'legacy' }}
+                    params={{ host: 'legacy', v: brandVersion }}
                     title="Запасний код для оплати"
                     description="Покажіть його, якщо банк клієнта не зчитав основний код для оплати."
                     alt="QR за стандартом НБУ (запасна адреса)"

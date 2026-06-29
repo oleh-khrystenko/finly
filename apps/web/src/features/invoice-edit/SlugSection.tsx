@@ -20,6 +20,8 @@ interface Props {
     businessSlug: string;
     /** Sprint 9 §SP-5 — account-slug у public URL інвойсу (3-сегментна матрьошка). */
     accountSlug: string;
+    /** Версія бренду для cache-bust QR-картинки (`qrBrandVersion`). */
+    brandVersion: string;
     /** Public payment-page origin (NEXT_PUBLIC_PAY_PUBLIC_URL). */
     payPublicOrigin: string;
     /**
@@ -54,6 +56,7 @@ export default function SlugSection({
     invoice,
     businessSlug,
     accountSlug,
+    brandVersion,
     payPublicOrigin,
     accessSuspended,
     isPaid,
@@ -128,6 +131,7 @@ export default function SlugSection({
                         invoice={invoice}
                         businessSlug={businessSlug}
                         accountSlug={accountSlug}
+                        brandVersion={brandVersion}
                     />
                 </div>
             </div>

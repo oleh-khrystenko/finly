@@ -67,9 +67,9 @@ describe('BrandSection', () => {
         ).not.toBeInTheDocument();
     });
 
-    it('активний бренд: статус «Активний» + Замінити + Видалити', () => {
+    it('активний бренд: логотип + Замінити + Видалити', () => {
         renderSection({ active: SLOT, pending: null });
-        expect(screen.getByText('Активний')).toBeInTheDocument();
+        expect(screen.getByAltText('Логотип бренду')).toBeInTheDocument();
         expect(
             screen.getByRole('button', { name: 'Замінити логотип' })
         ).toBeInTheDocument();

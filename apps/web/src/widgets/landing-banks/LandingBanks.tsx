@@ -7,11 +7,18 @@ import UiBankLogo from '@/shared/ui/UiBankLogo';
  */
 export function LandingBanks() {
     return (
-        <section className="bg-background">
+        <section
+            id="banks"
+            aria-labelledby="banks-heading"
+            className="bg-background"
+        >
             <div className="container mx-auto px-6 py-12 md:py-16">
-                <p className="text-muted-foreground mb-8 text-center text-xs font-medium tracking-widest uppercase">
+                <h2
+                    id="banks-heading"
+                    className="text-muted-foreground mb-8 text-center text-xs font-medium tracking-widest uppercase"
+                >
                     Працює з банк-додатками
-                </p>
+                </h2>
 
                 {/*
                  * Grid з кратним 10 числом колонок → жодних осиротілих рядків:

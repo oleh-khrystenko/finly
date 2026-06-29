@@ -10,6 +10,8 @@ interface Props {
     businessSlug: string;
     /** Sprint 9 §SP-5 — account-slug у public-URL інвойсу (3-сегментний матрьошка). */
     accountSlug: string;
+    /** Версія бренду для cache-bust QR-картинки (`qrBrandVersion`). */
+    brandVersion: string;
     apiBase?: string;
 }
 
@@ -33,6 +35,7 @@ export default function InvoiceQrSection({
     invoice,
     businessSlug,
     accountSlug,
+    brandVersion,
     apiBase = '/api',
 }: Props) {
     const base = `${apiBase}/businesses/public/${encodeURIComponent(
@@ -45,6 +48,7 @@ export default function InvoiceQrSection({
         <div className="space-y-4">
             <UiQrPanel
                 endpoint={`${base}/business.png`}
+                params={{ v: brandVersion }}
                 title="QR-вивіска на сторінку рахунку"
                 description="Роздрукуйте або надішліть клієнту. Він наведе камеру й одразу опиниться на сторінці рахунку."
                 alt="QR на публічну сторінку рахунку"
@@ -57,7 +61,7 @@ export default function InvoiceQrSection({
             {isActive && (
                 <UiQrPanel
                     endpoint={`${base}/nbu.png`}
-                    params={{ host: 'primary' }}
+                    params={{ host: 'primary', v: brandVersion }}
                     title="QR для оплати в банку"
                     description="Клієнт сканує код банк-додатком і одразу бачить заповнені суму та призначення."
                     alt="QR за стандартом НБУ для оплати в банку"
@@ -75,7 +79,7 @@ export default function InvoiceQrSection({
                 <UiDisclosure label="Запасний QR для старіших банків">
                     <UiQrPanel
                         endpoint={`${base}/nbu.png`}
-                        params={{ host: 'legacy' }}
+                        params={{ host: 'legacy', v: brandVersion }}
                         title="Запасний код для оплати"
                         description="Покажіть його, якщо банк клієнта не зчитав основний код для оплати."
                         alt="QR за стандартом НБУ (запасна адреса)"

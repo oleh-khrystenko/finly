@@ -56,9 +56,14 @@ export const BANK_LABEL: Record<BankCode, string> = {
  *    scheme=https). Кожен банк декларує app-link на хост `bank.gov.ua`, тож
  *    package-targeting відкриває саме його; не встановлений → Play Store.
  *
- * `iosScheme: null` — приватна схема невідома (Ощад/Райф не публікують її):
- * на iOS такий банк відкривається не через цю кнопку, а через загальний
- * НБУ-universal-link (caller робить fallback). Android покривається завжди.
+ * iOS-схему тримаємо **лише** для банків, підтверджених на реальному пристрої
+ * (privat/mono/abank — `docs/sprints/05-per-bank/bank-status.md`). Решта —
+ * `iosScheme: null`: приватної схеми, що приймає НБУ-payload, у них немає
+ * (pumb/sense перевірено — не реагують; інші — не підтверджено). На iOS такий
+ * банк окремою кнопкою не показуємо (`UiBankAppGrid` фільтрує), оплата йде
+ * через загальний НБУ-link. На Android банк відкривається завжди:
+ * `intent://package=` б'є в verified app-link НБУ
+ * (`bank.gov.ua/.well-known/assetlinks.json` делегує ці пакети).
  *
  * **Крихкість**: iOS-схеми приватні й недокументовані — банк може їх змінити,
  * і кнопка тихо перестане відкривати додаток. Тому UI завжди лишає загальний
@@ -75,17 +80,17 @@ export interface BankAppLaunch {
 export const BANK_APP_LAUNCH: Record<BankCode, BankAppLaunch> = {
     privatbank: { iosScheme: 'privat24', androidPackage: 'ua.privatbank.ap24' },
     monobank: { iosScheme: 'mono', androidPackage: 'com.ftband.mono' },
-    pumb: { iosScheme: 'pumb', androidPackage: 'com.fuib.android.spot.online' },
+    pumb: { iosScheme: null, androidPackage: 'com.fuib.android.spot.online' },
     oschadbank: {
         iosScheme: null,
         androidPackage: 'com.unitybars.corplight.oschadbank',
     },
-    sense: { iosScheme: 'alfabank', androidPackage: 'ua.alfabank.mobile.android' },
-    ukrgazbank: { iosScheme: 'ugb', androidPackage: 'com.ugb.app' },
-    izibank: { iosScheme: 'izibank', androidPackage: 'ua.izibank.app' },
+    sense: { iosScheme: null, androidPackage: 'ua.alfabank.mobile.android' },
+    ukrgazbank: { iosScheme: null, androidPackage: 'com.ugb.app' },
+    izibank: { iosScheme: null, androidPackage: 'ua.izibank.app' },
     raiffeisen: { iosScheme: null, androidPackage: 'ua.raiffeisen.myraif' },
     abank: { iosScheme: 'abank24', androidPackage: 'ua.com.abank' },
-    credit_dnipro: { iosScheme: 'creditdnepr', androidPackage: 'com.creditdnepr.mb' },
+    credit_dnipro: { iosScheme: null, androidPackage: 'com.creditdnepr.mb' },
 };
 
 /** Мобільна платформа, для якої будуємо per-bank deep-link. */

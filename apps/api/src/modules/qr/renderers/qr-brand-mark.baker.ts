@@ -40,11 +40,17 @@ const CENTER_PLATE_RADIUS_RATIO = 0.16;
 /** Повноширинна смуга тип-1 (дзеркало FINLY_BAND). */
 const BAND_WIDTH = 1024;
 const BAND_HEIGHT = 170;
-const BAND_LOGO_RATIO = 0.66;
+const BAND_LOGO_RATIO = 0.8;
 const BAND_PAD_X = 80;
 
-/** Текст оптично рівний лого: cap-height ≈ 0.68·висоти лого. Gap між ними. */
-const TEXT_CAP_RATIO = 0.68;
+/**
+ * Текст оптично рівний лого: cap-height як частка висоти лого. Окремі ratio на
+ * марку, щоб тюнити підпис per-позиція:
+ *   - центральна плашка page-QR («вивіска») — дрібніший підпис;
+ *   - повноширинна НБУ-смуга — дрібніший підпис (далі ще звужується до ширини).
+ */
+const CENTER_TEXT_CAP_RATIO = 0.5;
+const BAND_TEXT_CAP_RATIO = 0.5;
 const TEXT_GAP_RATIO = 0.16;
 
 export interface BakedBrandMarks {
@@ -105,7 +111,10 @@ export class QrBrandMarkBaker {
             return this.compositeLogo(svg, plateW, plateH, logoPng, padX, padY);
         }
 
-        const text = this.measureText(displayName, logoH * TEXT_CAP_RATIO);
+        const text = this.measureText(
+            displayName,
+            logoH * CENTER_TEXT_CAP_RATIO
+        );
         const gap = Math.round(logoH * TEXT_GAP_RATIO);
         const contentW = logoW + gap + text.width;
         const plateW = Math.round(contentW + 2 * padX);
@@ -158,7 +167,7 @@ export class QrBrandMarkBaker {
         const availTextW = BAND_WIDTH - 2 * BAND_PAD_X - logoW - gap;
         const text = this.measureText(
             displayName,
-            logoH * TEXT_CAP_RATIO,
+            logoH * BAND_TEXT_CAP_RATIO,
             availTextW
         );
         const contentW = logoW + gap + text.width;
