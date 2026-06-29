@@ -251,6 +251,15 @@ function ScreenContent() {
                 className="from-primary/25 absolute inset-x-0 top-0 h-1/2 bg-linear-to-b to-transparent"
             />
 
+            {/* Dynamic Island — чорна пігулка з лінзою камери. Частина фізичного
+                екрана, тож завжди чорна (theme-invariant), у px-просторі канваса. */}
+            <div
+                aria-hidden
+                className="absolute top-[14px] left-1/2 flex h-[34px] w-[118px] -translate-x-1/2 items-center justify-end rounded-full bg-black pr-2.5"
+            >
+                <span className="size-[11px] rounded-full bg-white/10 ring-1 ring-white/[0.07] ring-inset" />
+            </div>
+
             {/* Сума — якір цінності. */}
             <div className="relative text-center">
                 <p className="text-[13px] font-medium tracking-[0.2em] text-white/55 uppercase">
