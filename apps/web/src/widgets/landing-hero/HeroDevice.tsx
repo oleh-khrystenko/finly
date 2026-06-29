@@ -138,34 +138,45 @@ export function HeroDevice() {
     }, []);
 
     return (
-        <div className="relative w-full lg:absolute lg:max-w-3/5 right-0">
-            <div
-                ref={frameRef}
-                className="relative aspect-1448/1086 overflow-hidden mask-t-from-70% mask-b-from-70%"
-            >
-                <Image
-                    src="/landing/phone-hero.webp"
-                    alt="iPhone із платіжною сторінкою Finly: сума й QR-код для оплати у будь-якому банку"
-                    fill
-                    priority
-                    sizes="(max-width: 1024px) 100vw, 60vw"
-                    className="object-cover"
-                />
-
-                {/* Проєкція живого екрана на зелений chroma-key. */}
+        <div className="relative right-0 w-full lg:absolute lg:max-w-3/5">
+            {/* Вікно. На мобільному — портретний кадр 3:4, що наближає телефон
+                майже на весь екран і клипає поля; з sm — повне фото 4:3. Маска-
+                фейд живе тут, бо краї мають танути на видимих межах вікна (на
+                мобільному верх+низ, з sm — лише низ). */}
+            <div className="relative aspect-3/4 overflow-hidden mask-t-from-90% mask-b-from-90% sm:aspect-4/3 sm:mask-t-from-70% sm:mask-b-from-70%">
+                {/* Кадр = повне фото 4:3 (накладка екрана відкалібрована саме
+                    під нього, тож зум робимо через збільшення кадру, не crop).
+                    На мобільному absolute, збільшений ×2.1 і відцентрований на
+                    телефон; з sm повертається у звичайний потік. Лишається
+                    позиціонованим завжди — next/image fill цього вимагає. */}
                 <div
-                    aria-hidden
-                    style={{
-                        width: SCREEN_W,
-                        height: SCREEN_H,
-                        transform: matrix ?? undefined,
-                        transformOrigin: '0 0',
-                    }}
-                    className={`absolute top-0 left-0 transition-opacity duration-700 ease-out ${
-                        matrix ? 'opacity-100' : 'opacity-0'
-                    }`}
+                    ref={frameRef}
+                    className="absolute top-1/2 left-1/2 aspect-4/3 w-[210%] -translate-x-[47%] -translate-y-[46%] sm:relative sm:top-0 sm:left-0 sm:w-full sm:translate-x-0 sm:translate-y-0"
                 >
-                    <ScreenContent />
+                    <Image
+                        src="/landing/phone-hero.webp"
+                        alt="iPhone із платіжною сторінкою Finly: сума й QR-код для оплати у будь-якому банку"
+                        fill
+                        priority
+                        sizes="(max-width: 1024px) 100vw, 60vw"
+                        className="object-cover"
+                    />
+
+                    {/* Проєкція живого екрана на зелений chroma-key. */}
+                    <div
+                        aria-hidden
+                        style={{
+                            width: SCREEN_W,
+                            height: SCREEN_H,
+                            transform: matrix ?? undefined,
+                            transformOrigin: '0 0',
+                        }}
+                        className={`absolute top-0 left-0 transition-opacity duration-700 ease-out ${
+                            matrix ? 'opacity-100' : 'opacity-0'
+                        }`}
+                    >
+                        <ScreenContent />
+                    </div>
                 </div>
             </div>
 
