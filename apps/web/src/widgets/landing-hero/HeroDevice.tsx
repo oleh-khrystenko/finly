@@ -32,8 +32,8 @@ import { DecorativeQr } from './DecorativeQr';
 // скруглень) і перетнуто — це справжні кути екрана з урахуванням нахилу.
 // Порядок: TL, TR, BL, BR.
 const SCREEN_CORNERS = [
-    [0.374, 0.091], // top-left
-    [0.6005, 0.0715], // top-right
+    [0.374, 0.0905], // top-left
+    [0.601, 0.0705], // top-right
     [0.345, 0.821], // bottom-left
     [0.5718, 0.8537], // bottom-right
 ] as const;
@@ -223,7 +223,7 @@ export function HeroDevice() {
  */
 function ScreenContent() {
     return (
-        <div className="bg-device-frame relative flex h-full w-full flex-col justify-between overflow-hidden rounded-[12px] px-6 pt-22 pb-17">
+        <div className="bg-device-frame relative flex h-full w-full flex-col justify-between overflow-hidden rounded-[46px] px-6 pt-22 pb-17">
             {/* Зелений radial зверху — підхоплює світло фото. */}
             <div
                 aria-hidden
