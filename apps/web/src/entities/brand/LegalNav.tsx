@@ -15,7 +15,7 @@ interface LegalNavProps {
      * Next.js `Link` (cabinet/landing), стилі ідентичні.
      */
     baseUrl?: string;
-    /** Показати контактний email-рядок (landing-футер). */
+    /** Показати запрошення повідомити про помилку + email (landing/help-футер). */
     showContact?: boolean;
 }
 
@@ -58,20 +58,25 @@ export function LegalNav({ baseUrl, showContact = false }: LegalNavProps) {
                         )}
                     </li>
                 ))}
-                {showContact && (
-                    <li>
-                        <UiButton
-                            as="a"
-                            href="mailto:support@finly.com.ua"
-                            variant="link"
-                            size="sm"
-                            IconLeft={<Mail />}
-                        >
-                            support@finly.com.ua
-                        </UiButton>
-                    </li>
-                )}
             </ul>
+
+            {showContact && (
+                <div className="mt-4">
+                    <p className="text-muted-foreground max-w-xs text-sm leading-relaxed">
+                        Щось працює не так? Розкажіть нам, і ми це виправимо.
+                    </p>
+                    <UiButton
+                        as="a"
+                        href="mailto:support@finly.com.ua"
+                        variant="link"
+                        size="sm"
+                        IconLeft={<Mail />}
+                        className="mt-1"
+                    >
+                        support@finly.com.ua
+                    </UiButton>
+                </div>
+            )}
         </nav>
     );
 }
