@@ -50,7 +50,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const headerList = await headers();
     if (!isPublicHost(headerList.get('host'))) {
         return {
-            title: 'Сторінку не знайдено — Finly',
+            title: 'Сторінку не знайдено | Finly',
             robots: { index: false, follow: false },
         };
     }
@@ -58,7 +58,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const view = await loadPublicInvoiceView(slug, accountSlug, invoiceSlug);
     if (!view) {
         return {
-            title: 'Рахунок не знайдено — Finly',
+            title: 'Рахунок не знайдено | Finly',
             robots: { index: false, follow: false },
         };
     }
@@ -69,10 +69,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const businessLabel = `${BUSINESS_TYPE_LABEL[view.business.type]} ${view.business.name}`;
     const amountLabel = formatKopecksAsHryvnia(view.amount);
     const title = amountLabel
-        ? `Рахунок на ${amountLabel} — ${businessLabel}`
-        : `Рахунок на оплату — ${businessLabel}`;
+        ? `Рахунок на ${amountLabel}: ${businessLabel}`
+        : `Рахунок на оплату: ${businessLabel}`;
     return {
-        title: `${title} — Finly`,
+        title: `${title} | Finly`,
         description: `Сторінка для оплати рахунку. Оберіть банк і завершіть платіж у мобільному додатку.`,
         // Sprint 4 §4.7 — invoices завжди noindex.
         robots: { index: false, follow: false },

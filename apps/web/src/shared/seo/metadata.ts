@@ -13,6 +13,8 @@ interface BuildMetadataProps {
     description: string;
     canonicalUrl: string;
     noindex?: boolean;
+    ogTitle?: string;
+    ogDescription?: string;
 }
 
 export function buildMetadata({
@@ -20,7 +22,15 @@ export function buildMetadata({
     description,
     canonicalUrl,
     noindex,
+    ogTitle,
+    ogDescription,
 }: BuildMetadataProps): Metadata {
+    // OG/Twitter serve the share preview, the bare `title`/`description` serve
+    // the search snippet. Default to the same string; override only where the
+    // two diverge (e.g. drop the `| Finly` suffix the OG `siteName` repeats).
+    const socialTitle = ogTitle ?? title;
+    const socialDescription = ogDescription ?? description;
+
     return {
         title,
         description,
@@ -31,8 +41,8 @@ export function buildMetadata({
             robots: { index: false, follow: false },
         }),
         openGraph: {
-            title,
-            description,
+            title: socialTitle,
+            description: socialDescription,
             url: canonicalUrl,
             siteName: 'Finly',
             locale: 'uk_UA',
@@ -42,14 +52,14 @@ export function buildMetadata({
                     url: `${BASE_URL}/images/og-banner.png`,
                     width: 1200,
                     height: 630,
-                    alt: title,
+                    alt: socialTitle,
                 },
             ],
         },
         twitter: {
             card: 'summary_large_image',
-            title,
-            description,
+            title: socialTitle,
+            description: socialDescription,
             images: [`${BASE_URL}/images/og-banner.png`],
         },
     };
@@ -81,5 +91,7 @@ export function fetchMetadata({
         description,
         canonicalUrl,
         noindex,
+        ogTitle: meta?.ogTitle,
+        ogDescription: meta?.ogDescription,
     });
 }

@@ -56,7 +56,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const headerList = await headers();
     if (!isPublicHost(headerList.get('host'))) {
         return {
-            title: 'Сторінку не знайдено — Finly',
+            title: 'Сторінку не знайдено | Finly',
             robots: { index: false, follow: false },
         };
     }
@@ -64,15 +64,15 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const view = await loadPublicView(slug);
     if (!view) {
         return {
-            title: 'Сторінку не знайдено — Finly',
+            title: 'Сторінку не знайдено | Finly',
             robots: { index: false, follow: false },
         };
     }
     // Sprint 7 §SP-5 + §7.9 — SEO `<title>` навмисно type-aware (на відміну
     // від h1). H1 уніфікований до нейтрального формулювання, meta-tag тримає
-    // type-key-word-у для пошукової видачі ("Оплата на ФОП Іваненко — Finly").
+    // type-key-word-у для пошукової видачі ("Оплата на ФОП Іваненко | Finly").
     const heading = `${BUSINESS_TYPE_LABEL[view.type]} ${view.name}`;
-    const title = `Оплата на ${heading} — Finly`;
+    const title = `Оплата на ${heading} | Finly`;
     const description = `Сторінка для оплати на ${heading}. Оберіть рахунок і завершіть платіж у мобільному додатку.`;
     const canonicalUrl = `${ENV.NEXT_PUBLIC_PAY_PUBLIC_URL.replace(/\/$/, '')}/${view.slug}`;
     return {

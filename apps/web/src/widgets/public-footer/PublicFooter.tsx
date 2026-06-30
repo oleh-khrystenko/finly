@@ -57,7 +57,7 @@ export function PublicFooter() {
                         </UiButton>
                     </div>
 
-                    <LegalNav baseUrl={base} />
+                    <LegalNav baseUrl={base} showContact />
                 </div>
             </div>
 

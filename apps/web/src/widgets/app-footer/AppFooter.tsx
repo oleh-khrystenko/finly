@@ -41,15 +41,20 @@ export function AppFooter() {
                     ))}
                 </ul>
 
-                <UiButton
-                    as="a"
-                    href="mailto:support@finly.com.ua"
-                    variant="link"
-                    size="sm"
-                    IconLeft={<Mail />}
-                >
-                    support@finly.com.ua
-                </UiButton>
+                <div className="flex flex-col items-center gap-1 sm:items-end">
+                    <p className="text-muted-foreground text-sm sm:text-right">
+                        Щось працює не так? Розкажіть нам, і ми це виправимо.
+                    </p>
+                    <UiButton
+                        as="a"
+                        href="mailto:support@finly.com.ua"
+                        variant="link"
+                        size="sm"
+                        IconLeft={<Mail />}
+                    >
+                        support@finly.com.ua
+                    </UiButton>
+                </div>
             </nav>
 
             <Copyright />

@@ -9,6 +9,14 @@ export type Theme = (typeof THEME)[keyof typeof THEME];
 interface Meta {
     title: string;
     description: string;
+    /**
+     * Social-share overrides. Defaults to `title`/`description` when absent.
+     * Use to drop the `| Finly` brand suffix from `og:title` (OG already
+     * carries `siteName: 'Finly'`, so the suffix duplicates the brand in the
+     * preview) and to give a livelier, longer hook than the search snippet.
+     */
+    ogTitle?: string;
+    ogDescription?: string;
 }
 
 export interface MetaProps {
