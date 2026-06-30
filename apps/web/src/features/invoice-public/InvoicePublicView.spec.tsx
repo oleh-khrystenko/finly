@@ -225,7 +225,7 @@ describe('InvoicePublicView (Sprint 4 §4.7 + Sprint 9 §SP-6)', () => {
             );
             const primaryQr = screen.getByAltText('QR для оплати в банку');
             expect(primaryQr.getAttribute('src')).toMatch(
-                /\/IvanEnko\/account\/aBc12345\/invoices\/inv-001-aB3xQ9k7\/qr\/nbu\.png\?host=primary$/
+                /\/IvanEnko\/account\/aBc12345\/invoices\/inv-001-aB3xQ9k7\/qr\/nbu\.png\?host=primary&v=finly$/
             );
             fireEvent.click(
                 screen.getByRole('button', {
@@ -236,7 +236,7 @@ describe('InvoicePublicView (Sprint 4 §4.7 + Sprint 9 §SP-6)', () => {
                 'Запасний QR для оплати в банку'
             );
             expect(legacyQr.getAttribute('src')).toMatch(
-                /\/IvanEnko\/account\/aBc12345\/invoices\/inv-001-aB3xQ9k7\/qr\/nbu\.png\?host=legacy$/
+                /\/IvanEnko\/account\/aBc12345\/invoices\/inv-001-aB3xQ9k7\/qr\/nbu\.png\?host=legacy&v=finly$/
             );
         });
     });

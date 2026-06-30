@@ -73,7 +73,7 @@ export default async function HostPayRootPage() {
                 головний сайт (догфудимо власний продукт). */}
             <div className="border-border bg-card mt-10 w-full rounded-xl border p-6">
                 <div className="flex flex-col items-center gap-5 sm:flex-row sm:gap-6 sm:text-left">
-                    <div className="border-border w-36 shrink-0 rounded-lg border bg-white p-2">
+                    <div className="border-border w-full shrink-0 rounded-lg border bg-white p-2 sm:w-36">
                         <UiQrImage
                             src="/api/qr/landing.png"
                             alt="QR-код на сайт Finly"

@@ -21,3 +21,4 @@ export {
 export { useAutoCancelOnRouteChange } from './useAutoCancelOnRouteChange';
 export { useHasHydrated } from './useHasHydrated';
 export { detectClientPlatform, type ClientPlatform } from './clientPlatform';
+export { qrBrandVersion } from './qrBrandVersion';

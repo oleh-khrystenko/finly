@@ -82,6 +82,7 @@ export default function PublicBusinessView({
                     <UiBrandLogo
                         src={logo}
                         alt={brandDisplayName ?? payeeName}
+                        displayName={brandDisplayName}
                     />
                 )}
                 <div className="space-y-1">
@@ -203,6 +204,7 @@ function EmptyState({
                     <UiBrandLogo
                         src={logo}
                         alt={brandDisplayName ?? payeeName}
+                        displayName={brandDisplayName}
                     />
                 </div>
             )}

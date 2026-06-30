@@ -26,6 +26,54 @@
     animation: scaleIn 200ms ease-out;
 }
 
+/* --- Landing hero (PhoneMockup) decorative motion --- */
+
+/* Світловий промінь, що сканує QR-плитку зверху вниз — натяк «зчитується».
+ * Колір з brand-токена, не хардкод. */
+@keyframes qrScan {
+    0% {
+        transform: translateY(-120%);
+    }
+    100% {
+        transform: translateY(440%);
+    }
+}
+
+.qr-scan-beam {
+    background: linear-gradient(
+        to bottom,
+        transparent,
+        color-mix(in oklab, var(--primary) 45%, transparent),
+        transparent
+    );
+    animation: qrScan 2.8s ease-in-out infinite;
+}
+
+/* М'яке «дихання» плаваючих карток поряд з телефоном — додає життя сцені. */
+@keyframes floatBob {
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-6px);
+    }
+}
+
+.animate-floatBob {
+    animation: floatBob 4.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .qr-scan-beam,
+    .animate-floatBob {
+        animation: none;
+    }
+    .qr-scan-beam {
+        opacity: 0;
+    }
+}
+
 /* --- Radix animate utilities (Tailwind 4 @utility for variant support) --- */
 
 @keyframes enter {

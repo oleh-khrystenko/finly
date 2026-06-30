@@ -8,6 +8,7 @@ import {
     ExternalLink,
     Pencil,
     RefreshCw,
+    Share2,
     X,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -21,6 +22,15 @@ import UiPrefixInput from '@/shared/ui/UiPrefixInput';
 import type { UiSlugEditorProps } from './types';
 
 const AVAILABILITY_DEBOUNCE_MS = 350;
+
+/**
+ * Read-mode дії (Поділитись / Копіювати / Відкрити / Редагувати / Згенерувати).
+ * Mobile-first: базово підпис прихований (`hidden sm:inline` на тексті) — лишається
+ * сама іконка; від sm: підпис з'являється і кнопка природно розширюється. Падинг
+ * і gap беремо від UiButton (ui-primitives.md §2 — не дублюємо/не оверрайдимо їх
+ * у className); `min-h-11` тримає touch-target 44px на мобільному (responsive.md §2).
+ */
+const compactActionButton = 'min-h-11';
 
 type Mode = 'read' | 'edit' | 'upsell';
 type LiveState =
@@ -73,6 +83,17 @@ export default function UiSlugEditor({
         initialReservation
     );
     const [copied, setCopied] = useState(false);
+    // Web Share API є на всіх мобільних, але часто відсутня на десктоп-Chrome/
+    // Firefox. Рендеримо «Поділитись» лише там, де браузер її підтримує
+    // (progressive enhancement) — інакше на десктопі вона дублювала б
+    // «Копіювати». Перевірка лише на клієнті після mount (SSR не має navigator).
+    const [canShare, setCanShare] = useState(false);
+    useEffect(() => {
+        setCanShare(
+            typeof navigator !== 'undefined' &&
+                typeof navigator.share === 'function'
+        );
+    }, []);
 
     // Lowercase-порівняння — для пропуску availability-check власного імені
     // (зміна лише регістру свого slug тривіально «вільна»).
@@ -170,6 +191,16 @@ export default function UiSlugEditor({
     const cancelEdit = () => {
         setSaveError(undefined);
         setMode(reservation ? 'upsell' : 'read');
+    };
+
+    const handleShare = async () => {
+        try {
+            await navigator.share({ url: publicUrl });
+        } catch {
+            // Користувач закрив системну шторку (AbortError) або поділитись не
+            // вдалось — мовчки ігноруємо. «Копіювати» поруч лишається запасним
+            // шляхом, тож страшний toast тут зайвий.
+        }
     };
 
     const handleCopy = async () => {
@@ -366,7 +397,38 @@ export default function UiSlugEditor({
                 <span className="text-muted-foreground">{prefix}</span>
                 <span className="text-foreground">{currentSlug}</span>
             </span>
-            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            {/*
+             * Mobile-first (<sm): icon-only — підпис прихований, дія лишається
+             * озвученою через aria-label; `min-h-11` дає touch-target 44px
+             * (responsive.md §2). Від sm: повні підписи.
+             */}
+            <div className="flex flex-row flex-wrap items-center gap-2">
+                {canShare && (
+                    <UiButton
+                        type="button"
+                        variant="filled"
+                        size="md"
+                        onClick={() => void handleShare()}
+                        aria-label="Поділитись"
+                        IconLeft={<Share2 />}
+                        className={compactActionButton}
+                    >
+                        <span className="hidden sm:inline">Поділитись</span>
+                    </UiButton>
+                )}
+                <UiButton
+                    type="button"
+                    variant="outline"
+                    size="md"
+                    onClick={() => void handleCopy()}
+                    aria-label={copied ? 'Скопійовано' : 'Копіювати'}
+                    IconLeft={copied ? <Check /> : <Copy />}
+                    className={compactActionButton}
+                >
+                    <span className="hidden sm:inline">
+                        {copied ? 'Скопійовано' : 'Копіювати'}
+                    </span>
+                </UiButton>
                 <UiButton
                     as="a"
                     href={publicUrl}
@@ -374,30 +436,24 @@ export default function UiSlugEditor({
                     rel="noopener noreferrer"
                     variant="outline"
                     size="md"
+                    aria-label="Відкрити в новій вкладці"
                     IconLeft={<ExternalLink />}
-                    className="w-full sm:w-auto"
+                    className={compactActionButton}
                 >
-                    Відкрити в новій вкладці
-                </UiButton>
-                <UiButton
-                    type="button"
-                    variant="outline"
-                    size="md"
-                    onClick={() => void handleCopy()}
-                    IconLeft={copied ? <Check /> : <Copy />}
-                    className="w-full sm:w-auto"
-                >
-                    {copied ? 'Скопійовано' : 'Копіювати'}
+                    <span className="hidden sm:inline">
+                        Відкрити в новій вкладці
+                    </span>
                 </UiButton>
                 <UiButton
                     type="button"
                     variant="outline"
                     size="md"
                     onClick={startEdit}
+                    aria-label="Редагувати"
                     IconLeft={<Pencil />}
-                    className="w-full sm:w-auto"
+                    className={compactActionButton}
                 >
-                    Редагувати
+                    <span className="hidden sm:inline">Редагувати</span>
                 </UiButton>
                 {/*
                  * Згенерувати нове посилання — доступне всім рівням. Це не
@@ -410,10 +466,13 @@ export default function UiSlugEditor({
                     variant="outline"
                     size="md"
                     onClick={onRegenerate}
+                    aria-label="Згенерувати нове посилання"
                     IconLeft={<RefreshCw />}
-                    className="w-full sm:w-auto"
+                    className={compactActionButton}
                 >
-                    Згенерувати нове посилання
+                    <span className="hidden sm:inline">
+                        Згенерувати нове посилання
+                    </span>
                 </UiButton>
             </div>
         </div>

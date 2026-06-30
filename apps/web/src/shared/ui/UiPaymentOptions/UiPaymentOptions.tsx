@@ -7,7 +7,7 @@ import UiQrImage from '@/shared/ui/UiQrImage';
 import type { UiPaymentOptionsProps } from './types';
 
 const qrImageClass =
-    'border-border mx-auto w-full max-w-[240px] rounded-md border bg-white';
+    'border-border mx-auto w-full rounded-md border bg-white sm:max-w-xs';
 
 /**
  * «Один шлях» оплати на публічних вивісках (account + invoice): сітка банків —

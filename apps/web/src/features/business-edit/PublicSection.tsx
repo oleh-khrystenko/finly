@@ -13,7 +13,7 @@ import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSlugEditor from '@/shared/ui/UiSlugEditor';
 import UiSwitch from '@/shared/ui/UiSwitch';
 import UiUpsellNote from '@/shared/ui/UiUpsellNote';
-import { mapValidationCode } from '@/shared/lib';
+import { mapValidationCode, qrBrandVersion } from '@/shared/lib';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { useResetBusinessSlugConfirmStore } from './resetBusinessSlugConfirmStore';
@@ -136,6 +136,9 @@ export default function PublicSection({
                 <div className="py-6">
                     <UiQrPanel
                         endpoint={qrEndpoint}
+                        params={{
+                            v: qrBrandVersion(business.brand?.active?.logoUrl),
+                        }}
                         description="Роздрукуйте код на вивісці, чеку чи візитці. Клієнт наведе камеру й одразу опиниться на вашій сторінці."
                         alt="QR на публічну сторінку отримувача"
                         downloadFilename={buildQrDownloadFilename('page', {

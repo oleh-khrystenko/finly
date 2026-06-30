@@ -4,10 +4,14 @@ import { useEffect } from 'react';
 
 import { useHeaderNavStore } from '@/entities/navigation';
 
+// Порядок МУСИТЬ збігатися з DOM-порядком секцій у `app/page.tsx` —
+// scroll-spy (`useActiveSection`) підсвічує перший видимий пункт за порядком
+// цього масиву, тож розбіжність із прокруткою ламає активний стан.
 const NAV_ITEMS = [
     { href: '#how-it-works', label: 'Як це працює' },
-    { href: '#why', label: 'Чому Finly' },
     { href: '#try-now', label: 'Спробувати' },
+    { href: '#why', label: 'Чому Finly' },
+    { href: '#banks', label: 'Банки' },
 ] as const;
 
 /**

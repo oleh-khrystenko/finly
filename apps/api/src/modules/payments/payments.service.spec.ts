@@ -338,16 +338,21 @@ describe('PaymentsService (monobank, mocked)', () => {
             // claim знято (deleteOne з guard providerTransactionId:null), розклад
             // і доступ не чіпали → наступний прохід переспробує.
             expect(paymentRecordModel.deleteOne).toHaveBeenCalledTimes(1);
-            expect(paymentRecordModel.deleteOne.mock.calls[0][0]).toMatchObject({
-                status: PAYMENT_RECORD_STATUS.PENDING,
-                providerTransactionId: null,
-            });
+            expect(paymentRecordModel.deleteOne.mock.calls[0][0]).toMatchObject(
+                {
+                    status: PAYMENT_RECORD_STATUS.PENDING,
+                    providerTransactionId: null,
+                }
+            );
             expect(userModel.updateOne).not.toHaveBeenCalled();
         });
 
         it('невідомий результат (таймаут/5xx) → manual-review, планувальник зупинено', async () => {
             provider.chargeByToken.mockRejectedValue(
-                new ProviderRequestError('monobank request failed: timeout', false)
+                new ProviderRequestError(
+                    'monobank request failed: timeout',
+                    false
+                )
             );
 
             await service.chargeDueSubscription(USER);
@@ -442,7 +447,9 @@ describe('PaymentsService (monobank, mocked)', () => {
             // Повтор зсунуто щонайменше на ~29 хв уперед: годинник не спишe старий
             // токен, поки користувач на хостованій сторінці monobank.
             const deferred = set['billing.nextRetryAt'] as Date;
-            expect(deferred.getTime()).toBeGreaterThan(Date.now() + 29 * 60_000);
+            expect(deferred.getTime()).toBeGreaterThan(
+                Date.now() + 29 * 60_000
+            );
         });
 
         it('resume при незакритій спробі продовження → не відкриває другий checkout (захист від подвійного списання)', async () => {
@@ -466,7 +473,9 @@ describe('PaymentsService (monobank, mocked)', () => {
             // Звірка статусу ще не дала фіналу (списання в обробці).
             provider.getInvoiceStatus.mockResolvedValue(null);
             // Спроба лишилась PENDING після звірки.
-            paymentRecordModel.exists.mockResolvedValue({ _id: 'rec-inflight' });
+            paymentRecordModel.exists.mockResolvedValue({
+                _id: 'rec-inflight',
+            });
 
             await expect(
                 service.resumeSubscription(USER, {})

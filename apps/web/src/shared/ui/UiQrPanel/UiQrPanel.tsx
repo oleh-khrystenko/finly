@@ -32,7 +32,7 @@ const UiQrPanel = ({
 
     return (
         <div className="bg-muted/50 flex flex-col gap-6 rounded-lg p-4 sm:flex-row sm:items-center sm:gap-8">
-            <div className="w-60 max-w-full shrink-0">
+            <div className="w-full shrink-0 sm:w-60">
                 <UiQrImage
                     src={withQrQuery(endpoint, params)}
                     alt={alt}

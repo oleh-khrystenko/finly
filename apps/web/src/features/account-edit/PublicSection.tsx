@@ -17,6 +17,8 @@ import { useResetAccountSlugConfirmStore } from './resetAccountSlugConfirmStore'
 interface Props {
     account: Account;
     businessSlug: string;
+    /** Версія бренду для cache-bust QR-картинки (`qrBrandVersion`). */
+    brandVersion: string;
     /** Public payment-page origin (NEXT_PUBLIC_PAY_PUBLIC_URL). */
     payPublicOrigin: string;
     /**
@@ -47,6 +49,7 @@ interface Props {
 export default function PublicSection({
     account,
     businessSlug,
+    brandVersion,
     payPublicOrigin,
     accessSuspended,
     isPaid,
@@ -113,7 +116,11 @@ export default function PublicSection({
                     />
                 </div>
                 <div className="pt-6">
-                    <QrSection account={account} businessSlug={businessSlug} />
+                    <QrSection
+                        account={account}
+                        businessSlug={businessSlug}
+                        brandVersion={brandVersion}
+                    />
                 </div>
             </div>
         </UiSectionCard>
