@@ -134,7 +134,7 @@ describe('PublicAccountView (Sprint 9 §SP-4 + §SP-9)', () => {
             );
             const primaryQr = screen.getByAltText('QR для оплати в банку');
             expect(primaryQr.getAttribute('src')).toMatch(
-                /\/IvanEnko\/account\/aBc12345\/qr\/nbu\.png\?host=primary$/
+                /\/IvanEnko\/account\/aBc12345\/qr\/nbu\.png\?host=primary&v=finly$/
             );
             fireEvent.click(
                 screen.getByRole('button', {
@@ -145,7 +145,7 @@ describe('PublicAccountView (Sprint 9 §SP-4 + §SP-9)', () => {
                 'Запасний QR для оплати в банку'
             );
             expect(legacyQr.getAttribute('src')).toMatch(
-                /\/IvanEnko\/account\/aBc12345\/qr\/nbu\.png\?host=legacy$/
+                /\/IvanEnko\/account\/aBc12345\/qr\/nbu\.png\?host=legacy&v=finly$/
             );
         });
     });
