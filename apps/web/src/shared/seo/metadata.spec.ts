@@ -42,6 +42,36 @@ describe('fetchMetadata', () => {
         expect(meta.openGraph?.title).toBe('Terms');
     });
 
+    it('falls back to title/description for OG/Twitter when no override', () => {
+        const meta = fetchMetadata({
+            page: 'landing',
+            href: 'landing',
+            meta: { title: 'Search Title', description: 'Search desc' },
+        });
+        expect(meta.openGraph?.title).toBe('Search Title');
+        expect(meta.openGraph?.description).toBe('Search desc');
+        expect(meta.twitter?.title).toBe('Search Title');
+    });
+
+    it('uses ogTitle/ogDescription for OG/Twitter while keeping search title/description', () => {
+        const meta = fetchMetadata({
+            page: 'landing',
+            href: 'landing',
+            meta: {
+                title: 'Search Title | Finly',
+                description: 'Search desc',
+                ogTitle: 'Social Hook',
+                ogDescription: 'Livelier social desc',
+            },
+        });
+        expect(meta.title).toBe('Search Title | Finly');
+        expect(meta.description).toBe('Search desc');
+        expect(meta.openGraph?.title).toBe('Social Hook');
+        expect(meta.openGraph?.description).toBe('Livelier social desc');
+        expect(meta.twitter?.title).toBe('Social Hook');
+        expect(meta.twitter?.description).toBe('Livelier social desc');
+    });
+
     it('supports a custom canonical origin for public payment pages', () => {
         const meta = fetchMetadata({
             page: 'public-business',

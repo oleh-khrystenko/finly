@@ -207,10 +207,10 @@ describe('generateMetadata', () => {
                 invoiceSlug: 'inv-001-aB3xQ9k7',
             }),
         });
-        expect(meta.title).toMatch(/Рахунок на 1.500,00.+— ФОП Іваненко/);
+        expect(meta.title).toMatch(/Рахунок на 1.500,00.+: ФОП Іваненко/);
     });
 
-    it('amount=null → title "Рахунок на оплату — ..."', async () => {
+    it('amount=null → title "Рахунок на оплату: ..."', async () => {
         mockLoadPublicInvoiceView.mockResolvedValue(makeView({ amount: null }));
 
         const meta = await generateMetadata({
@@ -220,7 +220,7 @@ describe('generateMetadata', () => {
                 invoiceSlug: 'inv-001-aB3xQ9k7',
             }),
         });
-        expect(meta.title).toMatch(/Рахунок на оплату — ФОП Іваненко/);
+        expect(meta.title).toMatch(/Рахунок на оплату: ФОП Іваненко/);
     });
 
     it('missing invoice → "Рахунок не знайдено" + noindex', async () => {
@@ -233,7 +233,7 @@ describe('generateMetadata', () => {
                 invoiceSlug: 'no-such',
             }),
         });
-        expect(meta.title).toBe('Рахунок не знайдено — Finly');
+        expect(meta.title).toBe('Рахунок не знайдено | Finly');
         expect(meta.robots).toEqual({ index: false, follow: false });
     });
 });

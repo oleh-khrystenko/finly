@@ -240,7 +240,7 @@ describe('generateMetadata', () => {
             }),
         });
         expect(meta.title).toBe(
-            'Оплата на ФОП Іваненко (ПриватБанк •2580) — Finly'
+            'Оплата на ФОП Іваненко (ПриватБанк •2580) | Finly'
         );
     });
 
@@ -277,7 +277,7 @@ describe('generateMetadata', () => {
                 accountSlug: 'aBc12345',
             }),
         });
-        expect(meta.title).toBe('Оплата на ФОП Іваненко (•2580) — Finly');
+        expect(meta.title).toBe('Оплата на ФОП Іваненко (•2580) | Finly');
     });
 
     it('cabinet host → noindex (metadata-leak guard)', async () => {
@@ -302,7 +302,7 @@ describe('generateMetadata', () => {
                 accountSlug: 'no-such',
             }),
         });
-        expect(meta.title).toBe('Сторінку не знайдено — Finly');
+        expect(meta.title).toBe('Сторінку не знайдено | Finly');
         expect(meta.robots).toEqual({ index: false, follow: false });
     });
 });

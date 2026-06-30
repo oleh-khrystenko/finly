@@ -27,12 +27,12 @@ export async function generateMetadata(): Promise<Metadata> {
     const headerList = await headers();
     if (!isPublicHost(headerList.get('host'))) {
         return {
-            title: 'Сторінку не знайдено — Finly',
+            title: 'Сторінку не знайдено | Finly',
             robots: { index: false, follow: false },
         };
     }
     return {
-        title: 'Платіжні сторінки — Finly',
+        title: 'Платіжні сторінки | Finly',
         description:
             'Кожен підприємець має на Finly власну сторінку для оплати. Відкрийте повне посилання, яке вам надіслали.',
         // Утилітарний корінь хоста — не індексуємо (щоб не конкурувати з

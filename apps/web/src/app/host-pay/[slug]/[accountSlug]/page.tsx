@@ -39,7 +39,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const headerList = await headers();
     if (!isPublicHost(headerList.get('host'))) {
         return {
-            title: 'Сторінку не знайдено — Finly',
+            title: 'Сторінку не знайдено | Finly',
             robots: { index: false, follow: false },
         };
     }
@@ -47,7 +47,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const view = await loadPublicAccountView(slug, accountSlug);
     if (!view) {
         return {
-            title: 'Сторінку не знайдено — Finly',
+            title: 'Сторінку не знайдено | Finly',
             robots: { index: false, follow: false },
         };
     }
@@ -56,7 +56,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const businessLabel = `${BUSINESS_TYPE_LABEL[view.business.type]} ${view.business.name}`;
     const bankLabel =
         view.bankCode !== null ? `${BANK_LABEL[view.bankCode]} ` : '';
-    const title = `Оплата на ${businessLabel} (${bankLabel}${view.ibanMask}) — Finly`;
+    const title = `Оплата на ${businessLabel} (${bankLabel}${view.ibanMask}) | Finly`;
     const description = `Сторінка для оплати на ${businessLabel}. Оберіть банк і завершіть платіж у мобільному додатку.`;
     const canonicalUrl = `${ENV.NEXT_PUBLIC_PAY_PUBLIC_URL.replace(/\/$/, '')}/${view.business.slug}/${view.slug}`;
     return {

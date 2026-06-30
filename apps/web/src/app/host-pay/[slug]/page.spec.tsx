@@ -272,7 +272,7 @@ describe('generateMetadata — SEO robots (§E3)', () => {
         const meta = await generateMetadata({
             params: Promise.resolve({ slug: 'IvanEnko' }),
         });
-        expect(meta.title).toBe('Оплата на ФОП Іваненко — Finly');
+        expect(meta.title).toBe('Оплата на ФОП Іваненко | Finly');
     });
 
     it('adds canonical and social metadata on pay host', async () => {
@@ -296,7 +296,7 @@ describe('generateMetadata — SEO robots (§E3)', () => {
         const meta = await generateMetadata({
             params: Promise.resolve({ slug: 'missing' }),
         });
-        expect(meta.title).toBe('Сторінку не знайдено — Finly');
+        expect(meta.title).toBe('Сторінку не знайдено | Finly');
         expect(meta.robots).toEqual({ index: false, follow: false });
     });
 

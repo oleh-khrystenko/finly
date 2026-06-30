@@ -28,7 +28,7 @@ export async function generateMetadata({
         page: 'help-article',
         href: `help/${slug}`,
         meta: {
-            title: `${article.title} — Довідка Finly`,
+            title: `${article.title} | Довідка Finly`,
             description: article.description,
         },
     });
