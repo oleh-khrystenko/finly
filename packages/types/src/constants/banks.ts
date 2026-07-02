@@ -18,6 +18,7 @@ export const MVP_BANKS = [
     'oschadbank',
     'ukrgazbank',
     'credit_dnipro',
+    'ukrsibbank',
 ] as const;
 
 export type BankCode = (typeof MVP_BANKS)[number];
@@ -40,6 +41,7 @@ export const BANK_LABEL: Record<BankCode, string> = {
     raiffeisen: 'Raiffeisen',
     abank: 'A-Bank',
     credit_dnipro: 'Кредит Дніпро',
+    ukrsibbank: 'UKRSIBBANK',
 };
 
 /**
@@ -91,6 +93,10 @@ export const BANK_APP_LAUNCH: Record<BankCode, BankAppLaunch> = {
     raiffeisen: { iosScheme: null, androidPackage: 'ua.raiffeisen.myraif' },
     abank: { iosScheme: 'abank24', androidPackage: 'ua.com.abank' },
     credit_dnipro: { iosScheme: null, androidPackage: 'com.creditdnepr.mb' },
+    ukrsibbank: {
+        iosScheme: null,
+        androidPackage: 'com.ukrsibbank.uso.android',
+    },
 };
 
 /** Мобільна платформа, для якої будуємо per-bank deep-link. */

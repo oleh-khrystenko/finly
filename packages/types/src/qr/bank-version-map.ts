@@ -4,7 +4,7 @@ import type { PayloadVersion } from './format-version';
 /**
  * Mapping bank → payload version, який цей банк коректно зчитує.
  *
- * **Поточний стан (MVP):** усі 10 банків з `MVP_BANKS` мапляться на `'003'` —
+ * **Поточний стан (MVP):** усі 11 банків з `MVP_BANKS` мапляться на `'003'` —
  * це новий нормативний формат (постанова НБУ № 97, чинна з 01.11.2025).
  *
  * **Sprint 2 архітектурне рішення (§2.4):** ми надаємо механізм перемикання,
@@ -31,6 +31,7 @@ export const BANK_PAYLOAD_VERSION: Record<BankCode, PayloadVersion> = {
     raiffeisen: '003',
     abank: '003',
     credit_dnipro: '003',
+    ukrsibbank: '003',
 };
 
 /**
