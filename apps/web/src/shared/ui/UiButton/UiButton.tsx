@@ -88,6 +88,7 @@ interface RenderContentProps {
     IconRight?: ReactNode;
     children?: ReactNode;
     size: UiButtonSize;
+    collapseLabel: boolean;
 }
 
 const renderContent = ({
@@ -95,6 +96,7 @@ const renderContent = ({
     IconRight,
     children,
     size,
+    collapseLabel,
 }: RenderContentProps) => {
     const sizeClass = iconSizeStyles_svg[size];
     return (
@@ -104,7 +106,11 @@ const renderContent = ({
                     {IconLeft}
                 </span>
             )}
-            {children && <span>{children}</span>}
+            {children && (
+                <span className={collapseLabel ? 'hidden sm:inline' : undefined}>
+                    {children}
+                </span>
+            )}
             {IconRight && (
                 <span className={sizeClass} aria-hidden>
                     {IconRight}
@@ -217,6 +223,7 @@ const UiButton = forwardRef<
         IconRight,
         disabled,
         loading = false,
+        collapseLabel = false,
     } = props;
 
     const blocked = disabled || loading;
@@ -251,7 +258,13 @@ const UiButton = forwardRef<
         className
     );
 
-    const innerContent = renderContent({ IconLeft, IconRight, children, size });
+    const innerContent = renderContent({
+        IconLeft,
+        IconRight,
+        children,
+        size,
+        collapseLabel,
+    });
     const content = wrapContent({ content: innerContent, loading, size, hasGap });
     const commonProps = getCommonProps({ className: classes, variant, size, loading });
     const accessibilityProps = getLinkAccessibilityProps(blocked);
@@ -268,6 +281,7 @@ const UiButton = forwardRef<
             IconRight: _iconRight,
             disabled: _disabled,
             loading: _loading,
+            collapseLabel: _collapseLabel,
             children: _children,
             ...anchorProps
         } = props;
@@ -305,6 +319,7 @@ const UiButton = forwardRef<
             IconRight: _iconRight,
             disabled: _disabled,
             loading: _loading,
+            collapseLabel: _collapseLabel,
             children: _children,
             ...linkProps
         } = props;
@@ -345,6 +360,7 @@ const UiButton = forwardRef<
         IconRight: _iconRight,
         disabled: _disabled,
         loading: _loading,
+        collapseLabel: _collapseLabel,
         children: _children,
         ...buttonProps
     } = props;

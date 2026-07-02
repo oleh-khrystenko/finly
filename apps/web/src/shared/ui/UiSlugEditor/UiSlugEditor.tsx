@@ -411,9 +411,10 @@ export default function UiSlugEditor({
                         onClick={() => void handleShare()}
                         aria-label="Поділитись"
                         IconLeft={<Share2 />}
+                        collapseLabel
                         className={compactActionButton}
                     >
-                        <span className="hidden sm:inline">Поділитись</span>
+                        Поділитись
                     </UiButton>
                 )}
                 <UiButton
@@ -423,11 +424,10 @@ export default function UiSlugEditor({
                     onClick={() => void handleCopy()}
                     aria-label={copied ? 'Скопійовано' : 'Копіювати'}
                     IconLeft={copied ? <Check /> : <Copy />}
+                    collapseLabel
                     className={compactActionButton}
                 >
-                    <span className="hidden sm:inline">
-                        {copied ? 'Скопійовано' : 'Копіювати'}
-                    </span>
+                    {copied ? 'Скопійовано' : 'Копіювати'}
                 </UiButton>
                 <UiButton
                     as="a"
@@ -438,11 +438,10 @@ export default function UiSlugEditor({
                     size="md"
                     aria-label="Відкрити в новій вкладці"
                     IconLeft={<ExternalLink />}
+                    collapseLabel
                     className={compactActionButton}
                 >
-                    <span className="hidden sm:inline">
-                        Відкрити в новій вкладці
-                    </span>
+                    Відкрити в новій вкладці
                 </UiButton>
                 <UiButton
                     type="button"
@@ -451,9 +450,10 @@ export default function UiSlugEditor({
                     onClick={startEdit}
                     aria-label="Редагувати"
                     IconLeft={<Pencil />}
+                    collapseLabel
                     className={compactActionButton}
                 >
-                    <span className="hidden sm:inline">Редагувати</span>
+                    Редагувати
                 </UiButton>
                 {/*
                  * Згенерувати нове посилання — доступне всім рівням. Це не
@@ -468,11 +468,10 @@ export default function UiSlugEditor({
                     onClick={onRegenerate}
                     aria-label="Згенерувати нове посилання"
                     IconLeft={<RefreshCw />}
+                    collapseLabel
                     className={compactActionButton}
                 >
-                    <span className="hidden sm:inline">
-                        Згенерувати нове посилання
-                    </span>
+                    Згенерувати нове посилання
                 </UiButton>
             </div>
         </div>

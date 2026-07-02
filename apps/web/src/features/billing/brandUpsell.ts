@@ -1,3 +1,5 @@
+'use client';
+
 import { useEffect, useState } from 'react';
 import { createSubscriptionCheckout, getCatalog } from '@/shared/api/payments';
 
