@@ -1,9 +1,51 @@
 import { ReactNode } from 'react';
+import type { Metadata, Viewport } from 'next';
 import localFont from 'next/font/local';
 import '@/app/globals.css';
+import { ENV } from '@/shared/config';
+import { THEME_BACKGROUND } from '@/shared/styles/themeColors';
 import { AuthInitializer } from '@/features/auth';
 import { Providers } from '@/app/providers';
 import { Overlays } from '@/app/overlays';
+
+// `metadataBase` дає резолвити відносні URL у метаданих (canonical, OG). Дефолт
+// title гарантує непорожній заголовок вкладки на сторінках, що не мають власного
+// (кабінет, auth). Іконки: theme-scoped SVG (основні) + растровий фолбек фавікона
+// + apple-touch для home-screen.
+export const metadata: Metadata = {
+    metadataBase: new URL(ENV.NEXT_PUBLIC_BASE_URL),
+    title: {
+        default: 'Finly — веди справи, а не папери',
+        template: '%s',
+    },
+    icons: {
+        icon: [
+            {
+                url: '/logo/light-theme.svg',
+                type: 'image/svg+xml',
+                media: '(prefers-color-scheme: light)',
+            },
+            {
+                url: '/logo/dark-theme.svg',
+                type: 'image/svg+xml',
+                media: '(prefers-color-scheme: dark)',
+            },
+            { url: '/icons/favicon-48.png', type: 'image/png', sizes: '48x48' },
+        ],
+        apple: '/icons/apple-touch-icon.png',
+    },
+};
+
+export const viewport: Viewport = {
+    colorScheme: 'light dark',
+    themeColor: [
+        {
+            media: '(prefers-color-scheme: light)',
+            color: THEME_BACKGROUND.light,
+        },
+        { media: '(prefers-color-scheme: dark)', color: THEME_BACKGROUND.dark },
+    ],
+};
 
 const mulish = localFont({
     src: [
@@ -34,19 +76,6 @@ export default function RootLayout({ children }: RootLayoutProps) {
         <html lang="uk" className="scroll-smooth" suppressHydrationWarning>
             <head>
                 <meta name="darkreader-lock" />
-                <meta name="color-scheme" content="light dark" />
-                <link
-                    rel="icon"
-                    href="/logo/light-theme.svg"
-                    type="image/svg+xml"
-                    media="(prefers-color-scheme: light)"
-                />
-                <link
-                    rel="icon"
-                    href="/logo/dark-theme.svg"
-                    type="image/svg+xml"
-                    media="(prefers-color-scheme: dark)"
-                />
             </head>
 
             <body

@@ -95,7 +95,7 @@ export default async function HelpArticlePage({
                                 '@type': 'Organization',
                                 name: 'Finly',
                                 url: baseUrl,
-                                logo: `${baseUrl}/logo/light-theme.svg`,
+                                logo: `${baseUrl}/logo/mark-512.png`,
                             },
                         },
                     ],

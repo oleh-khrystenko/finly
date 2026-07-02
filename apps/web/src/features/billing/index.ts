@@ -4,3 +4,4 @@ export { default as CancelSubscriptionDialog } from './CancelSubscriptionDialog'
 export { useCancelSubscriptionDialogStore } from './cancelSubscriptionDialogStore';
 export { PLAN_COPY, ONE_OFF_COPY, ACCESS_LEVEL_LABEL } from './catalogCopy';
 export { useBrandSubscribeLabel, startBrandCheckout } from './brandUpsell';
+export { loadCatalog } from './loadCatalog';

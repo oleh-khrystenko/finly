@@ -155,6 +155,7 @@ border-primary/30  -- замість border-blue-200
 | `shared/icons/`                       | Hex-значення у SVG `fill`/`stroke`       | Брендові іконки (Google, Stripe) з офіційними кольорами                     |
 | `white` / `black`                     | `text-white`, `bg-black/50`              | Універсальні константи (контрастний текст, overlay backdrop)                |
 | Inline `style` для динамічних значень | `style={{ backgroundColor: userColor }}` | Runtime-значення, що не можуть бути токеном (user avatar color, chart data) |
+| Метадані (`viewport.themeColor`, web-манифест) | Літерал з `shared/styles/themeColors.ts` | Платформа читає ці значення до CSS, тож `var(--*)` неможливий. Літерали живуть в одному файлі під `shared/styles/` як sRGB-проєкція `--background` — не розсипані хардкоди |
 
 ## Scope
 
