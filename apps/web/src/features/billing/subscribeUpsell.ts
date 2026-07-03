@@ -1,11 +1,15 @@
+'use client';
+
 import { useEffect, useState } from 'react';
+import type { SubscriptionPlanCode } from '@finly/types';
 import { createSubscriptionCheckout, getCatalog } from '@/shared/api/payments';
 
 /**
- * Sprint 20/22 — спільний апсел на тариф «Бренд» (slug-flow на трьох сторінках).
- * Ціна тепер env-керована на боці API, тож web НІКОЛИ її не хардкодить — тягне з
- * каталог-ендпоінта (єдине джерело). Кеш на сесію, щоб не смикати API на кожній
- * сторінці.
+ * Sprint 20/22 — спільний апсел підписки поза сторінкою білінгу (slug-flow на
+ * трьох entity-сторінках — «Бренд»; ліміт клієнтських отримувачів на
+ * `/business/new` — «Агенція»). Ціна env-керована на боці API, тож web НІКОЛИ
+ * її не хардкодить — тягне з каталог-ендпоінта (єдине джерело). Кеш на сесію,
+ * щоб не смикати API на кожній сторінці.
  */
 let catalogPromise: ReturnType<typeof getCatalog> | null = null;
 function loadCatalogOnce(): ReturnType<typeof getCatalog> {
@@ -22,17 +26,17 @@ function loadCatalogOnce(): ReturnType<typeof getCatalog> {
  * збої — без числа («Підписатись»): краще без ціни, ніж показати суму, що
  * розходиться з реальним списанням.
  */
-export function useBrandSubscribeLabel(): string {
+export function useSubscribeLabel(planCode: SubscriptionPlanCode): string {
     const [grn, setGrn] = useState<number | null>(null);
     useEffect(() => {
         let active = true;
         loadCatalogOnce()
             .then((catalog) => {
-                const brand = catalog.subscriptionPlans.find(
-                    (p) => p.code === 'brand'
+                const plan = catalog.subscriptionPlans.find(
+                    (p) => p.code === planCode
                 );
-                if (active && brand) {
-                    setGrn(Math.round(brand.priceAmount / 100));
+                if (active && plan) {
+                    setGrn(Math.round(plan.priceAmount / 100));
                 }
             })
             .catch(() => {
@@ -41,18 +45,22 @@ export function useBrandSubscribeLabel(): string {
         return () => {
             active = false;
         };
-    }, []);
+    }, [planCode]);
     return grn == null ? 'Підписатись' : `Підписатись · ${grn} грн/міс`;
 }
 
 /**
- * Прямий checkout підписки «Бренд» з поверненням на `returnPath` (сторінка
- * сутності, де чекає бронь). Після оплати намір застосовується автоматично
- * (`useApplyPendingSlug`). Кидає — caller показує toast і лишає бронь чинною.
+ * Прямий checkout підписки з поверненням на `returnPath` (сторінка, з якої
+ * прийшов апсел). Лише для користувачів БЕЗ активної підписки — на живому
+ * слоті API відповідає 409 `ALREADY_SUBSCRIBED` (зміни тарифу немає, Sprint
+ * 22); таким показують перехід на `/billing`. Кидає — caller показує toast.
  */
-export async function startBrandCheckout(returnPath: string): Promise<void> {
+export async function startSubscriptionCheckout(
+    planCode: SubscriptionPlanCode,
+    returnPath: string
+): Promise<void> {
     const { checkoutUrl } = await createSubscriptionCheckout(
-        'brand',
+        planCode,
         returnPath
     );
     window.location.href = checkoutUrl;

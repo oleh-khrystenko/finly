@@ -15,6 +15,11 @@ import type { UiBrandLogoProps } from './types';
  * сталу світлу поверхню в обох темах: у light межа ледь помітна (зливається з
  * фоном), у dark — світла картка з чітким краєм.
  *
+ * `mix-blend-multiply` на зображенні гасить білий фон лого: білий × тон плашки =
+ * тон плашки, тож шов між не-чисто-білою плашкою і білим прямокутником зображення
+ * зникає, а темний друк множенням не змінюється. `isolate` на плашці замикає
+ * блендинг на її фоні — без нього multiply протікав би на фон сторінки.
+ *
  * Опційний `displayName` — косметичний підпис поряд з лого. Колір
  * `--brand-plate-foreground` тема-незалежний (плашка завжди світла, тож текст
  * завжди темний).
@@ -26,7 +31,7 @@ export default function UiBrandLogo({
     className,
 }: UiBrandLogoProps) {
     return (
-        <span className="bg-brand-plate border-brand-plate-border text-brand-plate-foreground inline-flex max-w-full items-center justify-center gap-1 rounded-xl border px-5 py-4 dark:shadow-md">
+        <span className="bg-brand-plate border-brand-plate-border text-brand-plate-foreground isolate inline-flex max-w-full items-center justify-center gap-1 rounded-xl border px-5 py-4 dark:shadow-md">
             <Image
                 src={src}
                 alt={alt}
@@ -34,7 +39,7 @@ export default function UiBrandLogo({
                 height={96}
                 unoptimized
                 className={composeClasses(
-                    'h-14 w-auto max-w-[220px] shrink-0 object-contain',
+                    'h-14 w-auto max-w-[220px] shrink-0 object-contain mix-blend-multiply',
                     className
                 )}
             />

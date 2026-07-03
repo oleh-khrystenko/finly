@@ -17,10 +17,11 @@ import { type BankCode } from './banks';
  * `"Банк •{last4}"`. Це коректна graceful degradation для дрібних регіональних
  * банків поза MVP-набором.
  *
- * **Verification status:** усі 10 записів `VERIFIED 2026-05-11` — звірено з
+ * **Verification status:** 10 записів `VERIFIED 2026-05-11` — звірено з
  * minfin.com.ua, bank.gov.ua (Licences_bank PDF), офіційними сайтами банків та
  * opendatabot. Sprint 9 повний verification-pass (попередня версія мала 9
- * BEST-EFFORT записів — закрито перед merge).
+ * BEST-EFFORT записів — закрито перед merge). Запис ukrsibbank додано пізніше
+ * (`VERIFIED 2026-07-02`, окреме джерело у рядку).
  *
  * **При додаванні нового запису** (Sprint 10+, розширення MVP_BANKS):
  *   1. Відкрити bank.gov.ua → "Реєстр банків і філій" АБО `bank.gov.ua/files/
@@ -74,6 +75,10 @@ export const BANK_MFO_MAP: Readonly<Record<string, BankCode>> = {
     // Licences_bank/305749.pdf + bank.gov.ua/en/supervision/institutions/
     // 14352406 + minfin.com.ua/ua/company/credit-dnepr.
     '305749': 'credit_dnipro',
+    // VERIFIED 2026-07-02 — АТ "УКРСИББАНК" (BNP Paribas Group, ЄДРПОУ
+    // 09807750); bank.gov.ua/files/Licences_bank/351005.pdf +
+    // ukrsibbank.com/about-bank/requisites + minfin.com.ua/ua/company/ukrsibbank.
+    '351005': 'ukrsibbank',
 };
 
 const MFO_START_INDEX = 4;

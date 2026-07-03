@@ -26,7 +26,7 @@ import { z } from 'zod';
  * однорядкова, а LF/CR зламали б її layout. NBU-charset тут НЕ застосовується —
  * це не платіжні дані, у QR-payload назва не йде.
  */
-export const BRAND_DISPLAY_NAME_MAX_LENGTH = 40;
+export const BRAND_DISPLAY_NAME_MAX_LENGTH = 20;
 
 const CONTROL_CHAR_DEL = 0x7f;
 const CONTROL_CHAR_MAX = 0x1f;

@@ -2,12 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import {
-    BUSINESS_TYPE_LABEL,
-    type UpdateBusinessRequest,
-} from '@finly/types';
+import { BUSINESS_TYPE_LABEL, type UpdateBusinessRequest } from '@finly/types';
 import {
     checkBusinessSlugAvailability,
     extractApiErrorCode,
@@ -26,7 +23,10 @@ import {
     useAuthStore,
     useCanEditSlug,
 } from '@/entities/user';
-import { useBrandSubscribeLabel, startBrandCheckout } from '@/features/billing';
+import {
+    useSubscribeLabel,
+    startSubscriptionCheckout,
+} from '@/features/billing';
 import { ENV } from '@/shared/config/env';
 import UiButton from '@/shared/ui/UiButton';
 import UiBreadcrumb from '@/shared/ui/UiBreadcrumb';
@@ -63,9 +63,11 @@ export default function BusinessSlugPage() {
     const router = useRouter();
     const params = useParams<{ slug: string }>();
     const userId = useAuthStore((s) => s.user?.id);
-    const reservation = useAuthStore((s) => s.user?.activeSlugReservation ?? null);
+    const reservation = useAuthStore(
+        (s) => s.user?.activeSlugReservation ?? null
+    );
     const isPaid = useCanEditSlug();
-    const subscribeLabel = useBrandSubscribeLabel();
+    const subscribeLabel = useSubscribeLabel('brand');
     const openDeleteConfirm = useDeleteBusinessConfirmStore((s) => s.open);
 
     const [business, setBusiness] = useState<BusinessWithCounts | null>(null);
@@ -185,7 +187,10 @@ export default function BusinessSlugPage() {
 
     const handleSubscribe = useCallback(() => {
         if (!business) return Promise.resolve();
-        return startBrandCheckout(`/business/${business.slug}`).catch(() => {
+        return startSubscriptionCheckout(
+            'brand',
+            `/business/${business.slug}`
+        ).catch(() => {
             toast.error('Не вдалося відкрити оплату. Спробуйте ще раз');
         });
     }, [business]);
@@ -216,17 +221,14 @@ export default function BusinessSlugPage() {
         <UiPageContainer className="space-y-6 py-10 md:py-14">
             {/* Top toolbar: breadcrumb + identity heading. */}
             <div className="flex flex-col gap-4">
-                <div className="flex items-center justify-between gap-3">
-                    <UiBreadcrumb
-                        items={[
-                            { label: 'Усі отримувачі', href: '/business' },
-                            { label: 'Отримувач' },
-                        ]}
-                    />
-                    {userId && (
-                        <OwnershipBadge isOwner={business.ownerId === userId} />
-                    )}
-                </div>
+                {/* Лінія 1 — хлібні крихти, наодинці */}
+                <UiBreadcrumb
+                    items={[
+                        { label: 'Усі отримувачі', href: '/business' },
+                        { label: 'Отримувач' },
+                    ]}
+                />
+                {/* Лінія 2 — тип + назва з inline-edit, наодинці */}
                 <div className="flex min-w-0 flex-col gap-1">
                     <p className="text-muted-foreground text-xl font-semibold tracking-wide uppercase">
                         {typeLabel}
@@ -235,6 +237,24 @@ export default function BusinessSlugPage() {
                         name={business.name}
                         onSave={(name) => handlePatch({ name })}
                     />
+                </div>
+                {/* Лінія 3 — метадані власності + дія створення */}
+                <div className="flex items-center gap-3">
+                    {userId && (
+                        <OwnershipBadge isOwner={business.ownerId === userId} />
+                    )}
+                    <UiButton
+                        as="link"
+                        href="/business/new"
+                        variant="outline"
+                        size="md"
+                        aria-label="Додати отримувача"
+                        IconLeft={<Plus />}
+                        collapseLabel="2xs"
+                        className="ml-auto min-h-11 shrink-0"
+                    >
+                        Додати отримувача
+                    </UiButton>
                 </div>
             </div>
 
@@ -252,9 +272,7 @@ export default function BusinessSlugPage() {
                 reserveSlug={(slug) => reserveBusinessSlug(business.slug, slug)}
                 onSubscribe={handleSubscribe}
                 subscribePriceLabel={subscribeLabel}
-                initialReservation={
-                    !isPaid && desiredSlug ? reservation : null
-                }
+                initialReservation={!isPaid && desiredSlug ? reservation : null}
                 autoStartSlugEdit={autoEditSlug}
             />
             <BrandSection

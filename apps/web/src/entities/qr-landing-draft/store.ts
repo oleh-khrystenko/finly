@@ -22,7 +22,9 @@ import type { QrPreviewInput, QrPreviewResponse } from '@finly/types';
  *    (wizard pre-fill з draft).
  *  - `claim-failed-account` — POST1 success, POST2 впав; backend повернув
  *    `claim.state='account-failed'` + `partialBusinessSlug`. Recovery через
- *    `/business/{slug}/account/new?from=landing` (IBAN pre-fill).
+ *    `/business/{slug}/account/new?from=landing` (IBAN pre-fill). Той самий
+ *    стан ставить type-limit-редирект у наявну фізособу (`runClaimChain`,
+ *    `BUSINESS_TYPE_LIMIT_REACHED`) — recovery-маршрут ідентичний.
  */
 export type ClaimIntent =
     | 'idle'

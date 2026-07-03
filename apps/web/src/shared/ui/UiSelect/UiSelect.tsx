@@ -83,6 +83,7 @@ const UiSelect = forwardRef<HTMLButtonElement, UiSelectProps>((props, ref) => {
                 <ListboxButton
                     ref={ref}
                     aria-labelledby={label ? generatedId : undefined}
+                    aria-invalid={error ? true : undefined}
                     className={buttonClasses}
                     data-variant={variant}
                     data-size={size}

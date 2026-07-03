@@ -58,6 +58,10 @@ const BANK_APP_STORE: Record<
         bundleId: 'com.creditdnepr.freebank',
         fallbackTerm: 'FreeBank Кредит Дніпро',
     },
+    ukrsibbank: {
+        bundleId: 'com.ukrsibbank.ukrsibonline.new',
+        fallbackTerm: 'UKRSIB online',
+    },
 };
 
 interface AppStoreResult {

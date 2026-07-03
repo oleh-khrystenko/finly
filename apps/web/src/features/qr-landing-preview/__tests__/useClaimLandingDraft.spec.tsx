@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, waitFor, act } from '@testing-library/react';
+import { AxiosError } from 'axios';
 
 jest.mock('@/shared/config', () => ({
     ENV: {
@@ -32,6 +33,17 @@ jest.mock('sonner', () => ({
         success: (...args: unknown[]) => mockToastSuccess(...args),
         error: (...args: unknown[]) => mockToastError(...args),
     },
+}));
+
+const mockListBusinesses = jest.fn();
+const mockListAccounts = jest.fn();
+
+jest.mock('@/shared/api/businesses', () => ({
+    listBusinesses: (...args: unknown[]) => mockListBusinesses(...args),
+}));
+
+jest.mock('@/shared/api/accounts', () => ({
+    listAccounts: (...args: unknown[]) => mockListAccounts(...args),
 }));
 
 import { useClaimLandingDraft } from '../useClaimLandingDraft';
@@ -237,6 +249,120 @@ describe('useClaimLandingDraft — failure paths', () => {
     });
 });
 
+describe('useClaimLandingDraft — type-limit merge у наявну фізособу', () => {
+    const typeLimitError = () => {
+        const err = new AxiosError('Forbidden');
+        err.response = {
+            data: { error: { code: 'BUSINESS_TYPE_LIMIT_REACHED' } },
+        } as never;
+        return err;
+    };
+
+    const EXISTING_INDIVIDUAL = {
+        slug: 'iva-X3kQ',
+        type: 'individual',
+        name: 'Іваненко Іван',
+        taxId: VALID_FORM.taxId,
+    };
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        useQrLandingDraftStore.getState().clearAll();
+        useAuthStore.getState().clearUser();
+        localStorage.clear();
+    });
+
+    it('РНОКПП збігається, IBAN новий → toast.info + redirect на account/new?from=landing', async () => {
+        mockCreateBusiness.mockRejectedValue(typeLimitError());
+        mockListBusinesses.mockResolvedValue([EXISTING_INDIVIDUAL]);
+        mockListAccounts.mockResolvedValue([
+            { slug: 'acc-old', iban: 'UA903052992990004149123456789' },
+        ]);
+        setAuthedComplete();
+        seedClaimPending();
+
+        render(<HookHarness />);
+
+        await waitFor(() => {
+            expect(mockToastInfo).toHaveBeenCalledWith(
+                'У вас вже є отримувач «Іваненко Іван». Додайте ці реквізити до нього'
+            );
+            expect(mockRouterReplace).toHaveBeenCalledWith(
+                '/business/iva-X3kQ/account/new?from=landing'
+            );
+            const s = useQrLandingDraftStore.getState();
+            expect(s.intent).toBe('claim-failed-account');
+            expect(s.formData).toEqual(VALID_FORM);
+            expect(mockToastError).not.toHaveBeenCalled();
+        });
+    });
+
+    it('РНОКПП збігається, IBAN уже збережений → «вже збережено» + redirect на реквізити + clearAll', async () => {
+        mockCreateBusiness.mockRejectedValue(typeLimitError());
+        mockListBusinesses.mockResolvedValue([EXISTING_INDIVIDUAL]);
+        mockListAccounts.mockResolvedValue([
+            { slug: 'acc-same', iban: VALID_FORM.iban },
+        ]);
+        setAuthedComplete();
+        seedClaimPending();
+
+        render(<HookHarness />);
+
+        await waitFor(() => {
+            expect(mockToastSuccess).toHaveBeenCalledWith(
+                'Ці реквізити вже збережені у кабінеті'
+            );
+            expect(mockRouterReplace).toHaveBeenCalledWith(
+                '/business/iva-X3kQ/account/acc-same'
+            );
+            const s = useQrLandingDraftStore.getState();
+            expect(s.intent).toBe('idle');
+            expect(s.formData).toEqual({});
+        });
+    });
+
+    it('РНОКПП інший (QR для іншої людини) → generic failure-path без merge', async () => {
+        mockCreateBusiness.mockRejectedValue(typeLimitError());
+        mockListBusinesses.mockResolvedValue([
+            { ...EXISTING_INDIVIDUAL, taxId: '9876543215' },
+        ]);
+        setAuthedComplete();
+        seedClaimPending();
+
+        render(<HookHarness />);
+
+        await waitFor(() => {
+            expect(mockToastError).toHaveBeenCalled();
+            expect(mockRouterReplace).toHaveBeenCalledWith(
+                '/business/new?from=landing'
+            );
+            expect(useQrLandingDraftStore.getState().intent).toBe(
+                'claim-failed-business'
+            );
+            expect(mockListAccounts).not.toHaveBeenCalled();
+        });
+    });
+
+    it('збій фонового fetch-у списку → deliberate degrade на generic failure-path', async () => {
+        mockCreateBusiness.mockRejectedValue(typeLimitError());
+        mockListBusinesses.mockRejectedValue(new Error('network down'));
+        setAuthedComplete();
+        seedClaimPending();
+
+        render(<HookHarness />);
+
+        await waitFor(() => {
+            expect(mockToastError).toHaveBeenCalled();
+            expect(mockRouterReplace).toHaveBeenCalledWith(
+                '/business/new?from=landing'
+            );
+            expect(useQrLandingDraftStore.getState().intent).toBe(
+                'claim-failed-business'
+            );
+        });
+    });
+});
+
 describe('useClaimLandingDraft — onboarding-completion-trigger (гілка B)', () => {
     beforeEach(() => {
         jest.clearAllMocks();
@@ -291,9 +417,7 @@ describe('useClaimLandingDraft — race-protection', () => {
         );
 
         act(() => {
-            useQrLandingDraftStore
-                .getState()
-                .setFormData({ ...VALID_FORM });
+            useQrLandingDraftStore.getState().setFormData({ ...VALID_FORM });
         });
 
         expect(mockCreateBusiness).toHaveBeenCalledTimes(1);

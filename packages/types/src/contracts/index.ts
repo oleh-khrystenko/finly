@@ -6,6 +6,7 @@ export * from './executions';
 export * from './help-chat';
 export * from './storage';
 export * from './businesses';
+export * from './business-limits';
 export * from './invoices';
 export * from './accounts';
 export * from './qr-preview';

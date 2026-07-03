@@ -1,9 +1,18 @@
 import { ReactNode } from 'react';
+import type { Metadata } from 'next';
 import { Logo } from '@/entities/brand';
 import { AppFooter } from '@/widgets/app-footer';
 import UiButton from '@/shared/ui/UiButton';
 import UiHeaderShell from '@/shared/ui/UiHeaderShell';
 import ChangeTheme from '@/features/change-theme';
+
+// Auth-сторінки — клієнтські компоненти (не можуть експортувати metadata самі),
+// тож title + noindex ставимо на layout: непорожній заголовок вкладки для всіх
+// auth-роутів і явна неіндексація (не лише через robots disallow).
+export const metadata: Metadata = {
+    title: 'Вхід у Finly',
+    robots: { index: false, follow: false },
+};
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
     return (

@@ -55,8 +55,8 @@ interface Props {
  * **`name`-схема з literal('')-варіантом**: empty string у `name`-input
  * означає "хочу auto-default з МФО", не "явне порожнє name". `accountNameSchema`
  * має `.min(1)`, тож сам `.optional()`-wrapper не допоможе — `''` (не `undefined`)
- * пішло б через `.min(1)` і fail-ило б `INVALID_ACCOUNT_NAME_REQUIRED`, блокуючи
- * submit-кнопку у `mode: 'onChange'`-формі.
+ * пішло б через `.min(1)` і fail-ило б `INVALID_ACCOUNT_NAME_REQUIRED` з
+ * помилкою під полем, хоча порожнє поле — легітимний стан.
  *
  * Union `z.literal('').or(accountNameSchema)` дозволяє `''` як легітимний "skip-
  * варіант" з form-side; submit-handler нормалізує `''.trim() === '' → omit`
@@ -84,7 +84,7 @@ export default function AccountCreateForm({
         defaultValues: { iban: prefillIban ?? '', name: '' },
     });
     const { register, handleSubmit, formState } = form;
-    const { errors, isValid } = formState;
+    const { errors } = formState;
 
     // IBAN усюди показується групами по 4 з пробілами — нормалізуємо на вводі,
     // щоб скопійоване `UA21 3223 …` не падало на pattern-валідації.
@@ -182,7 +182,7 @@ export default function AccountCreateForm({
                     type="submit"
                     variant="filled"
                     size="md"
-                    disabled={submitting || !isValid}
+                    disabled={submitting}
                 >
                     {submitting ? 'Створюю...' : 'Створити реквізити'}
                 </UiButton>

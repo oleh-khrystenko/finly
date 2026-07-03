@@ -57,6 +57,28 @@ describe('isValidIndividualTaxId — golden vectors', () => {
             expect(result.error.issues[0]?.message).toBe('INVALID_TAX_ID');
         }
     });
+
+    it('emits the dedicated too-long code when length exceeds 10', () => {
+        const result = individualTaxIdZod.safeParse('12345678901');
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            expect(result.error.issues).toHaveLength(1);
+            expect(result.error.issues[0]?.message).toBe(
+                'INVALID_TAX_ID_TOO_LONG'
+            );
+        }
+    });
+
+    it('legal entity: emits the dedicated too-long code when length exceeds 8', () => {
+        const result = legalEntityTaxIdZod.safeParse('123456789');
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            expect(result.error.issues).toHaveLength(1);
+            expect(result.error.issues[0]?.message).toBe(
+                'INVALID_LEGAL_TAX_ID_TOO_LONG'
+            );
+        }
+    });
 });
 
 describe('legalEntityTaxIdZod — ЄДРПОУ (8 digits, no checksum)', () => {

@@ -21,6 +21,7 @@ import {
 } from '@finly/types';
 import { createInvoice, getApiMessage, updateAccount } from '@/shared/api';
 import {
+    focusFirstInvalidField,
     getZodFieldError,
     mapValidationCode,
     parseUaMoney,
@@ -192,9 +193,9 @@ const createInvoiceResolver: Resolver<FormValues> = async (values) => {
     }
 
     // 2. Невалідний date-draft (режим «до дати» з порожнім/невалідним текстом)
-    //    блокує submit. `ValidUntilField` показує live-формат-помилку сам;
-    //    submit-кнопка disabled за тим самим `isValidUntilDraftValid`. Тут —
-    //    defense-in-depth, щоб `resolveValidUntil` не дав silent `null`.
+    //    блокує submit: помилка прокидається у `ValidUntilField` через
+    //    Controller `fieldState` (live-формат-помилку поле показує й само).
+    //    Без цього `resolveValidUntil` дав би silent `null` — «без терміну».
     if (!isValidUntilDraftValid(values.validUntilDraft)) {
         errors.validUntilDraft = {
             type: 'manual',
@@ -307,13 +308,16 @@ export default function CreateInvoiceForm({ business, account }: Props) {
         // amount-overflow / purpose-length errors. План §4.5 явно: "live-
         // валідацією через humanSlugPartSchema".
         mode: 'onChange',
+        // Всі поля — Controller без прокинутого `field.ref`, тож вбудований
+        // focus RHF не має куди цілитись. Замість нього —
+        // focusFirstInvalidField у handleSubmit (перше aria-invalid по DOM).
+        shouldFocusError: false,
     });
 
     const { control, handleSubmit, watch, setValue, formState } = form;
     const amountInput = watch('amountInput');
     const amountLocked = watch('amountLocked');
     const paymentPurpose = watch('paymentPurpose');
-    const validUntilDraft = watch('validUntilDraft');
     const slugChoice = watch('slugChoice');
     const humanPart = watch('humanPart');
     const rememberDefault = watch('rememberDefault');
@@ -440,7 +444,7 @@ export default function CreateInvoiceForm({ business, account }: Props) {
     return (
         <form
             onSubmit={(e) => {
-                void handleSubmit(onSubmit)(e);
+                void handleSubmit(onSubmit, focusFirstInvalidField)(e);
             }}
             className="space-y-8"
             noValidate
@@ -575,11 +579,12 @@ export default function CreateInvoiceForm({ business, account }: Props) {
                     <Controller
                         name="validUntilDraft"
                         control={control}
-                        render={({ field }) => (
+                        render={({ field, fieldState }) => (
                             <ValidUntilField
                                 label="Термін дії"
                                 draft={field.value}
                                 onChange={field.onChange}
+                                error={getZodFieldError(fieldState.error)}
                             />
                         )}
                     />
@@ -679,12 +684,7 @@ export default function CreateInvoiceForm({ business, account }: Props) {
                     type="submit"
                     variant="filled"
                     size="md"
-                    disabled={
-                        submitting ||
-                        formState.isSubmitting ||
-                        purposeOverflow ||
-                        !isValidUntilDraftValid(validUntilDraft)
-                    }
+                    disabled={submitting || formState.isSubmitting}
                 >
                     {submitting ? 'Створюю...' : 'Створити рахунок'}
                 </UiButton>

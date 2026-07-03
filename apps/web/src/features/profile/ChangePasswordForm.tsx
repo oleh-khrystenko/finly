@@ -13,7 +13,7 @@ import { changePassword, getMe } from '@/shared/api';
 import { useAuthStore } from '@/entities/user';
 
 const ChangePasswordFormSchema = z.object({
-    currentPassword: z.string().min(1),
+    currentPassword: z.string().min(1, 'INVALID_CURRENT_PASSWORD_REQUIRED'),
     newPassword: passwordSchema,
 });
 
@@ -34,8 +34,6 @@ const ChangePasswordForm = ({ onDone, onCancel }: ChangePasswordFormProps) => {
     });
 
     const { errors, isSubmitting } = form.formState;
-    const [currentPwd, newPwd] = form.watch(['currentPassword', 'newPassword']);
-    const canSubmit = !!currentPwd && !!newPwd;
 
     const onSubmit = async (data: ChangePasswordFormValues) => {
         if (data.currentPassword === data.newPassword) {
@@ -94,7 +92,7 @@ const ChangePasswordForm = ({ onDone, onCancel }: ChangePasswordFormProps) => {
                     error={
                         errors.currentPassword?.type === 'server'
                             ? errors.currentPassword.message
-                            : undefined
+                            : getZodFieldError(errors.currentPassword)
                     }
                     required
                     size="lg"
@@ -135,7 +133,6 @@ const ChangePasswordForm = ({ onDone, onCancel }: ChangePasswordFormProps) => {
                     type="submit"
                     variant="filled"
                     size="md"
-                    disabled={!canSubmit}
                     loading={isSubmitting}
                 >
                     Змінити пароль

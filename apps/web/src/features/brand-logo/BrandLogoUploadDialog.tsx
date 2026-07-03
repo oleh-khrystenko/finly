@@ -34,6 +34,9 @@ type Phase = 'pick' | 'preview';
 const ACCEPT_MIME = BRAND_LOGO.ALLOWED_MIME_TYPES.join(',');
 const MAX_MB = Math.round(BRAND_LOGO.MAX_FILE_SIZE / (1024 * 1024));
 const PREVIEW_DEBOUNCE_MS = 400;
+// Фізична стеля інпута: буфер над контрактним лімітом, щоб перевищення (ввід чи
+// вставка) було видно через лічильник і помилку, а не «мертву» клавіатуру на межі.
+const NAME_INPUT_HARD_CAP = BRAND_DISPLAY_NAME_MAX_LENGTH + 5;
 
 function normalizeName(value: string): string | null {
     const trimmed = value.trim();
@@ -147,6 +150,7 @@ export default function BrandLogoUploadDialog() {
     // з уже відрендереною (зокрема початковий рендер після завантаження).
     useEffect(() => {
         if (phase !== 'preview' || !fileKey || busy) return;
+        if (displayName.length > BRAND_DISPLAY_NAME_MAX_LENGTH) return;
         const name = normalizeName(displayName);
         if (name === lastPreviewedName.current) return;
         const handle = setTimeout(() => {
@@ -158,6 +162,7 @@ export default function BrandLogoUploadDialog() {
 
     const handleSave = async () => {
         if (!businessSlug || !fileKey || saving || busy || errorMessage) return;
+        if (displayName.length > BRAND_DISPLAY_NAME_MAX_LENGTH) return;
         setSaving(true);
         try {
             const result = await commitBrandLogo(
@@ -271,11 +276,16 @@ export default function BrandLogoUploadDialog() {
                                 <UiInput
                                     label="Назва поряд з логотипом (необовʼязково)"
                                     value={displayName}
-                                    maxLength={BRAND_DISPLAY_NAME_MAX_LENGTH}
+                                    maxLength={NAME_INPUT_HARD_CAP}
                                     onChange={(e) =>
                                         setDisplayName(e.target.value)
                                     }
                                     placeholder="Наприклад, назва кавʼярні"
+                                    error={
+                                        nameOverflow
+                                            ? `Не більше ${BRAND_DISPLAY_NAME_MAX_LENGTH} символів`
+                                            : undefined
+                                    }
                                 />
                                 <div className="mt-1 flex items-center justify-between">
                                     <span className="text-muted-foreground text-sm">
@@ -311,7 +321,10 @@ export default function BrandLogoUploadDialog() {
                                     size="md"
                                     onClick={handleSave}
                                     disabled={
-                                        busy || !!errorMessage || !fileKey
+                                        busy ||
+                                        !!errorMessage ||
+                                        !fileKey ||
+                                        nameOverflow
                                     }
                                     loading={saving}
                                 >
