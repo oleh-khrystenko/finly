@@ -8,12 +8,28 @@ import type { UiUpsellNoteProps } from './types';
  * Sprint 19 — компактний upsell-блок для замкнених фіч (редагування slug понад
  * Free, ліміти бізнесів). Пояснює обмеження і веде на білінг. Generic-примітив
  * у shared/ui, щоб feature-шари не імпортували один одного (FSD).
+ *
+ * `actions` замінює дефолтну CTA-кнопку на довільний блок дій (наприклад,
+ * `SubscribeActions` з білінг-фічі); лейаут тоді стек — ряд кнопок не
+ * втискається поруч із текстом.
  */
 export default function UiUpsellNote({
     message,
     ctaLabel = 'Покращити тариф',
     href = '/billing',
+    actions,
 }: UiUpsellNoteProps) {
+    if (actions) {
+        return (
+            <div className="border-primary/30 bg-primary/5 flex flex-col gap-3 rounded-lg border p-4">
+                <p className="text-muted-foreground flex items-center gap-2 text-sm">
+                    <Lock className="text-primary h-4 w-4 shrink-0" />
+                    {message}
+                </p>
+                {actions}
+            </div>
+        );
+    }
     return (
         <div className="border-primary/30 bg-primary/5 flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-muted-foreground flex items-center gap-2 text-sm">

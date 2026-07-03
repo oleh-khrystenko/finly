@@ -30,7 +30,10 @@ import {
     useAuthStore,
     useCanEditSlug,
 } from '@/entities/user';
-import { useBrandSubscribeLabel, startBrandCheckout } from '@/features/billing';
+import {
+    useSubscribeLabel,
+    startSubscriptionCheckout,
+} from '@/features/billing';
 import { BrandSection } from '@/features/brand-logo';
 import { ENV } from '@/shared/config/env';
 import { qrBrandVersion } from '@/shared/lib';
@@ -93,9 +96,11 @@ export default function InvoiceCabinetPage() {
         invoiceSlug: string;
     }>();
     const userId = useAuthStore((s) => s.user?.id);
-    const reservation = useAuthStore((s) => s.user?.activeSlugReservation ?? null);
+    const reservation = useAuthStore(
+        (s) => s.user?.activeSlugReservation ?? null
+    );
     const isPaid = useCanEditSlug();
-    const subscribeLabel = useBrandSubscribeLabel();
+    const subscribeLabel = useSubscribeLabel('brand');
     const openDeleteConfirm = useDeleteInvoiceConfirmStore((s) => s.open);
 
     const [data, setData] = useState<LoadedData | null>(null);
@@ -221,7 +226,8 @@ export default function InvoiceCabinetPage() {
     });
     const handleSubscribe = useCallback(() => {
         if (!data) return Promise.resolve();
-        return startBrandCheckout(
+        return startSubscriptionCheckout(
+            'brand',
             `/business/${data.business.slug}/account/${data.paramAcc}/invoice/${data.invoice.slug}`
         ).catch(() => {
             toast.error('Не вдалося відкрити оплату. Спробуйте ще раз');
@@ -364,7 +370,9 @@ export default function InvoiceCabinetPage() {
                     invoice={invoice}
                     businessSlug={business.slug}
                     accountSlug={accountSlug}
-                    brandVersion={qrBrandVersion(business.brand?.active?.logoUrl)}
+                    brandVersion={qrBrandVersion(
+                        business.brand?.active?.logoUrl
+                    )}
                     payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
                     accessSuspended={business.accessBlockedAt != null}
                     isPaid={isPaid}

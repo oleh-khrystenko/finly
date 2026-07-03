@@ -4,10 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import {
-    BUSINESS_TYPE_LABEL,
-    type UpdateBusinessRequest,
-} from '@finly/types';
+import { BUSINESS_TYPE_LABEL, type UpdateBusinessRequest } from '@finly/types';
 import {
     checkBusinessSlugAvailability,
     extractApiErrorCode,
@@ -26,7 +23,10 @@ import {
     useAuthStore,
     useCanEditSlug,
 } from '@/entities/user';
-import { useBrandSubscribeLabel, startBrandCheckout } from '@/features/billing';
+import {
+    useSubscribeLabel,
+    startSubscriptionCheckout,
+} from '@/features/billing';
 import { ENV } from '@/shared/config/env';
 import UiButton from '@/shared/ui/UiButton';
 import UiBreadcrumb from '@/shared/ui/UiBreadcrumb';
@@ -63,9 +63,11 @@ export default function BusinessSlugPage() {
     const router = useRouter();
     const params = useParams<{ slug: string }>();
     const userId = useAuthStore((s) => s.user?.id);
-    const reservation = useAuthStore((s) => s.user?.activeSlugReservation ?? null);
+    const reservation = useAuthStore(
+        (s) => s.user?.activeSlugReservation ?? null
+    );
     const isPaid = useCanEditSlug();
-    const subscribeLabel = useBrandSubscribeLabel();
+    const subscribeLabel = useSubscribeLabel('brand');
     const openDeleteConfirm = useDeleteBusinessConfirmStore((s) => s.open);
 
     const [business, setBusiness] = useState<BusinessWithCounts | null>(null);
@@ -185,7 +187,10 @@ export default function BusinessSlugPage() {
 
     const handleSubscribe = useCallback(() => {
         if (!business) return Promise.resolve();
-        return startBrandCheckout(`/business/${business.slug}`).catch(() => {
+        return startSubscriptionCheckout(
+            'brand',
+            `/business/${business.slug}`
+        ).catch(() => {
             toast.error('Не вдалося відкрити оплату. Спробуйте ще раз');
         });
     }, [business]);
@@ -267,9 +272,7 @@ export default function BusinessSlugPage() {
                 reserveSlug={(slug) => reserveBusinessSlug(business.slug, slug)}
                 onSubscribe={handleSubscribe}
                 subscribePriceLabel={subscribeLabel}
-                initialReservation={
-                    !isPaid && desiredSlug ? reservation : null
-                }
+                initialReservation={!isPaid && desiredSlug ? reservation : null}
                 autoStartSlugEdit={autoEditSlug}
             />
             <BrandSection

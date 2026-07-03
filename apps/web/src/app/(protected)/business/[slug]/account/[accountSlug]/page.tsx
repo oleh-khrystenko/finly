@@ -28,7 +28,10 @@ import {
     useAuthStore,
     useCanEditSlug,
 } from '@/entities/user';
-import { useBrandSubscribeLabel, startBrandCheckout } from '@/features/billing';
+import {
+    useSubscribeLabel,
+    startSubscriptionCheckout,
+} from '@/features/billing';
 import { BrandSection } from '@/features/brand-logo';
 import { ENV } from '@/shared/config/env';
 import { qrBrandVersion } from '@/shared/lib';
@@ -95,9 +98,11 @@ export default function AccountCabinetPage() {
     const router = useRouter();
     const params = useParams<{ slug: string; accountSlug: string }>();
     const userId = useAuthStore((s) => s.user?.id);
-    const reservation = useAuthStore((s) => s.user?.activeSlugReservation ?? null);
+    const reservation = useAuthStore(
+        (s) => s.user?.activeSlugReservation ?? null
+    );
     const isPaid = useCanEditSlug();
-    const subscribeLabel = useBrandSubscribeLabel();
+    const subscribeLabel = useSubscribeLabel('brand');
     const openDeleteConfirm = useDeleteAccountConfirmStore((s) => s.open);
 
     const [data, setData] = useState<LoadedData | null>(null);
@@ -212,7 +217,8 @@ export default function AccountCabinetPage() {
     });
     const handleSubscribe = useCallback(() => {
         if (!data) return Promise.resolve();
-        return startBrandCheckout(
+        return startSubscriptionCheckout(
+            'brand',
             `/business/${data.business.slug}/account/${data.account.slug}`
         ).catch(() => {
             toast.error('Не вдалося відкрити оплату. Спробуйте ще раз');
@@ -364,9 +370,7 @@ export default function AccountCabinetPage() {
                 }
                 onSubscribe={handleSubscribe}
                 subscribePriceLabel={subscribeLabel}
-                initialReservation={
-                    !isPaid && desiredSlug ? reservation : null
-                }
+                initialReservation={!isPaid && desiredSlug ? reservation : null}
                 autoStartSlugEdit={autoEditSlug}
             />
             <BrandSection
