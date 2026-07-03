@@ -18,6 +18,7 @@ export const MVP_BANKS = [
     'oschadbank',
     'ukrgazbank',
     'credit_dnipro',
+    'ukrsibbank',
 ] as const;
 
 export type BankCode = (typeof MVP_BANKS)[number];
@@ -40,6 +41,7 @@ export const BANK_LABEL: Record<BankCode, string> = {
     raiffeisen: 'Raiffeisen',
     abank: 'A-Bank',
     credit_dnipro: 'Кредит Дніпро',
+    ukrsibbank: 'UKRSIBBANK',
 };
 
 /**
@@ -59,11 +61,13 @@ export const BANK_LABEL: Record<BankCode, string> = {
  * iOS-схему тримаємо **лише** для банків, підтверджених на реальному пристрої
  * (privat/mono/abank — `docs/sprints/05-per-bank/bank-status.md`). Решта —
  * `iosScheme: null`: приватної схеми, що приймає НБУ-payload, у них немає
- * (pumb/sense перевірено — не реагують; інші — не підтверджено). На iOS такий
- * банк окремою кнопкою не показуємо (`UiBankAppGrid` фільтрує), оплата йде
- * через загальний НБУ-link. На Android банк відкривається завжди:
- * `intent://package=` б'є в verified app-link НБУ
- * (`bank.gov.ua/.well-known/assetlinks.json` делегує ці пакети).
+ * (pumb/sense перевірено — не реагують; інші — не підтверджено). Це впливає
+ * лише на **тап**: банк з `null`-схемою відкривається через загальний НБУ-link
+ * (fallback у `buildBankAppLink`), а не власним додатком. Які банки взагалі
+ * показувати на iOS — окреме рішення (`IOS_HIDDEN_BANKS`), не похідне від
+ * наявності схеми. На Android банк відкривається завжди: `intent://package=`
+ * б'є в verified app-link НБУ (`bank.gov.ua/.well-known/assetlinks.json`
+ * делегує ці пакети).
  *
  * **Крихкість**: iOS-схеми приватні й недокументовані — банк може їх змінити,
  * і кнопка тихо перестане відкривати додаток. Тому UI завжди лишає загальний
@@ -91,7 +95,28 @@ export const BANK_APP_LAUNCH: Record<BankCode, BankAppLaunch> = {
     raiffeisen: { iosScheme: null, androidPackage: 'ua.raiffeisen.myraif' },
     abank: { iosScheme: 'abank24', androidPackage: 'ua.com.abank' },
     credit_dnipro: { iosScheme: null, androidPackage: 'com.creditdnepr.mb' },
+    ukrsibbank: {
+        iosScheme: null,
+        androidPackage: 'com.ukrsibbank.uso.android',
+    },
 };
+
+/**
+ * Банки, які НЕ показуємо у сітці оплати на iOS (`UiBankAppGrid`).
+ *
+ * Historically iOS-список = банки з `iosScheme !== null` (whitelist). Тепер це
+ * явний blacklist: на iOS показуємо всі банки, крім перелічених тут. pumb/sense
+ * перевірено на реальному пристрої — вони ігнорують і приватну схему, і НБУ
+ * universal-link, тож їхня кнопка на iOS не веде нікуди корисного; raiffeisen
+ * тримаємо закритим за тим самим рішенням. Решта банків показуються: ті, що
+ * мають `iosScheme`, відкривають свій додаток; інші — падають на загальний
+ * НБУ-link через `buildBankAppLink` → `null`-fallback у `UiBankAppGrid`.
+ */
+export const IOS_HIDDEN_BANKS: readonly BankCode[] = [
+    'pumb',
+    'sense',
+    'raiffeisen',
+];
 
 /** Мобільна платформа, для якої будуємо per-bank deep-link. */
 export type BankAppPlatform = 'ios' | 'android';

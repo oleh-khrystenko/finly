@@ -2,7 +2,7 @@ import { BANK_MFO_MAP, bankCodeFromIban } from './bank-mfo';
 import { MVP_BANKS } from './banks';
 
 describe('BANK_MFO_MAP', () => {
-    it('містить запис для кожного банку з MVP_BANKS (10 entries)', () => {
+    it('містить запис для кожного банку з MVP_BANKS (11 entries)', () => {
         const mappedBankCodes = new Set(Object.values(BANK_MFO_MAP));
         for (const bankCode of MVP_BANKS) {
             expect(mappedBankCodes.has(bankCode)).toBe(true);

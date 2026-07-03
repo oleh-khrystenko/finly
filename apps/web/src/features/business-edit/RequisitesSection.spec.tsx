@@ -1,6 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { Business, BusinessType } from '@finly/types';
+import { TAX_ID_INPUT_MAX_LENGTH } from '@/entities/business';
 import RequisitesSection from './RequisitesSection';
 
 const VALID_RNOKPP = '1234567899';
@@ -43,13 +44,13 @@ function makeBusiness(
 
 describe('RequisitesSection — Sprint 7 §SP-4 + Sprint 9 §9.2 (taxId only)', () => {
     it.each([
-        ['individual', 'РНОКПП', VALID_RNOKPP, '10'],
-        ['fop', 'РНОКПП', VALID_RNOKPP, '10'],
-        ['tov', 'ЄДРПОУ', VALID_EDRPOU, '8'],
-        ['organization', 'ЄДРПОУ', VALID_EDRPOU, '8'],
+        ['individual', 'РНОКПП', VALID_RNOKPP],
+        ['fop', 'РНОКПП', VALID_RNOKPP],
+        ['tov', 'ЄДРПОУ', VALID_EDRPOU],
+        ['organization', 'ЄДРПОУ', VALID_EDRPOU],
     ] as const)(
-        '%s бізнес — label "%s", maxLength=%s',
-        async (type, expectedLabel, validValue, expectedMaxLength) => {
+        '%s бізнес — label "%s", фізичний maxLength з запасом',
+        async (type, expectedLabel, validValue) => {
             const business = makeBusiness({ type, taxId: validValue });
             render(
                 <RequisitesSection business={business} onSave={jest.fn()} />
@@ -58,12 +59,17 @@ describe('RequisitesSection — Sprint 7 §SP-4 + Sprint 9 §9.2 (taxId only)', 
             // Label видимий у read-mode
             expect(screen.getByText(expectedLabel)).toBeInTheDocument();
 
-            // Тригеримо edit-mode для перевірки maxLength
+            // Тригеримо edit-mode для перевірки maxLength: cap із запасом
+            // (TAX_ID_INPUT_MAX_LENGTH), не нормативна довжина 10/8 —
+            // надлишок цифр показує validation-помилку замість тихого обрізання.
             fireEvent.click(
                 screen.getByLabelText(`Редагувати: ${expectedLabel}`)
             );
             const input = screen.getByDisplayValue(validValue);
-            expect(input).toHaveAttribute('maxlength', expectedMaxLength);
+            expect(input).toHaveAttribute(
+                'maxlength',
+                String(TAX_ID_INPUT_MAX_LENGTH)
+            );
         }
     );
 

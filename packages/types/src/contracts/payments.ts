@@ -56,33 +56,41 @@ export const BILLING_CURRENCY = 'UAH';
 export type BillingInterval = 'month' | 'year';
 
 // --- Catalog Types (статичний конфіг, не runtime-fetch) ---
+// Zod-схема — джерело істини форми. Типи виведені через `z.infer`, тож немає
+// двох копій, що розходяться. Схема також валідує boundary там, де shape
+// приходить ззовні: web server-fetch каталогу для structured-data offers
+// (`GET /payments/catalog`) parse-ить відповідь перед вживанням.
 
-export interface SubscriptionPlanItem {
-    code: SubscriptionPlanCode;
-    name: string;
-    priceAmount: number; // копійки
-    currency: string;
-    interval: BillingInterval;
-    level: AccessLevel;
-    displayOrder: number;
-    featured: boolean;
-}
+export const subscriptionPlanItemSchema = z.object({
+    code: z.enum(SUBSCRIPTION_PLAN_CODES),
+    name: z.string(),
+    priceAmount: z.number().int().nonnegative(), // копійки
+    currency: z.string(),
+    interval: z.enum(['month', 'year']),
+    level: z.enum(ACCESS_LEVELS),
+    displayOrder: z.number().int(),
+    featured: z.boolean(),
+});
 
-export interface OneOffAccessItem {
-    code: OneOffAccessCode;
-    name: string;
-    priceAmount: number; // копійки
-    currency: string;
-    level: AccessLevel;
-    durationMonths: number;
-    displayOrder: number;
-    featured: boolean;
-}
+export const oneOffAccessItemSchema = z.object({
+    code: z.enum(ONE_OFF_ACCESS_CODES),
+    name: z.string(),
+    priceAmount: z.number().int().nonnegative(), // копійки
+    currency: z.string(),
+    level: z.enum(ACCESS_LEVELS),
+    durationMonths: z.number().int().positive(),
+    displayOrder: z.number().int(),
+    featured: z.boolean(),
+});
 
-export interface PaymentsCatalog {
-    subscriptionPlans: SubscriptionPlanItem[];
-    oneOffAccesses: OneOffAccessItem[];
-}
+export const paymentsCatalogSchema = z.object({
+    subscriptionPlans: z.array(subscriptionPlanItemSchema),
+    oneOffAccesses: z.array(oneOffAccessItemSchema),
+});
+
+export type SubscriptionPlanItem = z.infer<typeof subscriptionPlanItemSchema>;
+export type OneOffAccessItem = z.infer<typeof oneOffAccessItemSchema>;
+export type PaymentsCatalog = z.infer<typeof paymentsCatalogSchema>;
 
 // --- Static Catalog (структура — джерело істини) ---
 // Структура (коди, рівні, інтервал, назви) — джерело істини. ЦІНИ ТУТ НЕМАЄ:

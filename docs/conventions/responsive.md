@@ -26,11 +26,12 @@
 
 ## Стандартні breakpoints
 
-Використовуємо стандартні Tailwind v4 breakpoints плюс один санкціонований custom (`xs`):
+Використовуємо стандартні Tailwind v4 breakpoints плюс два санкціоновані custom (`2xs`, `xs`):
 
 | Префікс   | Min-width | Цільові пристрої                                       |
 | --------- | --------- | ------------------------------------------------------ |
-| (default) | 0px       | Малі mobile portrait (iPhone SE / mini, ≤429px)        |
+| (default) | 0px       | Найвужчі mobile portrait (iPhone SE 1, ≤389px)         |
+| `2xs:`    | 390px     | Стандартні mobile portrait (iPhone 12–16, ≥390px)      |
 | `xs:`     | 430px     | Великі mobile portrait (iPhone Pro Max та ширші)       |
 | `sm:`     | 640px     | Mobile landscape, малі планшети                        |
 | `md:`     | 768px     | Tablet portrait (iPad mini, iPad)                      |
@@ -38,10 +39,15 @@
 | `xl:`     | 1280px    | Desktop                                                |
 | `2xl:`    | 1536px    | Великі desktop-монітори                                |
 
-**`xs` (430px)** — єдиний custom breakpoint, заведений у `apps/web/src/shared/styles/themes.css`
+**`xs` (430px)** — custom breakpoint, заведений у `apps/web/src/shared/styles/themes.css`
 (`--breakpoint-xs`). Призначення: тонкий адаптив у межах телефонів, де `sm` (640px) надто
 далеко — коли елемент влазить на ширших телефонах (≥430), але не на вузьких (375). Типовий
 кейс: компактний попап на 375px, що виростає до повного розміру від 430px.
+
+**`2xs` (390px)** — custom breakpoint (`--breakpoint-2xs` у тому ж `themes.css`). Відсікає
+найвужчі екрани (320–389px, iPhone SE 1 / старі Android), де не влазить навіть те, що
+нормально живе на стандартних 390px-телефонах. Типовий кейс: toolbar-кнопка з текстовим
+лейблом, що на найвужчих екранах стає icon-only (`collapseLabel="2xs"` у `UiButton`).
 
 **Інших custom breakpoints не вводити без сильного обґрунтування** — фрагментація шкали
 ускладнює QA. Якщо реально потрібен новий — додавати у `themes.css` через `@theme` і
@@ -162,6 +168,7 @@ apps/web/src/
 - [ ] Перевірено на 320px (iPhone SE 1) — нема horizontal scroll.
 - [ ] Перевірено на 375×667 (iPhone SE 2) — основний flow працює.
 - [ ] Якщо компонент використовує `xs:` — перевірено перемикання на межі 430px (375 vs 430).
+- [ ] Якщо компонент використовує `2xs:` — перевірено перемикання на межі 390px (375 vs 390).
 - [ ] Перевірено на 768×1024 (iPad portrait) — layout масштабується.
 - [ ] Перевірено на 1440×900 (desktop) — layout не "розтягнутий" (max-width контейнери де треба).
 - [ ] Touch targets ≥ 44×44 px на мобільному.

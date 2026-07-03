@@ -160,7 +160,6 @@ const BRANDS = [
     'pravex',
     'kredobank',
     'otp',
-    'ukrsibbank',
     'tas',
     'tascombank',
     'concord',

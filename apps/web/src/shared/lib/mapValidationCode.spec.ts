@@ -21,7 +21,7 @@ describe('mapValidationCode', () => {
 
         it('INVALID_TAX_ID — РНОКПП-specific повідомлення (не змінилося Sprint 7)', () => {
             expect(mapValidationCode('INVALID_TAX_ID')).toBe(
-                'Перевірте РНОКПП: рівно 10 цифр'
+                'У РНОКПП є помилка. Перевірте всі 10 цифр'
             );
         });
 

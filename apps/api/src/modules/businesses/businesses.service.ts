@@ -19,6 +19,8 @@ import {
     RESPONSE_CODE,
     SLUG_AVAILABILITY_STATUS,
     VAT_ALLOWED_TAXATION_SYSTEMS,
+    evaluateClientBusinessCreation,
+    evaluateOwnedBusinessCreation,
     isAccessLevelAtLeast,
     isTaxIdValidForType,
     isTaxationAllowedForType,
@@ -65,11 +67,6 @@ import {
 } from './schemas/business-slug-history.schema';
 import { Business, BusinessDocument } from './schemas/business.schema';
 import { SlugGeneratorService } from './slug-generator.service';
-
-// Sprint 19 — ліміти створення бізнесів (див. `assertWithinBusinessLimit`).
-const FOUNDATIONAL_TYPE_LIMIT = 1; // власні фізособа / ФОП — інваріант
-const SCALE_TYPE_LIMIT_BELOW_BOOKKEEPER = 1; // власні ТОВ / організація до bookkeeper
-const CLIENT_BUSINESS_LIMIT = 10; // клієнтські бізнеси до bookkeeper
 
 // Ліміти рахуються count-ом (per-тип, per-власність) — unique-індекс їх не
 // виразить, тож конкурентний double-submit обходив би перевірку. Створення
@@ -384,14 +381,11 @@ export class BusinessesService {
     }
 
     /**
-     * Sprint 19 — ліміти створення бізнесів. Дві осі:
-     *  - **Клієнтські** (bookkeeper-режим, ownerless): усі типи разом, до
-     *    `CLIENT_LIMIT` на none/brand, без ліміту на bookkeeper.
-     *  - **Власні** (ownerId=userId), per-тип:
-     *    - фізособа / ФОП: завжди максимум 1 (доменний інваріант, не апсел) —
-     *      `BUSINESS_TYPE_LIMIT_REACHED`;
-     *    - ТОВ / організація: 1 на none/brand, без ліміту на bookkeeper —
-     *      `BUSINESS_LIMIT_REQUIRES_PLAN` (апсел).
+     * Sprint 19 — ліміти створення бізнесів. Правила живуть у
+     * `@finly/types` (`evaluate*BusinessCreation`) — той самий модуль
+     * використовує web для попереднього гейтингу type-picker-а на
+     * `/business/new`. Тут лише count + мапінг вердикту в 403-код.
+     * Bookkeeper-рівень short-circuit-иться до count-запиту.
      */
     private async assertWithinBusinessLimit(
         userObjectId: Types.ObjectId,
@@ -405,7 +399,11 @@ export class BusinessesService {
                 ownerId: null,
                 managers: userObjectId,
             });
-            if (clientCount >= CLIENT_BUSINESS_LIMIT) {
+            const verdict = evaluateClientBusinessCreation(
+                clientCount,
+                actorLevel
+            );
+            if (!verdict.allowed) {
                 throw new ForbiddenException({
                     code: RESPONSE_CODE.BUSINESS_LIMIT_REQUIRES_PLAN,
                     message:
@@ -419,20 +417,18 @@ export class BusinessesService {
             ownerId: userObjectId,
             type,
         });
-
-        if (type === 'individual' || type === 'fop') {
-            if (ownedOfType >= FOUNDATIONAL_TYPE_LIMIT) {
+        const verdict = evaluateOwnedBusinessCreation(
+            type,
+            ownedOfType,
+            actorLevel
+        );
+        if (!verdict.allowed) {
+            if (verdict.reason === 'type-limit') {
                 throw new ForbiddenException({
                     code: RESPONSE_CODE.BUSINESS_TYPE_LIMIT_REACHED,
-                    message: `Only ${FOUNDATIONAL_TYPE_LIMIT} business of this type is allowed`,
+                    message: 'Only one business of this type is allowed',
                 });
             }
-            return;
-        }
-
-        // tov / organization
-        if (isAccessLevelAtLeast(actorLevel, 'bookkeeper')) return;
-        if (ownedOfType >= SCALE_TYPE_LIMIT_BELOW_BOOKKEEPER) {
             throw new ForbiddenException({
                 code: RESPONSE_CODE.BUSINESS_LIMIT_REQUIRES_PLAN,
                 message: 'Business limit reached for the current plan',

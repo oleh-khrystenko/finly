@@ -461,15 +461,18 @@ describe('CreateInvoiceForm — required-fields validation', () => {
             fireEvent.click(option);
         });
         // Перемикання у «до дати» авто-заповнює завтра (спільний ValidUntilField).
-        // Очищаємо вручну → draft невалідний → submit заблокований.
+        // Очищаємо вручну → draft невалідний → submit показує помилку
+        // біля поля і не викликає API.
         const dateInput = screen.getByLabelText('Дата у форматі ДД.ММ.РРРР');
         await act(async () => {
             fireEvent.change(dateInput, { target: { value: '' } });
         });
-        const submitBtn = screen.getByRole('button', {
-            name: /Створити рахунок/,
+        await act(async () => {
+            fireEvent.click(
+                screen.getByRole('button', { name: /Створити рахунок/ })
+            );
         });
-        expect(submitBtn).toBeDisabled();
+        expect(await screen.findByText('Оберіть дату')).toBeInTheDocument();
         expect(mockCreateInvoice).not.toHaveBeenCalled();
     });
 
@@ -507,7 +510,7 @@ describe('CreateInvoiceForm — required-fields validation', () => {
         );
     });
 
-    it('purpose-overflow → submit-кнопка disabled', async () => {
+    it('purpose-overflow → submit не викликає API, помилка біля поля', async () => {
         renderForm();
         const purposeTextarea = screen.getByPlaceholderText(/За замовчуванням/);
         const longPurpose = 'a'.repeat(500);
@@ -516,9 +519,14 @@ describe('CreateInvoiceForm — required-fields validation', () => {
                 target: { value: longPurpose },
             });
         });
-        const submitBtn = screen.getByRole('button', {
-            name: /Створити рахунок/,
+        await act(async () => {
+            fireEvent.click(
+                screen.getByRole('button', { name: /Створити рахунок/ })
+            );
         });
-        expect(submitBtn).toBeDisabled();
+        await waitFor(() =>
+            expect(purposeTextarea.getAttribute('aria-invalid')).toBe('true')
+        );
+        expect(mockCreateInvoice).not.toHaveBeenCalled();
     });
 });

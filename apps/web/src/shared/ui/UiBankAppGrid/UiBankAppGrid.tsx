@@ -3,8 +3,8 @@
 import { useSyncExternalStore } from 'react';
 import { ArrowUpRight } from 'lucide-react';
 import {
-    BANK_APP_LAUNCH,
     BANK_LABEL,
+    IOS_HIDDEN_BANKS,
     MVP_BANKS,
     buildBankAppLink,
     type BankCode,
@@ -71,14 +71,14 @@ export default function UiBankAppGrid({
         getServerPlatform
     );
 
-    // На iOS націлити конкретний банк можна лише тим, хто реєструє приватну
-    // схему (privat/mono/abank). У решти тап відкрив би «не той» банк (вибір
-    // системи), тож на iOS їх ховаємо — оплата для них іде загальним НБУ-link
-    // («Мого банку немає у списку» в UiPaymentOptions). Android відкриває
-    // будь-який банк через intent://package=; desktop банк-додатків не має.
+    // На iOS показуємо всі банки, крім явного blacklist-у (IOS_HIDDEN_BANKS —
+    // pumb/sense/raiffeisen). Банк без приватної схеми лишається у списку, але
+    // його тап іде на загальний НБУ-link (buildBankAppLink → null → fallback).
+    // Android відкриває будь-який банк через intent://package=; desktop
+    // банк-додатків не має.
     const visibleBanks =
         platform === 'ios'
-            ? banks.filter((bank) => BANK_APP_LAUNCH[bank].iosScheme !== null)
+            ? banks.filter((bank) => !IOS_HIDDEN_BANKS.includes(bank))
             : banks;
 
     const handleSelect = (bank: BankCode) => {

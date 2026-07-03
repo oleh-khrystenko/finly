@@ -190,10 +190,10 @@ export default function InvoicesSection({
                         size="md"
                         aria-label="Виставити рахунок"
                         IconLeft={<Plus />}
+                        collapseLabel
+                        className="min-h-11"
                     >
-                        <span className="hidden sm:inline">
-                            Виставити рахунок
-                        </span>
+                        Виставити рахунок
                     </UiButton>
                 ) : undefined
             }

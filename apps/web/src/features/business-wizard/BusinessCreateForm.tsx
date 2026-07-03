@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { AxiosError } from 'axios';
 import { useRouter } from 'next/navigation';
 import { Controller, useForm } from 'react-hook-form';
@@ -17,6 +17,7 @@ import {
     businessPaymentPurposeTemplateSchema,
     isTaxationAllowedForType,
     requiresTaxation,
+    type BusinessCreationVerdict,
     type BusinessType,
     type CreateBusinessRequest,
     type TaxationSystem,
@@ -33,7 +34,7 @@ import {
 } from '@/entities/business';
 import { useQrLandingDraftStore } from '@/entities/qr-landing-draft';
 import { createBusiness, getApiMessage } from '@/shared/api';
-import { getZodFieldError } from '@/shared/lib';
+import { focusFirstInvalidField, getZodFieldError } from '@/shared/lib';
 import UiButton from '@/shared/ui/UiButton';
 import UiInput from '@/shared/ui/UiInput';
 import UiRadioCardGroup, {
@@ -90,8 +91,7 @@ const FormSchema = z
             ctx.addIssue({
                 code: z.ZodIssueCode.custom,
                 path: ['name'],
-                message:
-                    nameParse.error.issues[0]?.message ?? 'INVALID_NAME',
+                message: nameParse.error.issues[0]?.message ?? 'INVALID_NAME',
             });
         }
         const taxIdParse = taxIdFieldConfig(data.type).validator.safeParse(
@@ -174,24 +174,73 @@ const NAME_PLACEHOLDERS: Record<BusinessType, string> = {
     organization: '«Ваша організація»',
 };
 
-const TYPE_OPTIONS: ReadonlyArray<UiRadioCardGroupOption<BusinessType>> =
-    BUSINESS_TYPES.map((type) => ({
-        value: type,
-        title: BUSINESS_TYPE_LABEL[type],
-        description: TYPE_DESCRIPTIONS[type],
-    }));
-
 interface Props {
     initialValues?: BusinessCreateFormInitialValues;
     fromLanding?: boolean;
+    /**
+     * Sprint 19 ліміти — per-тип вердикти доступності (обчислені сторінкою
+     * через `evaluateOwnedBusinessCreation` з `@finly/types`, ті самі правила,
+     * що enforce-ить API). Відсутність пропа = все дозволено: graceful degrade
+     * при fail фонового fetch-у списку; сервер лишається фінальним арбітром.
+     */
+    typeVerdicts?: Record<BusinessType, BusinessCreationVerdict>;
+    /**
+     * Блок-пропозиція, що з'являється під type-picker-ом після кліку на
+     * plan-locked картку (`requires-plan`). Приходить зверху ReactNode-ом
+     * (сторінка збирає його з білінг-фічі), бо крос-імпорт
+     * business-wizard → billing заборонений modular-boundaries.
+     */
+    planUpsell?: ReactNode;
 }
 
 export default function BusinessCreateForm({
     initialValues,
     fromLanding = false,
+    typeVerdicts,
+    planUpsell,
 }: Props) {
     const router = useRouter();
     const [submitting, setSubmitting] = useState(false);
+    // Показується після кліку на plan-locked картку (ТОВ/організація понад
+    // ліміт тарифу). Вибір дозволеного типу ховає апсел.
+    const [planUpsellVisible, setPlanUpsellVisible] = useState(false);
+
+    /**
+     * Картки типів з урахуванням лімітів:
+     *  - `type-limit` (вже є фізособа/ФОП) — глухий кут без дії користувача,
+     *    тому картка disabled з причиною на місці;
+     *  - `requires-plan` (ТОВ/організація понад тариф) — точка продажу.
+     *    Картка навмисно виглядає звичайною, без тариф-маркера: клік не
+     *    обирає тип, а розкриває пропозицію (`handleTypeChange` → `planUpsell`).
+     *    Видимий маркер відсіював би людей до взаємодії; миттєва предметна
+     *    відповідь на клік (ціна + оплата) конвертує краще.
+     */
+    const typeOptions = useMemo<
+        ReadonlyArray<UiRadioCardGroupOption<BusinessType>>
+    >(
+        () =>
+            BUSINESS_TYPES.map((type) => {
+                const verdict = typeVerdicts?.[type];
+                if (
+                    verdict &&
+                    !verdict.allowed &&
+                    verdict.reason === 'type-limit'
+                ) {
+                    return {
+                        value: type,
+                        title: BUSINESS_TYPE_LABEL[type],
+                        description: 'У вас вже є такий отримувач',
+                        disabled: true,
+                    };
+                }
+                return {
+                    value: type,
+                    title: BUSINESS_TYPE_LABEL[type],
+                    description: TYPE_DESCRIPTIONS[type],
+                };
+            }),
+        [typeVerdicts]
+    );
 
     // Явний полевий merge замість spread: caller (наприклад, recovery з
     // лендінгу) може передати `name: undefined` / `taxId: undefined` для
@@ -202,6 +251,10 @@ export default function BusinessCreateForm({
     const form = useForm<FormValues>({
         resolver: zodResolver(FormSchema),
         mode: 'onChange',
+        // Вбудований focus RHF вміє лише registered-поля з ref і пропустив би
+        // type/taxationSystem/isVatPayer (setValue-driven). Замість нього —
+        // focusFirstInvalidField у handleSubmit (перше aria-invalid по DOM).
+        shouldFocusError: false,
         defaultValues: {
             type: initialValues?.type,
             name: initialValues?.name ?? '',
@@ -218,6 +271,16 @@ export default function BusinessCreateForm({
     const errors = form.formState.errors;
 
     const handleTypeChange = (newType: BusinessType) => {
+        const verdict = typeVerdicts?.[newType];
+        if (verdict && !verdict.allowed) {
+            // `type-limit`-картки disabled (Headless UI не викликає onChange),
+            // сюди долітає лише `requires-plan`: клік не обирає тип, а
+            // показує апсел під групою.
+            setPlanUpsellVisible(true);
+            return;
+        }
+        setPlanUpsellVisible(false);
+
         const currentTaxId = form.getValues('taxId');
         const currentSystem = form.getValues('taxationSystem');
 
@@ -226,8 +289,7 @@ export default function BusinessCreateForm({
         // Скидаємо taxId, якщо формат не підходить новому типу (10↔8 цифр).
         if (
             currentTaxId &&
-            !taxIdFieldConfig(newType).validator.safeParse(currentTaxId)
-                .success
+            !taxIdFieldConfig(newType).validator.safeParse(currentTaxId).success
         ) {
             form.setValue('taxId', '', { shouldValidate: true });
         }
@@ -321,9 +383,9 @@ export default function BusinessCreateForm({
     const taxIdConfig = type ? taxIdFieldConfig(type) : null;
     const purposeConfig = type ? paymentPurposeTemplateFieldConfig(type) : null;
     const taxationSelectOptions = type
-        ? TAXATION_SYSTEMS.filter((s) =>
-              isTaxationAllowedForType(type, s)
-          ).map((value) => ({ value, label: TAXATION_SYSTEM_LABEL[value] }))
+        ? TAXATION_SYSTEMS.filter((s) => isTaxationAllowedForType(type, s)).map(
+              (value) => ({ value, label: TAXATION_SYSTEM_LABEL[value] })
+          )
         : [];
     const vatApplicable = isVatChoiceApplicable(taxationSystem);
     const vatOptions = vatApplicable
@@ -334,7 +396,7 @@ export default function BusinessCreateForm({
 
     return (
         <form
-            onSubmit={form.handleSubmit(onSubmit)}
+            onSubmit={form.handleSubmit(onSubmit, focusFirstInvalidField)}
             className="space-y-6"
             noValidate
         >
@@ -342,11 +404,14 @@ export default function BusinessCreateForm({
                 <UiRadioCardGroup<BusinessType>
                     label="Тип отримувача"
                     labelSize="md"
-                    options={TYPE_OPTIONS}
+                    options={typeOptions}
                     value={type}
                     onChange={handleTypeChange}
                     columns={{ mobile: 2, desktop: 4 }}
+                    error={getZodFieldError(errors.type)}
                 />
+
+                {planUpsellVisible && planUpsell}
 
                 {type && taxIdConfig && purposeConfig && (
                     <>
@@ -442,7 +507,6 @@ export default function BusinessCreateForm({
                     variant="filled"
                     size="md"
                     loading={submitting}
-                    disabled={!form.formState.isValid}
                 >
                     Створити
                 </UiButton>

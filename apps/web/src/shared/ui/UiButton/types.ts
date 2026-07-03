@@ -12,6 +12,7 @@ export type UiButtonVariant =
     | 'icon-compact'
     | 'link';
 export type UiButtonSize = 'sm' | 'md' | 'lg';
+export type UiButtonCollapseBreakpoint = '2xs' | 'sm';
 
 /**
  * Base props shared by all button variants
@@ -32,6 +33,17 @@ interface BaseProps {
      * на всьому сайті замість swap-у `children` руками у кожному callsite.
      */
     loading?: boolean;
+    /**
+     * Ховає текстовий лейбл на вузьких екранах, лишаючи тільки іконку — для
+     * toolbar-кнопок, що на mobile стають icon-only. `true` еквівалентне `'sm'`
+     * (`hidden sm:inline`); `'2xs'` ховає лейбл лише на найвужчих екранах
+     * <390px (`hidden 2xs:inline`). Клас вішається на **власну** обгортку
+     * лейбла, тож при collapse вона зникає з flex-потоку і `gap-2` не резервує
+     * простір (інакше лишався б несиметричний відступ збоку від іконки).
+     * Обов'язково парний з `aria-label` — коли текст візуально схований,
+     * доступну назву несе саме він.
+     */
+    collapseLabel?: boolean | UiButtonCollapseBreakpoint;
 }
 
 /**

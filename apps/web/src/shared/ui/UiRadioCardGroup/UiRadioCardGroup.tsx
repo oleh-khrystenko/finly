@@ -109,6 +109,7 @@ function UiRadioCardGroup<TValue extends string>(
                 disabled={disabled}
                 aria-labelledby={label ? labelId : undefined}
                 aria-describedby={description ? descriptionId : undefined}
+                aria-invalid={error ? true : undefined}
                 className={composeClasses(
                     'grid gap-2',
                     COLUMN_CLASS_MAP[mobileCols],

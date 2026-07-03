@@ -44,12 +44,12 @@ export function LandingPartner() {
                         </div>
 
                         <div className="flex flex-col items-center md:items-start">
-                            <p
+                            <h2
                                 id="partner-heading"
-                                className="text-muted-foreground text-xs font-medium tracking-widest uppercase"
+                                className="text-muted-foreground text-sm font-medium tracking-widest uppercase"
                             >
                                 Створено разом з бухгалтером-практиком
-                            </p>
+                            </h2>
 
                             <blockquote className="text-foreground mt-4 text-lg leading-relaxed sm:text-xl">
                                 <Quote

@@ -25,3 +25,10 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
         disconnect(): void {}
     };
 }
+
+// jsdom не реалізує scrollIntoView; focusFirstInvalidField (onInvalid-handler
+// create-форм) викликає його у requestAnimationFrame — без stub невалідний
+// submit кидав би async TypeError поза assert-ланцюгом тесту.
+if (typeof Element.prototype.scrollIntoView === 'undefined') {
+    Element.prototype.scrollIntoView = (): void => {};
+}

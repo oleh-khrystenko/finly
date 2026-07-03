@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Plus } from 'lucide-react';
 import { AxiosError } from 'axios';
 import { toast } from 'sonner';
 import {
@@ -28,7 +28,10 @@ import {
     useAuthStore,
     useCanEditSlug,
 } from '@/entities/user';
-import { useBrandSubscribeLabel, startBrandCheckout } from '@/features/billing';
+import {
+    useSubscribeLabel,
+    startSubscriptionCheckout,
+} from '@/features/billing';
 import { BrandSection } from '@/features/brand-logo';
 import { ENV } from '@/shared/config/env';
 import { qrBrandVersion } from '@/shared/lib';
@@ -95,9 +98,11 @@ export default function AccountCabinetPage() {
     const router = useRouter();
     const params = useParams<{ slug: string; accountSlug: string }>();
     const userId = useAuthStore((s) => s.user?.id);
-    const reservation = useAuthStore((s) => s.user?.activeSlugReservation ?? null);
+    const reservation = useAuthStore(
+        (s) => s.user?.activeSlugReservation ?? null
+    );
     const isPaid = useCanEditSlug();
-    const subscribeLabel = useBrandSubscribeLabel();
+    const subscribeLabel = useSubscribeLabel('brand');
     const openDeleteConfirm = useDeleteAccountConfirmStore((s) => s.open);
 
     const [data, setData] = useState<LoadedData | null>(null);
@@ -212,7 +217,8 @@ export default function AccountCabinetPage() {
     });
     const handleSubscribe = useCallback(() => {
         if (!data) return Promise.resolve();
-        return startBrandCheckout(
+        return startSubscriptionCheckout(
+            'brand',
             `/business/${data.business.slug}/account/${data.account.slug}`
         ).catch(() => {
             toast.error('Не вдалося відкрити оплату. Спробуйте ще раз');
@@ -307,25 +313,40 @@ export default function AccountCabinetPage() {
     return (
         <UiPageContainer className="space-y-6 py-10 md:py-14">
             <div className="flex flex-col gap-4">
-                <div className="flex items-center justify-between gap-3">
-                    <UiBreadcrumb
-                        items={[
-                            { label: 'Усі отримувачі', href: '/business' },
-                            {
-                                label: 'Отримувач',
-                                href: `/business/${business.slug}`,
-                            },
-                            { label: 'Реквізити' },
-                        ]}
-                    />
-                    {userId && (
-                        <OwnershipBadge isOwner={business.ownerId === userId} />
-                    )}
-                </div>
+                {/* Лінія 1 — хлібні крихти, наодинці */}
+                <UiBreadcrumb
+                    items={[
+                        { label: 'Усі отримувачі', href: '/business' },
+                        {
+                            label: 'Отримувач',
+                            href: `/business/${business.slug}`,
+                        },
+                        { label: 'Реквізити' },
+                    ]}
+                />
+                {/* Лінія 2 — назва з inline-edit, наодинці */}
                 <EditableAccountName
                     account={account}
                     onSave={(name) => onSaveAccount({ name })}
                 />
+                {/* Лінія 3 — метадані власності + дія створення */}
+                <div className="flex items-center gap-3">
+                    {userId && (
+                        <OwnershipBadge isOwner={business.ownerId === userId} />
+                    )}
+                    <UiButton
+                        as="link"
+                        href={`/business/${business.slug}/account/new`}
+                        variant="outline"
+                        size="md"
+                        aria-label="Додати реквізити"
+                        IconLeft={<Plus />}
+                        collapseLabel="2xs"
+                        className="ml-auto min-h-11 shrink-0"
+                    >
+                        Додати реквізити
+                    </UiButton>
+                </div>
             </div>
 
             <PublicSection
@@ -349,9 +370,7 @@ export default function AccountCabinetPage() {
                 }
                 onSubscribe={handleSubscribe}
                 subscribePriceLabel={subscribeLabel}
-                initialReservation={
-                    !isPaid && desiredSlug ? reservation : null
-                }
+                initialReservation={!isPaid && desiredSlug ? reservation : null}
                 autoStartSlugEdit={autoEditSlug}
             />
             <BrandSection

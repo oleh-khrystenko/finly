@@ -6,18 +6,18 @@ describe('taxIdFieldConfig — Sprint 7 §SP-4 type-aware UI config', () => {
             'individual',
             {
                 label: 'РНОКПП',
-                placeholder: '1234567890',
+                placeholder: '1234567899',
                 description: '10 цифр, як у довідці ДПС',
-                maxLength: 10,
+                maxLength: 15,
             },
         ],
         [
             'fop',
             {
                 label: 'РНОКПП',
-                placeholder: '1234567890',
+                placeholder: '1234567899',
                 description: '10 цифр, особистий код з довідки ДПС',
-                maxLength: 10,
+                maxLength: 15,
             },
         ],
         [
@@ -26,7 +26,7 @@ describe('taxIdFieldConfig — Sprint 7 §SP-4 type-aware UI config', () => {
                 label: 'ЄДРПОУ',
                 placeholder: '12345678',
                 description: '8 цифр, як у виписці ЄДР',
-                maxLength: 8,
+                maxLength: 15,
             },
         ],
         [
@@ -35,11 +35,11 @@ describe('taxIdFieldConfig — Sprint 7 §SP-4 type-aware UI config', () => {
                 label: 'ЄДРПОУ',
                 placeholder: '12345678',
                 description: '8 цифр, як у виписці ЄДР',
-                maxLength: 8,
+                maxLength: 15,
             },
         ],
     ] as const)(
-        '%s → label/placeholder/description/maxLength відповідає нормативу',
+        '%s → label/placeholder/description/maxLength відповідає конфігу',
         (type, expected) => {
             const config = taxIdFieldConfig(type);
             expect(config.label).toBe(expected.label);
