@@ -33,7 +33,7 @@ import {
 } from '@/entities/business';
 import { useQrLandingDraftStore } from '@/entities/qr-landing-draft';
 import { createBusiness, getApiMessage } from '@/shared/api';
-import { getZodFieldError } from '@/shared/lib';
+import { focusFirstInvalidField, getZodFieldError } from '@/shared/lib';
 import UiButton from '@/shared/ui/UiButton';
 import UiInput from '@/shared/ui/UiInput';
 import UiRadioCardGroup, {
@@ -202,6 +202,10 @@ export default function BusinessCreateForm({
     const form = useForm<FormValues>({
         resolver: zodResolver(FormSchema),
         mode: 'onChange',
+        // Вбудований focus RHF вміє лише registered-поля з ref і пропустив би
+        // type/taxationSystem/isVatPayer (setValue-driven). Замість нього —
+        // focusFirstInvalidField у handleSubmit (перше aria-invalid по DOM).
+        shouldFocusError: false,
         defaultValues: {
             type: initialValues?.type,
             name: initialValues?.name ?? '',
@@ -334,7 +338,7 @@ export default function BusinessCreateForm({
 
     return (
         <form
-            onSubmit={form.handleSubmit(onSubmit)}
+            onSubmit={form.handleSubmit(onSubmit, focusFirstInvalidField)}
             className="space-y-6"
             noValidate
         >
@@ -346,6 +350,7 @@ export default function BusinessCreateForm({
                     value={type}
                     onChange={handleTypeChange}
                     columns={{ mobile: 2, desktop: 4 }}
+                    error={getZodFieldError(errors.type)}
                 />
 
                 {type && taxIdConfig && purposeConfig && (
@@ -442,7 +447,6 @@ export default function BusinessCreateForm({
                     variant="filled"
                     size="md"
                     loading={submitting}
-                    disabled={!form.formState.isValid}
                 >
                     Створити
                 </UiButton>

@@ -75,15 +75,15 @@ describe('QrLandingForm', () => {
         localStorage.clear();
     });
 
-    it('initial render — type badge "Фіз особа" видимий, кнопка disabled', () => {
+    it('initial render — type badge "Фіз особа" видимий, кнопка активна', () => {
         render(<FormHarness />);
         expect(screen.getByText('Фіз особа')).toBeInTheDocument();
         expect(
             screen.getByRole('button', { name: /Створити QR/ })
-        ).toBeDisabled();
+        ).not.toBeDisabled();
     });
 
-    it('блокує submit коли поля невалідні (RHF mode:onChange + disabled={!isValid})', async () => {
+    it('невалідні поля → submit не викликає API, помилки біля полів', async () => {
         render(<FormHarness />);
 
         fireEvent.input(screen.getByLabelText(/IBAN/), {
@@ -99,11 +99,14 @@ describe('QrLandingForm', () => {
             target: { value: 'Тест' },
         });
 
+        fireEvent.click(screen.getByRole('button', { name: /Створити QR/ }));
+
         await waitFor(() =>
             expect(
-                screen.getByRole('button', { name: /Створити QR/ })
-            ).toBeDisabled()
+                screen.getByLabelText(/IBAN/).getAttribute('aria-invalid')
+            ).toBe('true')
         );
+        expect(mockFetchQrPreview).not.toHaveBeenCalled();
     });
 
     it('валідні дані → submit викликає fetchQrPreview і setResult у store', async () => {

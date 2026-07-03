@@ -35,9 +35,9 @@ interface QrLandingFormProps {
  *     (placeholder-free копія, специфічна для anon QR-preview throttle 10/min;
  *     `errors.generic.rate_limit_exceeded` має `{minutes}`-placeholder, який
  *     без vars залишався б literal у toast)
- *   - 400 → PAYLOAD_TOO_LARGE (на `mode: 'onChange'` + `disabled={!isValid}`
- *     RHF блокує submit при field-помилках, тож 400 на submit — практично
- *     завжди overall-payload-size overflow з backend builder-а)
+ *   - 400 → PAYLOAD_TOO_LARGE (`handleSubmit` не пускає onSubmit при
+ *     field-помилках, тож 400 на submit — практично завжди
+ *     overall-payload-size overflow з backend builder-а)
  *   - else → INTERNAL_ERROR (generic crash UA)
  *
  * Якщо у Sprint 9+ будуть нові backend-error-codes для anon-flow, треба
@@ -49,7 +49,7 @@ export function QrLandingForm({ form }: QrLandingFormProps) {
     const {
         register,
         handleSubmit,
-        formState: { errors, isValid, isSubmitting },
+        formState: { errors, isSubmitting },
     } = form;
 
     // IBAN усюди показується групами по 4 з пробілами — нормалізуємо на вводі,
@@ -135,7 +135,7 @@ export function QrLandingForm({ form }: QrLandingFormProps) {
                     variant="filled"
                     size="lg"
                     className="w-full"
-                    disabled={!isValid || isSubmitting}
+                    disabled={isSubmitting}
                 >
                     {isSubmitting ? 'Створюємо QR...' : 'Створити QR'}
                 </UiButton>

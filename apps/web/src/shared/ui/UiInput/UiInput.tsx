@@ -100,7 +100,7 @@ const UiInput = forwardRef<HTMLInputElement, UiInputProps>((props, ref) => {
                     ref={ref}
                     disabled={disabled}
                     required={required}
-                    aria-invalid={error ? true : undefined}
+                    aria-invalid={error ? true : inputProps['aria-invalid']}
                     aria-describedby={describedBy}
                     className="placeholder:text-muted-foreground w-full bg-transparent outline-none disabled:cursor-not-allowed"
                 />

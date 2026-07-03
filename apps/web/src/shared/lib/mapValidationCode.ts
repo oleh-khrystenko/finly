@@ -21,6 +21,7 @@ const VALIDATION_MESSAGES: Record<string, string> = {
     // --- Базові поля користувача ---
     INVALID_EMAIL: 'Введіть коректну електронну адресу',
     INVALID_PASSWORD_TOO_SHORT: 'Пароль повинен містити щонайменше 8 символів',
+    INVALID_CURRENT_PASSWORD_REQUIRED: 'Введіть поточний пароль',
 
     // --- Universal name (rare; nameSchema без префіксу) ---
     INVALID_NAME_TOO_SHORT: 'Назва має містити щонайменше 2 символи',

@@ -116,6 +116,7 @@ export default function ValidUntilField({
                                 inputMode="numeric"
                                 autoComplete="off"
                                 aria-label="Дата у форматі ДД.ММ.РРРР"
+                                aria-invalid={fieldError ? true : undefined}
                                 // Червона рамка при помилці без inline-message
                                 // (message — окремим рядком нижче). className
                                 // композиться останнім, тож перекриває borderIdle.

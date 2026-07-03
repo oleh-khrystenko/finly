@@ -8,6 +8,7 @@ export { isValidRedirect, saveRedirect, consumeRedirect } from './redirect';
 export { getTimezone } from './timezone';
 export { mapValidationCode } from './mapValidationCode';
 export { getZodFieldError } from './getZodFieldError';
+export { focusFirstInvalidField } from './focusFirstInvalidField';
 export { INTL_LOCALE, formatLocalDate, pluralizeUa } from './intl';
 export { authEvents, type AuthEvent } from './authEvents';
 export { kyivEndOfDayInstant, formatKyivDate } from './kyivTz';
