@@ -58,9 +58,28 @@ export function isValidIndividualTaxId(value: string): boolean {
     return expected === actual;
 }
 
-export const individualTaxIdZod = z
-    .string()
-    .refine(isValidIndividualTaxId, { message: 'INVALID_TAX_ID' });
+/**
+ * Надлишок довжини — окремий код: інпути дозволяють ввести більше за
+ * нормативну довжину (видимий overflow чесніший за silent-обрізання
+ * жорстким `maxLength`-ом, особливо при вставці), тож «забагато цифр» —
+ * окремий user-facing failure-mode, і generic «у номері помилка» для
+ * нього збивав би з пантелику.
+ */
+export const individualTaxIdZod = z.string().superRefine((value, ctx) => {
+    if (value.length > IPN_LENGTH) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'INVALID_TAX_ID_TOO_LONG',
+        });
+        return;
+    }
+    if (!isValidIndividualTaxId(value)) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'INVALID_TAX_ID',
+        });
+    }
+});
 
 export type IndividualTaxId = z.infer<typeof individualTaxIdZod>;
 
@@ -85,9 +104,22 @@ export type IndividualTaxId = z.infer<typeof individualTaxIdZod>;
  * мати помилку тільки коли writer ігнорує warning, що uncommon).
  */
 const EDRPOU_PATTERN = /^\d{8}$/;
+const EDRPOU_LENGTH = 8;
 
-export const legalEntityTaxIdZod = z.string().regex(EDRPOU_PATTERN, {
-    message: 'INVALID_LEGAL_TAX_ID',
+export const legalEntityTaxIdZod = z.string().superRefine((value, ctx) => {
+    if (value.length > EDRPOU_LENGTH) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'INVALID_LEGAL_TAX_ID_TOO_LONG',
+        });
+        return;
+    }
+    if (!EDRPOU_PATTERN.test(value)) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'INVALID_LEGAL_TAX_ID',
+        });
+    }
 });
 
 export type LegalEntityTaxId = z.infer<typeof legalEntityTaxIdZod>;

@@ -3,6 +3,7 @@
 import { toast } from 'sonner';
 import { normalizeIban, type QrPreviewInput } from '@finly/types';
 
+import { TAX_ID_INPUT_MAX_LENGTH } from '@/entities/business';
 import { useQrLandingDraftStore } from '@/entities/qr-landing-draft';
 import { getApiMessage } from '@/shared/api/mapApiCode';
 import { PublicApiError } from '@/shared/api/client';
@@ -111,10 +112,10 @@ export function QrLandingForm({ form }: QrLandingFormProps) {
 
             <UiInput
                 label="РНОКПП"
-                placeholder="1234567890"
+                placeholder="1234567899"
                 inputMode="numeric"
                 pattern="[0-9]*"
-                maxLength={10}
+                maxLength={TAX_ID_INPUT_MAX_LENGTH}
                 autoComplete="off"
                 {...register('taxId')}
                 error={getZodFieldError(errors.taxId)}

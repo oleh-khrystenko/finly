@@ -41,7 +41,7 @@ const VALID_RNOKPP = '1234567899';
 function FormHarness(props: { defaultValues?: Partial<QrPreviewInput> }) {
     const form = useForm<QrPreviewInput>({
         resolver: zodResolver(QrPreviewInputSchema),
-        mode: 'onChange',
+        mode: 'onTouched',
         defaultValues: {
             receiverName: props.defaultValues?.receiverName ?? '',
             iban: props.defaultValues?.iban ?? '',

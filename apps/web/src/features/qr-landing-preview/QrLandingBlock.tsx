@@ -88,9 +88,12 @@ function HydratedContent() {
     const setFormData = useQrLandingDraftStore((s) => s.setFormData);
     const invalidateResult = useQrLandingDraftStore((s) => s.invalidateResult);
 
+    // `onTouched` — помилка з'являється після виходу з поля (або на submit),
+    // не з першого символу набору: РНОКПП/IBAN невалідні до останньої цифри,
+    // «крик» під час введення виглядав як зламана валідація.
     const form = useForm<QrPreviewInput>({
         resolver: zodResolver(QrPreviewInputSchema),
-        mode: 'onChange',
+        mode: 'onTouched',
         defaultValues: {
             receiverName: persistedFormData.receiverName ?? '',
             iban: persistedFormData.iban ?? '',

@@ -1,7 +1,6 @@
 import {
     individualTaxIdZod,
     legalEntityTaxIdZod,
-    taxIdLengthFor,
     type BusinessType,
 } from '@finly/types';
 
@@ -28,11 +27,15 @@ import {
  * `BusinessType` без оновлення цього мапінгу дає compile-error через
  * `Record<BusinessType, ...>` exhaustiveness (fail-fast convention).
  *
- * **`maxLength` обчислюється через `taxIdLengthFor()` з `@finly/types`**, не
- * захардкоджується другим Record-ом — single source of truth для довжини
- * лежить у shared types, факторі тут лише агрегує label/placeholder/validator
- * у єдиний UI-config.
+ * **`maxLength` — фізичний cap інпута, НЕ нормативна довжина коду.**
+ * Жорсткий `maxLength` на нормативній довжині (10/8) мовчки обрізав би
+ * зайві символи (особливо при вставці) — користувач не розуміє, чому
+ * «не вводиться». Cap із запасом (15) + окремий validation-код
+ * `INVALID_*_TOO_LONG` роблять надлишок видимим і поясненим.
  */
+
+/** Фізичний `<input maxLength>` для полів коду одержувача (з запасом). */
+export const TAX_ID_INPUT_MAX_LENGTH = 15;
 
 /**
  * Union конкретних Zod-типів двох taxId-валідаторів. Використовуємо саме
@@ -62,28 +65,25 @@ export interface TaxIdFieldConfig {
      * `legalEntityTaxIdZod` для tov / organization (8 цифр без checksum).
      */
     validator: TaxIdValidator;
-    /** `<input maxLength>` — `taxIdLengthFor(type)` (8 АБО 10 за нормативом). */
-    maxLength: 8 | 10;
+    /** Фізичний `<input maxLength>` — `TAX_ID_INPUT_MAX_LENGTH`, не норматив. */
+    maxLength: number;
 }
 
-/**
- * Static-частина мапінгу: label / placeholder / validator. `maxLength`
- * НЕ зберігається тут, бо це дублювало б `taxIdLengthFor()` з `@finly/types`
- * — джерело правди для довжини нормативного коду живе саме там
- * (`packages/types/src/enums/business-type.ts`). Factory нижче агрегує.
- */
 type TaxIdFieldStatic = Omit<TaxIdFieldConfig, 'maxLength'>;
 
 const STATIC_CONFIG_BY_TYPE: Record<BusinessType, TaxIdFieldStatic> = {
+    // Плейсхолдер — checksum-валідний приклад (десята цифра РНОКПП —
+    // контрольна за алгоритмом ДПС): «1234567890» не проходить перевірку,
+    // і введене «як у прикладі» значення миттєво червоніло б.
     individual: {
         label: 'РНОКПП',
-        placeholder: '1234567890',
+        placeholder: '1234567899',
         description: '10 цифр, як у довідці ДПС',
         validator: individualTaxIdZod,
     },
     fop: {
         label: 'РНОКПП',
-        placeholder: '1234567890',
+        placeholder: '1234567899',
         description: '10 цифр, особистий код з довідки ДПС',
         validator: individualTaxIdZod,
     },
@@ -103,5 +103,5 @@ const STATIC_CONFIG_BY_TYPE: Record<BusinessType, TaxIdFieldStatic> = {
 
 export const taxIdFieldConfig = (type: BusinessType): TaxIdFieldConfig => ({
     ...STATIC_CONFIG_BY_TYPE[type],
-    maxLength: taxIdLengthFor(type),
+    maxLength: TAX_ID_INPUT_MAX_LENGTH,
 });
