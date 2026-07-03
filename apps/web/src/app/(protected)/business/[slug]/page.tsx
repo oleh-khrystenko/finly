@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
     BUSINESS_TYPE_LABEL,
@@ -216,17 +216,14 @@ export default function BusinessSlugPage() {
         <UiPageContainer className="space-y-6 py-10 md:py-14">
             {/* Top toolbar: breadcrumb + identity heading. */}
             <div className="flex flex-col gap-4">
-                <div className="flex items-center justify-between gap-3">
-                    <UiBreadcrumb
-                        items={[
-                            { label: 'Усі отримувачі', href: '/business' },
-                            { label: 'Отримувач' },
-                        ]}
-                    />
-                    {userId && (
-                        <OwnershipBadge isOwner={business.ownerId === userId} />
-                    )}
-                </div>
+                {/* Лінія 1 — хлібні крихти, наодинці */}
+                <UiBreadcrumb
+                    items={[
+                        { label: 'Усі отримувачі', href: '/business' },
+                        { label: 'Отримувач' },
+                    ]}
+                />
+                {/* Лінія 2 — тип + назва з inline-edit, наодинці */}
                 <div className="flex min-w-0 flex-col gap-1">
                     <p className="text-muted-foreground text-xl font-semibold tracking-wide uppercase">
                         {typeLabel}
@@ -235,6 +232,24 @@ export default function BusinessSlugPage() {
                         name={business.name}
                         onSave={(name) => handlePatch({ name })}
                     />
+                </div>
+                {/* Лінія 3 — метадані власності + дія створення */}
+                <div className="flex items-center gap-3">
+                    {userId && (
+                        <OwnershipBadge isOwner={business.ownerId === userId} />
+                    )}
+                    <UiButton
+                        as="link"
+                        href="/business/new"
+                        variant="outline"
+                        size="md"
+                        aria-label="Додати отримувача"
+                        IconLeft={<Plus />}
+                        collapseLabel="2xs"
+                        className="ml-auto min-h-11 shrink-0"
+                    >
+                        Додати отримувача
+                    </UiButton>
                 </div>
             </div>
 

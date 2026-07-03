@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Plus } from 'lucide-react';
 import { AxiosError } from 'axios';
 import { toast } from 'sonner';
 import {
@@ -307,25 +307,40 @@ export default function AccountCabinetPage() {
     return (
         <UiPageContainer className="space-y-6 py-10 md:py-14">
             <div className="flex flex-col gap-4">
-                <div className="flex items-center justify-between gap-3">
-                    <UiBreadcrumb
-                        items={[
-                            { label: 'Усі отримувачі', href: '/business' },
-                            {
-                                label: 'Отримувач',
-                                href: `/business/${business.slug}`,
-                            },
-                            { label: 'Реквізити' },
-                        ]}
-                    />
-                    {userId && (
-                        <OwnershipBadge isOwner={business.ownerId === userId} />
-                    )}
-                </div>
+                {/* Лінія 1 — хлібні крихти, наодинці */}
+                <UiBreadcrumb
+                    items={[
+                        { label: 'Усі отримувачі', href: '/business' },
+                        {
+                            label: 'Отримувач',
+                            href: `/business/${business.slug}`,
+                        },
+                        { label: 'Реквізити' },
+                    ]}
+                />
+                {/* Лінія 2 — назва з inline-edit, наодинці */}
                 <EditableAccountName
                     account={account}
                     onSave={(name) => onSaveAccount({ name })}
                 />
+                {/* Лінія 3 — метадані власності + дія створення */}
+                <div className="flex items-center gap-3">
+                    {userId && (
+                        <OwnershipBadge isOwner={business.ownerId === userId} />
+                    )}
+                    <UiButton
+                        as="link"
+                        href={`/business/${business.slug}/account/new`}
+                        variant="outline"
+                        size="md"
+                        aria-label="Додати реквізити"
+                        IconLeft={<Plus />}
+                        collapseLabel="2xs"
+                        className="ml-auto min-h-11 shrink-0"
+                    >
+                        Додати реквізити
+                    </UiButton>
+                </div>
             </div>
 
             <PublicSection

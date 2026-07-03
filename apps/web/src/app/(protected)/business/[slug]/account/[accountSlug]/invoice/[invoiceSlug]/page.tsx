@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import { AxiosError } from 'axios';
 import { toast } from 'sonner';
 import {
@@ -320,28 +320,43 @@ export default function InvoiceCabinetPage() {
     return (
         <UiPageContainer className="space-y-6 py-8 md:py-12">
             <div className="flex flex-col gap-4">
-                <div className="flex items-center justify-between gap-3">
-                    <UiBreadcrumb
-                        items={[
-                            { label: 'Усі отримувачі', href: '/business' },
-                            {
-                                label: 'Отримувач',
-                                href: `/business/${business.slug}`,
-                            },
-                            {
-                                label: 'Реквізити',
-                                href: `/business/${business.slug}/account/${accountSlug}`,
-                            },
-                            { label: 'Рахунок' },
-                        ]}
-                    />
-                    {userId && (
-                        <OwnershipBadge isOwner={business.ownerId === userId} />
-                    )}
-                </div>
+                {/* Лінія 1 — хлібні крихти, наодинці */}
+                <UiBreadcrumb
+                    items={[
+                        { label: 'Усі отримувачі', href: '/business' },
+                        {
+                            label: 'Отримувач',
+                            href: `/business/${business.slug}`,
+                        },
+                        {
+                            label: 'Реквізити',
+                            href: `/business/${business.slug}/account/${accountSlug}`,
+                        },
+                        { label: 'Рахунок' },
+                    ]}
+                />
+                {/* Лінія 2 — slug-заголовок, наодинці */}
                 <h1 className="text-foreground min-w-0 font-mono text-3xl font-bold tracking-tight break-all md:text-4xl">
                     {invoice.slug}
                 </h1>
+                {/* Лінія 3 — метадані власності + дія створення */}
+                <div className="flex items-center gap-3">
+                    {userId && (
+                        <OwnershipBadge isOwner={business.ownerId === userId} />
+                    )}
+                    <UiButton
+                        as="link"
+                        href={`/business/${business.slug}/account/${accountSlug}/invoice/new`}
+                        variant="outline"
+                        size="md"
+                        aria-label="Виставити рахунок"
+                        IconLeft={<Plus />}
+                        collapseLabel="2xs"
+                        className="ml-auto min-h-11 shrink-0"
+                    >
+                        Виставити рахунок
+                    </UiButton>
+                </div>
             </div>
 
             <div className="space-y-4">

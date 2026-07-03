@@ -5,7 +5,12 @@ import { ReactNode, Ref, forwardRef } from 'react';
 import { composeClasses } from '@/shared/lib';
 import UiSpinner from '@/shared/ui/UiSpinner';
 import type { UiSpinnerSize } from '@/shared/ui/UiSpinner';
-import type { UiButtonProps, UiButtonSize, UiButtonVariant } from './types';
+import type {
+    UiButtonCollapseBreakpoint,
+    UiButtonProps,
+    UiButtonSize,
+    UiButtonVariant,
+} from './types';
 
 /**
  * CSS classes to control icon size via container.
@@ -83,12 +88,18 @@ const spinnerSizeForButton: Record<UiButtonSize, UiSpinnerSize> = {
     lg: 'md',
 };
 
+// Статична мапа — Tailwind JIT не бачить динамічно склеєних класів.
+const collapseLabelStyles: Record<UiButtonCollapseBreakpoint, string> = {
+    '2xs': 'hidden 2xs:inline',
+    sm: 'hidden sm:inline',
+};
+
 interface RenderContentProps {
     IconLeft?: ReactNode;
     IconRight?: ReactNode;
     children?: ReactNode;
     size: UiButtonSize;
-    collapseLabel: boolean;
+    collapseLabel: boolean | UiButtonCollapseBreakpoint;
 }
 
 const renderContent = ({
@@ -107,7 +118,15 @@ const renderContent = ({
                 </span>
             )}
             {children && (
-                <span className={collapseLabel ? 'hidden sm:inline' : undefined}>
+                <span
+                    className={
+                        collapseLabel
+                            ? collapseLabelStyles[
+                                  collapseLabel === true ? 'sm' : collapseLabel
+                              ]
+                            : undefined
+                    }
+                >
                     {children}
                 </span>
             )}
