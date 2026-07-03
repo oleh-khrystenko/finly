@@ -1,8 +1,15 @@
 import { AxiosError } from 'axios';
 import { toast } from 'sonner';
-import type { LandingDraft, QrPreviewInput } from '@finly/types';
+import {
+    RESPONSE_CODE,
+    normalizeIban,
+    type LandingDraft,
+    type QrPreviewInput,
+} from '@finly/types';
 
 import type { ClaimIntent } from '@/entities/qr-landing-draft';
+import { listAccounts } from '@/shared/api/accounts';
+import { listBusinesses } from '@/shared/api/businesses';
 import { getApiMessage } from '@/shared/api/mapApiCode';
 
 import { createAccountFromDraft, createBusinessFromDraft } from './api';
@@ -63,9 +70,16 @@ export async function runClaimChain(
         );
         businessSlug = business.slug;
     } catch (err) {
+        const code = extractAxiosCode(err);
+        if (
+            code === RESPONSE_CODE.BUSINESS_TYPE_LIMIT_REACHED &&
+            (await redirectDraftIntoExistingIndividual(draft, ctx))
+        ) {
+            return;
+        }
         ctx.setFormData(draft);
         ctx.setIntent('claim-failed-business');
-        toast.error(getApiMessage(extractAxiosCode(err), 'businesses'));
+        toast.error(getApiMessage(code, 'businesses'));
         ctx.router.replace('/business/new?from=landing');
         return;
     }
@@ -82,9 +96,7 @@ export async function runClaimChain(
         ctx.onSuccessFormReset?.();
         ctx.clearAll();
         toast.success('Отримувача і реквізити збережено');
-        ctx.router.replace(
-            `/business/${businessSlug}/account/${account.slug}`
-        );
+        ctx.router.replace(`/business/${businessSlug}/account/${account.slug}`);
     } catch (err) {
         ctx.setFormData(draft);
         ctx.setIntent('claim-failed-account');
@@ -92,6 +104,60 @@ export async function runClaimChain(
         ctx.router.replace(
             `/business/${businessSlug}/account/new?from=landing`
         );
+    }
+}
+
+/**
+ * POST1 впав на `BUSINESS_TYPE_LIMIT_REACHED` — не помилка користувача, а
+ * зіткнення з доменним інваріантом «фізособа лише одна». Цінність чернетки
+ * для такого користувача — реквізити (IBAN), не новий отримувач, тож
+ * замість глухого failure-path ведемо чернетку у наявну фізособу:
+ *
+ *  - РНОКПП чернетки збігається з наявним і IBAN уже збережений →
+ *    «вже збережено» + відкриваємо сторінку цих реквізитів;
+ *  - збігається, IBAN новий → `account/new?from=landing` з prefill IBAN
+ *    (готовий recovery-маршрут POST2; intent той самий
+ *    `claim-failed-account`);
+ *  - РНОКПП інший (QR генерувався для іншої людини) → `false`, generic
+ *    failure-path: зливати чужі реквізити у власну фізособу не можна.
+ *
+ * Збій фонових fetch-ів → `false` (deliberate degrade): розумний роутинг —
+ * зручність, а не enforcement; generic-шлях лишається робочим.
+ */
+async function redirectDraftIntoExistingIndividual(
+    draft: LandingDraft,
+    ctx: ClaimChainContext
+): Promise<boolean> {
+    try {
+        const owned = await listBusinesses('own');
+        const existing = owned.find((b) => b.type === 'individual');
+        if (!existing || existing.taxId !== draft.taxId) return false;
+
+        const accounts = await listAccounts(existing.slug);
+        const saved = accounts.find(
+            (a) => normalizeIban(a.iban) === normalizeIban(draft.iban)
+        );
+        if (saved) {
+            ctx.onSuccessFormReset?.();
+            ctx.clearAll();
+            toast.success('Ці реквізити вже збережені у кабінеті');
+            ctx.router.replace(
+                `/business/${existing.slug}/account/${saved.slug}`
+            );
+            return true;
+        }
+
+        ctx.setFormData(draft);
+        ctx.setIntent('claim-failed-account');
+        toast.info(
+            `У вас вже є отримувач «${existing.name}». Додайте ці реквізити до нього`
+        );
+        ctx.router.replace(
+            `/business/${existing.slug}/account/new?from=landing`
+        );
+        return true;
+    } catch {
+        return false;
     }
 }
 
