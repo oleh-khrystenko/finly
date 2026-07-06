@@ -260,6 +260,32 @@ BusinessSchema.index({ slugLower: 1 }, { unique: true });
 BusinessSchema.index({ ownerId: 1 }, { sparse: true });
 BusinessSchema.index({ managers: 1 });
 
+// Унікальність `taxId` у межах користувача, per-type. Два partial-індекси, бо
+// scope власності подвійний і в одному ключі не виражається:
+//  - owned: `(ownerId, taxId, type)`, тільки документи з ObjectId-власником;
+//  - клієнтські бухгалтера: `(managers, taxId, type)` (multikey — uniqueness
+//    per-елемент масиву), тільки `ownerId: null`-документи.
+// Глобальної унікальності НЕМАЄ навмисно: різні користувачі легітимно ведуть
+// той самий реальний бізнес (ФОП сам + його бухгалтер), а верифікації
+// власності коду не існує — глобальний індекс дозволив би squatting чужого
+// ЄДРПОУ. `type` у ключі дозволяє пару individual+fop з одним РНОКПП (той
+// самий номер однієї людини). Primary-check — service-layer (create під
+// per-user локом, PATCH з pre-read); індекси закривають race-window.
+BusinessSchema.index(
+    { ownerId: 1, taxId: 1, type: 1 },
+    {
+        unique: true,
+        partialFilterExpression: { ownerId: { $type: 'objectId' } },
+    }
+);
+BusinessSchema.index(
+    { managers: 1, taxId: 1, type: 1 },
+    {
+        unique: true,
+        partialFilterExpression: { ownerId: { $type: 'null' } },
+    }
+);
+
 // Sprint 21 — cron-чистка orphan pending-логотипів неоплачених шукає бізнеси з
 // `brand.pending.uploadedAt` старішим за поріг. Sparse: переважна більшість
 // бізнесів без pending-бренду взагалі не потрапляють в index.

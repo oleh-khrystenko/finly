@@ -303,6 +303,20 @@ export class BusinessesService {
             actorLevel
         );
 
+        // Дубль `(taxId, type)` у межах користувача. Після limit-check-у:
+        // BUSINESS_TYPE_LIMIT_REACHED має пріоритет (на ньому висить merge
+        // landing-чернетки у наявну фізособу), дубль-код не повинен його
+        // перехоплювати. Pre-check під тим самим per-user локом — race
+        // з конкурентним create того ж користувача виключений; крос-flow
+        // race (PATCH taxId) закриває partial-unique індекс (11000 нижче).
+        await this.assertTaxIdAvailable(
+            ownership.ownerId
+                ? { ownerId: ownership.ownerId }
+                : { ownerId: null, managers: { $in: ownership.managers } },
+            dto.type,
+            dto.taxId
+        );
+
         const slug = await this.slugGenerator.generateRandomSlug();
 
         // Sprint 7 §SP-3 — discriminated-union variants `individual` /
@@ -347,6 +361,18 @@ export class BusinessesService {
                     if (existing) {
                         return existing;
                     }
+                }
+                // Race-window між pre-check-ом дубля taxId і insert-ом:
+                // create серіалізований локом лише проти create, конкурентний
+                // PATCH `taxId` іншого бізнесу міг зайняти пару після
+                // перевірки. Partial-unique `(ownerId|managers, taxId, type)`
+                // блокує insert — той самий 409, що й у pre-check.
+                if (keyPattern.taxId === 1) {
+                    throw new ConflictException({
+                        code: RESPONSE_CODE.BUSINESS_TAX_ID_DUPLICATE,
+                        message:
+                            'Business with this tax id already exists for the user',
+                    });
                 }
                 // Sprint 3 — race condition: SlugGenerator щойно перевірив
                 // `slugLower` як вільний, але паралельний create зайняв його
@@ -432,6 +458,36 @@ export class BusinessesService {
             throw new ForbiddenException({
                 code: RESPONSE_CODE.BUSINESS_LIMIT_REQUIRES_PLAN,
                 message: 'Business limit reached for the current plan',
+            });
+        }
+    }
+
+    /**
+     * Дубль-перевірка `(scope власності, taxId, type)`. Scope — owned
+     * (`ownerId`) або клієнтські бухгалтера (`ownerId: null` + перетин
+     * `managers`); глобальної перевірки навмисно немає (той самий реальний
+     * бізнес легітимно живе у ФОП і його бухгалтера). `type` у ключі —
+     * пара individual+fop з одним РНОКПП валідна (один номер однієї людини).
+     * `excludeId` — self-виключення для PATCH. Primary-check; race-window
+     * до write закривають partial-unique індекси на схемі.
+     */
+    private async assertTaxIdAvailable(
+        scopeFilter: FilterQuery<BusinessDocument>,
+        type: BusinessType,
+        taxId: string,
+        excludeId?: Types.ObjectId
+    ): Promise<void> {
+        const clash = await this.businessModel.exists({
+            ...scopeFilter,
+            type,
+            taxId,
+            ...(excludeId ? { _id: { $ne: excludeId } } : {}),
+        });
+        if (clash) {
+            throw new ConflictException({
+                code: RESPONSE_CODE.BUSINESS_TAX_ID_DUPLICATE,
+                message:
+                    'Business with this tax id already exists for the user',
             });
         }
     }
@@ -641,9 +697,16 @@ export class BusinessesService {
         const dtoTouchesTaxId = dto.taxId !== undefined;
 
         if (dtoTouchesTaxation || dtoTouchesTaxId) {
+            // `ownerId` + `managers` — для дубль-перевірки taxId нижче
+            // (scope власності), читаються тим самим single round-trip-ом.
             const existing = await this.businessModel
-                .findOne({ slugLower }, { type: 1 })
-                .lean<{ type: CreateBusinessRequest['type'] }>()
+                .findOne({ slugLower }, { type: 1, ownerId: 1, managers: 1 })
+                .lean<{
+                    _id: Types.ObjectId;
+                    type: CreateBusinessRequest['type'];
+                    ownerId: Types.ObjectId | null;
+                    managers: Types.ObjectId[];
+                }>()
                 .exec();
             if (!existing) {
                 throw new NotFoundException({
@@ -708,6 +771,20 @@ export class BusinessesService {
                             'Tax id format does not match the business type',
                     });
                 }
+                // Дубль `(taxId, type)` у межах того самого scope власності;
+                // self виключений через `$ne: _id`. Race-window до write
+                // закриває partial-unique індекс (11000 мапиться нижче).
+                await this.assertTaxIdAvailable(
+                    existing.ownerId
+                        ? { ownerId: existing.ownerId }
+                        : {
+                              ownerId: null,
+                              managers: { $in: existing.managers },
+                          },
+                    existingType,
+                    newTaxId,
+                    existing._id
+                );
             }
         }
 
@@ -760,13 +837,27 @@ export class BusinessesService {
             setPayload.slugCustomized = markSlugCustomized;
         }
 
-        const updated = await this.businessModel
-            .findOneAndUpdate(
-                filter,
-                { $set: setPayload },
-                { new: true, runValidators: true }
-            )
-            .exec();
+        let updated: BusinessDocument | null;
+        try {
+            updated = await this.businessModel
+                .findOneAndUpdate(
+                    filter,
+                    { $set: setPayload },
+                    { new: true, runValidators: true }
+                )
+                .exec();
+        } catch (err) {
+            // Race-window між pre-check-ом дубля taxId і write-ом: конкурентний
+            // create/PATCH зайняв пару `(taxId, type)` у scope після перевірки.
+            if (isDuplicateKeyError(err) && readKeyPattern(err).taxId === 1) {
+                throw new ConflictException({
+                    code: RESPONSE_CODE.BUSINESS_TAX_ID_DUPLICATE,
+                    message:
+                        'Business with this tax id already exists for the user',
+                });
+            }
+            throw err;
+        }
         if (updated) return updated;
 
         // Null = filter не пропустив update. Якщо coupled-fields у dto,
@@ -911,6 +1002,16 @@ export class BusinessesService {
             return updated!;
         } catch (err) {
             if (isDuplicateKeyError(err)) {
+                // PATCH може нести slug і taxId одночасно — розрізняємо, який
+                // unique-індекс спрацював, інакше taxId-дубль маскувався б під
+                // SLUG_TAKEN з хибним recovery-path для користувача.
+                if (readKeyPattern(err).taxId === 1) {
+                    throw new ConflictException({
+                        code: RESPONSE_CODE.BUSINESS_TAX_ID_DUPLICATE,
+                        message:
+                            'Business with this tax id already exists for the user',
+                    });
+                }
                 throw new ConflictException({
                     code: RESPONSE_CODE.SLUG_TAKEN,
                     message: 'Slug already taken by another business',

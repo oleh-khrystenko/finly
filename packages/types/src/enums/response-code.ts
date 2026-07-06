@@ -158,6 +158,22 @@ export const RESPONSE_CODE = {
      */
     TAX_ID_FORMAT_MISMATCH_TYPE: 'TAX_ID_FORMAT_MISMATCH_TYPE',
     /**
+     * Доменний інваріант: у межах одного користувача не може бути двох
+     * бізнесів з однаковою парою `(taxId, type)`. Scope — власність:
+     * owned (`ownerId`) або клієнтські бухгалтера (`ownerId=null` +
+     * `managers ∋ userId`); між різними користувачами дублікат дозволений
+     * (ФОП і його бухгалтер легітимно ведуть той самий реальний бізнес).
+     * `type` у ключі — та сама людина має один РНОКПП і для «фізособи», і
+     * для «ФОП»: пара individual+fop з однаковим кодом валідна.
+     *
+     * Кидається на create (pre-check під per-user Redis-локом) і на PATCH
+     * `taxId`; race-window закривають partial-unique індекси
+     * `(ownerId, taxId, type)` / `(managers, taxId, type)` → 11000 мапиться
+     * у цей самий код. Recovery-path для UI: відредагувати наявного
+     * отримувача замість створення дубля.
+     */
+    BUSINESS_TAX_ID_DUPLICATE: 'BUSINESS_TAX_ID_DUPLICATE',
+    /**
      * Юр-обмеження ПКУ розд. XIV гл. 1: групи 1 і 2 єдиного податку доступні
      * виключно ФОП. ТОВ (юр-особа) може бути на групі 3 (спрощена-3) або на
      * загальній системі. Кидається з write-DTO refine (`createTovVariant`)
@@ -375,6 +391,7 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.TAXATION_NOT_APPLICABLE_FOR_TYPE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.TAXATION_REQUIRED_FOR_TYPE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.TAX_ID_FORMAT_MISMATCH_TYPE]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BUSINESS_TAX_ID_DUPLICATE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.SLUG_RESERVED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.SLUG_TAKEN]: RESPONSE_TYPE.ERROR,

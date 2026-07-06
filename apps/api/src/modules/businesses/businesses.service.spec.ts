@@ -298,6 +298,97 @@ describe('BusinessesService', () => {
             ).rejects.toThrow('Mongo timeout');
         });
 
+        // ─── Дубль taxId у межах користувача (ownerId|managers, taxId, type) ───
+
+        describe('дубль taxId у межах користувача', () => {
+            // Owned-дубль реально досяжний лише для tov/organization
+            // (фізособа/ФОП обрізаються type-limit-ом раніше) — фікстура tov.
+            const TOV_CREATE: CreateBusinessRequest = {
+                type: 'tov',
+                name: 'Ромашка',
+                taxId: '12345678',
+                taxationSystem: 'general',
+                isVatPayer: true,
+                paymentPurposeTemplate: 'Оплата',
+            };
+
+            it('owned: clash у (ownerId, taxId, type) → 409 BUSINESS_TAX_ID_DUPLICATE, insert не викликається', async () => {
+                businessModel.exists.mockResolvedValue({
+                    _id: new Types.ObjectId(),
+                });
+                await expect(
+                    service.create(
+                        userId.toString(),
+                        TOV_CREATE,
+                        false,
+                        'bookkeeper'
+                    )
+                ).rejects.toMatchObject({
+                    response: { code: 'BUSINESS_TAX_ID_DUPLICATE' },
+                });
+                expect(businessModel.exists).toHaveBeenCalledWith({
+                    ownerId: expect.any(Types.ObjectId),
+                    type: 'tov',
+                    taxId: '12345678',
+                });
+                expect(businessModel.create).not.toHaveBeenCalled();
+            });
+
+            it('bookkeeper-mode: scope — ownerId:null + перетин managers', async () => {
+                businessModel.exists.mockResolvedValue(null);
+                businessModel.create.mockResolvedValue({} as never);
+                await service.create(
+                    userId.toString(),
+                    TOV_CREATE,
+                    true,
+                    'bookkeeper'
+                );
+                expect(businessModel.exists).toHaveBeenCalledWith({
+                    ownerId: null,
+                    managers: { $in: [expect.any(Types.ObjectId)] },
+                    type: 'tov',
+                    taxId: '12345678',
+                });
+            });
+
+            it('type-limit має пріоритет над дубль-check-ом (merge-flow фізособи залежить від коду)', async () => {
+                businessModel.countDocuments.mockResolvedValue(1);
+                businessModel.exists.mockResolvedValue({
+                    _id: new Types.ObjectId(),
+                });
+                await expect(
+                    service.create(
+                        userId.toString(),
+                        VALID_CREATE,
+                        false,
+                        'bookkeeper'
+                    )
+                ).rejects.toMatchObject({
+                    response: { code: 'BUSINESS_TYPE_LIMIT_REACHED' },
+                });
+                expect(businessModel.exists).not.toHaveBeenCalled();
+            });
+
+            it('race-window: insert падає на 11000 з keyPattern.taxId → 409 BUSINESS_TAX_ID_DUPLICATE', async () => {
+                businessModel.exists.mockResolvedValue(null);
+                const dupErr = Object.assign(new Error('E11000'), {
+                    code: 11000,
+                    keyPattern: { ownerId: 1, taxId: 1, type: 1 },
+                });
+                businessModel.create.mockRejectedValue(dupErr);
+                await expect(
+                    service.create(
+                        userId.toString(),
+                        TOV_CREATE,
+                        false,
+                        'bookkeeper'
+                    )
+                ).rejects.toMatchObject({
+                    response: { code: 'BUSINESS_TAX_ID_DUPLICATE' },
+                });
+            });
+        });
+
         // ─── Sprint 10 §SP-11 — claimIdempotencyKey replay ───
 
         describe('claimIdempotencyKey (Sprint 10 §SP-11)', () => {
@@ -911,6 +1002,103 @@ describe('BusinessesService', () => {
                         TEST_USER_ID
                     )
                 ).resolves.toBeDefined();
+            });
+
+            describe('дубль taxId на PATCH', () => {
+                const selfId = new Types.ObjectId();
+                const mockExistingDoc = (doc: Record<string, unknown>) => {
+                    businessModel.findOne.mockReturnValue({
+                        lean: jest.fn().mockReturnValue({
+                            exec: jest.fn().mockResolvedValue(doc),
+                        }),
+                    });
+                };
+
+                it('owned: clash поза self → 409 BUSINESS_TAX_ID_DUPLICATE, write не викликається', async () => {
+                    const ownerId = new Types.ObjectId();
+                    mockExistingDoc({
+                        _id: selfId,
+                        type: 'fop',
+                        ownerId,
+                        managers: [],
+                    });
+                    businessModel.exists.mockResolvedValue({
+                        _id: new Types.ObjectId(),
+                    });
+                    await expect(
+                        service.update(
+                            'IvanEnko',
+                            { taxId: '1234567899' },
+                            'bookkeeper',
+                            TEST_USER_ID
+                        )
+                    ).rejects.toMatchObject({
+                        response: { code: 'BUSINESS_TAX_ID_DUPLICATE' },
+                    });
+                    expect(businessModel.exists).toHaveBeenCalledWith({
+                        ownerId,
+                        type: 'fop',
+                        taxId: '1234567899',
+                        _id: { $ne: selfId },
+                    });
+                    expect(
+                        businessModel.findOneAndUpdate
+                    ).not.toHaveBeenCalled();
+                });
+
+                it('null-owner (клієнт бухгалтера): scope — ownerId:null + $in managers', async () => {
+                    const managerId = new Types.ObjectId();
+                    mockExistingDoc({
+                        _id: selfId,
+                        type: 'tov',
+                        ownerId: null,
+                        managers: [managerId],
+                    });
+                    businessModel.exists.mockResolvedValue(null);
+                    mockUpdateReturn({ taxId: '12345678' });
+                    await expect(
+                        service.update(
+                            'IvanEnko',
+                            { taxId: '12345678' },
+                            'bookkeeper',
+                            TEST_USER_ID
+                        )
+                    ).resolves.toBeDefined();
+                    expect(businessModel.exists).toHaveBeenCalledWith({
+                        ownerId: null,
+                        managers: { $in: [managerId] },
+                        type: 'tov',
+                        taxId: '12345678',
+                        _id: { $ne: selfId },
+                    });
+                });
+
+                it('race-window: findOneAndUpdate падає на 11000 з keyPattern.taxId → 409', async () => {
+                    mockExistingDoc({
+                        _id: selfId,
+                        type: 'fop',
+                        ownerId: new Types.ObjectId(),
+                        managers: [],
+                    });
+                    businessModel.exists.mockResolvedValue(null);
+                    const dupErr = Object.assign(new Error('E11000'), {
+                        code: 11000,
+                        keyPattern: { ownerId: 1, taxId: 1, type: 1 },
+                    });
+                    businessModel.findOneAndUpdate.mockReturnValue({
+                        exec: jest.fn().mockRejectedValue(dupErr),
+                    });
+                    await expect(
+                        service.update(
+                            'IvanEnko',
+                            { taxId: '1234567899' },
+                            'bookkeeper',
+                            TEST_USER_ID
+                        )
+                    ).rejects.toMatchObject({
+                        response: { code: 'BUSINESS_TAX_ID_DUPLICATE' },
+                    });
+                });
             });
 
             it('PATCH name only — findOne не викликається (cross-check skip)', async () => {
