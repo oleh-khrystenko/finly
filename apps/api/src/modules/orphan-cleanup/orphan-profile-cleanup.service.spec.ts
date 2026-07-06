@@ -199,6 +199,7 @@ describe('OrphanProfileCleanupService (Sprint 12 §12.1c, MongoMemoryReplSet)', 
         return user;
     }
 
+    let taxIdSeq = 0;
     async function seedBusinessWithBackdatedCreatedAt(opts: {
         ownerId: Types.ObjectId;
         name: string;
@@ -212,7 +213,9 @@ describe('OrphanProfileCleanupService (Sprint 12 §12.1c, MongoMemoryReplSet)', 
             slug,
             slugLower: slug.toLowerCase(),
             name: opts.name,
-            taxId: '1234567899',
+            // Унікальний per-seed: partial-unique `(ownerId, taxId, type)`
+            // інакше валить сідінг другого fop-бізнесу того самого власника.
+            taxId: String(1000000000 + taxIdSeq++),
             taxationSystem: 'simplified-3',
             isVatPayer: false,
             paymentPurposeTemplate: 'Оплата',

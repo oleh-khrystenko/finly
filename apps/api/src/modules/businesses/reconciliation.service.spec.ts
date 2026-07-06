@@ -163,6 +163,9 @@ describe('ReconciliationService (MongoMemoryReplSet)', () => {
             type: opts.type,
             ownerId: opts.owned ? userId : null,
             managers: opts.owned ? [] : [userId],
+            // Унікальний per-seed: partial-unique індекси `(ownerId|managers,
+            // taxId, type)` інакше валять сідінг кількох бізнесів одного типу.
+            taxId: String(1000000000 + n),
             slug: `biz-${n}`,
             slugLower: `biz-${n}`,
             slugCustomized: opts.slugCustomized ?? false,
