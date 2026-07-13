@@ -1,6 +1,6 @@
 import type { MetadataRoute } from 'next';
 
-import { getAllArticleSlugs } from '@/entities/help-article';
+import { getAllArticleSlugs, getAllAuthors } from '@/entities/help-article';
 import { ENV } from '@/shared/config';
 
 const BASE_URL = ENV.NEXT_PUBLIC_BASE_URL;
@@ -22,9 +22,16 @@ export default function sitemap(): MetadataRoute.Sitemap {
         })
     );
 
+    const authors: MetadataRoute.Sitemap = getAllAuthors().map((author) => ({
+        url: `${BASE_URL}/avtor/${author.id}`,
+        changeFrequency: 'monthly',
+        priority: 0.5,
+    }));
+
     return [
         { url: BASE_URL, changeFrequency: 'monthly', priority: 1 },
         { url: `${BASE_URL}/help`, changeFrequency: 'monthly', priority: 0.7 },
         ...helpArticles,
+        ...authors,
     ];
 }

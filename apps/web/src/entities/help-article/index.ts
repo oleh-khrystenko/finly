@@ -8,5 +8,7 @@ export {
     getArticlesByCategory,
     getCategoriesWithArticles,
     getRelatedArticles,
+    getAllAuthors,
     getAuthorById,
+    getArticlesByAuthor,
 } from './lib';

@@ -15,7 +15,9 @@ export {
     getArticleBySlug,
     getArticlesByCategory,
     getRelatedArticles,
+    getAllAuthors,
     getAuthorById,
+    getArticlesByAuthor,
 } from '@finly/types';
 
 function withIcon(category: HelpCategoryData): HelpCategory {

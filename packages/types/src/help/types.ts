@@ -18,14 +18,22 @@ export interface HelpAuthor {
     id: string;
     /** Full name, as shown in the byline and schema. */
     name: string;
-    /** Professional role, e.g. "Бухгалтер-аудитор, засновниця EasyFin". */
+    /** Professional role, e.g. "Засновниця EasyFin, головний бухгалтер". */
     role: string;
-    /** Short bio, one or two sentences. */
+    /** Short bio, one or two sentences (byline / card). */
     bio: string;
+    /** Longer bio for the dedicated profile page. Falls back to `bio`. */
+    longBio?: string;
+    /** City/country, e.g. "Полтава, Україна" (Person.address in schema). */
+    location?: string;
     /** Web-served static portrait path, e.g. "/partners/tetiana-priadko.webp". */
     photo: string;
     /** Organization the author works for (Person.worksFor in schema). */
     worksFor?: { name: string; url: string };
+    /** School (Person.alumniOf in schema). */
+    alumniOf?: string;
+    /** Areas of expertise (Person.knowsAbout in schema). */
+    knowsAbout?: string[];
     /**
      * External profiles that corroborate the author's identity (Person.sameAs).
      * The stronger the external proof, the stronger the E-E-A-T signal.

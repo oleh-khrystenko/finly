@@ -11,8 +11,8 @@ import {
 
 import { HelpSidebar } from './HelpSidebar';
 import { HelpArticleCard } from './HelpArticleCard';
-import { HelpCtaBanner } from './HelpCtaBanner';
-import { HelpArticleByline } from './HelpArticleByline';
+import { HelpArticleMeta } from './HelpArticleMeta';
+import { HelpAuthorCard } from './HelpAuthorCard';
 
 export function HelpArticleView({ article }: { article: HelpArticle }) {
     const category = getCategoryById(article.categoryId);
@@ -49,11 +49,13 @@ export function HelpArticleView({ article }: { article: HelpArticle }) {
                         {article.description}
                     </p>
 
-                    <HelpArticleByline article={article} />
+                    <HelpArticleMeta article={article} />
 
                     <div className="prose-help text-foreground/90 mt-6">
                         <Markdown>{article.body}</Markdown>
                     </div>
+
+                    <HelpAuthorCard article={article} />
 
                     <aside className="border-border bg-muted/40 mt-10 flex items-center gap-4 rounded-xl border p-5">
                         <span className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-lg">
@@ -111,8 +113,6 @@ export function HelpArticleView({ article }: { article: HelpArticle }) {
                             Усі розділи довідки
                         </UiButton>
                     </div>
-
-                    <HelpCtaBanner />
                 </article>
             </div>
         </main>

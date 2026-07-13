@@ -57,8 +57,10 @@ export default async function HelpArticlePage({
     const authorNode = author
         ? {
               '@type': 'Person',
+              '@id': `${baseUrl}/avtor/${author.id}#person`,
               name: author.name,
               jobTitle: author.role,
+              url: `${baseUrl}/avtor/${author.id}`,
               ...(author.worksFor && {
                   worksFor: {
                       '@type': 'Organization',

@@ -5,7 +5,9 @@ export { HELP_AUTHORS } from './authors';
 export {
     getAllCategories,
     getCategoryById,
+    getAllAuthors,
     getAuthorById,
+    getArticlesByAuthor,
     getAllArticles,
     getAllArticleSlugs,
     getArticleBySlug,
