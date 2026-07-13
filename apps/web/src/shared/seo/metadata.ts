@@ -15,6 +15,7 @@ interface BuildMetadataProps {
     noindex?: boolean;
     ogTitle?: string;
     ogDescription?: string;
+    ogImage?: string | null;
 }
 
 export function buildMetadata({
@@ -24,12 +25,20 @@ export function buildMetadata({
     noindex,
     ogTitle,
     ogDescription,
+    ogImage,
 }: BuildMetadataProps): Metadata {
     // OG/Twitter serve the share preview, the bare `title`/`description` serve
     // the search snippet. Default to the same string; override only where the
     // two diverge (e.g. drop the `| Finly` suffix the OG `siteName` repeats).
     const socialTitle = ogTitle ?? title;
     const socialDescription = ogDescription ?? description;
+
+    // `null` opts out of an explicit image so Next merges the route-level
+    // `opengraph-image` file (per-page banner). Otherwise use the shared banner.
+    const imageUrl =
+        ogImage === null
+            ? undefined
+            : (ogImage ?? `${BASE_URL}/images/og-banner.png`);
 
     return {
         title,
@@ -47,20 +56,22 @@ export function buildMetadata({
             siteName: 'Finly',
             locale: 'uk_UA',
             type: 'website',
-            images: [
-                {
-                    url: `${BASE_URL}/images/og-banner.png`,
-                    width: 1200,
-                    height: 630,
-                    alt: socialTitle,
-                },
-            ],
+            ...(imageUrl && {
+                images: [
+                    {
+                        url: imageUrl,
+                        width: 1200,
+                        height: 630,
+                        alt: socialTitle,
+                    },
+                ],
+            }),
         },
         twitter: {
             card: 'summary_large_image',
             title: socialTitle,
             description: socialDescription,
-            images: [`${BASE_URL}/images/og-banner.png`],
+            ...(imageUrl && { images: [imageUrl] }),
         },
     };
 }
@@ -93,5 +104,6 @@ export function fetchMetadata({
         noindex,
         ogTitle: meta?.ogTitle,
         ogDescription: meta?.ogDescription,
+        ogImage: meta?.ogImage,
     });
 }

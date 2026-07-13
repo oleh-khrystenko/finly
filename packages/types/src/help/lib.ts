@@ -1,11 +1,16 @@
 import { HELP_CATEGORIES } from './categories';
 import { HELP_ARTICLES } from './articles';
-import type { HelpArticle, HelpCategory } from './types';
+import { HELP_AUTHORS } from './authors';
+import type { HelpArticle, HelpAuthor, HelpCategory } from './types';
 
 const RELATED_LIMIT = 3;
 
 export function getAllCategories(): readonly HelpCategory[] {
     return HELP_CATEGORIES;
+}
+
+export function getAuthorById(id: string): HelpAuthor | undefined {
+    return HELP_AUTHORS.find((a) => a.id === id);
 }
 
 export function getCategoryById(id: string): HelpCategory | undefined {

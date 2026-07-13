@@ -10,6 +10,7 @@ const PRODUCT_LINKS = [
     { href: '#how-it-works', label: 'Як це працює' },
     { href: '#why', label: 'Чому Finly' },
     { href: '#try-now', label: 'Спробувати без реєстрації' },
+    { href: '/help', label: 'Довідка' },
     { href: '/auth/signin', label: 'Увійти / Реєстрація' },
 ] as const;
 

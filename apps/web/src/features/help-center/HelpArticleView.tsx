@@ -12,6 +12,7 @@ import {
 import { HelpSidebar } from './HelpSidebar';
 import { HelpArticleCard } from './HelpArticleCard';
 import { HelpCtaBanner } from './HelpCtaBanner';
+import { HelpArticleByline } from './HelpArticleByline';
 
 export function HelpArticleView({ article }: { article: HelpArticle }) {
     const category = getCategoryById(article.categoryId);
@@ -47,6 +48,8 @@ export function HelpArticleView({ article }: { article: HelpArticle }) {
                     <p className="text-muted-foreground mt-2 text-base leading-relaxed">
                         {article.description}
                     </p>
+
+                    <HelpArticleByline article={article} />
 
                     <div className="prose-help text-foreground/90 mt-6">
                         <Markdown>{article.body}</Markdown>
