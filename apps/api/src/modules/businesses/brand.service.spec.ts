@@ -33,7 +33,7 @@ describe('BrandService', () => {
             .toBuffer();
     }
 
-    function makeBusiness(): BusinessDocument {
+    function makeBusiness(branded = false): BusinessDocument {
         return {
             _id: businessId,
             slug: 'kvity',
@@ -41,6 +41,8 @@ describe('BrandService', () => {
             taxId: '1234567899',
             paymentPurposeTemplate: 'Оплата',
             brand: null,
+            // Sprint 27 — гейт логотипа per-business: `isPaid = brandedAt != null`.
+            brandedAt: branded ? new Date() : null,
         } as unknown as BusinessDocument;
     }
 
@@ -91,10 +93,9 @@ describe('BrandService', () => {
         const { service, baker, businessModel } = makeDeps(logo);
 
         const result = await service.commit(
-            makeBusiness(),
+            makeBusiness(true),
             FILE_KEY,
-            'Квіти',
-            'brand'
+            'Квіти'
         );
 
         expect(result.outcome).toBe(BRAND_COMMIT_OUTCOME.ACTIVE);
@@ -108,12 +109,7 @@ describe('BrandService', () => {
         const logo = await makeImage(300, 150, 20);
         const { service } = makeDeps(logo);
 
-        const result = await service.commit(
-            makeBusiness(),
-            FILE_KEY,
-            null,
-            'none'
-        );
+        const result = await service.commit(makeBusiness(), FILE_KEY, null);
 
         expect(result.outcome).toBe(BRAND_COMMIT_OUTCOME.PENDING);
         expect(result.brand.active).toBeNull();
@@ -128,7 +124,7 @@ describe('BrandService', () => {
         const { service, storage } = makeDeps(logo);
 
         await expect(
-            service.commit(makeBusiness(), FILE_KEY, null, 'brand')
+            service.commit(makeBusiness(), FILE_KEY, null)
         ).rejects.toMatchObject({
             response: { code: RESPONSE_CODE.BRAND_LOGO_ASPECT_INVALID },
         });
@@ -141,7 +137,7 @@ describe('BrandService', () => {
         const { service, storage } = makeDeps(logo);
 
         await expect(
-            service.commit(makeBusiness(), FILE_KEY, null, 'brand')
+            service.commit(makeBusiness(), FILE_KEY, null)
         ).rejects.toMatchObject({
             response: { code: RESPONSE_CODE.BRAND_LOGO_TOO_WIDE },
         });
@@ -153,7 +149,7 @@ describe('BrandService', () => {
         const { service } = makeDeps(logo);
 
         await expect(
-            service.commit(makeBusiness(), FILE_KEY, null, 'brand')
+            service.commit(makeBusiness(), FILE_KEY, null)
         ).rejects.toMatchObject({
             response: { code: RESPONSE_CODE.BRAND_LOGO_TOO_LIGHT },
         });
@@ -165,7 +161,7 @@ describe('BrandService', () => {
         const alien = `brand-logos/${new Types.ObjectId().toString()}/12345678-1234-1234-1234-123456789abc.png`;
 
         await expect(
-            service.commit(makeBusiness(), alien, null, 'brand')
+            service.commit(makeBusiness(), alien, null)
         ).rejects.toBeInstanceOf(BadRequestException);
     });
 });

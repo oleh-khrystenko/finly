@@ -68,6 +68,23 @@ jest.mock('../src/config/env', () => ({
         R2_SECRET_ACCESS_KEY: 'test-secret',
         R2_BUCKET_NAME: 'test-bucket',
         R2_PUBLIC_URL: 'https://media.test.local',
+        BILLING_BRAND_ENABLED: true,
+        BILLING_DOCUMENTS_ENABLED: false,
+        BILLING_GRID: {
+            currency: 'UAH',
+            brand: { pricePerBusiness: 4900 },
+            documents: {
+                tiers: [
+                    { size: 1, priceAmount: 29900, monthlyCredits: 1000 },
+                    { size: 5, priceAmount: 149500, monthlyCredits: 5000 },
+                ],
+                storageGbPerBusiness: 5,
+                storageRentCreditsPerGb: 10,
+                creditPacks: [{ credits: 500, priceAmount: 15000 }],
+                lowBalanceThreshold: 200,
+                criticalBalanceThreshold: 100,
+            },
+        },
     },
     parseLockoutThresholds: (raw: string) =>
         raw.split(',').map((entry: string) => {
@@ -271,29 +288,6 @@ describe('Businesses E2E', () => {
 
     // ─── Helpers ───
 
-    // Sprint 19 — slug-редагування вимагає рівня не нижче brand. Тести rename
-    // створюють користувача з активною підпискою brand.
-    const ACTIVE_BRAND_BILLING = {
-        provider: 'monobank',
-        cardToken: null,
-        walletId: null,
-        cardMask: null,
-        planCode: 'brand',
-        currency: 'UAH',
-        subscriptionStatus: 'ACTIVE',
-        currentPeriodEnd: null,
-        nextChargeAt: null,
-        cancelAtPeriodEnd: false,
-        hasActiveSubscription: true,
-        lastProviderEventAt: null,
-        dunningAttempts: 0,
-        nextRetryAt: null,
-        oneOffLevel: null,
-        oneOffAccessUntil: null,
-        oneOffOrderReference: null,
-        reconcileRequiredAt: null,
-    };
-
     async function createUser(
         overrides: Partial<UserDocument> = {}
     ): Promise<UserDocument> {
@@ -304,7 +298,6 @@ describe('Businesses E2E', () => {
                 lastName: 'User',
                 acceptedTermsVersion: CURRENT_TERMS_VERSION,
             },
-            executions: { balance: 0, freeReportUsed: false },
             worksAsBookkeeper: false,
             ...overrides,
         });
@@ -376,7 +369,6 @@ describe('Businesses E2E', () => {
             // Sprint 6 додасть frontend-модалку gate; service-layer Sprint 3
             // — без перевірки.
             const user = await createUser();
-            expect(user.billing?.hasActiveSubscription).toBeFalsy();
 
             await supertest(app.getHttpServer())
                 .patch('/api/users/me')
@@ -886,12 +878,17 @@ describe('Businesses E2E', () => {
         });
 
         it('Sprint 14 — vanity-slug edit через PATCH (200): slug перейменовується, старий slugLower звільняється', async () => {
-            const user = await createUser({ billing: ACTIVE_BRAND_BILLING });
+            const user = await createUser();
             const created = await supertest(app.getHttpServer())
                 .post('/api/businesses/me')
                 .set('Authorization', bearerFor(user))
                 .send(VALID_CREATE_PAYLOAD);
             const { slug } = (created.body as { data: { slug: string } }).data;
+            // Sprint 27 — гейт vanity-slug per-business: брендуємо бізнес.
+            await businessModel.updateOne(
+                { slugLower: slug.toLowerCase() },
+                { $set: { brandedAt: new Date() } }
+            );
             const newSlug = 'nova-vanity-adresa';
 
             const res = await supertest(app.getHttpServer())
@@ -1179,24 +1176,6 @@ describe('Businesses E2E', () => {
             expect(body.error.code).toBe('BUSINESS_NOT_FOUND');
         });
 
-        it('Sprint 19 — заблокований бізнес гасне публічно (404)', async () => {
-            const user = await createUser();
-            const created = await supertest(app.getHttpServer())
-                .post('/api/businesses/me')
-                .set('Authorization', bearerFor(user))
-                .send(VALID_CREATE_PAYLOAD);
-            const { slug } = (created.body as { data: { slug: string } }).data;
-
-            await businessModel.updateOne(
-                { slugLower: slug.toLowerCase() },
-                { $set: { accessBlockedAt: new Date() } }
-            );
-
-            await supertest(app.getHttpServer())
-                .get(`/api/businesses/public/${slug}`)
-                .expect(404);
-        });
-
         it('Sprint 19 — lapse-history (redirect:false) не резолвиться публічно (404)', async () => {
             const user = await createUser();
             const created = await supertest(app.getHttpServer())
@@ -1239,8 +1218,8 @@ describe('Businesses E2E', () => {
                 .expect(200);
 
             expect(res.headers['cache-control']).toMatch(/public/);
-            // Sprint 19 — короткий TTL без stale-while-revalidate: сторінка
-            // revocable через accessBlockedAt, тож CDN не має віддавати погашену
+            // Короткий TTL без stale-while-revalidate: сторінка revocable
+            // (видалення бізнесу, slug-rent), тож CDN не має віддавати погашену
             // сторінку після спливу max-age.
             expect(res.headers['cache-control']).toMatch(/max-age=300/);
             expect(res.headers['cache-control']).not.toMatch(

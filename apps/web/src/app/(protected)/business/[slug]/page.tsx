@@ -15,13 +15,12 @@ import {
     updateBusiness,
 } from '@/shared/api';
 import type { BusinessBrand, BusinessWithCounts } from '@finly/types';
-import { OwnershipBadge } from '@/entities/business';
+import { OwnershipBadge, isBusinessBranded } from '@/entities/business';
 import { BrandSection } from '@/features/brand-logo';
 import {
     matchActiveSlugReservation,
     useApplyPendingSlug,
     useAuthStore,
-    useCanEditSlug,
 } from '@/entities/user';
 import {
     useSubscribeLabel,
@@ -66,13 +65,15 @@ export default function BusinessSlugPage() {
     const reservation = useAuthStore(
         (s) => s.user?.activeSlugReservation ?? null
     );
-    const isPaid = useCanEditSlug();
-    const subscribeLabel = useSubscribeLabel('brand');
+    const subscribeLabel = useSubscribeLabel();
     const openDeleteConfirm = useDeleteBusinessConfirmStore((s) => s.open);
 
     const [business, setBusiness] = useState<BusinessWithCounts | null>(null);
     const [error, setError] = useState<{ code: string } | null>(null);
     const [autoEditSlug, setAutoEditSlug] = useState(false);
+
+    // Sprint 27 — гейт vanity-slug/логотипа per-business: чи цей бізнес брендований.
+    const isPaid = isBusinessBranded(business);
 
     useEffect(() => {
         if (!params.slug) return;
@@ -181,6 +182,7 @@ export default function BusinessSlugPage() {
     useApplyPendingSlug({
         matches: desiredSlug !== null,
         desiredSlug,
+        isBranded: isPaid,
         apply: applyReservedSlug,
         onTaken: handleSlugTaken,
     });
@@ -188,7 +190,7 @@ export default function BusinessSlugPage() {
     const handleSubscribe = useCallback(() => {
         if (!business) return Promise.resolve();
         return startSubscriptionCheckout(
-            'brand',
+            business.id,
             `/business/${business.slug}`
         ).catch(() => {
             toast.error('Не вдалося відкрити оплату. Спробуйте ще раз');

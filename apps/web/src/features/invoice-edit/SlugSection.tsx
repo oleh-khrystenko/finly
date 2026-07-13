@@ -10,7 +10,6 @@ import {
 } from '@finly/types';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSlugEditor from '@/shared/ui/UiSlugEditor';
-import UiUpsellNote from '@/shared/ui/UiUpsellNote';
 import { mapValidationCode } from '@/shared/lib';
 import InvoiceQrSection from './InvoiceQrSection';
 import { useResetInvoiceSlugConfirmStore } from './resetInvoiceSlugConfirmStore';
@@ -24,11 +23,6 @@ interface Props {
     brandVersion: string;
     /** Public payment-page origin (NEXT_PUBLIC_PAY_PUBLIC_URL). */
     payPublicOrigin: string;
-    /**
-     * Sprint 19 — отримувача заблоковано реконсиляцією: публічні ендпоінти
-     * віддають 404, рендеримо «доступ призупинено».
-     */
-    accessSuspended: boolean;
     /** Платний рівень (brand+): Save пише slug одразу, інакше — бронь + апсел. */
     isPaid: boolean;
     onSave: (patch: UpdateInvoiceRequest) => Promise<void>;
@@ -58,7 +52,6 @@ export default function SlugSection({
     accountSlug,
     brandVersion,
     payPublicOrigin,
-    accessSuspended,
     isPaid,
     onSave,
     defaultMode,
@@ -71,19 +64,6 @@ export default function SlugSection({
     autoStartSlugEdit,
 }: Props) {
     const openResetConfirm = useResetInvoiceSlugConfirmStore((s) => s.open);
-
-    if (accessSuspended) {
-        return (
-            <UiSectionCard title="Публічна сторінка">
-                <div className="mt-4">
-                    <UiUpsellNote
-                        message="Доступ до отримувача призупинено, публічна сторінка і QR-коди неактивні. Поновіть доступ або видаліть отримувача."
-                        ctaLabel="Поновити доступ"
-                    />
-                </div>
-            </UiSectionCard>
-        );
-    }
 
     const hostnamePrefix = `${payPublicOrigin
         .replace(/^https?:\/\//, '')

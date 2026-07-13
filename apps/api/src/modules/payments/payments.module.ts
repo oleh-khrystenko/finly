@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { PaymentsController } from './payments.controller';
-import { PaymentsService } from './payments.service';
+import { BillingProfileService } from './billing-profile.service';
 import { PaymentsCleanupService } from './payments-cleanup.service';
 import { BillingClockService } from './billing-clock.service';
 import { CatalogService } from './catalog.service';
@@ -15,6 +15,14 @@ import {
     PaymentRecord,
     PaymentRecordSchema,
 } from './schemas/payment-record.schema';
+import {
+    BillingProfile,
+    BillingProfileSchema,
+} from './schemas/billing-profile.schema';
+import {
+    CreditLedgerEntry,
+    CreditLedgerEntrySchema,
+} from './schemas/credit-ledger-entry.schema';
 import { UsersModule } from '../users/users.module';
 import { BusinessesModule } from '../businesses/businesses.module';
 
@@ -29,20 +37,28 @@ import { BusinessesModule } from '../businesses/businesses.module';
                 name: PaymentRecord.name,
                 schema: PaymentRecordSchema,
             },
+            {
+                name: BillingProfile.name,
+                schema: BillingProfileSchema,
+            },
+            {
+                name: CreditLedgerEntry.name,
+                schema: CreditLedgerEntrySchema,
+            },
         ]),
         UsersModule,
-        // Sprint 19 — реконсиляція бізнесів при зміні білінг-стану.
+        // Sprint 27 — реконсиляція бізнесів per-business при зміні прикріплень.
         BusinessesModule,
     ],
     controllers: [PaymentsController],
     providers: [
-        PaymentsService,
+        BillingProfileService,
         PaymentsCleanupService,
         BillingClockService,
         CatalogService,
         MonobankService,
         paymentProviderProvider,
     ],
-    exports: [PaymentsService, CatalogService],
+    exports: [BillingProfileService, CatalogService],
 })
 export class PaymentsModule {}

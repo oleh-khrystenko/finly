@@ -20,11 +20,18 @@ export {
     acceptTerms,
 } from './auth';
 export {
-    createSubscriptionCheckout,
-    createOneOffCheckout,
+    getCatalog,
+    getBillingProfile,
+    startCheckout,
+    changeCapacity,
+    attachBusiness,
+    detachBusiness,
+    buyCredits,
+    calculatePrice,
     cancelSubscription,
     resumeSubscription,
     listPayments,
+    listCreditLedger,
 } from './payments';
 export {
     requestAvatarUploadUrl,

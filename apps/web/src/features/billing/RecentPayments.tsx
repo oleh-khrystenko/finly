@@ -13,8 +13,9 @@ import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
 
 const TYPE_LABELS: Record<PaymentRecord['type'], string> = {
-    [PAYMENT_RECORD_TYPE.SUBSCRIPTION]: 'Підписка',
-    [PAYMENT_RECORD_TYPE.ONE_OFF]: 'Доступ на місяць',
+    [PAYMENT_RECORD_TYPE.CYCLE]: 'Місячне списання',
+    [PAYMENT_RECORD_TYPE.PRORATION]: 'Доплата за розширення',
+    [PAYMENT_RECORD_TYPE.CREDIT_PACK]: 'Докупівля кредитів',
     [PAYMENT_RECORD_TYPE.UNMATCHED]: 'Нерозпізнане списання',
 };
 

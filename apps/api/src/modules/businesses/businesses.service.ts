@@ -19,13 +19,9 @@ import {
     RESPONSE_CODE,
     SLUG_AVAILABILITY_STATUS,
     VAT_ALLOWED_TAXATION_SYSTEMS,
-    evaluateClientBusinessCreation,
-    evaluateOwnedBusinessCreation,
-    isAccessLevelAtLeast,
     isTaxIdValidForType,
     isTaxationAllowedForType,
     requiresTaxation,
-    type AccessLevel,
     type BusinessType,
     type BusinessWithCounts,
     type CreateBusinessRequest,
@@ -213,8 +209,7 @@ export class BusinessesService {
     async create(
         userId: string,
         dto: CreateBusinessRequest,
-        isBookkeeperMode: boolean,
-        actorLevel: AccessLevel
+        isBookkeeperMode: boolean
     ): Promise<BusinessDocument> {
         const userObjectId = new Types.ObjectId(userId);
 
@@ -261,7 +256,6 @@ export class BusinessesService {
                             userObjectId,
                             dto,
                             isBookkeeperMode,
-                            actorLevel,
                             ownership,
                             replayFilter
                         )
@@ -285,23 +279,31 @@ export class BusinessesService {
         userObjectId: Types.ObjectId,
         dto: CreateBusinessRequest,
         isBookkeeperMode: boolean,
-        actorLevel: AccessLevel,
         ownership: {
             ownerId: Types.ObjectId | null;
             managers: Types.ObjectId[];
         },
         replayFilter: FilterQuery<BusinessDocument> | null
     ): Promise<BusinessDocument> {
-        // Sprint 19 — ліміти на кількість бізнесів за рівнем доступу і власністю.
-        // Перевірка після anon-claim replay (replay повертає наявний, не створює
-        // новий) і перед генерацією slug. claimIdempotencyKey-replay сам по собі
-        // не платний — ліміт стосується нового бізнесу.
-        await this.assertWithinBusinessLimit(
-            userObjectId,
-            dto.type,
-            isBookkeeperMode,
-            actorLevel
-        );
+        // Sprint 27 — ліміти кількості бізнесів зняті (створення безкоштовне і
+        // безлімітне). Лишається лише доменний інваріант: власна фізособа / ФОП
+        // по одній (одна людина = один РНОКПП). Клієнтські (bookkeeper, ownerless)
+        // не обмежені — кожен представляє окрему реальну особу.
+        if (
+            !isBookkeeperMode &&
+            (dto.type === 'individual' || dto.type === 'fop')
+        ) {
+            const ownedOfType = await this.businessModel.countDocuments({
+                ownerId: userObjectId,
+                type: dto.type,
+            });
+            if (ownedOfType >= 1) {
+                throw new ForbiddenException({
+                    code: RESPONSE_CODE.BUSINESS_TYPE_LIMIT_REACHED,
+                    message: 'Only one business of this type is allowed',
+                });
+            }
+        }
 
         // Дубль `(taxId, type)` у межах користувача. Після limit-check-у:
         // BUSINESS_TYPE_LIMIT_REACHED має пріоритет (на ньому висить merge
@@ -404,62 +406,6 @@ export class BusinessesService {
                   claimIdempotencyKey,
               }
             : { ownerId: userObjectId, claimIdempotencyKey };
-    }
-
-    /**
-     * Sprint 19 — ліміти створення бізнесів. Правила живуть у
-     * `@finly/types` (`evaluate*BusinessCreation`) — той самий модуль
-     * використовує web для попереднього гейтингу type-picker-а на
-     * `/business/new`. Тут лише count + мапінг вердикту в 403-код.
-     * Bookkeeper-рівень short-circuit-иться до count-запиту.
-     */
-    private async assertWithinBusinessLimit(
-        userObjectId: Types.ObjectId,
-        type: BusinessType,
-        isBookkeeperMode: boolean,
-        actorLevel: AccessLevel
-    ): Promise<void> {
-        if (isBookkeeperMode) {
-            if (isAccessLevelAtLeast(actorLevel, 'bookkeeper')) return;
-            const clientCount = await this.businessModel.countDocuments({
-                ownerId: null,
-                managers: userObjectId,
-            });
-            const verdict = evaluateClientBusinessCreation(
-                clientCount,
-                actorLevel
-            );
-            if (!verdict.allowed) {
-                throw new ForbiddenException({
-                    code: RESPONSE_CODE.BUSINESS_LIMIT_REQUIRES_PLAN,
-                    message:
-                        'Client business limit reached for the current plan',
-                });
-            }
-            return;
-        }
-
-        const ownedOfType = await this.businessModel.countDocuments({
-            ownerId: userObjectId,
-            type,
-        });
-        const verdict = evaluateOwnedBusinessCreation(
-            type,
-            ownedOfType,
-            actorLevel
-        );
-        if (!verdict.allowed) {
-            if (verdict.reason === 'type-limit') {
-                throw new ForbiddenException({
-                    code: RESPONSE_CODE.BUSINESS_TYPE_LIMIT_REACHED,
-                    message: 'Only one business of this type is allowed',
-                });
-            }
-            throw new ForbiddenException({
-                code: RESPONSE_CODE.BUSINESS_LIMIT_REQUIRES_PLAN,
-                message: 'Business limit reached for the current plan',
-            });
-        }
     }
 
     /**
@@ -626,13 +572,7 @@ export class BusinessesService {
     ): Promise<BusinessDocument | null> {
         const slugLower = slug.toLowerCase();
         const business = await this.businessModel.findOne({ slugLower }).exec();
-        if (business) {
-            // Sprint 19 — заблокований реконсиляцією бізнес гасне публічно:
-            // повертаємо null, публічний контролер віддає 404. Єдина точка
-            // резолву для всіх трьох публічних контролерів (business/account/
-            // invoice), тож гасіння централізоване тут.
-            return business.accessBlockedAt ? null : business;
-        }
+        if (business) return business;
         // Sprint 19 — lapse-записи (redirect:false) НЕ редіректять: ім'я лише
         // зарезервоване на холд, публічний хіт неактивний. `$ne: false` ловить і
         // legacy-записи без поля (redirect зберігається, як було).
@@ -641,16 +581,15 @@ export class BusinessesService {
             .lean<{ businessId: Types.ObjectId }>()
             .exec();
         if (!historyEntry) return null;
-        const current = await this.businessModel
-            .findById(historyEntry.businessId)
-            .exec();
-        return current && !current.accessBlockedAt ? current : null;
+        return this.businessModel.findById(historyEntry.businessId).exec();
     }
 
     async update(
         slug: string,
         dto: UpdateBusinessRequest,
-        actorLevel: AccessLevel,
+        // Sprint 27 — чи бізнес брендований (у активному Бренд-складі): замок на
+        // vanity-slug тепер per-business, не за рівнем користувача.
+        isBranded: boolean,
         // Sprint 20 — власник, чию активну бронь споживає успішний rename
         // (атомарно у TX). Чужа бронь блокує rename нарівні із зайнятим іменем.
         userId: string,
@@ -673,10 +612,11 @@ export class BusinessesService {
         const slugCaseOnlyChange =
             newSlug !== undefined && !slugRenaming && newSlug !== slug;
         if ((slugRenaming || slugCaseOnlyChange) && markSlugCustomized) {
-            // Sprint 19 — vanity-slug як платна фіча (brand+). Cheap-reject до
-            // DB-роботи. Гейт лише на кастомне ім'я (`markSlugCustomized=true`);
-            // reset-slug (false) — гігієна випадкової адреси, доступна всім рівням.
-            assertSlugEditAllowed(actorLevel);
+            // Sprint 27 — vanity-slug як бренд-фіча (бізнес брендований). Cheap-
+            // reject до DB-роботи. Гейт лише на кастомне ім'я
+            // (`markSlugCustomized=true`); reset-slug (false) — гігієна випадкової
+            // адреси, доступна завжди.
+            assertSlugEditAllowed(isBranded);
         }
         let renameOwnerId: Types.ObjectId | null = null;
         if (slugRenaming) {
@@ -1103,11 +1043,11 @@ export class BusinessesService {
         const newSlug = await this.slugGenerator.generateRandomSlug();
         // markSlugCustomized=false — reset повертає до авто, не vanity. Гейт
         // assertSlugEditAllowed не спрацьовує (умова `&& markSlugCustomized`),
-        // тож рівень доступу тут не читається: reset доступний усім рівням.
+        // тож `isBranded` тут не читається: reset доступний завжди.
         return this.update(
             business.slug,
             { slug: newSlug },
-            'none',
+            false,
             userId,
             false
         );

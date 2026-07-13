@@ -41,8 +41,8 @@ import type { AccountDocument } from './schemas/account.schema';
  * Sprint 9 §9.1 — public endpoints для зони `pay.finly.com.ua/{businessSlug}/
  * {accountSlug}`. Той самий patern, що Sprint 3 `PublicBusinessesController`:
  *  - без guard-ів, без cookie / Authorization.
- *  - короткий CDN-cache `PUBLIC_PAGE_CACHE_CONTROL` (сторінка revocable через
- *    `accessBlockedAt`, тож без stale-while-revalidate — гасіння у межах TTL).
+ *  - короткий CDN-cache `PUBLIC_PAGE_CACHE_CONTROL` (сторінка revocable:
+ *    видалення/slug-rent, тож без stale-while-revalidate — гасіння у межах TTL).
  *  - whitelist `PublicAccountViewSchema` strip-ить leak-кандидати.
  *  - реквізити leak-vector лише через `nbuLinks` Base64URL payload.
  *
