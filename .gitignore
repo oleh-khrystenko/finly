@@ -80,10 +80,6 @@ packages/*/.tsbuildinfo
 .DS_Store
 *.tgz
 
-# --- DB dumps (бекапам місце у restic, не в репозиторії) ---
-*.gz
-finly-prod-backup*
-
 # --- Lock & Workspace Files (keep pnpm workspace config) ---
 !pnpm-workspace.yaml
 
