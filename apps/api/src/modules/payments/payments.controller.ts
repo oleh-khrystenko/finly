@@ -18,70 +18,81 @@ import { RawBodyRequest } from '@nestjs/common/interfaces';
 import { Request } from 'express';
 import {
     RESPONSE_CODE,
+    type BillingCatalog,
+    type BillingProfileView,
+    type CreditLedgerEntry,
     type PaymentRecord,
-    type PaymentsCatalog,
+    type PriceCalculation,
 } from '@finly/types';
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { SkipOnboarding } from '../../common/decorators/skip-onboarding.decorator';
 import { UserDocument } from '../users/schemas/user.schema';
-import { ENV } from '../../config/env';
-import { PaymentsService } from './payments.service';
+import { BillingProfileService } from './billing-profile.service';
 import { CatalogService } from './catalog.service';
-import { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
-import { ResumeSubscriptionDto } from './dto/manage-subscription.dto';
+import {
+    BuyCreditsDto,
+    ChangeCapacityDto,
+    ManageAttachmentDto,
+    PriceCalculatorDto,
+    ResumeSubscriptionDto,
+    StartCheckoutDto,
+} from './dto/billing.dto';
 import type { PaymentRecordLean } from './schemas/payment-record.schema';
+import type { CreditLedgerEntryLean } from './schemas/credit-ledger-entry.schema';
 
-const DEFAULT_PAYMENTS_LIMIT = 10;
-const MAX_PAYMENTS_LIMIT = 50;
+const DEFAULT_LIST_LIMIT = 10;
+const MAX_LIST_LIMIT = 50;
 const SUPPORTED_PROVIDERS = new Set(['monobank']);
 
 @Controller('payments')
 export class PaymentsController {
     constructor(
-        private readonly paymentsService: PaymentsService,
-        private readonly catalogService: CatalogService
+        private readonly billing: BillingProfileService,
+        private readonly catalog: CatalogService
     ) {}
 
     @SkipThrottle()
     @SkipOnboarding()
     @Get('catalog')
-    getCatalog(): { data: PaymentsCatalog } {
-        const catalog = this.catalogService.getCatalog();
-        return {
-            data: {
-                subscriptionPlans: ENV.PAYMENTS_SUBSCRIPTION_ENABLED
-                    ? catalog.subscriptionPlans
-                    : [],
-                oneOffAccesses: ENV.PAYMENTS_ONE_OFF_ENABLED
-                    ? catalog.oneOffAccesses
-                    : [],
-            },
-        };
+    getCatalog(): { data: BillingCatalog } {
+        return { data: this.catalog.getCatalog() };
     }
 
     @UseGuards(JwtActiveGuard)
-    @Post('checkout-session')
-    async createCheckoutSession(
+    @Get('profile')
+    async getProfileView(
+        @CurrentUser() user: UserDocument
+    ): Promise<{ data: BillingProfileView | null }> {
+        const view = await this.billing.getProfileView(user._id.toString());
+        return { data: view };
+    }
+
+    // ── First purchase (hosted checkout) ─────────────────────────────────
+
+    @UseGuards(JwtActiveGuard)
+    @Post('checkout')
+    async checkout(
         @CurrentUser() user: UserDocument,
-        @Body() dto: CreateCheckoutSessionDto
+        @Body() dto: StartCheckoutDto
     ): Promise<{ data: { checkoutUrl: string } }> {
-        const { checkoutUrl } =
-            await this.paymentsService.createCheckoutSession(
-                user._id.toString(),
-                dto
-            );
-        return { data: { checkoutUrl } };
+        const result = await this.billing.startCheckout(
+            user._id.toString(),
+            dto
+        );
+        return { data: result };
     }
 
+    // ── Capacity / attachments (existing token) ──────────────────────────
+
     @UseGuards(JwtActiveGuard)
-    @Post('subscription/resume')
+    @Post('capacity')
     @HttpCode(HttpStatus.OK)
-    async resumeSubscription(
+    async changeCapacity(
         @CurrentUser() user: UserDocument,
-        @Body() dto: ResumeSubscriptionDto
-    ): Promise<{ data: { checkoutUrl: string } }> {
-        const result = await this.paymentsService.resumeSubscription(
+        @Body() dto: ChangeCapacityDto
+    ): Promise<{ data: { immediateCharge: number; scheduled: boolean } }> {
+        const result = await this.billing.changeCapacity(
             user._id.toString(),
             dto
         );
@@ -89,14 +100,76 @@ export class PaymentsController {
     }
 
     @UseGuards(JwtActiveGuard)
-    @Post('subscription/cancel')
+    @Post('attach')
     @HttpCode(HttpStatus.OK)
-    async cancelSubscription(
-        @CurrentUser() user: UserDocument
+    async attach(
+        @CurrentUser() user: UserDocument,
+        @Body() dto: ManageAttachmentDto
     ): Promise<{ data: { ok: true } }> {
-        await this.paymentsService.cancelSubscription(user._id.toString());
+        await this.billing.attachBusiness(user._id.toString(), dto);
         return { data: { ok: true } };
     }
+
+    @UseGuards(JwtActiveGuard)
+    @Post('detach')
+    @HttpCode(HttpStatus.OK)
+    async detach(
+        @CurrentUser() user: UserDocument,
+        @Body() dto: ManageAttachmentDto
+    ): Promise<{ data: { ok: true } }> {
+        await this.billing.detachBusiness(user._id.toString(), dto);
+        return { data: { ok: true } };
+    }
+
+    @UseGuards(JwtActiveGuard)
+    @Post('credits/buy')
+    @HttpCode(HttpStatus.OK)
+    async buyCredits(
+        @CurrentUser() user: UserDocument,
+        @Body() dto: BuyCreditsDto
+    ): Promise<{ data: { charged: number; scheduled: boolean } }> {
+        const result = await this.billing.buyCredits(user._id.toString(), dto);
+        return { data: result };
+    }
+
+    @UseGuards(JwtActiveGuard)
+    @Post('calculator')
+    @HttpCode(HttpStatus.OK)
+    async calculate(
+        @CurrentUser() user: UserDocument,
+        @Body() dto: PriceCalculatorDto
+    ): Promise<{ data: PriceCalculation }> {
+        const result = await this.billing.calculate(user._id.toString(), dto);
+        return { data: result };
+    }
+
+    // ── Cancel / resume ──────────────────────────────────────────────────
+
+    @UseGuards(JwtActiveGuard)
+    @Post('subscription/cancel')
+    @HttpCode(HttpStatus.OK)
+    async cancel(
+        @CurrentUser() user: UserDocument
+    ): Promise<{ data: { ok: true } }> {
+        await this.billing.cancel(user._id.toString());
+        return { data: { ok: true } };
+    }
+
+    @UseGuards(JwtActiveGuard)
+    @Post('subscription/resume')
+    @HttpCode(HttpStatus.OK)
+    async resume(
+        @CurrentUser() user: UserDocument,
+        @Body() dto: ResumeSubscriptionDto
+    ): Promise<{ data: { checkoutUrl: string } }> {
+        const result = await this.billing.resume(
+            user._id.toString(),
+            dto.returnPath
+        );
+        return { data: result };
+    }
+
+    // ── History ──────────────────────────────────────────────────────────
 
     @UseGuards(JwtActiveGuard)
     @Get('payments')
@@ -104,13 +177,27 @@ export class PaymentsController {
         @CurrentUser() user: UserDocument,
         @Query('limit') limitParam?: string
     ): Promise<{ data: PaymentRecord[] }> {
-        const limit = clampLimit(limitParam);
-        const records = await this.paymentsService.listPayments(
+        const records = await this.billing.listPayments(
             user._id.toString(),
-            limit
+            clampLimit(limitParam)
         );
         return { data: records.map(mapPaymentRecord) };
     }
+
+    @UseGuards(JwtActiveGuard)
+    @Get('credits/ledger')
+    async listLedger(
+        @CurrentUser() user: UserDocument,
+        @Query('limit') limitParam?: string
+    ): Promise<{ data: CreditLedgerEntry[] }> {
+        const entries = await this.billing.listLedger(
+            user._id.toString(),
+            clampLimit(limitParam)
+        );
+        return { data: entries.map(mapLedgerEntry) };
+    }
+
+    // ── Webhook ──────────────────────────────────────────────────────────
 
     @SkipThrottle()
     @SkipOnboarding()
@@ -134,12 +221,8 @@ export class PaymentsController {
                 message: 'Missing raw body',
             });
         }
-        const acked = await this.paymentsService.handleWebhook(
-            rawBody,
-            signature
-        );
+        const acked = await this.billing.handleWebhook(rawBody, signature);
         if (!acked) {
-            // Crash-orphan / lock-busy: non-2xx → monobank передоставить подію.
             throw new ServiceUnavailableException({
                 code: RESPONSE_CODE.INTERNAL_ERROR,
                 message: 'Webhook deferred, will retry',
@@ -150,9 +233,9 @@ export class PaymentsController {
 }
 
 function clampLimit(raw: string | undefined): number {
-    const parsed = raw ? parseInt(raw, 10) : DEFAULT_PAYMENTS_LIMIT;
-    if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_PAYMENTS_LIMIT;
-    return Math.min(parsed, MAX_PAYMENTS_LIMIT);
+    const parsed = raw ? parseInt(raw, 10) : DEFAULT_LIST_LIMIT;
+    if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_LIST_LIMIT;
+    return Math.min(parsed, MAX_LIST_LIMIT);
 }
 
 function mapPaymentRecord(record: PaymentRecordLean): PaymentRecord {
@@ -165,5 +248,15 @@ function mapPaymentRecord(record: PaymentRecordLean): PaymentRecord {
         cardMask: record.cardMask,
         refundAmount: record.refundAmount,
         createdAt: record.createdAt,
+    };
+}
+
+function mapLedgerEntry(entry: CreditLedgerEntryLean): CreditLedgerEntry {
+    return {
+        id: entry._id.toString(),
+        type: entry.type,
+        credits: entry.credits,
+        balanceAfter: entry.balanceAfter,
+        createdAt: entry.createdAt,
     };
 }

@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-import { UserBillingSchema } from '../contracts/payments';
 import { SlugReservationViewSchema } from '../contracts/slug-reservation';
 import { DEFAULT_USER_ROLE, USER_ROLES } from '../enums/user-role';
 import { validateSameOriginPath } from '../utils/path';
@@ -15,11 +14,6 @@ export const UserProfileDataSchema = z.object({
     firstName: z.string().optional(),
     lastName: z.string().optional(),
     avatar: z.string().url().optional(),
-});
-
-export const UserExecutionsSchema = z.object({
-    balance: z.number().int().min(0),
-    freeReportUsed: z.boolean(),
 });
 
 export const UserProfileCompletionRemindersSchema = z.object({
@@ -45,13 +39,14 @@ export const UserSchema = z.object({
     worksAsBookkeeper: z.boolean().default(false),
     provider: UserProviderSchema.optional(),
     profile: UserProfileDataSchema,
-    executions: UserExecutionsSchema,
     hasPassword: z.boolean(),
     deletedAt: z.coerce.date().nullable().optional(),
     accountDeletionRequestedAt: z.coerce.date().nullable().optional(),
     createdAt: z.coerce.date(),
     lastLoginAt: z.coerce.date().optional(),
-    billing: UserBillingSchema.nullable().optional(),
+    // Sprint 27 — білінг НЕ в профілі користувача: він живе окремою сутністю
+    // `BillingProfile` і віддається окремим `GET /payments/profile`
+    // (`BillingProfileViewSchema`), а не в `getMe`.
     termsAcceptedAt: z.coerce.date().nullable().optional(),
     termsVersion: z.string().nullable().optional(),
     pendingPostLoginTarget: z
@@ -76,11 +71,9 @@ export const UserProfileSchema = UserSchema.pick({
     role: true,
     worksAsBookkeeper: true,
     profile: true,
-    executions: true,
     hasPassword: true,
     deletedAt: true,
     accountDeletionRequestedAt: true,
-    billing: true,
     termsVersion: true,
     pendingPostLoginTarget: true,
     activeSlugReservation: true,

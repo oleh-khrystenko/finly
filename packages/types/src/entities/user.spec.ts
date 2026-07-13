@@ -7,10 +7,6 @@ const VALID_USER = {
         firstName: 'Ольга',
         lastName: 'Іваненко',
     },
-    executions: {
-        balance: 0,
-        freeReportUsed: false,
-    },
     hasPassword: true,
     createdAt: '2026-05-13T10:00:00.000Z',
 };

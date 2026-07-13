@@ -7,6 +7,7 @@
 
 import { config } from 'dotenv';
 import { resolve } from 'path';
+import { parseBillingGrid } from './billing-grid.config';
 
 // Load .env from monorepo root before reading process.env.
 // Use __dirname (relative to this file) instead of process.cwd() which varies by runner.
@@ -36,9 +37,6 @@ export const getNonNegativeIntEnvVar = (name: string): number => {
     return Number(raw);
 };
 
-const subscriptionEnabled =
-    getEnvVar('PAYMENTS_SUBSCRIPTION_ENABLED') === 'true';
-const oneOffEnabled = getEnvVar('PAYMENTS_ONE_OFF_ENABLED') === 'true';
 // Демо-режим білінгу. На проді з живими грошима МУСИТЬ бути false. Web-аналог:
 // NEXT_PUBLIC_BILLING_DEMO_MODE (показує демо-банер на сторінці тарифу).
 const billingDemoMode = getEnvVar('BILLING_DEMO_MODE') === 'true';
@@ -90,8 +88,6 @@ export const ENV = {
     // вебхуки верифікуються публічним ключем з GET /api/merchant/pubkey.
     MONOBANK_TOKEN: getEnvVar('MONOBANK_TOKEN'),
 
-    PAYMENTS_SUBSCRIPTION_ENABLED: subscriptionEnabled,
-    PAYMENTS_ONE_OFF_ENABLED: oneOffEnabled,
     BILLING_DEMO_MODE: billingDemoMode,
 
     // Sprint 22 — dunning billing-clock: скільки спроб списання у прострочці до
@@ -105,23 +101,16 @@ export const ENV = {
         'BILLING_DUNNING_RETRY_INTERVAL_HOURS'
     ),
 
-    // Sprint 22 — ЦІНИ у ГРИВНЯХ (цілі). Єдине джерело ціни для всього продукту:
-    // `CatalogService` накладає їх на каталог, а той живить і публічний
-    // ендпоінт (web рендерить з нього), і суму реального списання у
-    // `PaymentsService`. Зміна = відредагувати тут + перезапустити API (без
-    // ребілду web). Конверсію у копійки робить CatalogService (×100).
-    BILLING_PRICE_SUBSCRIPTION_BRAND: getNonNegativeIntEnvVar(
-        'BILLING_PRICE_SUBSCRIPTION_BRAND'
-    ),
-    BILLING_PRICE_SUBSCRIPTION_BOOKKEEPER: getNonNegativeIntEnvVar(
-        'BILLING_PRICE_SUBSCRIPTION_BOOKKEEPER'
-    ),
-    BILLING_PRICE_ONEOFF_BRAND: getNonNegativeIntEnvVar(
-        'BILLING_PRICE_ONEOFF_BRAND'
-    ),
-    BILLING_PRICE_ONEOFF_BOOKKEEPER: getNonNegativeIntEnvVar(
-        'BILLING_PRICE_ONEOFF_BOOKKEEPER'
-    ),
+    // Sprint 27 — тарифна сітка двох всесвітів, зібрана з `.env` у типізований
+    // `BillingGrid` (див. billing-grid.config.ts). Єдине джерело значень: ціни,
+    // розміри пакетів, обсяги кредитів, ГБ, пороги — усе тут, нічого в коді.
+    BILLING_GRID: parseBillingGrid(getEnvVar),
+    // Sprint 27 — які всесвіти продаються. Бренд вмикається одразу; Документи —
+    // під прапором «скоро» до спринту запуску документів (механіка будується і
+    // тестується, вітрина й checkout вимкнені).
+    BILLING_BRAND_ENABLED: getEnvVar('BILLING_BRAND_ENABLED') === 'true',
+    BILLING_DOCUMENTS_ENABLED:
+        getEnvVar('BILLING_DOCUMENTS_ENABLED') === 'true',
 
     AUTH_PASSWORD_MIN_LENGTH: parseInt(
         getEnvVar('AUTH_PASSWORD_MIN_LENGTH'),
@@ -201,14 +190,6 @@ export const ENV = {
     R2_PUBLIC_URL: getEnvVar('R2_PUBLIC_URL'),
 };
 
-// Validate payment toggles
-if (!ENV.PAYMENTS_SUBSCRIPTION_ENABLED && !ENV.PAYMENTS_ONE_OFF_ENABLED) {
-    throw new Error(
-        '❌ At least one payment type must be enabled. ' +
-            'Set PAYMENTS_SUBSCRIPTION_ENABLED or PAYMENTS_ONE_OFF_ENABLED to "true".'
-    );
-}
-
 // Sprint 22 — dunning мусить мати щонайменше одну спробу і ненульовий інтервал,
 // інакше прострочка або миттєво знімала б доступ (MAX=0), або повтори злипались
 // би в один момент (INTERVAL=0), руйнуючи грейс-вікно.
@@ -221,20 +202,6 @@ if (
             `BILLING_DUNNING_RETRY_INTERVAL_HOURS (${ENV.BILLING_DUNNING_RETRY_INTERVAL_HOURS}) ` +
             'must both be ≥ 1.'
     );
-}
-
-// Sprint 22 — ціна 0 грн = безкоштовний/зламаний charge. Кожен тариф ≥ 1 грн.
-const billingPrices = {
-    BILLING_PRICE_SUBSCRIPTION_BRAND: ENV.BILLING_PRICE_SUBSCRIPTION_BRAND,
-    BILLING_PRICE_SUBSCRIPTION_BOOKKEEPER:
-        ENV.BILLING_PRICE_SUBSCRIPTION_BOOKKEEPER,
-    BILLING_PRICE_ONEOFF_BRAND: ENV.BILLING_PRICE_ONEOFF_BRAND,
-    BILLING_PRICE_ONEOFF_BOOKKEEPER: ENV.BILLING_PRICE_ONEOFF_BOOKKEEPER,
-};
-for (const [name, value] of Object.entries(billingPrices)) {
-    if (value < 1) {
-        throw new Error(`❌ ${name} (${value}) must be ≥ 1 (гривні).`);
-    }
 }
 
 // Sprint 10 §10.1 — dedup-overwrite-flow (sendMagicLink SP-8) припускає, що

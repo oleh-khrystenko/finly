@@ -4,49 +4,45 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { Model } from 'mongoose';
 import { PAYMENT_RECORD_STATUS, SUBSCRIPTION_STATUS } from '@finly/types';
 
-import { User, UserDocument } from '../users/schemas/user.schema';
+import {
+    BillingProfile,
+    BillingProfileDocument,
+} from './schemas/billing-profile.schema';
 import {
     PaymentRecord,
     PaymentRecordDocument,
 } from './schemas/payment-record.schema';
-import { PaymentsService } from './payments.service';
+import { BillingProfileService } from './billing-profile.service';
 
 /**
  * PENDING claim-запис, молодший за цей поріг, ще може бути в роботі синхронного
- * списання (живий творець утримує per-user лок). Звіряємо лише старші — це
- * завислі (нетермінальний результат або крах після списання).
+ * списання (живий творець утримує per-user лок). Звіряємо лише старші — завислі
+ * (нетермінальний результат або крах після списання).
  */
 const PENDING_RECONCILE_AGE_MS = 5 * 60 * 1000;
 
 /**
- * Sprint 22 — billing-clock: серце self-managed білінгу. monobank не має
- * рекуренту, тож продовження ініціює наш погодинний cron, читаючи дату
- * наступного списання з бази (єдине джерело правди). Пропущений запуск
- * самолікується наступним проходом — правда лежить у базі. Кожен крок ізольовано
- * (catch на per-item рівні в `PaymentsService`); top-level find захищає `step`.
+ * Sprint 27 — billing-clock на білінг-профілях. monobank не має рекуренту, тож
+ * місячне продовження ініціює наш погодинний cron, читаючи `nextChargeAt` з
+ * профілю (єдине джерело правди). Пропущений запуск самолікується наступним
+ * проходом. Кожен крок ізольовано (catch на per-item рівні у сервісі).
  */
 @Injectable()
 export class BillingClockService {
     private readonly logger = new Logger(BillingClockService.name);
 
     constructor(
-        @InjectModel(User.name)
-        private readonly userModel: Model<UserDocument>,
-
+        @InjectModel(BillingProfile.name)
+        private readonly profileModel: Model<BillingProfileDocument>,
         @InjectModel(PaymentRecord.name)
         private readonly paymentRecordModel: Model<PaymentRecordDocument>,
-
-        private readonly paymentsService: PaymentsService
+        private readonly billing: BillingProfileService
     ) {}
 
     @Cron(CronExpression.EVERY_HOUR)
     async runBillingClock(): Promise<void> {
-        // Спершу доводимо завислі спроби (звірка статусом), щоб не списати поверх
-        // незакритого продовження; далі нові продовження і повтори прострочки.
-        await this.step('reconcilePendingRenewals', () =>
-            this.reconcilePendingRenewals()
-        );
-        await this.step('chargeDueRenewals', () => this.chargeDueRenewals());
+        await this.step('reconcilePending', () => this.reconcilePending());
+        await this.step('chargeDueCycles', () => this.chargeDueCycles());
         await this.step('retryDunning', () => this.retryDunning());
     }
 
@@ -61,55 +57,61 @@ export class BillingClockService {
         }
     }
 
-    /** ACTIVE підписки з насталою датою списання — продовжуємо за токеном. */
-    private async chargeDueRenewals(): Promise<void> {
+    /** ACTIVE профілі з насталою датою списання — продовжуємо цикл за токеном. */
+    private async chargeDueCycles(): Promise<void> {
         const now = new Date();
-        const due = await this.userModel
+        const due = await this.profileModel
             .find(
                 {
-                    'billing.hasActiveSubscription': true,
-                    'billing.subscriptionStatus': SUBSCRIPTION_STATUS.ACTIVE,
-                    'billing.cancelAtPeriodEnd': false,
-                    'billing.nextChargeAt': { $ne: null, $lte: now },
+                    status: SUBSCRIPTION_STATUS.ACTIVE,
+                    cancelAtPeriodEnd: false,
+                    nextChargeAt: { $ne: null, $lte: now },
                 },
-                { _id: 1 }
+                { userId: 1 }
             )
             .lean();
         if (due.length === 0) return;
-        this.logger.log(`Charging ${due.length} due subscription(s)`);
-        for (const user of due) {
-            await this.chargeOne(user._id.toString());
+        this.logger.log(`Charging ${due.length} due profile(s)`);
+        for (const p of due) {
+            await this.chargeOne(p.userId.toString());
         }
     }
 
-    /** PAST_DUE підписки з насталим часом повтору — повторна спроба списання. */
+    /** PAST_DUE профілі з насталим часом повтору — повторна спроба списання. */
     private async retryDunning(): Promise<void> {
         const now = new Date();
-        const due = await this.userModel
+        const due = await this.profileModel
             .find(
                 {
-                    'billing.hasActiveSubscription': true,
-                    'billing.subscriptionStatus': SUBSCRIPTION_STATUS.PAST_DUE,
-                    'billing.nextRetryAt': { $ne: null, $lte: now },
+                    status: SUBSCRIPTION_STATUS.PAST_DUE,
+                    nextRetryAt: { $ne: null, $lte: now },
                 },
-                { _id: 1 }
+                { userId: 1 }
             )
             .lean();
         if (due.length === 0) return;
-        this.logger.log(`Retrying ${due.length} past-due subscription(s)`);
-        for (const user of due) {
-            await this.chargeOne(user._id.toString());
+        this.logger.log(`Retrying ${due.length} past-due profile(s)`);
+        for (const p of due) {
+            await this.chargeOne(p.userId.toString());
         }
     }
 
-    /** Завислі PENDING claim-записи з invoiceId — доводимо звіркою статусу. */
-    private async reconcilePendingRenewals(): Promise<void> {
+    /**
+     * Завислі PENDING claim-записи — доводимо до фіналу. З invoiceId —
+     * звіркою статусу у провайдера. БЕЗ invoiceId (крах процесу між claim-ом
+     * і збереженням invoiceId, і вебхук так і не прийшов — інвойс,
+     * найімовірніше, не був створений) авто-розвʼязки немає:
+     * `resolveClaimEvent` ставить ops-прапор `needsManualReview`. Фільтрувати
+     * такі записи геть не можна — вони були б вічно невидимими і мовчки
+     * блокували б усі платні мутації платника (`assertNoUnsettledCharge`)
+     * без жодного сигналу.
+     */
+    private async reconcilePending(): Promise<void> {
         const cutoff = new Date(Date.now() - PENDING_RECONCILE_AGE_MS);
         const stuck = await this.paymentRecordModel
             .find(
                 {
                     status: PAYMENT_RECORD_STATUS.PENDING,
-                    providerTransactionId: { $ne: null },
                     createdAt: { $lt: cutoff },
                 },
                 { userId: 1, orderReference: 1 }
@@ -119,7 +121,7 @@ export class BillingClockService {
         this.logger.log(`Reconciling ${stuck.length} pending charge(s)`);
         for (const record of stuck) {
             try {
-                await this.paymentsService.finalizePendingRenewal(
+                await this.billing.finalizePending(
                     record.userId.toString(),
                     record.orderReference
                 );
@@ -134,7 +136,7 @@ export class BillingClockService {
 
     private async chargeOne(userId: string): Promise<void> {
         try {
-            await this.paymentsService.chargeDueSubscription(userId);
+            await this.billing.chargeDueCycle(userId);
         } catch (error) {
             this.logger.error(
                 `Billing clock charge failed for user ${userId}`,

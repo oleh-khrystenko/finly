@@ -1,5 +1,5 @@
 import { Metadata } from 'next';
-import { BILLING_CURRENCY, type PaymentsCatalog } from '@finly/types';
+import { type BillingCatalog } from '@finly/types';
 
 import { QrLandingBlock } from '@/features/qr-landing-preview';
 import { loadCatalog } from '@/features/billing';
@@ -36,20 +36,18 @@ export function generateMetadata(): Metadata {
  * Offer-вузли SoftwareApplication з реальних цін каталогу (копійки → гривні,
  * major-units string за schema.org). Безкоштовний рівень включається першим.
  */
-function buildOffers(catalog: PaymentsCatalog): Array<Record<string, string>> {
-    const toOffer = (name: string, priceAmount: number, currency: string) => ({
+function buildOffers(catalog: BillingCatalog): Array<Record<string, string>> {
+    const toOffer = (name: string, priceAmount: number) => ({
         '@type': 'Offer',
         name,
         price: (priceAmount / 100).toFixed(2),
-        priceCurrency: currency,
+        priceCurrency: catalog.currency,
     });
     return [
-        toOffer('Безкоштовно', 0, BILLING_CURRENCY),
-        ...catalog.subscriptionPlans.map((plan) =>
-            toOffer(plan.name, plan.priceAmount, plan.currency)
-        ),
-        ...catalog.oneOffAccesses.map((access) =>
-            toOffer(access.name, access.priceAmount, access.currency)
+        toOffer('Безкоштовно', 0),
+        toOffer('Бренд', catalog.brand.pricePerBusiness),
+        ...catalog.documents.tiers.map((tier) =>
+            toOffer(`Документи · ${tier.size}`, tier.priceAmount)
         ),
     ];
 }

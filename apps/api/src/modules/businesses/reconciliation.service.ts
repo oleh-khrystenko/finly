@@ -1,22 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
-import {
-    isAccessLevelAtLeast,
-    type AccessLevel,
-    type BusinessType,
-} from '@finly/types';
+import { SUBSCRIPTION_STATUS } from '@finly/types';
 
-import {
-    BILLING_LOCK_TTL_MS,
-    billingLockKey,
-} from '../../common/billing/billing-lock';
-import { resolveAccessLevel } from '../../common/billing/resolve-access-level';
-import {
-    RedisLockBusyError,
-    RedisLockService,
-} from '../../common/services/redis-lock.service';
-import { UsersService } from '../users/users.service';
 import {
     AccountSlugHistory,
     AccountSlugHistoryDocument,
@@ -28,6 +14,18 @@ import {
 } from '../invoices/schemas/invoice-slug-history.schema';
 import { Invoice, InvoiceDocument } from '../invoices/schemas/invoice.schema';
 import {
+    BillingProfile,
+    BillingProfileDocument,
+} from '../payments/schemas/billing-profile.schema';
+import {
+    RECONCILE_LOCK_KEY,
+    RECONCILE_LOCK_TTL_MS,
+} from '../../common/billing/billing-lock';
+import {
+    RedisLockBusyError,
+    RedisLockService,
+} from '../../common/services/redis-lock.service';
+import {
     BusinessSlugHistory,
     BusinessSlugHistoryDocument,
 } from './schemas/business-slug-history.schema';
@@ -37,16 +35,10 @@ import {
     generateRandomTail,
 } from './slug-generator.service';
 
-type BucketItem = {
-    _id: Types.ObjectId;
-    accessBlockedAt: Date | null;
-};
-
 /**
  * Бюджет slug-rent одного прогону. `remaining` — скільки ще entity-reset-ів
  * дозволено; `incomplete` — лишилась робота поза бюджетом або частина reset-ів
- * упала (обидва випадки → durable-стемп `reconcileRequiredAt`, доганяє
- * daily-sweep).
+ * упала.
  */
 type SlugRentBudget = {
     remaining: number;
@@ -54,44 +46,36 @@ type SlugRentBudget = {
 };
 
 const NESTED_SLUG_MAX_ATTEMPTS = 10;
-
-// Стеля per-entity slug-reset-ів за один прогін реконсиляції. Реконсиляція
-// виконується під білінг-локом (TTL — див. billing-lock.ts), а кількість
-// кастомних slug-ів bookkeeper-користувача необмежена за продуктом — без
-// батч-ліміту довгий slug-rent виїв би TTL (зник би mutual-exclusion) і
-// затягував би webhook-відповідь провайдеру. Кожен reset — коротка TX
-// (одиниці-десятки мс), тож 200 тримає прогін у межах кількох секунд;
-// решта доганяється наступними прогонами через `reconcileRequiredAt`-стемп.
 const SLUG_RENT_MAX_RESETS_PER_RUN = 200;
 
-// Cron-реконсиляція бере той самий per-user білінг-лок, що й білінг-мутації.
-// Лок звільняється швидко (критична секція обмежена батч-лімітом вище), тож
-// кілька спроб з коротким бекофом перекривають типову контенцію; якщо холдер
-// усе ще тримає лок — стемп `reconcileRequiredAt` (ставиться самим
-// `reconcileUnderLock` ДО спроби локу) гарантує retry наступним daily-sweep-ом.
+// Reconcile-мьютекс звільняється швидко (критична секція — Mongo-операції,
+// обмежені батч-лімітом вище), тож кілька спроб з коротким бекофом перекривають
+// типову контенцію; якщо холдер усе ще тримає лок — повертаємо false, durable
+// `reconcileRequiredAt`-стемп caller-а гарантує retry наступним тригером.
 const RECONCILE_LOCK_MAX_ATTEMPTS = 5;
 const RECONCILE_LOCK_RETRY_DELAY_MS = 200;
 
 /**
- * Sprint 19 — реконсиляція бізнесів під поточний рівень доступу користувача.
+ * Sprint 27 — реконсиляція бренд-фіч бізнесу per-business.
  *
- * Ідемпотентна і двонаправлена: викликається при будь-якій зміні білінг-стану
- * (втрата доступу — скасування підписки, сплив past-due/one-off; повернення —
- * нова підписка/one-off). Перераховує, які бізнеси виживають у межах лімітів
- * рівня, блокує зайві (стемп `accessBlockedAt`) і знімає блокування з тих, що
- * знову в межах. Нічого не видаляє — заблокований бізнес лишається у кабінеті,
- * користувач може лише видалити вручну.
+ * Модель перевернута з per-user (рівень доступу платника) на per-business
+ * (прикріплення бізнесу до активного Бренд-складу). Бізнес «брендований», поки
+ * прикріплений хоча б до одного складу платника у статусі ACTIVE або PAST_DUE
+ * (грейс). Реконсиляція для набору бізнесів перечитує це наживо і:
+ *   - виставляє / знімає денормалізований прапор `brandedAt` (гейтинг і публічний
+ *     рендер читають саме його);
+ *   - промотує логотип `pending → active` (брендований) або демоутить
+ *     `active → pending` (втратив останнє прикріплення), файл лишається;
+ *   - при втраті бренду робить slug-rent: скидає кастомні slug-и бізнесу,
+ *     реквізитів і рахунків до авто (ім'я повертається ринку), старе → history
+ *     з `redirect:false` (резерв на холд без 308).
  *
- * Правило виживання — «найстаріші per-bucket»: у кожному відрі (власні per-тип,
- * клієнтські) виживають найперше створені в межах ліміту, решта блокуються.
- * Фізособа/ФОП завжди ≤1 (доменний інваріант), тож ніколи не блокуються.
+ * Лімітів кількості бізнесів і рівневої шкали більше немає — блокування бізнесів
+ * (`accessBlockedAt`) знято разом з ними.
  *
- * Slug-rent: при падінні нижче brand усі кастомні (vanity) slug-и користувача —
- * бізнесів, реквізитів (account) і рахунків (invoice) — скидаються до авто,
- * старе ім'я їде у відповідну `*SlugHistory` з `redirect:false` (резерв на холд
- * без 308). Account/invoice slug генеруємо inline через `generateRandomTail` +
- * scope-uniqueness, тож downstream-генератор-сервіси (DAG `Businesses ←
- * Accounts ← Invoices`) не потрібні — лише їх моделі (вже у forFeature).
+ * Ідемпотентна: всі оновлення умовні, повторний прогін на незмінному стані —
+ * no-op. Викликається BillingProfileService при зміні прикріплень / lapse і
+ * daily-sweep для профілів зі стемпом незавершеної реконсиляції.
  */
 @Injectable()
 export class ReconciliationService {
@@ -110,209 +94,123 @@ export class ReconciliationService {
         private readonly invoiceModel: Model<InvoiceDocument>,
         @InjectModel(InvoiceSlugHistory.name)
         private readonly invoiceHistoryModel: Model<InvoiceSlugHistoryDocument>,
+        @InjectModel(BillingProfile.name)
+        private readonly profileModel: Model<BillingProfileDocument>,
         @InjectConnection()
         private readonly connection: Connection,
         private readonly slugGenerator: SlugGeneratorService,
-        private readonly usersService: UsersService,
         private readonly locks: RedisLockService
     ) {}
 
     /**
-     * Реконсиляція під per-user білінг-локом (той самий ключ, що й
-     * білінг-мутації у `PaymentsService`). Для тригерів, що НЕ тримають лок
-     * самі: cron-сплини (`PaymentsCleanupService`) і видалення бізнесу
-     * (`BusinessesController.delete`) — інакше вони конкурували б за
-     * `accessBlockedAt` з grant-вебхуком того ж користувача (lost-update).
-     * `reconcile` re-читає свіжий білінг-стан, тож серіалізований порядок не
-     * важить — останній виконавець бачить фінальний стан.
+     * Реконсилює бренд-стан набору бізнесів під поточні активні прикріплення.
+     * Повертає `true` при ПОВНОМУ проході; `false` — лок зайнятий, slug-rent не
+     * вмістився у батч-ліміт або частина reset-ів упала. Caller мусить тримати
+     * durable-маркер (`reconcileRequiredAt`) до повного проходу — daily-sweep
+     * доганяє.
      *
-     * Ніколи не кидає: lock-контенція після ретраїв і reconcile-помилки —
-     * best-effort лог; durable-retry гарантує `reconcileRequiredAt`-стемп,
-     * який цей метод ставить САМ до спроби локу (див. нижче) і який добиває
-     * daily-sweep. Холдери білінг-локу цей метод НЕ викликають — вони йдуть
-     * напряму у `reconcile` (повторне взяття non-reentrant локу кинуло б busy).
+     * Прохід — під глобальним reconcile-мьютексом (`RECONCILE_LOCK_KEY`):
+     * read-then-write на `brandedAt` інакше гонить між тригерами різних
+     * платників того самого бізнесу і daily-sweep без user-лока — stale-читання
+     * перетирало б свіжий флип без жодного retry-тригера (обидва маркери на той
+     * момент уже зняті). Стан читається всередині секції, тож останній reconcile
+     * у черзі завжди пише за найсвіжішим станом.
      */
-    async reconcileUnderLock(userId: string): Promise<void> {
-        // Durable-маркер ДО спроби взяти лок: якщо всі ретраї впруться у
-        // зайнятий лок або процес впаде, daily-sweep знайде стемп і добʼє
-        // reconcile. Для cron-тригерів це дубль їхнього стемпа (нешкідливо),
-        // для delete-тригера (`BusinessesController.delete`) — єдина
-        // durable-гарантія. Повний reconcile знімає маркер сам (clear умовний
-        // за startedAt, тож пізніший конкурентний стемп переживає). Для
-        // користувача без білінг-субдока стемп no-op — durable-retry там
-        // неможливий за схемою. Best-effort: збій стемпа не блокує саму спробу.
-        try {
-            await this.usersService.stampBillingReconcileRequired(userId);
-        } catch (error) {
-            this.logger.error(
-                `Failed to stamp reconcileRequiredAt for user ${userId}`,
-                error instanceof Error ? error.stack : String(error)
-            );
-        }
+    async reconcileBusinesses(businessIds: string[]): Promise<boolean> {
+        const ids = dedupeObjectIds(businessIds);
+        if (ids.length === 0) return true;
         for (
             let attempt = 1;
             attempt <= RECONCILE_LOCK_MAX_ATTEMPTS;
             attempt++
         ) {
             try {
-                await this.locks.withLock(
-                    billingLockKey(userId),
-                    BILLING_LOCK_TTL_MS,
-                    () => this.reconcile(userId)
+                return await this.locks.withLock(
+                    RECONCILE_LOCK_KEY,
+                    RECONCILE_LOCK_TTL_MS,
+                    () => this.reconcileBusinessesLocked(ids)
                 );
-                return;
             } catch (error) {
-                if (error instanceof RedisLockBusyError) {
-                    if (attempt < RECONCILE_LOCK_MAX_ATTEMPTS) {
-                        await delay(RECONCILE_LOCK_RETRY_DELAY_MS);
-                        continue;
-                    }
-                    this.logger.warn(
-                        `Reconcile deferred for user ${userId}: billing lock busy ` +
-                            `after ${RECONCILE_LOCK_MAX_ATTEMPTS} attempts`
-                    );
-                    return;
+                if (!(error instanceof RedisLockBusyError)) throw error;
+                if (attempt < RECONCILE_LOCK_MAX_ATTEMPTS) {
+                    await delay(RECONCILE_LOCK_RETRY_DELAY_MS);
                 }
-                this.logger.error(
-                    `Reconciliation failed for user ${userId} (deferred to next trigger)`,
-                    error instanceof Error ? error.stack : String(error)
-                );
-                return;
             }
         }
+        this.logger.warn(
+            `Reconcile lock busy after ${RECONCILE_LOCK_MAX_ATTEMPTS} attempts ` +
+                `for ${ids.length} business(es) — deferred to durable marker`
+        );
+        return false;
     }
 
-    async reconcile(userId: string): Promise<void> {
-        // Момент старту прогону — межа для умовного clear-у durable-маркера:
-        // стемп, поставлений конкурентним cron-флипом ПІСЛЯ читання білінг-стану
-        // нижче, мусить пережити зняття (цей прогін його флипу ще не бачив).
-        const startedAt = new Date();
-        const user = await this.usersService.findById(userId);
-        if (!user) return;
-        const level = resolveAccessLevel(user.billing);
-        const userObjectId = new Types.ObjectId(userId);
-
-        const owned = await this.businessModel
+    private async reconcileBusinessesLocked(
+        ids: Types.ObjectId[]
+    ): Promise<boolean> {
+        // Які з цих бізнесів прикріплені хоча б до одного активного Бренд-складу.
+        const profiles = await this.profileModel
             .find(
-                { ownerId: userObjectId },
-                { type: 1, accessBlockedAt: 1, createdAt: 1 }
+                {
+                    status: {
+                        $in: [
+                            SUBSCRIPTION_STATUS.ACTIVE,
+                            SUBSCRIPTION_STATUS.PAST_DUE,
+                        ],
+                    },
+                    'brand.attachedBusinessIds': { $in: ids },
+                },
+                { 'brand.attachedBusinessIds': 1 }
             )
-            .sort({ createdAt: 1 })
-            .lean<Array<BucketItem & { type: BusinessType }>>()
-            .exec();
-        const client = await this.businessModel
-            .find(
-                { ownerId: null, managers: userObjectId },
-                { accessBlockedAt: 1, createdAt: 1 }
-            )
-            .sort({ createdAt: 1 })
-            .lean<BucketItem[]>()
-            .exec();
+            .lean();
 
-        const toBlock: Types.ObjectId[] = [];
-        const toUnblock: Types.ObjectId[] = [];
-
-        const ownedByType = new Map<BusinessType, BucketItem[]>();
-        for (const b of owned) {
-            const list = ownedByType.get(b.type) ?? [];
-            list.push(b);
-            ownedByType.set(b.type, list);
+        const brandedSet = new Set<string>();
+        for (const p of profiles) {
+            for (const bid of p.brand.attachedBusinessIds) {
+                brandedSet.add(bid.toString());
+            }
         }
-        for (const [type, list] of ownedByType) {
-            partitionBucket(list, ownedLimit(type, level), toBlock, toUnblock);
-        }
-        partitionBucket(client, clientLimit(level), toBlock, toUnblock);
+        const branded = ids.filter((id) => brandedSet.has(id.toString()));
+        const unbranded = ids.filter((id) => !brandedSet.has(id.toString()));
 
-        if (toBlock.length > 0) {
+        if (branded.length > 0) {
             await this.businessModel.updateMany(
-                { _id: { $in: toBlock }, accessBlockedAt: null },
-                { $set: { accessBlockedAt: new Date() } }
+                { _id: { $in: branded }, brandedAt: null },
+                { $set: { brandedAt: new Date() } }
             );
         }
-        if (toUnblock.length > 0) {
+        if (unbranded.length > 0) {
             await this.businessModel.updateMany(
-                { _id: { $in: toUnblock }, accessBlockedAt: { $ne: null } },
-                { $set: { accessBlockedAt: null } }
+                { _id: { $in: unbranded }, brandedAt: { $ne: null } },
+                { $set: { brandedAt: null } }
             );
         }
 
-        if (toBlock.length > 0 || toUnblock.length > 0) {
-            this.logger.log(
-                `Reconciled user ${userId} (level ${level}): ` +
-                    `${toBlock.length} to block, ${toUnblock.length} to unblock`
-            );
-        }
+        await this.reconcileBrandLogos(branded, unbranded);
 
-        const businessIds = [...owned, ...client].map((b) => b._id);
-
-        // Sprint 21 — демоція/промоція кастомного бренду під поточний рівень.
-        // Це і є auto-apply після оплати: грант-вебхук → reconcileSafe →
-        // промоція pending→active без окремого хука; згасання тарифу (cron/
-        // refund/cancel) → демоція active→pending (файл лишається).
-        await this.reconcileBrands(businessIds, level);
-
-        // Slug-rent: нижче brand втрачається право на vanity-slug → скидаємо
-        // кастомні slug-и бізнесів, реквізитів і рахунків до авто (ім'я
-        // повертається ринку). brand/bookkeeper зберігають кастомні.
-        // Ідемпотентно: після reset slugCustomized=false, повторний прогін не
-        // чіпає. businessIds беремо з уже завантажених bucket-ів (без зайвого
-        // запиту). Обсяг одного прогону обмежений батчем (TTL білінг-локу +
-        // латентність webhook-шляху) — хвіст доганяється через стемп нижче.
-        let slugRentComplete = true;
-        if (!isAccessLevelAtLeast(level, 'brand') && businessIds.length > 0) {
-            slugRentComplete = await this.runSlugRent(businessIds);
-        }
-
-        // Durable-маркер на білінгу: неповний прогін (батч-ліміт / збої
-        // окремих reset-ів) → стемп, daily-sweep `PaymentsCleanupService`
-        // доганяє; повний → знімаємо стемпи, поставлені ДО старту цього прогону
-        // (cron-тригери, reconcileUnderLock). Clear умовний за `startedAt`:
-        // стемп конкурентного cron-флипу, що приземлився після нашого читання
-        // білінг-стану, переживає зняття — інакше той флип лишився б без
-        // durable-retry. Для користувача без білінг-субдока стемп неможливий
-        // ($set крізь null) і не потрібен — у нього немає cron-тригерів, які
-        // могли б загубитись.
-        if (user.billing) {
-            if (slugRentComplete) {
-                await this.usersService.clearBillingReconcileRequired(
-                    userId,
-                    startedAt
-                );
-            } else {
-                await this.usersService.stampBillingReconcileRequired(userId);
+        // Втратив бренд → скидаємо кастомні slug-и (бізнес + реквізити + рахунки).
+        if (unbranded.length > 0) {
+            const complete = await this.runSlugRent(unbranded);
+            if (!complete) {
                 this.logger.warn(
-                    `Slug-rent for user ${userId} incomplete (batch limit or ` +
-                        `per-entity failures), stamped for daily retry`
+                    `Slug-rent incomplete for ${unbranded.length} business(es) ` +
+                        `(batch limit or per-entity failures)`
                 );
+                return false;
             }
         }
+        return true;
     }
 
-    // ── Brand demote/promote (Sprint 21) ────────────────────────────────
+    // ── Brand logo promote / demote ─────────────────────────────────────
 
-    /**
-     * Тримає слот кастомного бренду в актуальному стані під рівень доступу:
-     *   - ≥ brand: промотує `pending → active` (логотип повертається публічно).
-     *     Це і є auto-apply після оплати — окремий хук не потрібен.
-     *   - < brand: демоутить `active → pending` зі свіжим `uploadedAt` (файл
-     *     лишається; orphan-cron прибере, якщо підписку не поновлять у вікні).
-     *
-     * Атомарні bulk-update з aggregation-pipeline (один запит на весь набір),
-     * ідемпотентні через filter-умови. Інваріант: `active` і `pending` не
-     * співіснують у нормальному потоці (платний commit чистить pending,
-     * deleteOrphanedFiles чистить файли) — тож промоція не перетирає чужий
-     * pending, а демоція не лишає orphan-файлів попереднього pending.
-     */
-    private async reconcileBrands(
-        businessIds: Types.ObjectId[],
-        level: AccessLevel
+    private async reconcileBrandLogos(
+        branded: Types.ObjectId[],
+        unbranded: Types.ObjectId[]
     ): Promise<void> {
-        if (businessIds.length === 0) return;
-
-        if (isAccessLevelAtLeast(level, 'brand')) {
+        if (branded.length > 0) {
             await this.businessModel.updateMany(
                 {
-                    _id: { $in: businessIds },
+                    _id: { $in: branded },
                     'brand.pending': { $ne: null },
                     'brand.active': null,
                 },
@@ -330,37 +228,31 @@ export class ReconciliationService {
                     },
                 ]
             );
-            return;
         }
-
-        await this.businessModel.updateMany(
-            { _id: { $in: businessIds }, 'brand.active': { $ne: null } },
-            [
-                {
-                    $set: {
-                        'brand.pending': {
-                            logoUrl: '$brand.active.logoUrl',
-                            centerMarkUrl: '$brand.active.centerMarkUrl',
-                            bandMarkUrl: '$brand.active.bandMarkUrl',
-                            displayName: '$brand.active.displayName',
-                            uploadedAt: '$$NOW',
-                            // Демоутований платний логотип — довгий поріг чистки.
-                            demoted: true,
+        if (unbranded.length > 0) {
+            await this.businessModel.updateMany(
+                { _id: { $in: unbranded }, 'brand.active': { $ne: null } },
+                [
+                    {
+                        $set: {
+                            'brand.pending': {
+                                logoUrl: '$brand.active.logoUrl',
+                                centerMarkUrl: '$brand.active.centerMarkUrl',
+                                bandMarkUrl: '$brand.active.bandMarkUrl',
+                                displayName: '$brand.active.displayName',
+                                uploadedAt: '$$NOW',
+                                demoted: true,
+                            },
+                            'brand.active': null,
                         },
-                        'brand.active': null,
                     },
-                },
-            ]
-        );
+                ]
+            );
+        }
     }
 
-    // ── Slug-rent reset (рівень нижче brand) ─────────────────────────────
+    // ── Slug-rent reset (business lost brand) ────────────────────────────
 
-    /**
-     * Скидає кастомні slug-и трьох рівнів у межах спільного бюджету
-     * (`SLUG_RENT_MAX_RESETS_PER_RUN`). Повертає true, якщо все скинуто
-     * (бюджету вистачило і жоден reset не впав).
-     */
     private async runSlugRent(businessIds: Types.ObjectId[]): Promise<boolean> {
         const budget: SlugRentBudget = {
             remaining: SLUG_RENT_MAX_RESETS_PER_RUN,
@@ -376,8 +268,6 @@ export class ReconciliationService {
         businessIds: Types.ObjectId[],
         budget: SlugRentBudget
     ): Promise<void> {
-        // Бюджет вичерпано попереднім рівнем — консервативно вважаємо прогін
-        // неповним (зайвий no-op retry дешевший за exists-перевірку тут).
         if (budget.remaining <= 0) {
             budget.incomplete = true;
             return;
@@ -394,7 +284,6 @@ export class ReconciliationService {
             budget.incomplete = true;
             customized.length = budget.remaining;
         }
-
         for (const biz of customized) {
             const ok = await this.safeReset('business', biz._id, () =>
                 this.resetOneBusinessSlug(biz._id, biz.slugLower)
@@ -430,7 +319,6 @@ export class ReconciliationService {
             budget.incomplete = true;
             customized.length = budget.remaining;
         }
-
         for (const acc of customized) {
             const ok = await this.safeReset('account', acc._id, () =>
                 this.resetOneAccountSlug(acc._id, acc.businessId, acc.slugLower)
@@ -467,7 +355,6 @@ export class ReconciliationService {
             budget.incomplete = true;
             customized.length = budget.remaining;
         }
-
         for (const inv of customized) {
             const ok = await this.safeReset('invoice', inv._id, () =>
                 this.resetOneInvoiceSlug(
@@ -507,10 +394,6 @@ export class ReconciliationService {
                 },
                 { session }
             );
-            // Бізнес зник між скануванням і TX (cascade-delete не під
-            // білінг-локом): abort відкочує history-insert, інакше orphan-запис,
-            // поставлений ПІСЛЯ cascade-зачистки history, блокував би звільнений
-            // slug глобально до TTL.
             if (updated.matchedCount === 0) {
                 throw new Error(
                     `Business ${businessId.toString()} vanished during slug reset`
@@ -561,8 +444,6 @@ export class ReconciliationService {
                 },
                 { session }
             );
-            // Симетрично resetOneBusinessSlug: abort відкочує history-insert
-            // для зниклої сутності.
             if (updated.matchedCount === 0) {
                 throw new Error(
                     `Account ${accountId.toString()} vanished during slug reset`
@@ -604,9 +485,6 @@ export class ReconciliationService {
                 ],
                 { session }
             );
-            // Reset до random-slug-у без counter-нумерації: slugPreset/scope/
-            // counter обнуляються (інвойс більше не counter-based), інакше stale
-            // counter висів би у partial-unique-індексі.
             const updated = await this.invoiceModel.updateOne(
                 { _id: invoiceId },
                 {
@@ -621,8 +499,6 @@ export class ReconciliationService {
                 },
                 { session }
             );
-            // Симетрично resetOneBusinessSlug: abort відкочує history-insert
-            // для зниклої сутності.
             if (updated.matchedCount === 0) {
                 throw new Error(
                     `Invoice ${invoiceId.toString()} vanished during slug reset`
@@ -631,12 +507,6 @@ export class ReconciliationService {
         });
     }
 
-    /**
-     * Best-effort обгортка для per-entity slug-reset: збій одного не зриває
-     * решту батча (slugCustomized лишається true, durable-стемп
-     * `reconcileRequiredAt` гарантує retry). Повертає false на збій — caller
-     * мітить прогін неповним.
-     */
     private async safeReset(
         kind: string,
         id: Types.ObjectId,
@@ -685,40 +555,13 @@ function delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Ліміт власних бізнесів за типом і рівнем доступу. */
-function ownedLimit(type: BusinessType, level: AccessLevel): number {
-    // Фізособа / ФОП — доменний інваріант ≤1 на будь-якому рівні (їх і так
-    // максимум 1 через create-замок, тож вони завжди виживають).
-    if (type === 'individual' || type === 'fop') return 1;
-    // ТОВ / організація — 1 на none/brand, без ліміту на bookkeeper.
-    return isAccessLevelAtLeast(level, 'bookkeeper')
-        ? Number.POSITIVE_INFINITY
-        : 1;
-}
-
-/** Ліміт клієнтських бізнесів за рівнем доступу. */
-function clientLimit(level: AccessLevel): number {
-    return isAccessLevelAtLeast(level, 'bookkeeper')
-        ? Number.POSITIVE_INFINITY
-        : 10;
-}
-
-/**
- * Перші `limit` (за createdAt asc) виживають → знімаємо блокування; решта →
- * блокуємо. Колекціонує id у спільні toBlock/toUnblock; самі updateMany з
- * conditional-фільтром роблять операцію ідемпотентною.
- */
-function partitionBucket(
-    sortedOldestFirst: BucketItem[],
-    limit: number,
-    toBlock: Types.ObjectId[],
-    toUnblock: Types.ObjectId[]
-): void {
-    sortedOldestFirst.forEach((item, index) => {
-        if (index < limit) {
-            toUnblock.push(item._id);
-        } else {
-            toBlock.push(item._id);
-        }
-    });
+function dedupeObjectIds(ids: string[]): Types.ObjectId[] {
+    const seen = new Set<string>();
+    const out: Types.ObjectId[] = [];
+    for (const id of ids) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+        out.push(new Types.ObjectId(id));
+    }
+    return out;
 }

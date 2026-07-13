@@ -21,12 +21,11 @@ import {
     resetAccountSlug,
     updateAccount,
 } from '@/shared/api';
-import { OwnershipBadge } from '@/entities/business';
+import { OwnershipBadge, isBusinessBranded } from '@/entities/business';
 import {
     matchActiveSlugReservation,
     useApplyPendingSlug,
     useAuthStore,
-    useCanEditSlug,
 } from '@/entities/user';
 import {
     useSubscribeLabel,
@@ -101,12 +100,14 @@ export default function AccountCabinetPage() {
     const reservation = useAuthStore(
         (s) => s.user?.activeSlugReservation ?? null
     );
-    const isPaid = useCanEditSlug();
-    const subscribeLabel = useSubscribeLabel('brand');
+    const subscribeLabel = useSubscribeLabel();
     const openDeleteConfirm = useDeleteAccountConfirmStore((s) => s.open);
 
     const [data, setData] = useState<LoadedData | null>(null);
     const [error, setError] = useState<ErrorState | null>(null);
+
+    // Sprint 27 — гейт vanity-slug/логотипа per-business: батьківський бізнес брендований.
+    const isPaid = isBusinessBranded(data?.business);
     const [autoEditSlug, setAutoEditSlug] = useState(false);
 
     const paramBiz = params.slug;
@@ -212,13 +213,14 @@ export default function AccountCabinetPage() {
     useApplyPendingSlug({
         matches: desiredSlug !== null,
         desiredSlug,
+        isBranded: isPaid,
         apply: applyReservedSlug,
         onTaken: handleSlugTaken,
     });
     const handleSubscribe = useCallback(() => {
         if (!data) return Promise.resolve();
         return startSubscriptionCheckout(
-            'brand',
+            data.business.id,
             `/business/${data.business.slug}/account/${data.account.slug}`
         ).catch(() => {
             toast.error('Не вдалося відкрити оплату. Спробуйте ще раз');
@@ -354,7 +356,6 @@ export default function AccountCabinetPage() {
                 businessSlug={business.slug}
                 brandVersion={qrBrandVersion(business.brand?.active?.logoUrl)}
                 payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
-                accessSuspended={business.accessBlockedAt != null}
                 isPaid={isPaid}
                 onSave={onSaveAccount}
                 onResetSlug={handleResetSlug}

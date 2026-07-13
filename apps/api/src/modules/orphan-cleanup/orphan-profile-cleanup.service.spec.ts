@@ -40,11 +40,6 @@ import {
     InvoiceDocument,
     InvoiceSchema,
 } from '../invoices/schemas/invoice.schema';
-import {
-    ExecutionTransaction,
-    ExecutionTransactionDocument,
-    ExecutionTransactionSchema,
-} from '../users/schemas/execution-transaction.schema';
 import { User, UserDocument, UserSchema } from '../users/schemas/user.schema';
 import { UsersService } from '../users/users.service';
 import { OrphanProfileCleanupService } from './orphan-profile-cleanup.service';
@@ -65,7 +60,6 @@ describe('OrphanProfileCleanupService (Sprint 12 §12.1c, MongoMemoryReplSet)', 
     let accountModel: Model<AccountDocument>;
     let invoiceModel: Model<InvoiceDocument>;
     let counterModel: Model<InvoiceSlugCounterDocument>;
-    let txModel: Model<ExecutionTransactionDocument>;
     let businessesService: BusinessesService;
     let emailMock: EmailMock;
 
@@ -85,10 +79,6 @@ describe('OrphanProfileCleanupService (Sprint 12 §12.1c, MongoMemoryReplSet)', 
                 MongooseModule.forRoot(mongo.uri),
                 MongooseModule.forFeature([
                     { name: User.name, schema: UserSchema },
-                    {
-                        name: ExecutionTransaction.name,
-                        schema: ExecutionTransactionSchema,
-                    },
                     { name: Business.name, schema: BusinessSchema },
                     {
                         name: BusinessSlugHistory.name,
@@ -150,7 +140,6 @@ describe('OrphanProfileCleanupService (Sprint 12 §12.1c, MongoMemoryReplSet)', 
         accountModel = moduleRef.get(getModelToken(Account.name));
         invoiceModel = moduleRef.get(getModelToken(Invoice.name));
         counterModel = moduleRef.get(getModelToken(InvoiceSlugCounter.name));
-        txModel = moduleRef.get(getModelToken(ExecutionTransaction.name));
     }, 30_000);
 
     afterAll(async () => {
@@ -165,7 +154,6 @@ describe('OrphanProfileCleanupService (Sprint 12 §12.1c, MongoMemoryReplSet)', 
             accountModel.deleteMany({}),
             invoiceModel.deleteMany({}),
             counterModel.deleteMany({}),
-            txModel.deleteMany({}),
         ]);
         emailMock.sendProfileCompletionReminder.mockClear();
         emailMock.sendProfileCompletionReminder.mockResolvedValue(undefined);

@@ -59,6 +59,35 @@ export class PaymentRecord {
     @Prop({ type: Number, default: null })
     refundAmount!: number | null;
 
+    /**
+     * Sprint 27 — відкладений ефект для негайних token-списань (пропорція /
+     * докупівля кредитів), якщо провайдер повернув НЕтермінальний результат:
+     * ефект (нова ємність складу + нарахування кредитів) застосовується при
+     * фіналізації статусу billing-clock-reconcile, а не синхронно. `null` для
+     * циклових/checkout-списань (їх ефект детермінований reference-ом / станом).
+     * Ідемпотентність нарахування кредитів тримає `idempotencyKey` книги
+     * (= orderReference), тож повторна фіналізація не подвоїть баланс.
+     */
+    @Prop({
+        type: {
+            universe: { type: String, required: true },
+            targetCapacity: { type: Number, default: null },
+            targetTierSize: { type: Number, default: null },
+            grantCredits: { type: Number, default: 0 },
+            attachBusinessId: { type: String, default: null },
+        },
+        default: null,
+        _id: false,
+    })
+    pendingEffect!: {
+        universe: string;
+        targetCapacity: number | null;
+        targetTierSize: number | null;
+        grantCredits: number;
+        /** Бізнес, що атомарно заповнює новий слот при застосуванні ефекту. */
+        attachBusinessId: string | null;
+    } | null;
+
     // Declared for TypeScript visibility; managed by Mongoose timestamps: true.
     createdAt!: Date;
 }

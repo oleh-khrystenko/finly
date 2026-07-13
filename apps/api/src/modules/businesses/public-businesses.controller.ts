@@ -51,7 +51,8 @@ import { BusinessesService } from './businesses.service';
  * customer-perspective "перший-створений = основний-рахунок зверху".
  *
  * **Whitelist 5 полів** + cache `PUBLIC_PAGE_CACHE_CONTROL` (короткий TTL без
- * SWR — сторінка revocable через `accessBlockedAt`). Реквізити
+ * SWR — сторінка revocable: видалення бізнесу і slug-rent мусять гаснути в
+ * межах TTL). Реквізити
  * leak-vector лише через `nbuLinks` на per-account-page (Base64URL у платіжній
  * команді банку), не у JSON.
  *
@@ -87,7 +88,6 @@ export class PublicBusinessesController {
         const businesses = await this.businessModel
             .find({
                 seoIndexEnabled: true,
-                accessBlockedAt: null,
                 deletedAt: null,
             })
             .select('_id slug updatedAt')

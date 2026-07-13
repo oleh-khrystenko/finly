@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState } from 'react';
 import { AxiosError } from 'axios';
 import { useRouter } from 'next/navigation';
 import { Controller, useForm } from 'react-hook-form';
@@ -17,7 +17,6 @@ import {
     businessPaymentPurposeTemplateSchema,
     isTaxationAllowedForType,
     requiresTaxation,
-    type BusinessCreationVerdict,
     type BusinessType,
     type CreateBusinessRequest,
     type TaxationSystem,
@@ -178,42 +177,26 @@ interface Props {
     initialValues?: BusinessCreateFormInitialValues;
     fromLanding?: boolean;
     /**
-     * Sprint 19 ліміти — per-тип вердикти доступності (обчислені сторінкою
-     * через `evaluateOwnedBusinessCreation` з `@finly/types`, ті самі правила,
-     * що enforce-ить API). Відсутність пропа = все дозволено: graceful degrade
-     * при fail фонового fetch-у списку; сервер лишається фінальним арбітром.
+     * Sprint 27 — доступність типів. Лімітів кількості бізнесів більше немає;
+     * лишається доменний інваріант «власна фізособа/ФОП по 1»: якщо такий уже
+     * є, картка типу disabled. Відсутність пропа = все дозволено (graceful
+     * degrade при fail фонового fetch-у; сервер лишається фінальним арбітром).
      */
-    typeVerdicts?: Record<BusinessType, BusinessCreationVerdict>;
-    /**
-     * Блок-пропозиція, що з'являється під type-picker-ом після кліку на
-     * plan-locked картку (`requires-plan`). Приходить зверху ReactNode-ом
-     * (сторінка збирає його з білінг-фічі), бо крос-імпорт
-     * business-wizard → billing заборонений modular-boundaries.
-     */
-    planUpsell?: ReactNode;
+    typeVerdicts?: Record<BusinessType, { allowed: boolean }>;
 }
 
 export default function BusinessCreateForm({
     initialValues,
     fromLanding = false,
     typeVerdicts,
-    planUpsell,
 }: Props) {
     const router = useRouter();
     const [submitting, setSubmitting] = useState(false);
-    // Показується після кліку на plan-locked картку (ТОВ/організація понад
-    // ліміт тарифу). Вибір дозволеного типу ховає апсел.
-    const [planUpsellVisible, setPlanUpsellVisible] = useState(false);
 
     /**
-     * Картки типів з урахуванням лімітів:
-     *  - `type-limit` (вже є фізособа/ФОП) — глухий кут без дії користувача,
-     *    тому картка disabled з причиною на місці;
-     *  - `requires-plan` (ТОВ/організація понад тариф) — точка продажу.
-     *    Картка навмисно виглядає звичайною, без тариф-маркера: клік не
-     *    обирає тип, а розкриває пропозицію (`handleTypeChange` → `planUpsell`).
-     *    Видимий маркер відсіював би людей до взаємодії; миттєва предметна
-     *    відповідь на клік (ціна + оплата) конвертує краще.
+     * Картки типів: недоступний тип (вже є власна фізособа/ФОП) — disabled
+     * з причиною на місці. Точок продажу тут більше немає (ТОВ/організація
+     * безлімітні).
      */
     const typeOptions = useMemo<
         ReadonlyArray<UiRadioCardGroupOption<BusinessType>>
@@ -221,11 +204,7 @@ export default function BusinessCreateForm({
         () =>
             BUSINESS_TYPES.map((type) => {
                 const verdict = typeVerdicts?.[type];
-                if (
-                    verdict &&
-                    !verdict.allowed &&
-                    verdict.reason === 'type-limit'
-                ) {
+                if (verdict && !verdict.allowed) {
                     return {
                         value: type,
                         title: BUSINESS_TYPE_LABEL[type],
@@ -271,16 +250,8 @@ export default function BusinessCreateForm({
     const errors = form.formState.errors;
 
     const handleTypeChange = (newType: BusinessType) => {
-        const verdict = typeVerdicts?.[newType];
-        if (verdict && !verdict.allowed) {
-            // `type-limit`-картки disabled (Headless UI не викликає onChange),
-            // сюди долітає лише `requires-plan`: клік не обирає тип, а
-            // показує апсел під групою.
-            setPlanUpsellVisible(true);
-            return;
-        }
-        setPlanUpsellVisible(false);
-
+        // Недоступні картки disabled (Headless UI не викликає onChange), тож сюди
+        // долітають лише дозволені типи.
         const currentTaxId = form.getValues('taxId');
         const currentSystem = form.getValues('taxationSystem');
 
@@ -410,8 +381,6 @@ export default function BusinessCreateForm({
                     columns={{ mobile: 2, desktop: 4 }}
                     error={getZodFieldError(errors.type)}
                 />
-
-                {planUpsellVisible && planUpsell}
 
                 {type && taxIdConfig && purposeConfig && (
                     <>

@@ -14,14 +14,13 @@ import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { ZodValidationPipe } from 'nestjs-zod';
 import {
     AccountSlugCandidateSchema,
-    type AccessLevel,
     type AccountSlugCandidate,
     type AccountWithCounts,
     type SlugAvailabilityResponse,
     type SlugReservationView,
 } from '@finly/types';
 
-import { CurrentAccessLevel } from '../../common/decorators/current-access-level.decorator';
+import { CurrentBusinessBranded } from '../../common/decorators/current-business-branded.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
 import {
@@ -91,13 +90,13 @@ export class AccountsController {
     async update(
         @CurrentUser() user: UserDocument,
         @CurrentAccount() account: AccountDocument,
-        @CurrentAccessLevel() actorLevel: AccessLevel,
+        @CurrentBusinessBranded() isBranded: boolean,
         @Body() dto: UpdateAccountDto
     ): Promise<{ data: AccountDocument }> {
         const updated = await this.accountsService.update(
             account,
             dto,
-            actorLevel,
+            isBranded,
             user._id.toString()
         );
         return { data: updated };

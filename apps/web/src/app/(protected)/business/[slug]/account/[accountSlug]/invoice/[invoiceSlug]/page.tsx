@@ -23,12 +23,11 @@ import {
     resetInvoiceSlug,
     updateInvoice,
 } from '@/shared/api';
-import { OwnershipBadge } from '@/entities/business';
+import { OwnershipBadge, isBusinessBranded } from '@/entities/business';
 import {
     matchActiveSlugReservation,
     useApplyPendingSlug,
     useAuthStore,
-    useCanEditSlug,
 } from '@/entities/user';
 import {
     useSubscribeLabel,
@@ -99,13 +98,15 @@ export default function InvoiceCabinetPage() {
     const reservation = useAuthStore(
         (s) => s.user?.activeSlugReservation ?? null
     );
-    const isPaid = useCanEditSlug();
-    const subscribeLabel = useSubscribeLabel('brand');
+    const subscribeLabel = useSubscribeLabel();
     const openDeleteConfirm = useDeleteInvoiceConfirmStore((s) => s.open);
 
     const [data, setData] = useState<LoadedData | null>(null);
     const [error, setError] = useState<ErrorState | null>(null);
     const [autoEditSlug, setAutoEditSlug] = useState(false);
+
+    // Sprint 27 — гейт vanity-slug/логотипа per-business: батьківський бізнес брендований.
+    const isPaid = isBusinessBranded(data?.business);
 
     const paramBiz = params.slug;
     const paramAcc = params.accountSlug;
@@ -221,13 +222,14 @@ export default function InvoiceCabinetPage() {
     useApplyPendingSlug({
         matches: desiredSlug !== null,
         desiredSlug,
+        isBranded: isPaid,
         apply: applyReservedSlug,
         onTaken: handleSlugTaken,
     });
     const handleSubscribe = useCallback(() => {
         if (!data) return Promise.resolve();
         return startSubscriptionCheckout(
-            'brand',
+            data.business.id,
             `/business/${data.business.slug}/account/${data.paramAcc}/invoice/${data.invoice.slug}`
         ).catch(() => {
             toast.error('Не вдалося відкрити оплату. Спробуйте ще раз');
@@ -374,7 +376,6 @@ export default function InvoiceCabinetPage() {
                         business.brand?.active?.logoUrl
                     )}
                     payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
-                    accessSuspended={business.accessBlockedAt != null}
                     isPaid={isPaid}
                     defaultMode={account.invoiceSlugPresetDefault}
                     onSave={onSave}

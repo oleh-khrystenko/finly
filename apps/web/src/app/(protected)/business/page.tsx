@@ -209,10 +209,6 @@ function BusinessCard({ business }: { business: BusinessWithCounts }) {
     // tov/organization — той самий single-source label, що у формі створення
     // та cabinet-edit (`taxIdFieldConfig`), щоб копія не дрейфувала.
     const taxIdLabel = taxIdFieldConfig(business.type).label;
-    // Sprint 19 — заблокований реконсиляцією бізнес: публічна сторінка і QR
-    // погашені (backend), у кабінеті показуємо окремим станом «доступ
-    // призупинено». Користувач може відкрити, щоб видалити, або поновити доступ.
-    const blocked = business.accessBlockedAt != null;
     // Sprint 9 §Risk #7 mitigation — два counter-и (реквізити + рахунки усього)
     // на business-картці, щоб ФОП розумів обсяг без drill-down-у у per-account-page.
     return (
@@ -222,22 +218,9 @@ function BusinessCard({ business }: { business: BusinessWithCounts }) {
             eyebrow={typeLabel}
             title={business.name}
             titleAttr={business.name}
-            surface={blocked ? 'muted' : 'card'}
-            badge={
-                blocked ? (
-                    <span className="bg-warning/15 text-warning shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium">
-                        Доступ призупинено
-                    </span>
-                ) : undefined
-            }
+            surface="card"
             meta={
                 <>
-                    {blocked && (
-                        <p className="text-warning">
-                            Публічна сторінка неактивна. Поновіть доступ або
-                            видаліть отримувача.
-                        </p>
-                    )}
                     <p>
                         {taxIdLabel}:{' '}
                         <span className="text-foreground font-mono">

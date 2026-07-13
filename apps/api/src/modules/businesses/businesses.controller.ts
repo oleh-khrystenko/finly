@@ -17,7 +17,6 @@ import { ZodValidationPipe } from 'nestjs-zod';
 import {
     BusinessSlugCandidateSchema,
     CreateBusinessSchema,
-    type AccessLevel,
     type BusinessSlugCandidate,
     type BusinessWithCounts,
     type CreateBusinessRequest,
@@ -25,7 +24,7 @@ import {
     type SlugReservationView,
 } from '@finly/types';
 
-import { CurrentAccessLevel } from '../../common/decorators/current-access-level.decorator';
+import { CurrentBusinessBranded } from '../../common/decorators/current-business-branded.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
 import {
@@ -41,7 +40,6 @@ import { toSlugReservationView } from '../slug-reservation/slug-reservation.serv
 import { BusinessAccessGuard, CurrentBusiness } from './business-access.guard';
 import { BusinessesService } from './businesses.service';
 import { UpdateBusinessDto } from './dto/update-business.dto';
-import { ReconciliationService } from './reconciliation.service';
 import type { BusinessDocument } from './schemas/business.schema';
 
 /**
@@ -69,7 +67,6 @@ import type { BusinessDocument } from './schemas/business.schema';
 export class BusinessesController {
     constructor(
         private readonly businessesService: BusinessesService,
-        private readonly reconciliation: ReconciliationService,
         @InjectModel(Account.name)
         private readonly accountModel: Model<AccountDocument>,
         @InjectModel(Invoice.name)
@@ -107,7 +104,6 @@ export class BusinessesController {
     @HttpCode(HttpStatus.CREATED)
     async create(
         @CurrentUser() user: UserDocument,
-        @CurrentAccessLevel() actorLevel: AccessLevel,
         @Body(new ZodValidationPipe(CreateBusinessSchema))
         dto: CreateBusinessRequest
     ): Promise<{ data: BusinessDocument }> {
@@ -120,8 +116,7 @@ export class BusinessesController {
         const business = await this.businessesService.create(
             user._id.toString(),
             dto,
-            user.worksAsBookkeeper,
-            actorLevel
+            user.worksAsBookkeeper
         );
         return { data: business };
     }
@@ -153,13 +148,13 @@ export class BusinessesController {
     async update(
         @CurrentUser() user: UserDocument,
         @CurrentBusiness() business: BusinessDocument,
-        @CurrentAccessLevel() actorLevel: AccessLevel,
+        @CurrentBusinessBranded() isBranded: boolean,
         @Body() dto: UpdateBusinessDto
     ): Promise<{ data: BusinessDocument }> {
         const updated = await this.businessesService.update(
             business.slug,
             dto,
-            actorLevel,
+            isBranded,
             user._id.toString()
         );
         return { data: updated };
@@ -235,22 +230,16 @@ export class BusinessesController {
     @Delete(':slug')
     @UseGuards(BusinessAccessGuard)
     @HttpCode(HttpStatus.OK)
-    async delete(
-        @CurrentUser() user: UserDocument,
-        @CurrentBusiness() business: BusinessDocument
-    ): Promise<{
+    async delete(@CurrentBusiness() business: BusinessDocument): Promise<{
         data: { affectedAccounts: number; affectedInvoices: number };
     }> {
         // Sprint 9 §SP-5 — повертаємо обидва counters cascade-видалених
         // (accounts + invoices). Frontend toast: "Видалено бізнес, {N}
         // рахунків і {M} інвойсів".
+        // Sprint 27 — реконсиляція при видаленні більше не потрібна: лімітів
+        // немає, а звільнений слот у чужому Бренд-складі суму не міняє (мертвий
+        // ref чиститься ліниво при наступному читанні/списанні складу).
         const result = await this.businessesService.delete(business);
-        // Sprint 19 — видалення міняє склад bucket-ів (хто «виживає» у межах
-        // ліміту), а білінг-тригера тут немає. Без перерахунку юзер, що видалив
-        // вцілілий бізнес, назавжди лишився б із заблокованим іншим, хоч той
-        // уже в межах безкоштовного ліміту. Best-effort (метод сам логує збої)
-        // під спільним білінг-локом проти race з вебхуком.
-        await this.reconciliation.reconcileUnderLock(user._id.toString());
         return { data: result };
     }
 }

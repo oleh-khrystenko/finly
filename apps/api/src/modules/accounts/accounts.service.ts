@@ -11,7 +11,6 @@ import {
     RESPONSE_CODE,
     SLUG_AVAILABILITY_STATUS,
     bankCodeFromIban,
-    type AccessLevel,
     type AccountWithCounts,
     type CreateAccountRequest,
     type SlugAvailabilityStatus,
@@ -371,7 +370,8 @@ export class AccountsService {
     async update(
         account: AccountDocument,
         dto: UpdateAccountRequest,
-        actorLevel: AccessLevel,
+        // Sprint 27 — чи брендований батьківський бізнес (per-business гейт slug).
+        isBranded: boolean,
         // Sprint 20 — власник, чию активну бронь споживає успішний rename.
         userId: string,
         markSlugCustomized = true
@@ -392,10 +392,9 @@ export class AccountsService {
         const slugCaseOnlyChange =
             dto.slug !== undefined && !renaming && dto.slug !== account.slug;
         if ((renaming || slugCaseOnlyChange) && markSlugCustomized) {
-            // Sprint 19 — vanity-slug як платна фіча (brand+). Гейт лише на
-            // кастомне ім'я (`markSlugCustomized=true`); reset-slug (false) —
-            // гігієна випадкової адреси, доступна всім рівням.
-            assertSlugEditAllowed(actorLevel);
+            // Sprint 27 — vanity-slug як бренд-фіча (батьківський бізнес
+            // брендований). Гейт лише на кастомне ім'я; reset-slug — завжди.
+            assertSlugEditAllowed(isBranded);
         }
         if (renaming) {
             return this.renameAndUpdate(
@@ -561,7 +560,7 @@ export class AccountsService {
         // markSlugCustomized=false — reset повертає до авто. Гейт
         // assertSlugEditAllowed не спрацьовує (умова `&& markSlugCustomized`),
         // тож рівень доступу тут не читається: reset доступний усім рівням.
-        return this.update(account, { slug: newSlug }, 'none', userId, false);
+        return this.update(account, { slug: newSlug }, false, userId, false);
     }
 
     private async assertSlugAvailable(

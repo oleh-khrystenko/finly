@@ -17,10 +17,6 @@ jest.mock('./authStore', () => ({
     useAuthStore: { getState: () => ({ setUser: mockSetUser }) },
 }));
 
-jest.mock('./useAccessLevel', () => ({
-    useCanEditSlug: () => mockIsPaid,
-}));
-
 import { useApplyPendingSlug } from './useApplyPendingSlug';
 
 describe('useApplyPendingSlug (Sprint 20)', () => {
@@ -40,6 +36,7 @@ describe('useApplyPendingSlug (Sprint 20)', () => {
             useApplyPendingSlug({
                 matches: true,
                 desiredSlug: 'new-name',
+                isBranded: mockIsPaid,
                 apply,
                 onTaken,
             })
@@ -63,6 +60,7 @@ describe('useApplyPendingSlug (Sprint 20)', () => {
             useApplyPendingSlug({
                 matches: true,
                 desiredSlug: 'taken',
+                isBranded: mockIsPaid,
                 apply,
                 onTaken,
             })
@@ -84,6 +82,7 @@ describe('useApplyPendingSlug (Sprint 20)', () => {
             useApplyPendingSlug({
                 matches: true,
                 desiredSlug: 'new-name',
+                isBranded: mockIsPaid,
                 apply,
                 onTaken,
             })
@@ -105,6 +104,7 @@ describe('useApplyPendingSlug (Sprint 20)', () => {
             useApplyPendingSlug({
                 matches: true,
                 desiredSlug: 'taken',
+                isBranded: mockIsPaid,
                 apply,
                 onTaken,
             })
@@ -126,6 +126,7 @@ describe('useApplyPendingSlug (Sprint 20)', () => {
             useApplyPendingSlug({
                 matches: true,
                 desiredSlug: 'x',
+                isBranded: mockIsPaid,
                 apply,
                 onTaken,
             })
@@ -144,6 +145,7 @@ describe('useApplyPendingSlug (Sprint 20)', () => {
             useApplyPendingSlug({
                 matches: false,
                 desiredSlug: null,
+                isBranded: mockIsPaid,
                 apply,
                 onTaken,
             })
