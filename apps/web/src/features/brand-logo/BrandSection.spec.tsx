@@ -34,7 +34,7 @@ function makeBusiness(brand: BusinessBrand | null): Business {
         paymentPurposeTemplate: 'Оплата',
         seoIndexEnabled: false,
         deletedAt: null,
-        accessBlockedAt: null,
+        brandedAt: null,
         brand,
         createdAt: new Date('2026-06-01'),
         updatedAt: new Date('2026-06-01'),

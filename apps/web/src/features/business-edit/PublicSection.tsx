@@ -12,7 +12,6 @@ import UiQrPanel from '@/shared/ui/UiQrPanel';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSlugEditor from '@/shared/ui/UiSlugEditor';
 import UiSwitch from '@/shared/ui/UiSwitch';
-import UiUpsellNote from '@/shared/ui/UiUpsellNote';
 import { mapValidationCode, qrBrandVersion } from '@/shared/lib';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -48,9 +47,6 @@ interface Props {
  *
  * QR-код тут — друге кодування тієї самої адреси (URL для людини, QR для камери),
  * тому живе в одній картці. На бізнес-рівні можливий лише тип-2 (URL на вітрину).
- *
- * Sprint 19: заблокований реконсиляцією отримувач (`accessBlockedAt`) рендерить
- * стан «доступ призупинено» — публічні ендпоінти для нього віддають 404.
  */
 export default function PublicSection({
     business,
@@ -68,19 +64,6 @@ export default function PublicSection({
 }: Props) {
     const [seoSaving, setSeoSaving] = useState(false);
     const openResetConfirm = useResetBusinessSlugConfirmStore((s) => s.open);
-
-    if (business.accessBlockedAt != null) {
-        return (
-            <UiSectionCard title="Публічна сторінка">
-                <div className="mt-4">
-                    <UiUpsellNote
-                        message="Доступ призупинено, публічна сторінка і QR-коди неактивні. Поновіть доступ або видаліть отримувача."
-                        ctaLabel="Поновити доступ"
-                    />
-                </div>
-            </UiSectionCard>
-        );
-    }
 
     const hostnamePrefix = `${payPublicOrigin
         .replace(/^https?:\/\//, '')

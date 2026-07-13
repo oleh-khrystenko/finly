@@ -17,8 +17,6 @@ import {
     BRAND_LOGO_FILE_KEY_REGEX,
     NBU_HOST_PRIMARY,
     RESPONSE_CODE,
-    isAccessLevelAtLeast,
-    type AccessLevel,
     type BrandLogoUploadUrlResponse,
     type BrandPreviewResponse,
     type BusinessBrand,
@@ -99,8 +97,7 @@ export class BrandService {
     async commit(
         business: BusinessDocument,
         fileKey: string,
-        displayName: string | null,
-        actorLevel: AccessLevel
+        displayName: string | null
     ): Promise<CommitBrandResponse> {
         const businessId = business._id.toString();
         const logo = await this.loadAndValidateLogo(businessId, fileKey);
@@ -133,19 +130,58 @@ export class BrandService {
             displayName,
         };
 
-        const isPaid = isAccessLevelAtLeast(actorLevel, 'brand');
-        const previous = business.brand;
+        // Sprint 27 — «оплачено» = бізнес брендований (у активному Бренд-складі).
+        // Рішення active vs pending приймає САМ update за актуальним `brandedAt`
+        // (aggregation-pipeline `$cond`), а не за станом guard-read: реконсиляція
+        // (lapse / attach) без спільного лока могла фліпнути прапор посеред
+        // запиту, і stale-гілка назавжди лишила б активний логотип
+        // небрендованому бізнесу (нового reconcile-тригера для нього вже немає).
+        // `$literal` — щоб жоден користувацький рядок (displayName) не
+        // трактувався як `$`-вираз pipeline-у.
+        // Free-завантаження без оплати — короткий поріг cron-чистки (uploadedAt).
+        const pendingSlot = {
+            ...slot,
+            uploadedAt: new Date(),
+            demoted: false,
+        };
+        const preImage = await this.businessModel
+            .findByIdAndUpdate(
+                business._id,
+                [
+                    {
+                        $set: {
+                            brand: {
+                                $cond: [
+                                    { $ne: ['$brandedAt', null] },
+                                    {
+                                        $literal: {
+                                            active: slot,
+                                            pending: null,
+                                        },
+                                    },
+                                    {
+                                        active: {
+                                            $ifNull: ['$brand.active', null],
+                                        },
+                                        pending: { $literal: pendingSlot },
+                                    },
+                                ],
+                            },
+                        },
+                    },
+                ],
+                { new: false }
+            )
+            .exec();
+
+        // null — бізнес зник між guard-ом і записом; рахуємо за guard-read
+        // (як раніше: без throw, файли чистимо за відомим станом).
+        const decided = preImage ?? business;
+        const isPaid = decided.brandedAt != null;
+        const previous = decided.brand ?? null;
         const newBrand: BusinessBrand = isPaid
             ? { active: slot, pending: null }
-            : {
-                  active: previous?.active ?? null,
-                  // Free-завантаження без оплати — короткий поріг cron-чистки.
-                  pending: { ...slot, uploadedAt: new Date(), demoted: false },
-              };
-
-        await this.businessModel
-            .findByIdAndUpdate(business._id, { brand: newBrand })
-            .exec();
+            : { active: previous?.active ?? null, pending: pendingSlot };
 
         // Видаляємо файли, що більше не на жодному слоті (best-effort, ПІСЛЯ
         // успішного persist — щоб збій persist не лишив слот без файлів).

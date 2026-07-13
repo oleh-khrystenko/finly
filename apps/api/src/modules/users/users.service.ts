@@ -1,16 +1,8 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { ClientSession, Model, Types } from 'mongoose';
+import { Model } from 'mongoose';
 
-import {
-    EXECUTION_TRANSACTION_TYPE,
-    RESPONSE_CODE,
-    validateSameOriginPath,
-} from '@finly/types';
-import {
-    ExecutionTransaction,
-    ExecutionTransactionDocument,
-} from './schemas/execution-transaction.schema';
+import { RESPONSE_CODE, validateSameOriginPath } from '@finly/types';
 import { User, UserDocument } from './schemas/user.schema';
 
 interface GoogleProfile {
@@ -27,10 +19,7 @@ export class UsersService {
 
     constructor(
         @InjectModel(User.name)
-        private readonly userModel: Model<UserDocument>,
-
-        @InjectModel(ExecutionTransaction.name)
-        private readonly executionTransactionModel: Model<ExecutionTransactionDocument>
+        private readonly userModel: Model<UserDocument>
     ) {}
 
     async findByEmail(email: string): Promise<UserDocument | null> {
@@ -102,94 +91,8 @@ export class UsersService {
         });
     }
 
-    async addExecutions(
-        userId: string,
-        amount: number,
-        action: string,
-        session?: ClientSession
-    ): Promise<number> {
-        const user = await this.userModel.findByIdAndUpdate(
-            userId,
-            { $inc: { 'executions.balance': amount } },
-            { new: true, session }
-        );
-        const balanceAfter = user?.executions.balance ?? 0;
-
-        await this.recordTransaction(
-            {
-                userId,
-                type: EXECUTION_TRANSACTION_TYPE.CREDIT,
-                action,
-                amount,
-                balanceAfter,
-            },
-            session
-        );
-
-        return balanceAfter;
-    }
-
-    async recordTransaction(
-        data: {
-            userId: string;
-            type: string;
-            action: string;
-            amount: number;
-            balanceAfter: number;
-        },
-        session?: ClientSession
-    ): Promise<ExecutionTransactionDocument> {
-        const [transaction] = await this.executionTransactionModel.create(
-            [
-                {
-                    userId: new Types.ObjectId(data.userId),
-                    type: data.type,
-                    action: data.action,
-                    amount: data.amount,
-                    balanceAfter: data.balanceAfter,
-                },
-            ],
-            { session }
-        );
-        return transaction;
-    }
-
     async updateTimezone(userId: string, timezone: string): Promise<void> {
         await this.userModel.findByIdAndUpdate(userId, { timezone }).exec();
-    }
-
-    /**
-     * Sprint 19 — durable-маркер незавершеної реконсиляції бізнесів
-     * (`billing.reconcileRequiredAt`). Guard `billing: { $ne: null }` — `$set`
-     * крізь null-субдок падає на Mongo-рівні; без білінгу маркер і не потрібен
-     * (немає cron-тригерів, які могли б загубитись).
-     */
-    async stampBillingReconcileRequired(userId: string): Promise<void> {
-        await this.userModel.updateOne(
-            { _id: userId, billing: { $ne: null } },
-            { $set: { 'billing.reconcileRequiredAt': new Date() } }
-        );
-    }
-
-    /**
-     * Знімає durable-маркер реконсиляції, але ЛИШЕ якщо він не новіший за
-     * `notAfter` (момент старту reconcile-прогону). Конкурентний cron-стемп,
-     * поставлений ПІСЛЯ того, як reconcile прочитав білінг-стан (cron-овий
-     * updateMany флипу доступу йде поза білінг-локом), мусить пережити зняття —
-     * безумовний clear загубив би єдиний durable-тригер того флипу.
-     * `$lte`-фільтр заразом виключає null-маркер і null-білінг (no-op).
-     */
-    async clearBillingReconcileRequired(
-        userId: string,
-        notAfter: Date
-    ): Promise<void> {
-        await this.userModel.updateOne(
-            {
-                _id: userId,
-                'billing.reconcileRequiredAt': { $lte: notAfter },
-            },
-            { $set: { 'billing.reconcileRequiredAt': null } }
-        );
     }
 
     async setPasswordHash(userId: string, hash: string): Promise<void> {

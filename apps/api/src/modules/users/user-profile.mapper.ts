@@ -1,12 +1,9 @@
 import {
     DEFAULT_USER_ROLE,
-    type AccessLevel,
     type SlugReservationView,
-    type UserBilling,
     type UserProfile,
 } from '@finly/types';
 
-import { resolveAccessLevel } from '../../common/billing/resolve-access-level';
 import type { UserDocument } from './schemas/user.schema';
 
 /**
@@ -15,20 +12,17 @@ import type { UserDocument } from './schemas/user.schema';
  * `verifyMagicLink`).
  *
  * Поля `role` і `worksAsBookkeeper` нормалізуються через `??`-fallback:
- * Mongoose `default` працює лише на insert, тож legacy documents без полів
- * отримують sane defaults на read-time без міграції БД.
+ * Mongoose `default` працює лише на insert, тож legacy documents отримують sane
+ * defaults на read-time без міграції.
  *
- * Billing шейп — `UserBillingSchema` (public). Свідомо НЕ містить
- * provider-secret поля `cardToken`/`walletId` і внутрішніх полів
- * (`lastProviderEventAt`, `dunningAttempts`, `nextRetryAt`): вони лишаються
- * тільки на боці API. Кожне поле — explicit pick, тож секрети не протікають за
- * замовчуванням.
+ * Sprint 27 — білінг більше НЕ в профілі користувача: він переїхав у окрему
+ * сутність `BillingProfile` і віддається окремим ендпоінтом `GET
+ * /payments/profile` (`BillingProfileView`). Це розв'язує циклічність
+ * Users↔Payments і чисто відділяє білінг від профілю. «Виконання» знесені.
  */
 export function mapUserToProfileResponse(
     user: UserDocument,
-    // Sprint 20 — активна бронь slug (top-level, не в `billing`). Передається
-    // лише з `getMe` (cabinet-flow читає для відліку + добивання наміру); інші
-    // call-сайти (login/verify) залишають null — бронь там нерелевантна.
+    // Sprint 20 — активна бронь slug (top-level). Передається лише з `getMe`.
     activeSlugReservation: SlugReservationView | null = null
 ): UserProfile {
     return {
@@ -38,32 +32,10 @@ export function mapUserToProfileResponse(
         role: user.role ?? DEFAULT_USER_ROLE,
         worksAsBookkeeper: user.worksAsBookkeeper ?? false,
         profile: user.profile,
-        executions: {
-            balance: user.executions.balance,
-            freeReportUsed: user.executions.freeReportUsed,
-        },
         hasPassword: !!user.passwordHash,
         deletedAt: user.deletedAt ?? null,
         accountDeletionRequestedAt: user.accountDeletionRequestedAt ?? null,
         termsVersion: user.termsVersion ?? null,
         pendingPostLoginTarget: user.pendingPostLoginTarget,
-        billing: user.billing
-            ? {
-                  provider: user.billing.provider,
-                  planCode: user.billing.planCode,
-                  currency: user.billing.currency,
-                  subscriptionStatus: user.billing
-                      .subscriptionStatus as UserBilling['subscriptionStatus'],
-                  currentPeriodEnd: user.billing.currentPeriodEnd,
-                  nextChargeAt: user.billing.nextChargeAt ?? null,
-                  cancelAtPeriodEnd: user.billing.cancelAtPeriodEnd,
-                  hasActiveSubscription: user.billing.hasActiveSubscription,
-                  cardMask: user.billing.cardMask ?? null,
-                  oneOffLevel:
-                      (user.billing.oneOffLevel as AccessLevel | null) ?? null,
-                  oneOffAccessUntil: user.billing.oneOffAccessUntil ?? null,
-                  accessLevel: resolveAccessLevel(user.billing),
-              }
-            : null,
     };
 }

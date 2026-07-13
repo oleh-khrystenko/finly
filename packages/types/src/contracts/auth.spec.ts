@@ -20,14 +20,10 @@ const VALID_USER = {
         firstName: 'Іван',
         lastName: 'Петренко',
     },
-    executions: {
-        balance: 0,
-        freeReportUsed: false,
-    },
     hasPassword: true,
     deletedAt: null,
     accountDeletionRequestedAt: null,
-    billing: null,
+    billingProfile: null,
     termsVersion: '1.0',
 };
 

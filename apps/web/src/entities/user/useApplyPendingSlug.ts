@@ -10,7 +10,6 @@ import {
     releaseSlugReservation,
 } from '@/shared/api';
 import { useAuthStore } from './authStore';
-import { useCanEditSlug } from './useAccessLevel';
 
 /**
  * Sprint 20 — добивання наміру після оплати. Коли користувач уже платний
@@ -28,16 +27,18 @@ import { useCanEditSlug } from './useAccessLevel';
 export function useApplyPendingSlug(opts: {
     matches: boolean;
     desiredSlug: string | null;
+    // Sprint 27 — чи цільовий бізнес брендований (per-business гейт), передається
+    // caller-ом (`isBusinessBranded(business)`), а не з рівня користувача.
+    isBranded: boolean;
     apply: (slug: string) => Promise<void>;
     onTaken: () => void;
 }): void {
-    const { matches, desiredSlug, apply, onTaken } = opts;
-    const isPaid = useCanEditSlug();
+    const { matches, desiredSlug, isBranded, apply, onTaken } = opts;
     const doneRef = useRef(false);
 
     useEffect(() => {
         if (doneRef.current) return;
-        if (!isPaid || !matches || !desiredSlug) return;
+        if (!isBranded || !matches || !desiredSlug) return;
         doneRef.current = true;
         void (async () => {
             try {
@@ -66,5 +67,5 @@ export function useApplyPendingSlug(opts: {
                 }
             }
         })();
-    }, [isPaid, matches, desiredSlug, apply, onTaken]);
+    }, [isBranded, matches, desiredSlug, apply, onTaken]);
 }

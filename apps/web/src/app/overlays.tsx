@@ -44,6 +44,18 @@ const MobileMenuSheet = dynamic(
 const BrandLogoUploadDialog = dynamic(
     () => import('@/features/brand-logo/BrandLogoUploadDialog')
 );
+const BrandPickerDialog = dynamic(
+    () => import('@/features/billing/BrandPickerDialog')
+);
+const BrandProrationConfirmDialog = dynamic(
+    () => import('@/features/billing/BrandProrationConfirmDialog')
+);
+const BrandDetachConfirmDialog = dynamic(
+    () => import('@/features/billing/BrandDetachConfirmDialog')
+);
+const BrandDecreaseConfirmDialog = dynamic(
+    () => import('@/features/billing/BrandDecreaseConfirmDialog')
+);
 
 export function Overlays() {
     return (
@@ -62,6 +74,10 @@ export function Overlays() {
             <SlugPresetWarningDialog />
             <MobileMenuSheet />
             <BrandLogoUploadDialog />
+            <BrandPickerDialog />
+            <BrandProrationConfirmDialog />
+            <BrandDetachConfirmDialog />
+            <BrandDecreaseConfirmDialog />
         </>
     );
 }

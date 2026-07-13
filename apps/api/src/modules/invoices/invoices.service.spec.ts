@@ -375,7 +375,6 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                 {
                     paymentPurpose: 'New',
                 },
-                'bookkeeper',
                 TEST_USER_ID
             );
             const filter = invoiceModel.findOneAndUpdate.mock.calls[0]![0];
@@ -393,7 +392,6 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                 {
                     amountLocked: true,
                 },
-                'bookkeeper',
                 TEST_USER_ID
             );
             const filter = invoiceModel.findOneAndUpdate.mock.calls[0]![0];
@@ -411,7 +409,6 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                 {
                     amount: null,
                 },
-                'bookkeeper',
                 TEST_USER_ID
             );
             const filter = invoiceModel.findOneAndUpdate.mock.calls[0]![0];
@@ -433,7 +430,6 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                     {
                         amountLocked: true,
                     },
-                    'bookkeeper',
                     TEST_USER_ID
                 )
             ).rejects.toBeInstanceOf(BadRequestException);
@@ -449,7 +445,6 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                     {
                         paymentPurpose: 'X',
                     },
-                    'bookkeeper',
                     TEST_USER_ID
                 )
             ).rejects.toBeInstanceOf(NotFoundException);
@@ -467,7 +462,6 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                     {
                         amountLocked: true,
                     },
-                    'bookkeeper',
                     TEST_USER_ID
                 )
             ).rejects.toBeInstanceOf(NotFoundException);
@@ -493,7 +487,6 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                         account,
                         invoiceDoc('inv-001-x'),
                         { slug: 'my-vanity' },
-                        'none',
                         TEST_USER_ID
                     )
                 );
@@ -508,7 +501,6 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                         account,
                         invoiceDoc('inv-001-x'),
                         { slug: 'INV-001-X' },
-                        'none',
                         TEST_USER_ID
                     )
                 );
@@ -522,7 +514,6 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                     account,
                     invoiceDoc('inv-001-x'),
                     { slug: 'inv-001-x' },
-                    'none',
                     TEST_USER_ID
                 );
                 const pipeline = invoiceModel.findOneAndUpdate.mock
@@ -554,14 +545,18 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                 );
             });
 
-            it('case-only зміна на brand → проходить + позначає slugCustomized', async () => {
+            it('case-only зміна на брендованому бізнесі → проходить + позначає slugCustomized', async () => {
                 mockUpdateReturn({ slug: 'INV-001-X' });
+                // Sprint 27 — гейт per-business: батьківський бізнес брендований.
+                const brandedBusiness = {
+                    ...business,
+                    brandedAt: new Date(),
+                } as BusinessDocument;
                 await service.update(
-                    business,
+                    brandedBusiness,
                     account,
                     invoiceDoc('inv-001-x'),
                     { slug: 'INV-001-X' },
-                    'brand',
                     TEST_USER_ID
                 );
                 const pipeline = invoiceModel.findOneAndUpdate.mock
@@ -582,7 +577,6 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                     {
                         validUntil: past,
                     },
-                    'bookkeeper',
                     TEST_USER_ID
                 )
             ).rejects.toBeInstanceOf(BadRequestException);
@@ -599,7 +593,6 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                     {
                         paymentPurpose: 'Updated',
                     },
-                    'bookkeeper',
                     TEST_USER_ID
                 );
                 const updateArg =
@@ -632,7 +625,6 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                     {
                         paymentPurpose: null,
                     },
-                    'bookkeeper',
                     TEST_USER_ID
                 );
                 const updateArg =
@@ -666,7 +658,6 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                     {
                         amount: 200000,
                     },
-                    'bookkeeper',
                     TEST_USER_ID
                 );
                 const updateArg =

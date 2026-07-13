@@ -32,6 +32,10 @@ import {
     BusinessSlugHistorySchema,
 } from './schemas/business-slug-history.schema';
 import { Business, BusinessSchema } from './schemas/business.schema';
+import {
+    BillingProfile,
+    BillingProfileSchema,
+} from '../payments/schemas/billing-profile.schema';
 import { ReconciliationService } from './reconciliation.service';
 import { SlugGeneratorService } from './slug-generator.service';
 
@@ -74,6 +78,8 @@ import { SlugGeneratorService } from './slug-generator.service';
                 name: InvoiceSlugHistory.name,
                 schema: InvoiceSlugHistorySchema,
             },
+            // Sprint 27 — реконсиляція per-business читає активні Бренд-прикріплення.
+            { name: BillingProfile.name, schema: BillingProfileSchema },
         ]),
         UsersModule,
         QrModule,

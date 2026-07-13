@@ -1,7 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 
-import { ExecutionTransaction } from './schemas/execution-transaction.schema';
 import { User } from './schemas/user.schema';
 import { UsersService } from './users.service';
 
@@ -14,7 +13,6 @@ const mockUserDoc = (overrides = {}) => ({
         lastName: 'Doe',
         avatar: 'https://photo.url',
     },
-    executions: { balance: 0, freeReportUsed: false },
     lastLoginAt: null as Date | null,
     save: jest.fn().mockReturnThis(),
     ...overrides,
@@ -30,12 +28,6 @@ const mockModel = {
     create: jest.fn(),
 };
 
-const mockTransactionModel = {
-    create: jest.fn(),
-    find: jest.fn(),
-    deleteMany: jest.fn(),
-};
-
 describe('UsersService', () => {
     let service: UsersService;
 
@@ -44,10 +36,6 @@ describe('UsersService', () => {
             providers: [
                 UsersService,
                 { provide: getModelToken(User.name), useValue: mockModel },
-                {
-                    provide: getModelToken(ExecutionTransaction.name),
-                    useValue: mockTransactionModel,
-                },
             ],
         }).compile();
 
@@ -251,54 +239,6 @@ describe('UsersService', () => {
 
             expect(existing.lastLoginAt).toBeInstanceOf(Date);
             expect(existing.save).toHaveBeenCalled();
-        });
-    });
-
-    describe('addExecutions', () => {
-        it('should increment balance and record transaction', async () => {
-            mockModel.findByIdAndUpdate.mockResolvedValue(
-                mockUserDoc({
-                    executions: { balance: 10, freeReportUsed: false },
-                })
-            );
-            mockTransactionModel.create.mockResolvedValue([{}]);
-
-            const result = await service.addExecutions(
-                '507f1f77bcf86cd799439011',
-                10,
-                'pack_purchase'
-            );
-
-            expect(mockModel.findByIdAndUpdate).toHaveBeenCalledWith(
-                '507f1f77bcf86cd799439011',
-                { $inc: { 'executions.balance': 10 } },
-                { new: true }
-            );
-            expect(mockTransactionModel.create).toHaveBeenCalledWith(
-                [
-                    expect.objectContaining({
-                        type: 'credit',
-                        action: 'pack_purchase',
-                        amount: 10,
-                        balanceAfter: 10,
-                    }),
-                ],
-                { session: undefined }
-            );
-            expect(result).toBe(10);
-        });
-
-        it('should return 0 when user not found', async () => {
-            mockModel.findByIdAndUpdate.mockResolvedValue(null);
-            mockTransactionModel.create.mockResolvedValue([{}]);
-
-            const result = await service.addExecutions(
-                '507f1f77bcf86cd799439012',
-                5,
-                'pack_purchase'
-            );
-
-            expect(result).toBe(0);
         });
     });
 

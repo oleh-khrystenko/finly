@@ -11,7 +11,6 @@ import { Connection, Model, Types, type FilterQuery } from 'mongoose';
 import {
     RESPONSE_CODE,
     SLUG_AVAILABILITY_STATUS,
-    type AccessLevel,
     type AutoSlugMode,
     type CreateInvoiceRequest,
     type SlugAvailabilityStatus,
@@ -456,7 +455,6 @@ export class InvoicesService {
         account: AccountDocument,
         invoice: InvoiceDocument,
         dto: UpdateInvoiceRequest,
-        actorLevel: AccessLevel,
         // Sprint 20 — власник, чию активну бронь споживає успішний rename.
         userId: string,
         markSlugCustomized = true
@@ -477,7 +475,8 @@ export class InvoicesService {
         const slugChanging =
             dto.slug !== undefined && dto.slug !== invoice.slug;
         if (slugChanging) {
-            assertSlugEditAllowed(actorLevel);
+            // Sprint 27 — per-business гейт: батьківський бізнес брендований.
+            assertSlugEditAllowed(business.brandedAt != null);
         }
 
         const filter: FilterQuery<InvoiceDocument> = {

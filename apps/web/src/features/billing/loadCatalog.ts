@@ -1,4 +1,4 @@
-import { paymentsCatalogSchema, type PaymentsCatalog } from '@finly/types';
+import { BillingCatalogSchema, type BillingCatalog } from '@finly/types';
 
 /**
  * Server-side fetch каталогу для structured-data offers на лендінгу (Server
@@ -20,7 +20,7 @@ import { paymentsCatalogSchema, type PaymentsCatalog } from '@finly/types';
  */
 const CATALOG_REVALIDATE_SEC = 3600;
 
-export async function loadCatalog(): Promise<PaymentsCatalog | null> {
+export async function loadCatalog(): Promise<BillingCatalog | null> {
     const apiBase = process.env.API_INTERNAL_URL;
     if (!apiBase) return null;
     try {
@@ -30,7 +30,7 @@ export async function loadCatalog(): Promise<PaymentsCatalog | null> {
         });
         if (!res.ok) return null;
         const json = (await res.json()) as { data: unknown };
-        return paymentsCatalogSchema.parse(json.data);
+        return BillingCatalogSchema.parse(json.data);
     } catch {
         return null;
     }

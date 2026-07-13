@@ -33,6 +33,37 @@ export const RESPONSE_CODE = {
      */
     BILLING_OPERATION_IN_PROGRESS: 'BILLING_OPERATION_IN_PROGRESS',
 
+    // --- billing v2 (Sprint 27) error ---
+    /** Перша купівля неможлива: у платника вже є активний білінг-профіль. */
+    BILLING_ALREADY_ACTIVE: 'BILLING_ALREADY_ACTIVE',
+    /** Всесвіт вимкнений конфіг-прапором (документи «скоро»). */
+    BILLING_UNIVERSE_DISABLED: 'BILLING_UNIVERSE_DISABLED',
+    /** Немає збереженої картки для негайного списання (спершу перша купівля). */
+    BILLING_NO_CARD_ON_FILE: 'BILLING_NO_CARD_ON_FILE',
+    /**
+     * Підписку скасовано до кінця періоду: токен картки стерто, платні зміни
+     * (розширення ємності, докупівля кредитів) недоступні до згасання профілю.
+     * Recovery: дочекатись кінця оплаченого періоду і оформити нову купівлю.
+     */
+    BILLING_CANCEL_PENDING: 'BILLING_CANCEL_PENDING',
+    /**
+     * Профіль у прострочці (PAST_DUE): період уже минув, пропорція «за дні до
+     * кінця циклу» нульова, тож збільшення ємності діставалось би безкоштовно
+     * на весь dunning-грейс. Recovery: оплатити прострочене списання (resume),
+     * після цього розширювати.
+     */
+    BILLING_PAST_DUE: 'BILLING_PAST_DUE',
+    INVALID_UNIVERSE: 'INVALID_UNIVERSE',
+    INVALID_TIER: 'INVALID_TIER',
+    INVALID_CAPACITY: 'INVALID_CAPACITY',
+    INVALID_CREDIT_PACK: 'INVALID_CREDIT_PACK',
+    /** Прикріплень уже стільки ж, скільки оплаченої ємності складу. */
+    BILLING_CAPACITY_EXCEEDED: 'BILLING_CAPACITY_EXCEEDED',
+    BUSINESS_ALREADY_ATTACHED: 'BUSINESS_ALREADY_ATTACHED',
+    BUSINESS_NOT_ATTACHED: 'BUSINESS_NOT_ATTACHED',
+    /** Списання за токеном відхилено банком (докупівля / доплата). */
+    BILLING_CHARGE_DECLINED: 'BILLING_CHARGE_DECLINED',
+
     // --- onboarding error ---
     ONBOARDING_INCOMPLETE: 'ONBOARDING_INCOMPLETE',
 
@@ -222,12 +253,6 @@ export const RESPONSE_CODE = {
      */
     BUSINESS_TYPE_LIMIT_REACHED: 'BUSINESS_TYPE_LIMIT_REACHED',
     /**
-     * Sprint 19 — перевищено ліміт бізнесів поточного рівня: власні ТОВ/
-     * організації (по 1 на none/brand) або клієнтські бізнеси (до 10 на
-     * none/brand). Знімається підпискою «Бухгалтер». Upsell на bookkeeper.
-     */
-    BUSINESS_LIMIT_REQUIRES_PLAN: 'BUSINESS_LIMIT_REQUIRES_PLAN',
-    /**
      * Sprint 19 — створення бізнесів одного користувача серіалізується per-user
      * Redis-локом (ліміт рахується count-ом, без локу конкурентний double-submit
      * обходив би його). Лок не звільнився за відведені ретраї — повторити пізніше.
@@ -365,6 +390,19 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.INVALID_PLAN]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.SUBSCRIPTION_NOT_PAST_DUE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.BILLING_OPERATION_IN_PROGRESS]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BILLING_ALREADY_ACTIVE]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BILLING_UNIVERSE_DISABLED]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BILLING_NO_CARD_ON_FILE]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BILLING_CANCEL_PENDING]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BILLING_PAST_DUE]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.INVALID_UNIVERSE]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.INVALID_TIER]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.INVALID_CAPACITY]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.INVALID_CREDIT_PACK]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BILLING_CAPACITY_EXCEEDED]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BUSINESS_ALREADY_ATTACHED]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BUSINESS_NOT_ATTACHED]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BILLING_CHARGE_DECLINED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.AI_RATE_LIMIT_EXCEEDED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.AI_MESSAGE_TOO_LONG]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.AI_HELP_BUDGET_EXHAUSTED]: RESPONSE_TYPE.ERROR,
@@ -398,7 +436,6 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.SLUG_EDIT_REQUIRES_PLAN]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.BRAND_REQUIRES_PLAN]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.BUSINESS_TYPE_LIMIT_REACHED]: RESPONSE_TYPE.ERROR,
-    [RESPONSE_CODE.BUSINESS_LIMIT_REQUIRES_PLAN]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.BUSINESS_CREATE_IN_PROGRESS]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.SLUG_RESERVATION_IN_PROGRESS]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVOICE_NOT_FOUND]: RESPONSE_TYPE.ERROR,

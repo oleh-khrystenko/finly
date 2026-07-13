@@ -305,7 +305,6 @@ describe('Auth E2E', () => {
             email: email.toLowerCase(),
             passwordHash: hash,
             profile: { firstName: 'Test', lastName: 'User' },
-            executions: { balance: 0, freeReportUsed: false },
         });
     }
 
@@ -315,7 +314,6 @@ describe('Auth E2E', () => {
         return userModel.create({
             email: email.toLowerCase(),
             profile: { firstName: 'Test', lastName: 'User' },
-            executions: { balance: 0, freeReportUsed: false },
         });
     }
 
@@ -900,23 +898,18 @@ describe('Auth E2E', () => {
                     id: string;
                     email: string;
                     profile: object;
-                    executions: { balance: number; freeReportUsed: boolean };
                     hasPassword: boolean;
                     deletedAt: null;
                     accountDeletionRequestedAt: null;
                     termsVersion: string | null;
-                    billing: object | null;
                 };
             };
             expect(body.data.email).toBe('user@example.com');
             expect(body.data.hasPassword).toBe(true);
             expect(body.data.id).toBeDefined();
             expect(body.data.profile).toBeDefined();
-            expect(body.data.executions).toEqual({
-                balance: expect.any(Number),
-                freeReportUsed: expect.any(Boolean),
-            });
-            expect(body.data.billing).toBeNull();
+            // Sprint 27 — профіль більше не несе `executions`/`billing`
+            // (білінг переїхав у окремий `GET /api/payments/profile`).
         });
 
         it('GET /api/users/me should return 401 without auth', async () => {

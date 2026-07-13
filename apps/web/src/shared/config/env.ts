@@ -41,18 +41,6 @@ export const ENV = {
     ),
 } as const;
 
-export const PAYMENTS_SUBSCRIPTION_ENABLED =
-    assertEnv(
-        process.env.NEXT_PUBLIC_PAYMENTS_SUBSCRIPTION_ENABLED,
-        'NEXT_PUBLIC_PAYMENTS_SUBSCRIPTION_ENABLED'
-    ) === 'true';
-
-export const PAYMENTS_ONE_OFF_ENABLED =
-    assertEnv(
-        process.env.NEXT_PUBLIC_PAYMENTS_ONE_OFF_ENABLED,
-        'NEXT_PUBLIC_PAYMENTS_ONE_OFF_ENABLED'
-    ) === 'true';
-
 // Демо-банер на сторінці білінгу (тестова картка, "кошти не списуються").
 // Тільки для sandbox-стадії monobank; у проді МУСИТЬ бути 'false', інакше
 // реальним користувачам показується хибне твердження про відсутність списань.

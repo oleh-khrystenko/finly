@@ -17,13 +17,11 @@ import { ZodValidationPipe } from 'nestjs-zod';
 
 import {
     InvoiceSlugCandidateSchema,
-    type AccessLevel,
     type InvoiceSlugCandidate,
     type SlugAvailabilityResponse,
     type SlugReservationView,
 } from '@finly/types';
 
-import { CurrentAccessLevel } from '../../common/decorators/current-access-level.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
 import {
@@ -102,7 +100,6 @@ export class InvoicesController {
         @CurrentBusiness() business: BusinessDocument,
         @CurrentAccount() account: AccountDocument,
         @CurrentInvoice() invoice: InvoiceDocument,
-        @CurrentAccessLevel() actorLevel: AccessLevel,
         @Body() dto: UpdateInvoiceDto
     ): Promise<{ data: InvoiceDocument }> {
         const updated = await this.invoicesService.update(
@@ -110,7 +107,6 @@ export class InvoicesController {
             account,
             invoice,
             dto,
-            actorLevel,
             user._id.toString()
         );
         return { data: updated };

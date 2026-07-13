@@ -26,15 +26,6 @@ class UserProfileData {
 }
 
 @Schema({ _id: false })
-class UserExecutions {
-    @Prop({ required: true, default: 0, min: 0 })
-    balance!: number;
-
-    @Prop({ required: true, default: false })
-    freeReportUsed!: boolean;
-}
-
-@Schema({ _id: false })
 class ProfileCompletionReminders {
     @Prop({ type: Date, default: null })
     firstReminderSentAt!: Date | null;
@@ -73,15 +64,6 @@ export class User {
 
     @Prop({ type: UserProfileData, default: () => ({}) })
     profile!: UserProfileData;
-
-    @Prop({
-        type: UserExecutions,
-        default: () => ({
-            balance: 0,
-            freeReportUsed: false,
-        }),
-    })
-    executions!: UserExecutions;
 
     @Prop({ type: String, default: null })
     passwordHash!: string | null;
@@ -135,104 +117,10 @@ export class User {
     @Prop()
     lastLoginAt?: Date;
 
-    /**
-     * Sprint 22 — monobank білінг під керуванням нашого коду. monobank не має
-     * рекуренту: тяглість підписки тримає НАШ запис, не провайдер. `cardToken` —
-     * secret-токен картки monobank, за яким billing-clock списує всі продовження;
-     * НІКОЛИ не серіалізується у frontend (mapper явно його не вибирає).
-     * `walletId` — стабільний per-user гаманець monobank для токенізації.
-     * `nextChargeAt` — вісь планувальника (активна підписка завжди має її в
-     * майбутньому). `dunningAttempts`/`nextRetryAt` — стан прострочки (серія
-     * повторних спроб у межах грейсу). `cardMask` — маска для відображення.
-     */
-    @Prop({
-        type: {
-            provider: { type: String, default: null },
-            cardToken: { type: String, default: null },
-            walletId: { type: String, default: null },
-            cardMask: { type: String, default: null },
-            planCode: { type: String, default: null },
-            currency: { type: String, default: null },
-            subscriptionStatus: { type: String, default: null },
-            currentPeriodEnd: { type: Date, default: null },
-            nextChargeAt: { type: Date, default: null },
-            cancelAtPeriodEnd: { type: Boolean, default: false },
-            hasActiveSubscription: { type: Boolean, default: false },
-            lastProviderEventAt: { type: Date, default: null },
-            dunningAttempts: { type: Number, default: 0 },
-            nextRetryAt: { type: Date, default: null },
-            needsManualReview: { type: Boolean, default: false },
-            oneOffLevel: { type: String, default: null },
-            oneOffAccessUntil: { type: Date, default: null },
-            oneOffOrderReference: { type: String, default: null },
-            reconcileRequiredAt: { type: Date, default: null },
-        },
-        default: null,
-        _id: false,
-    })
-    billing!: {
-        provider: string | null;
-        /** Secret-токен картки monobank — веде всі продовження. Не у frontend. */
-        cardToken: string | null;
-        /** Стабільний per-user гаманець monobank для захоплення/перевикористання токена. */
-        walletId: string | null;
-        cardMask: string | null;
-        planCode: string | null;
-        currency: string | null;
-        subscriptionStatus: string | null;
-        currentPeriodEnd: Date | null;
-        /**
-         * Дата наступного списання нашим billing-clock. Активна підписка завжди
-         * має визначену дату в майбутньому; скасування і зняття доступу її
-         * прибирають (null = планувальник підписку не чіпає).
-         */
-        nextChargeAt: Date | null;
-        cancelAtPeriodEnd: boolean;
-        hasActiveSubscription: boolean;
-        lastProviderEventAt: Date | null;
-        /** Лічильник невдалих спроб списання у поточній прострочці (0 коли ACTIVE). */
-        dunningAttempts: number;
-        /** Час наступної повторної спроби dunning (null поза прострочкою). */
-        nextRetryAt: Date | null;
-        /**
-         * Durable-прапор для ops: списання дало нерозвʼязний результат (невідомо,
-         * чи рухались гроші). Планувальник зупинено (`nextChargeAt=null`), доступ
-         * збережено; знімається успішною активацією/продовженням або руками ops.
-         * Опційне: присутнє лише коли виставлене (sparse за замовчуванням).
-         */
-        needsManualReview?: boolean;
-        /**
-         * Sprint 19 — орендований one-off доступ: рівень (`brand`/`bookkeeper`)
-         * + дата закінчення. Не залежить від підписки; гасне ліниво на read
-         * (`deriveAccessLevel` звіряє дату). Підписка і one-off живуть у тому
-         * самому субдоці, рівень доступу = максимум обох.
-         */
-        oneOffLevel: string | null;
-        oneOffAccessUntil: Date | null;
-        /**
-         * orderReference покупки, що тримає чинний one-off-слот. Refund-вебхук
-         * гасить доступ лише при збігу — повернення грошей за старішу покупку
-         * (слот уже перезаписано новішою) не зачіпає чинний оплачений доступ.
-         */
-        oneOffOrderReference: string | null;
-        /**
-         * Sprint 19 — durable-маркер незавершеної реконсиляції бізнесів.
-         * Стемпиться cleanup-cron-ом при флипі доступу (щоб відкладений через
-         * lock-contention reconcile не загубився разом зі своїм тригером) і
-         * самою реконсиляцією, коли slug-rent не вмістився у батч-ліміт.
-         * Знімається `ReconciliationService.reconcile` після повного проходу.
-         * Daily-sweep (`PaymentsCleanupService.retryPendingReconciles`) добиває
-         * стемпнутих.
-         */
-        reconcileRequiredAt: Date | null;
-    } | null;
+    // Sprint 27 — вбудований `billing`-субдок знято: білінг переїхав у окрему
+    // сутність `BillingProfile` (payments-модуль). На користувачі білінгу немає.
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
 
 UserSchema.index({ 'provider.id': 1 }, { sparse: true });
-// Sprint 19 — cron сплину one-off шукає активні one-off із датою у минулому.
-UserSchema.index({ 'billing.oneOffAccessUntil': 1 }, { sparse: true });
-// Sprint 22 — billing-clock шукає підписки з насталою датою списання / повтору.
-UserSchema.index({ 'billing.nextChargeAt': 1 }, { sparse: true });
-UserSchema.index({ 'billing.nextRetryAt': 1 }, { sparse: true });

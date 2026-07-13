@@ -79,6 +79,23 @@ jest.mock('../src/config/env', () => ({
         R2_SECRET_ACCESS_KEY: 'test-secret',
         R2_BUCKET_NAME: 'test-bucket',
         R2_PUBLIC_URL: 'https://media.test.local',
+        BILLING_BRAND_ENABLED: true,
+        BILLING_DOCUMENTS_ENABLED: false,
+        BILLING_GRID: {
+            currency: 'UAH',
+            brand: { pricePerBusiness: 4900 },
+            documents: {
+                tiers: [
+                    { size: 1, priceAmount: 29900, monthlyCredits: 1000 },
+                    { size: 5, priceAmount: 149500, monthlyCredits: 5000 },
+                ],
+                storageGbPerBusiness: 5,
+                storageRentCreditsPerGb: 10,
+                creditPacks: [{ credits: 500, priceAmount: 15000 }],
+                lowBalanceThreshold: 200,
+                criticalBalanceThreshold: 100,
+            },
+        },
     },
     parseLockoutThresholds: (raw: string) =>
         raw.split(',').map((entry: string) => {
@@ -281,28 +298,6 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
 
     // ─── Helpers ───
 
-    // Sprint 19 — slug-редагування вимагає рівня не нижче brand.
-    const ACTIVE_BRAND_BILLING = {
-        provider: 'monobank',
-        cardToken: null,
-        walletId: null,
-        cardMask: null,
-        planCode: 'brand',
-        currency: 'UAH',
-        subscriptionStatus: 'ACTIVE',
-        currentPeriodEnd: null,
-        nextChargeAt: null,
-        cancelAtPeriodEnd: false,
-        hasActiveSubscription: true,
-        lastProviderEventAt: null,
-        dunningAttempts: 0,
-        nextRetryAt: null,
-        oneOffLevel: null,
-        oneOffAccessUntil: null,
-        oneOffOrderReference: null,
-        reconcileRequiredAt: null,
-    };
-
     async function createUser(
         overrides: Partial<UserDocument> = {}
     ): Promise<UserDocument> {
@@ -313,7 +308,6 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
                 lastName: 'User',
                 acceptedTermsVersion: CURRENT_TERMS_VERSION,
             },
-            executions: { balance: 0, freeReportUsed: false },
             worksAsBookkeeper: false,
             ...overrides,
         });
@@ -957,8 +951,13 @@ describe('Invoices E2E (Sprint 4 §4.2)', () => {
         });
 
         it('Sprint 15 — PATCH slug перейменовує інвойс (vanity) + старе посилання редіректить', async () => {
-            const user = await createUser({ billing: ACTIVE_BRAND_BILLING });
+            const user = await createUser();
             const { slug, accountSlug } = await createBusinessFor(user);
+            // Sprint 27 — гейт per-business: брендуємо батьківський бізнес.
+            await businessModel.updateOne(
+                { slugLower: slug.toLowerCase() },
+                { $set: { brandedAt: new Date() } }
+            );
             const create = await supertest(app.getHttpServer())
                 .post(
                     `/api/businesses/me/${slug}/accounts/${accountSlug}/invoices`

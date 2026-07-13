@@ -1,11 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
+import { SUBSCRIPTION_STATUS } from '@finly/types';
 
 import { ENV } from '../../config/env';
 import { AuthService } from '../auth/auth.service';
 import { EmailService } from '../email/email.service';
+import {
+    BillingProfile,
+    BillingProfileDocument,
+} from '../payments/schemas/billing-profile.schema';
 import { User, UserDocument } from './schemas/user.schema';
 
 const DELIVERY_WINDOW_START = 8; // 8:00 AM local time
@@ -17,6 +22,8 @@ export class CleanupService {
 
     constructor(
         @InjectModel(User.name) private userModel: Model<UserDocument>,
+        @InjectModel(BillingProfile.name)
+        private readonly profileModel: Model<BillingProfileDocument>,
         private readonly authService: AuthService,
         private readonly emailService: EmailService
     ) {}
@@ -106,6 +113,11 @@ export class CleanupService {
         for (const user of expiredUsers) {
             const userId = user._id.toString();
             try {
+                // Спершу білінг: clock читає лише BillingProfile і без ретайру
+                // списував би картку неіснуючого акаунта далі. Порядок
+                // crash-safe: якщо впали після ретайру, наступний прохід
+                // ре-ретайрить (no-op) і видалить користувача.
+                await this.retireBillingProfile(userId);
                 await this.authService.revokeAllUserTokens(userId);
                 await this.userModel.findByIdAndDelete(userId).exec();
                 deleted++;
@@ -118,6 +130,35 @@ export class CleanupService {
 
         this.logger.log(
             `Hard-deleted ${deleted}/${expiredUsers.length} expired account(s)`
+        );
+    }
+
+    /**
+     * Гасить білінг-профіль платника, що видаляється: зупиняє планувальник
+     * (nextChargeAt/nextRetryAt → null), зачищає токен і ставить CANCELED.
+     * Стемп `reconcileRequiredAt` — durable-тригер: daily-sweep payments-модуля
+     * реконсилює прикріплені бізнеси (бренд-фічі гаснуть) навіть якщо цей
+     * прохід упаде одразу після update. Idempotent через фільтр статусу.
+     */
+    private async retireBillingProfile(userId: string): Promise<void> {
+        await this.profileModel.updateOne(
+            {
+                userId: new Types.ObjectId(userId),
+                status: { $ne: SUBSCRIPTION_STATUS.CANCELED },
+            },
+            {
+                $set: {
+                    status: SUBSCRIPTION_STATUS.CANCELED,
+                    nextChargeAt: null,
+                    nextRetryAt: null,
+                    cardToken: null,
+                },
+                // $max — маркер реконсиляції монотонний: cron без user-лока не
+                // сміє перекрити новіший конкурентний стемп старішою датою,
+                // інакше clear того тригера ($lte його стемпа) стер би durable-
+                // слід (див. PaymentsCleanupService.expireCanceledProfiles).
+                $max: { reconcileRequiredAt: new Date() },
+            }
         );
     }
 

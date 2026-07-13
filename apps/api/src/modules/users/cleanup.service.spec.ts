@@ -3,6 +3,7 @@ import { getModelToken } from '@nestjs/mongoose';
 
 import { AuthService } from '../auth/auth.service';
 import { EmailService } from '../email/email.service';
+import { BillingProfile } from '../payments/schemas/billing-profile.schema';
 import { CleanupService } from './cleanup.service';
 import { User } from './schemas/user.schema';
 
@@ -17,6 +18,16 @@ const mockModel = {
     findByIdAndDelete: jest.fn(),
     findByIdAndUpdate: jest.fn(),
 };
+
+// Sprint 27 — hard-delete спершу гасить білінг-профіль (retireBillingProfile).
+const mockProfileModel = {
+    updateOne: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
+};
+
+// retireBillingProfile робить `new Types.ObjectId(userId)` — фікстурні id
+// мусять бути валідними 24-hex ObjectId, інакше hard-delete цикл падає.
+const USER_ID_1 = '64b0000000000000000000a1';
+const USER_ID_2 = '64b0000000000000000000a2';
 
 const mockAuthService = {
     revokeAllUserTokens: jest.fn().mockResolvedValue(undefined),
@@ -58,6 +69,10 @@ describe('CleanupService', () => {
             providers: [
                 CleanupService,
                 { provide: getModelToken(User.name), useValue: mockModel },
+                {
+                    provide: getModelToken(BillingProfile.name),
+                    useValue: mockProfileModel,
+                },
                 { provide: AuthService, useValue: mockAuthService },
                 { provide: EmailService, useValue: mockEmailService },
             ],
@@ -70,8 +85,8 @@ describe('CleanupService', () => {
     describe('handleExpiredAccounts — hard delete', () => {
         it('should delete users with deletedAt older than grace period', async () => {
             const expiredUsers = [
-                { _id: { toString: () => 'user-1' }, email: 'a@test.com' },
-                { _id: { toString: () => 'user-2' }, email: 'b@test.com' },
+                { _id: { toString: () => USER_ID_1 }, email: 'a@test.com' },
+                { _id: { toString: () => USER_ID_2 }, email: 'b@test.com' },
             ];
 
             mockModel.find
@@ -85,13 +100,13 @@ describe('CleanupService', () => {
             await service.handleExpiredAccounts();
 
             expect(mockAuthService.revokeAllUserTokens).toHaveBeenCalledWith(
-                'user-1'
+                USER_ID_1
             );
             expect(mockAuthService.revokeAllUserTokens).toHaveBeenCalledWith(
-                'user-2'
+                USER_ID_2
             );
-            expect(mockModel.findByIdAndDelete).toHaveBeenCalledWith('user-1');
-            expect(mockModel.findByIdAndDelete).toHaveBeenCalledWith('user-2');
+            expect(mockModel.findByIdAndDelete).toHaveBeenCalledWith(USER_ID_1);
+            expect(mockModel.findByIdAndDelete).toHaveBeenCalledWith(USER_ID_2);
             expect(mockModel.findByIdAndDelete).toHaveBeenCalledTimes(2);
         });
 
@@ -124,8 +139,8 @@ describe('CleanupService', () => {
 
         it('should continue deleting other users when one fails', async () => {
             const expiredUsers = [
-                { _id: { toString: () => 'user-1' }, email: 'a@test.com' },
-                { _id: { toString: () => 'user-2' }, email: 'b@test.com' },
+                { _id: { toString: () => USER_ID_1 }, email: 'a@test.com' },
+                { _id: { toString: () => USER_ID_2 }, email: 'b@test.com' },
             ];
 
             mockModel.find
@@ -145,7 +160,7 @@ describe('CleanupService', () => {
             expect(mockAuthService.revokeAllUserTokens).toHaveBeenCalledTimes(
                 2
             );
-            expect(mockModel.findByIdAndDelete).toHaveBeenCalledWith('user-2');
+            expect(mockModel.findByIdAndDelete).toHaveBeenCalledWith(USER_ID_2);
             expect(mockModel.findByIdAndDelete).toHaveBeenCalledTimes(1);
         });
 
@@ -157,7 +172,7 @@ describe('CleanupService', () => {
                 .mockReturnValueOnce(
                     mockFindChain([
                         {
-                            _id: { toString: () => 'user-1' },
+                            _id: { toString: () => USER_ID_1 },
                             email: 'a@test.com',
                         },
                     ])
@@ -330,7 +345,7 @@ describe('CleanupService', () => {
                 .mockReturnValueOnce(
                     mockFindChain([
                         {
-                            _id: { toString: () => 'user-1' },
+                            _id: { toString: () => USER_ID_1 },
                             email: 'no-tz@test.com',
                             deletedAt,
                             timezone: null,
@@ -356,7 +371,7 @@ describe('CleanupService', () => {
                 .mockReturnValueOnce(
                     mockFindChain([
                         {
-                            _id: { toString: () => 'user-1' },
+                            _id: { toString: () => USER_ID_1 },
                             email: 'day@test.com',
                             deletedAt,
                             timezone: daytimeTimezone,
@@ -382,7 +397,7 @@ describe('CleanupService', () => {
                 .mockReturnValueOnce(
                     mockFindChain([
                         {
-                            _id: { toString: () => 'user-1' },
+                            _id: { toString: () => USER_ID_1 },
                             email: 'night@test.com',
                             deletedAt,
                             timezone: nighttimeTimezone,
@@ -406,7 +421,7 @@ describe('CleanupService', () => {
                 .mockReturnValueOnce(
                     mockFindChain([
                         {
-                            _id: { toString: () => 'user-1' },
+                            _id: { toString: () => USER_ID_1 },
                             email: 'bad-tz@test.com',
                             deletedAt,
                             timezone: 'Invalid/Timezone',

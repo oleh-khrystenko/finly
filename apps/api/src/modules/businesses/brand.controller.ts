@@ -14,7 +14,6 @@ import {
     CommitBrandSchema,
     RequestBrandLogoUploadUrlSchema,
     RESPONSE_CODE,
-    type AccessLevel,
     type BrandLogoUploadUrlResponse,
     type BrandPreviewResponse,
     type CommitBrandDto,
@@ -23,7 +22,6 @@ import {
     type ResponseCode,
 } from '@finly/types';
 
-import { CurrentAccessLevel } from '../../common/decorators/current-access-level.decorator';
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
 import { BusinessAccessGuard, CurrentBusiness } from './business-access.guard';
 import { BrandService } from './brand.service';
@@ -58,14 +56,12 @@ export class BrandController {
     @HttpCode(HttpStatus.OK)
     async commit(
         @CurrentBusiness() business: BusinessDocument,
-        @CurrentAccessLevel() actorLevel: AccessLevel,
         @Body(new ZodValidationPipe(CommitBrandSchema)) dto: CommitBrandDto
     ): Promise<{ data: CommitBrandResponse & { code: ResponseCode } }> {
         const result = await this.brandService.commit(
             business,
             dto.fileKey,
-            dto.displayName ?? null,
-            actorLevel
+            dto.displayName ?? null
         );
         const code =
             result.outcome === BRAND_COMMIT_OUTCOME.ACTIVE
