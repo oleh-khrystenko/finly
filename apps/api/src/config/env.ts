@@ -70,6 +70,14 @@ export const ENV = {
      */
     PAY_PUBLIC_URL: getEnvVar('PAY_PUBLIC_URL'),
 
+    /**
+     * Sprint 28 — спільний секрет для internal on-demand revalidation web-у.
+     * Після адмін-публікації гайда API б'є `WEB_URL/internal/revalidate-guides`
+     * з цим bearer-ом, а web-роут звіряє його перед `revalidateTag`. Мусить
+     * збігатися зі значенням у web-контейнері.
+     */
+    REVALIDATE_SECRET: getEnvVar('REVALIDATE_SECRET'),
+
     MONGODB_URI: getEnvVar('MONGODB_URI'),
     JWT_ACCESS_SECRET: getEnvVar('JWT_ACCESS_SECRET'),
     JWT_REFRESH_SECRET: getEnvVar('JWT_REFRESH_SECRET'),

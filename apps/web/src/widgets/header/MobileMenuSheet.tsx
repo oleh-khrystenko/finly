@@ -2,7 +2,14 @@
 
 import { usePathname } from 'next/navigation';
 import { useTheme } from 'next-themes';
-import { LogOut, User, CreditCard, LogIn, Briefcase } from 'lucide-react';
+import {
+    LogOut,
+    User,
+    CreditCard,
+    LogIn,
+    Briefcase,
+    BookOpen,
+} from 'lucide-react';
 import ChangeTheme, {
     THEME_ICONS,
     THEME_LABELS,
@@ -56,6 +63,7 @@ export default function MobileMenuSheet() {
         businesses: <Briefcase />,
         profile: <User />,
         billing: <CreditCard />,
+        admin: <BookOpen />,
         logout: <LogOut />,
     });
 

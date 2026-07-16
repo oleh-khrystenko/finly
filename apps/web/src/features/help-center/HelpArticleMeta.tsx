@@ -13,7 +13,7 @@ const DATE_FMT = new Intl.DateTimeFormat('uk-UA', {
 /**
  * Top-of-article meta: just the freshness date. Help is support documentation,
  * so the top carries an institutional "updated on" line, not a personal byline.
- * The expert attribution lives in HelpAuthorCard at the end of the article.
+ * The expert attribution lives in AuthorCard at the end of the article.
  */
 export function HelpArticleMeta({ article }: { article: HelpArticle }) {
     const updated = DATE_FMT.format(new Date(article.dateModified));

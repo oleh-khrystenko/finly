@@ -4,6 +4,7 @@ process.env.NODE_ENV ??= 'test';
 process.env.PORT ??= '4000';
 process.env.TRUST_PROXY_HOPS ??= '0';
 process.env.WEB_URL ??= 'http://localhost:3000';
+process.env.REVALIDATE_SECRET ??= 'test-revalidate-secret';
 process.env.PAY_PUBLIC_URL ??= 'http://pay.finly.local:3000';
 process.env.MONGODB_URI ??= 'mongodb://localhost:27017/test';
 process.env.JWT_ACCESS_SECRET ??= 'test-access-secret';

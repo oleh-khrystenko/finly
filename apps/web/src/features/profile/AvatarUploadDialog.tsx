@@ -164,7 +164,7 @@ export default function AvatarUploadDialog() {
         try {
             const blob = await cropImage(imageSrc, cropAreaPixels);
             const { uploadUrl, fileKey } = await requestAvatarUploadUrl();
-            await uploadToR2(uploadUrl, blob);
+            await uploadToR2(uploadUrl, blob, AVATAR.OUTPUT_FORMAT);
             const { avatar } = await commitAvatarUpload(fileKey);
 
             // Response-driven auth state — avoid an extra `getMe()` round-trip

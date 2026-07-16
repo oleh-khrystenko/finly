@@ -67,6 +67,43 @@ export const RESPONSE_CODE = {
     // --- onboarding error ---
     ONBOARDING_INCOMPLETE: 'ONBOARDING_INCOMPLETE',
 
+    // --- admin error (Sprint 28) ---
+    /**
+     * Викликач автентифікований, але `role !== 'admin'`. Перша адмін-поверхня
+     * продукту: guard джерело правди на API, фронтенд лише ховає розділ.
+     */
+    ADMIN_ACCESS_REQUIRED: 'ADMIN_ACCESS_REQUIRED',
+
+    // --- guides error (Sprint 28) ---
+    GUIDE_NOT_FOUND: 'GUIDE_NOT_FOUND',
+    /**
+     * Slug опублікованої статті незмінний: зміна адреси означала б 404 для
+     * індексу без redirect-машинерії. Recovery: правити інші поля; адреса
+     * фіксується першою публікацією назавжди.
+     */
+    GUIDE_SLUG_LOCKED: 'GUIDE_SLUG_LOCKED',
+    /**
+     * Видалити можна лише чернетку. Для опублікованої — два свідомі кроки:
+     * зняти з публікації, потім видалити (захист URL, що вже в індексі).
+     */
+    GUIDE_PUBLISHED_DELETE_FORBIDDEN: 'GUIDE_PUBLISHED_DELETE_FORBIDDEN',
+    /**
+     * `pillarSlug` не вказує на наявний pillar: статті з таким slug немає,
+     * або вона сама є cluster-ом (дворівнева структура, глибша вкладеність
+     * не підтримується), або стаття посилається сама на себе.
+     */
+    GUIDE_PILLAR_INVALID: 'GUIDE_PILLAR_INVALID',
+    /**
+     * Стаття має cluster-и, що на неї посилаються: не можна ані перетворити
+     * її на cluster, ані видалити. Спершу відвʼязати або видалити cluster-и.
+     */
+    GUIDE_HAS_CLUSTERS: 'GUIDE_HAS_CLUSTERS',
+
+    // --- guide images error (Sprint 28) ---
+    GUIDE_IMAGE_UPLOAD_NOT_FOUND: 'GUIDE_IMAGE_UPLOAD_NOT_FOUND',
+    GUIDE_IMAGE_UPLOAD_INVALID: 'GUIDE_IMAGE_UPLOAD_INVALID',
+    GUIDE_IMAGE_UPLOAD_FAILED: 'GUIDE_IMAGE_UPLOAD_FAILED',
+
     // --- ai error ---
     AI_RATE_LIMIT_EXCEEDED: 'AI_RATE_LIMIT_EXCEEDED',
     AI_MESSAGE_TOO_LONG: 'AI_MESSAGE_TOO_LONG',
@@ -451,6 +488,15 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.ACCOUNT_CREATE_FAILED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.PAYLOAD_TOO_LARGE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.ONBOARDING_INCOMPLETE]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.ADMIN_ACCESS_REQUIRED]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.GUIDE_NOT_FOUND]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.GUIDE_SLUG_LOCKED]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.GUIDE_PUBLISHED_DELETE_FORBIDDEN]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.GUIDE_PILLAR_INVALID]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.GUIDE_HAS_CLUSTERS]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.GUIDE_IMAGE_UPLOAD_NOT_FOUND]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.GUIDE_IMAGE_UPLOAD_INVALID]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.GUIDE_IMAGE_UPLOAD_FAILED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVALID_REDIRECT_TARGET]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.UNAUTHORIZED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.VALIDATION_ERROR]: RESPONSE_TYPE.ERROR,

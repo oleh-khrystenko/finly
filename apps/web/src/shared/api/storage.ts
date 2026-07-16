@@ -1,5 +1,4 @@
 import {
-    AVATAR,
     type AvatarUploadUrlResponse,
     type BrandLogoUploadUrlResponse,
     type BrandPreviewResponse,
@@ -35,15 +34,20 @@ export async function deleteAvatar(): Promise<void> {
  * rather than `apiClient` because:
  *   - the destination is R2, not our API — no Bearer token, no CSRF, no baseURL
  *   - the `Content-Type` header must EXACTLY match what the backend signed
- *     into the presigned URL (`image/webp`), otherwise R2 rejects with
- *     403 `SignatureDoesNotMatch`.
+ *     into the presigned URL, otherwise R2 rejects with 403
+ *     `SignatureDoesNotMatch`. The caller passes the exact type it requested the
+ *     presigned URL for (avatar / guide image / …) — no shared hidden default.
  * `Content-Length` is set by the browser automatically from the blob body and
  * cannot be controlled programmatically (forbidden request header in Fetch).
  */
-export async function uploadToR2(uploadUrl: string, blob: Blob): Promise<void> {
+export async function uploadToR2(
+    uploadUrl: string,
+    blob: Blob,
+    contentType: string
+): Promise<void> {
     const response = await fetch(uploadUrl, {
         method: 'PUT',
-        headers: { 'Content-Type': AVATAR.OUTPUT_FORMAT },
+        headers: { 'Content-Type': contentType },
         body: blob,
     });
 

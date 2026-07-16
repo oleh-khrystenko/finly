@@ -3,6 +3,7 @@ import { ChevronRight, ArrowLeft, Bot } from 'lucide-react';
 
 import UiLink from '@/shared/ui/UiLink';
 import UiButton from '@/shared/ui/UiButton';
+import { AuthorCard } from '@/entities/author';
 import {
     getCategoryById,
     getRelatedArticles,
@@ -12,7 +13,6 @@ import {
 import { HelpSidebar } from './HelpSidebar';
 import { HelpArticleCard } from './HelpArticleCard';
 import { HelpArticleMeta } from './HelpArticleMeta';
-import { HelpAuthorCard } from './HelpAuthorCard';
 
 export function HelpArticleView({ article }: { article: HelpArticle }) {
     const category = getCategoryById(article.categoryId);
@@ -55,7 +55,7 @@ export function HelpArticleView({ article }: { article: HelpArticle }) {
                         <Markdown>{article.body}</Markdown>
                     </div>
 
-                    <HelpAuthorCard article={article} />
+                    <AuthorCard authorId={article.authorId} />
 
                     <aside className="border-border bg-muted/40 mt-10 flex items-center gap-4 rounded-xl border p-5">
                         <span className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-lg">

@@ -2,19 +2,19 @@ import Image from 'next/image';
 import { ArrowRight } from 'lucide-react';
 
 import UiLink from '@/shared/ui/UiLink';
-import { getAuthorById, type HelpArticle } from '@/entities/help-article';
+import { getAuthorById } from '@finly/types';
 
 /**
- * "Про автора" card at the end of the article. On support docs a person belongs
- * at the bottom as an attribution/bio block, not as a top byline (which reads
- * ambiguously on a help page). This is also the classic E-E-A-T placement and
- * mirrors the Person node in the page structured data.
+ * "Про автора" card at the end of an article. A named practitioner at the
+ * bottom is the classic E-E-A-T placement and mirrors the Person node in the
+ * page structured data. Shared by help and guides — both reference the same
+ * author identity by id, so the trust signal stays consistent across the site.
  *
  * The "profile" action sits top-right, in the header row with the section
  * label ("section heading + action" pattern), not buried under the role.
  */
-export function HelpAuthorCard({ article }: { article: HelpArticle }) {
-    const author = getAuthorById(article.authorId);
+export function AuthorCard({ authorId }: { authorId: string }) {
+    const author = getAuthorById(authorId);
     if (!author) return null;
 
     return (
