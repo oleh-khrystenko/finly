@@ -29,6 +29,7 @@ services:
             - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
             - WEB_URL=http://localhost:${WEB_PORT}
             - PAY_PUBLIC_URL=http://pay.finly.local:${WEB_PORT}
+            - REVALIDATE_SECRET=${REVALIDATE_SECRET}
             - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
             - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
             - GOOGLE_CALLBACK_URL=${GOOGLE_CALLBACK_URL}
@@ -115,6 +116,7 @@ services:
             - NEXT_PUBLIC_BILLING_DEMO_MODE=${NEXT_PUBLIC_BILLING_DEMO_MODE}
             - NEXT_PUBLIC_PAY_PUBLIC_URL=http://pay.finly.local:${WEB_PORT}
             - NEXT_PUBLIC_STORAGE_HOSTNAME=${NEXT_PUBLIC_STORAGE_HOSTNAME}
+            - REVALIDATE_SECRET=${REVALIDATE_SECRET}
             - WATCHPACK_POLLING=true
             - CHOKIDAR_USEPOLLING=true
         ports:
