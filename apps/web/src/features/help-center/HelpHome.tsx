@@ -2,7 +2,6 @@ import { getCategoriesWithArticles } from '@/entities/help-article';
 import { HelpChat } from '@/features/help-chat';
 
 import { HelpArticleCard } from './HelpArticleCard';
-import { HelpCtaBanner } from './HelpCtaBanner';
 
 export function HelpHome() {
     const groups = getCategoriesWithArticles();
@@ -63,8 +62,6 @@ export function HelpHome() {
                     );
                 })}
             </div>
-
-            <HelpCtaBanner />
         </main>
     );
 }

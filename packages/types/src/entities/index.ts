@@ -3,3 +3,4 @@ export * from './brand';
 export * from './business';
 export * from './invoice';
 export * from './account';
+export * from './guide';

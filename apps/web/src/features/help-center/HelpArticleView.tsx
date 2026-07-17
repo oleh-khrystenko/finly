@@ -3,6 +3,7 @@ import { ChevronRight, ArrowLeft, Bot } from 'lucide-react';
 
 import UiLink from '@/shared/ui/UiLink';
 import UiButton from '@/shared/ui/UiButton';
+import { AuthorCard } from '@/entities/author';
 import {
     getCategoryById,
     getRelatedArticles,
@@ -11,7 +12,7 @@ import {
 
 import { HelpSidebar } from './HelpSidebar';
 import { HelpArticleCard } from './HelpArticleCard';
-import { HelpCtaBanner } from './HelpCtaBanner';
+import { HelpArticleMeta } from './HelpArticleMeta';
 
 export function HelpArticleView({ article }: { article: HelpArticle }) {
     const category = getCategoryById(article.categoryId);
@@ -48,9 +49,13 @@ export function HelpArticleView({ article }: { article: HelpArticle }) {
                         {article.description}
                     </p>
 
+                    <HelpArticleMeta article={article} />
+
                     <div className="prose-help text-foreground/90 mt-6">
                         <Markdown>{article.body}</Markdown>
                     </div>
+
+                    <AuthorCard authorId={article.authorId} />
 
                     <aside className="border-border bg-muted/40 mt-10 flex items-center gap-4 rounded-xl border p-5">
                         <span className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-lg">
@@ -108,8 +113,6 @@ export function HelpArticleView({ article }: { article: HelpArticle }) {
                             Усі розділи довідки
                         </UiButton>
                     </div>
-
-                    <HelpCtaBanner />
                 </article>
             </div>
         </main>

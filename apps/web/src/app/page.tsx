@@ -9,6 +9,7 @@ import { fetchMetadata } from '@/shared/seo/metadata';
 import { LandingBanks } from '@/widgets/landing-banks';
 import { LandingClosingCta } from '@/widgets/landing-closing-cta';
 import { LandingContrast } from '@/widgets/landing-contrast';
+import { LandingFaq } from '@/widgets/landing-faq';
 import { LandingFooter } from '@/widgets/landing-footer';
 import { LandingHero } from '@/widgets/landing-hero';
 import { LandingHowItWorks } from '@/widgets/landing-how-it-works';
@@ -114,6 +115,7 @@ export default async function HomePage() {
                 <LandingWhy />
                 <LandingBanks />
                 <LandingPartner />
+                <LandingFaq />
                 <LandingClosingCta />
             </main>
             <LandingFooter />

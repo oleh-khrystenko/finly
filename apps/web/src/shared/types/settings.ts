@@ -17,6 +17,12 @@ interface Meta {
      */
     ogTitle?: string;
     ogDescription?: string;
+    /**
+     * Controls the OG/Twitter share image. Absent → the shared og-banner.png.
+     * `null` → emit no `images`, so a route-level `opengraph-image` file
+     * convention supplies a per-page banner (help articles, Sprint 24).
+     */
+    ogImage?: string | null;
 }
 
 export interface MetaProps {

@@ -79,3 +79,17 @@ export {
 } from './invoices';
 export type { PaginatedInvoices } from './invoices';
 export { clearPendingPostLoginTarget, releaseSlugReservation } from './users';
+export {
+    adminListGuides,
+    adminGetGuide,
+    createGuide,
+    updateGuide,
+    publishGuide,
+    startDraftGuide,
+    unpublishGuide,
+    deleteGuide,
+    reorderGuides,
+    syncOrganicGuides,
+    requestGuideImageUploadUrl,
+    commitGuideImage,
+} from './guides';

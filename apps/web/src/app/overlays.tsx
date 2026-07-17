@@ -56,6 +56,9 @@ const BrandDetachConfirmDialog = dynamic(
 const BrandDecreaseConfirmDialog = dynamic(
     () => import('@/features/billing/BrandDecreaseConfirmDialog')
 );
+const DeleteGuideConfirmDialog = dynamic(
+    () => import('@/features/admin-guides/DeleteGuideConfirmDialog')
+);
 
 export function Overlays() {
     return (
@@ -78,6 +81,7 @@ export function Overlays() {
             <BrandProrationConfirmDialog />
             <BrandDetachConfirmDialog />
             <BrandDecreaseConfirmDialog />
+            <DeleteGuideConfirmDialog />
         </>
     );
 }

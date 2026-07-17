@@ -1,5 +1,7 @@
 import { CreditCard, FileText, UserPlus } from 'lucide-react';
 
+import UiLink from '@/shared/ui/UiLink';
+
 const STEPS = [
     {
         num: '01',
@@ -77,7 +79,14 @@ export function LandingHowItWorks() {
                             Для одноразових платежів
                         </span>{' '}
                         є окремий рахунок із фіксованою сумою, призначенням і
-                        терміном дії. Стільки, скільки треба.
+                        терміном дії. Стільки, скільки треба.{' '}
+                        <UiLink
+                            as="link"
+                            href="/help/yak-vystavyty-rakhunok"
+                            variant="primary"
+                        >
+                            Як виставити рахунок клієнту
+                        </UiLink>
                     </p>
                 </div>
             </div>

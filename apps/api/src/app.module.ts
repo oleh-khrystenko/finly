@@ -22,6 +22,7 @@ import { StorageModule } from './modules/storage/storage.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { QrModule } from './modules/qr/qr.module';
 import { AiModule } from './modules/ai/ai.module';
+import { GuidesModule } from './modules/guides/guides.module';
 
 @Module({
     imports: [
@@ -70,6 +71,12 @@ import { AiModule } from './modules/ai/ai.module';
                 // поспіль — 20/min вистачає на правки лого/назви, стримуючи
                 // перебір. Apply через `@Throttle({ 'brand-preview' })`.
                 { name: 'brand-preview', ttl: 60000, limit: 20 },
+                // Sprint 28 — публічний read-only контент гайдів. Споживач —
+                // server-side fetch web-у (сторінки, sitemap, OG), тож усі
+                // клієнти виглядають одним IP: високий ліміт як у
+                // public-payment, окремий бакет щоб не ділити лічильник з
+                // платіжною зоною.
+                { name: 'public-content', ttl: 60000, limit: 600 },
             ],
         }),
         ScheduleModule.forRoot(),
@@ -88,6 +95,7 @@ import { AiModule } from './modules/ai/ai.module';
         PaymentsModule,
         QrModule,
         AiModule,
+        GuidesModule,
     ],
     controllers: [AppController],
     providers: [
