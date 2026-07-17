@@ -5,16 +5,21 @@ jest.mock('@/shared/config', () => ({
     },
 }));
 
-import { loadGuideSlugs } from '@/features/guides';
+import { loadGuideSlugsSafe } from '@/features/guides';
 
+// Sitemap споживає build-safe враппер: він сам деградує до [] при недоступному
+// API (див. loadGuides.spec), тож тут мокаємо саме його і перевіряємо, як
+// sitemap реагує на його результат.
 jest.mock('@/features/guides', () => ({
-    loadGuideSlugs: jest.fn().mockResolvedValue(['yak-fop-pryimaty-oplatu']),
+    loadGuideSlugsSafe: jest
+        .fn()
+        .mockResolvedValue(['yak-fop-pryimaty-oplatu']),
 }));
 
 import sitemap from './sitemap';
 
-const loadGuideSlugsMock = loadGuideSlugs as jest.MockedFunction<
-    typeof loadGuideSlugs
+const loadGuideSlugsMock = loadGuideSlugsSafe as jest.MockedFunction<
+    typeof loadGuideSlugsSafe
 >;
 
 beforeEach(() => {
@@ -46,16 +51,14 @@ describe('sitemap', () => {
         ).toBe(false);
     });
 
-    it('does not fall over when guide loading fails', async () => {
-        const errorSpy = jest
-            .spyOn(console, 'error')
-            .mockImplementation(() => {});
-        loadGuideSlugsMock.mockRejectedValue(new Error('API down'));
+    it('still builds the rest of the sitemap when guides degrade to empty', async () => {
+        // loadGuideSlugsSafe ковтає помилку API і повертає [] — sitemap мусить
+        // спокійно віддати решту сторінок без розділу гайдів.
+        loadGuideSlugsMock.mockResolvedValue([]);
         const urls = (await sitemap()).map((entry) => entry.url);
 
         expect(urls).toContain('https://finly.com.ua');
         expect(urls).not.toContain('https://finly.com.ua/guides');
-        errorSpy.mockRestore();
     });
 
     it('does not include noindex legal drafts', async () => {
