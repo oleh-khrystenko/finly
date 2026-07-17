@@ -14,7 +14,8 @@ jest.mock('../src/config/env', () => ({
         REVALIDATE_SECRET: 'test-secret',
         GSC_SITE_URL: 'sc-domain:finly.com.ua',
         GSC_CLIENT_EMAIL: 'test-gsc@test.iam.gserviceaccount.com',
-        GSC_PRIVATE_KEY: '-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n',
+        GSC_PRIVATE_KEY:
+            '-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n',
         R2_ACCOUNT_ID: 'test-account',
         R2_ACCESS_KEY_ID: 'test-key-id',
         R2_SECRET_ACCESS_KEY: 'test-secret',

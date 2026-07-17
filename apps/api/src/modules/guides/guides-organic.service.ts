@@ -59,7 +59,9 @@ export class GuidesOrganicService {
 
     async syncNow(): Promise<SyncOrganicResult> {
         const now = new Date();
-        const startDate = kyivDate(new Date(now.getTime() - WINDOW_DAYS * MS_PER_DAY));
+        const startDate = kyivDate(
+            new Date(now.getTime() - WINDOW_DAYS * MS_PER_DAY)
+        );
         const endDate = kyivDate(now);
 
         const clicksByUrl = await this.gsc.fetchPageClicks(startDate, endDate);
