@@ -92,3 +92,6 @@ repomix-output.xml
 
 # --- Claude Code runtime state ---
 .claude/scheduled_tasks.lock
+
+# --- Scratch (чернетка для обміну контекстом, не для репо) ---
+scratch/

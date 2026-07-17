@@ -26,7 +26,10 @@
         "migration:nested-slug-lower": "ts-node scripts/migrations/2026-06-03-nested-slug-lower.ts",
         "migration:slug-customized": "ts-node scripts/migrations/2026-06-10-slug-customized-backfill.ts",
         "migration:businesses-brand": "ts-node scripts/migrations/2026-06-18-businesses-brand-null.ts",
-        "migration:all": "pnpm migration:slug-lower && pnpm migration:invoices-payee-snapshot && pnpm migration:accounts-null-auto-name && pnpm migration:nested-slug-lower && pnpm migration:slug-customized && pnpm migration:businesses-brand"
+        "migration:all": "pnpm migration:slug-lower && pnpm migration:invoices-payee-snapshot && pnpm migration:accounts-null-auto-name && pnpm migration:nested-slug-lower && pnpm migration:slug-customized && pnpm migration:businesses-brand && pnpm migration:guides-seed",
+        "migration:guides-seed": "ts-node scripts/migrations/2026-07-15-guides-seed.ts",
+        "migration:drop-legacy": "ts-node scripts/migrations/2026-07-17-drop-legacy-collections.ts",
+        "migration:drop-legacy:force": "ts-node scripts/migrations/2026-07-17-drop-legacy-collections.ts --force"
     },
     "dependencies": {
         "@anthropic-ai/sdk": "^0.80.0",
@@ -47,6 +50,7 @@
         "bcrypt": "^6.0.0",
         "cookie-parser": "^1.4.7",
         "dotenv": "^17.3.1",
+        "google-auth-library": "^10.9.0",
         "ioredis": "^5.9.3",
         "mongoose": "^8.19.2",
         "nestjs-zod": "^5.1.1",

@@ -102,3 +102,27 @@ export interface BrandPreviewResponse {
     pagePngBase64: string;
     nbuPngBase64: string | null;
 }
+
+/**
+ * Sprint 28 — ілюстрації блоків гайдів: `guide-images/{uuid}.webp`.
+ *
+ * Без per-user namespace: контент спільний адмінський, ownership гарантує
+ * guard ролі admin на ендпоінтах, не структура ключа. UUID version-agnostic.
+ */
+export const GUIDE_IMAGE_FILE_KEY_REGEX =
+    /^guide-images\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.webp$/;
+
+export const CommitGuideImageSchema = z.object({
+    fileKey: z.string().regex(GUIDE_IMAGE_FILE_KEY_REGEX),
+});
+
+export type CommitGuideImageDto = z.infer<typeof CommitGuideImageSchema>;
+
+export interface GuideImageUploadUrlResponse {
+    uploadUrl: string;
+    fileKey: string;
+}
+
+export interface CommitGuideImageResponse {
+    url: string;
+}

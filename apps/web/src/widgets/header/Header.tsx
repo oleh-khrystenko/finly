@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { LogOut, User, CreditCard, Menu, Briefcase } from 'lucide-react';
+import { LogOut, User, CreditCard, Menu, Briefcase, BookOpen } from 'lucide-react';
 import ChangeTheme from '@/features/change-theme';
 import { Logo } from '@/entities/brand';
 import UiButton from '@/shared/ui/UiButton';
@@ -52,6 +52,7 @@ const Header = () => {
         businesses: <Briefcase />,
         profile: <User />,
         billing: <CreditCard />,
+        admin: <BookOpen />,
         logout: <LogOut />,
     });
 

@@ -1,4 +1,4 @@
-export type { HelpArticle, HelpCategory } from './types';
+export type { HelpArticle, HelpAuthor, HelpCategory } from './types';
 export {
     getAllCategories,
     getCategoryById,
@@ -8,4 +8,7 @@ export {
     getArticlesByCategory,
     getCategoriesWithArticles,
     getRelatedArticles,
+    getAllAuthors,
+    getAuthorById,
+    getArticlesByAuthor,
 } from './lib';

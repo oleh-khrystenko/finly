@@ -86,6 +86,22 @@ html {
     & hr {
         @apply my-8 border-border;
     }
+
+    & table {
+        @apply my-4 w-full border-collapse text-sm;
+    }
+
+    & th {
+        @apply border-b border-border px-3 py-2 text-left font-semibold text-foreground;
+    }
+
+    & td {
+        @apply border-b border-border/60 px-3 py-2 align-top leading-relaxed;
+    }
+
+    & tbody tr:last-child td {
+        @apply border-b-0;
+    }
 }
 
 .prose-chat {

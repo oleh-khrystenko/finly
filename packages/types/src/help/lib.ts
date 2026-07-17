@@ -1,11 +1,29 @@
 import { HELP_CATEGORIES } from './categories';
 import { HELP_ARTICLES } from './articles';
-import type { HelpArticle, HelpCategory } from './types';
+import { HELP_AUTHORS } from './authors';
+import type { HelpArticle, HelpAuthor, HelpCategory } from './types';
 
 const RELATED_LIMIT = 3;
 
 export function getAllCategories(): readonly HelpCategory[] {
     return HELP_CATEGORIES;
+}
+
+export function getAllAuthors(): readonly HelpAuthor[] {
+    return HELP_AUTHORS;
+}
+
+export function getAuthorById(id: string): HelpAuthor | undefined {
+    return HELP_AUTHORS.find((a) => a.id === id);
+}
+
+/** Articles written by an author, newest first (by publish date then order). */
+export function getArticlesByAuthor(authorId: string): HelpArticle[] {
+    return HELP_ARTICLES.filter((a) => a.authorId === authorId).sort((a, b) =>
+        a.datePublished === b.datePublished
+            ? a.order - b.order
+            : b.datePublished.localeCompare(a.datePublished)
+    );
 }
 
 export function getCategoryById(id: string): HelpCategory | undefined {

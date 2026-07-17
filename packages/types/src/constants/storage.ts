@@ -64,3 +64,25 @@ export const BRAND_LOGO = {
 
 export type BrandLogoAllowedMimeType =
     (typeof BRAND_LOGO.ALLOWED_MIME_TYPES)[number];
+
+/**
+ * Sprint 28 — ілюстрації блоків гайдів. Той самий pipeline, що avatar:
+ * клієнт конвертує обране зображення у WebP (canvas), зчитує реальні розміри
+ * до збереження, presigned PUT підписує лише webp, commit перевіряє
+ * HeadObject-ом. Без кропа — пропорції зображення довільні.
+ */
+export const GUIDE_IMAGE = {
+    /** Max size of the converted WebP the admin may upload (2 MB). */
+    MAX_FILE_SIZE: 2 * 1024 * 1024,
+    /** Longest-edge cap on the client before encoding — контент-ширина ~42rem. */
+    MAX_DIMENSION: 2400,
+    /** Only output MIME allowed. Signed into presigned PUT URLs. */
+    OUTPUT_FORMAT: 'image/webp',
+    /** WebP quality used by `canvas.toBlob` on the client. */
+    OUTPUT_QUALITY: 0.85,
+    /** Input MIME accepted by the file picker before conversion (як avatar). */
+    ALLOWED_MIME_TYPES: ['image/jpeg', 'image/png', 'image/webp'],
+} as const;
+
+export type GuideImageAllowedMimeType =
+    (typeof GUIDE_IMAGE.ALLOWED_MIME_TYPES)[number];
