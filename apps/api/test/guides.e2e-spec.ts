@@ -12,6 +12,9 @@ jest.mock('../src/config/env', () => ({
         NODE_ENV: 'test',
         WEB_URL: 'https://finly.com.ua',
         REVALIDATE_SECRET: 'test-secret',
+        GSC_SITE_URL: 'sc-domain:finly.com.ua',
+        GSC_CLIENT_EMAIL: 'test-gsc@test.iam.gserviceaccount.com',
+        GSC_PRIVATE_KEY: '-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n',
         R2_ACCOUNT_ID: 'test-account',
         R2_ACCESS_KEY_ID: 'test-key-id',
         R2_SECRET_ACCESS_KEY: 'test-secret',
@@ -43,7 +46,6 @@ function guidePayload(
         description: 'Опис гайда для e2e-тесту прийому оплати',
         authorId: 'tetiana-priadko',
         pillarSlug: null,
-        order: 1,
         blocks: [{ text: 'Текст першого блоку гайда.' }],
         faq: [],
         ...overrides,
@@ -116,7 +118,7 @@ describe('Guides E2E (Sprint 28)', () => {
             .send(guidePayload());
         expect(created.status).toBe(201);
         const id = created.body.data.id as string;
-        expect(created.body.data.status).toBe('draft');
+        expect(created.body.data.status).toBe('planned');
 
         // Чернетка публічно недоступна.
         const draftView = await supertest(app.getHttpServer()).get(
@@ -141,6 +143,30 @@ describe('Guides E2E (Sprint 28)', () => {
         );
         expect(tree.status).toBe(200);
         expect(tree.body.data).toHaveLength(1);
+    });
+
+    it('reorder перевпорядковує список (route не перехоплений :id)', async () => {
+        const a = await supertest(app.getHttpServer())
+            .post('/api/admin/guides')
+            .send(guidePayload({ slug: 'guide-a', title: 'Гайд A' }));
+        const b = await supertest(app.getHttpServer())
+            .post('/api/admin/guides')
+            .send(guidePayload({ slug: 'guide-b', title: 'Гайд B' }));
+        const idA = a.body.data.id as string;
+        const idB = b.body.data.id as string;
+
+        const res = await supertest(app.getHttpServer())
+            .patch('/api/admin/guides/reorder')
+            .send({ ids: [idB, idA] });
+        expect(res.status).toBe(200);
+
+        const list = await supertest(app.getHttpServer()).get(
+            '/api/admin/guides'
+        );
+        expect(list.body.data.map((g: { slug: string }) => g.slug)).toEqual([
+            'guide-b',
+            'guide-a',
+        ]);
     });
 
     it('забороняє видалення опублікованої статті', async () => {

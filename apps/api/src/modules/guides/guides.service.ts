@@ -34,6 +34,11 @@ function kyivToday(): string {
     }).format(new Date());
 }
 
+/** Стаття має хоч один непорожній блок тексту — умова публікації. */
+function hasContent(blocks: { text: string }[]): boolean {
+    return blocks.some((block) => block.text.trim() !== '');
+}
+
 function toCard(doc: GuideDocument): PublicGuideCard {
     return {
         slug: doc.slug,
@@ -143,7 +148,7 @@ export class GuidesService {
     async adminList(): Promise<AdminGuideListItem[]> {
         const docs = await this.guideModel
             .find()
-            .sort({ updatedAt: -1 })
+            .sort({ order: 1, createdAt: 1 })
             .exec();
         return docs.map((doc) => ({
             id: doc._id.toString(),
@@ -154,6 +159,8 @@ export class GuidesService {
             order: doc.order,
             datePublished: doc.datePublished,
             dateModified: doc.dateModified,
+            organicClicks: doc.organicClicks ?? 0,
+            organicSyncedAt: doc.organicSyncedAt ?? null,
             updatedAt: doc.updatedAt,
         }));
     }
@@ -175,10 +182,17 @@ export class GuidesService {
         this.assertAuthorExists(dto.authorId);
         await this.assertPillarRefValid(dto.pillarSlug, dto.slug);
 
+        // `order` не редагується у формі: нова стаття стає в кінець списку.
+        // Точний порядок задається дією «підняти/опустити» (див. reorder).
+        const order = (await this.maxOrder()) + 1;
+
         try {
             return await this.guideModel.create({
                 ...dto,
-                status: 'draft',
+                order,
+                // Нова стаття народжується запланованою темою (backlog). До
+                // чернетки її переводить окрема дія startDraft.
+                status: 'planned',
                 datePublished: null,
                 dateModified: null,
             });
@@ -187,10 +201,52 @@ export class GuidesService {
         }
     }
 
+    /**
+     * Присвоює послідовні `order` (1..N) за порядком переданих id. Клієнт шле
+     * повний список; невалідні id тихо пропускаються (індекс зберігається, тож
+     * відносний порядок решти не зсувається). Перегенеровуємо публічні
+     * сторінки: порядок впливає на дерево /guides і блок «читайте також».
+     */
+    async reorder(ids: string[]): Promise<void> {
+        const ops = ids
+            .map((id, index) => ({ id, index }))
+            .filter(({ id }) => isValidObjectId(id))
+            .map(({ id, index }) => ({
+                updateOne: {
+                    filter: { _id: id },
+                    update: { $set: { order: index + 1 } },
+                },
+            }));
+
+        if (ops.length > 0) {
+            await this.guideModel.bulkWrite(ops);
+        }
+        await this.revalidation.revalidate();
+    }
+
+    private async maxOrder(): Promise<number> {
+        const last = await this.guideModel
+            .findOne()
+            .sort({ order: -1 })
+            .select('order')
+            .lean()
+            .exec();
+        return last?.order ?? 0;
+    }
+
     async update(id: string, dto: UpsertGuideRequest): Promise<GuideDocument> {
         const doc = await this.adminGetById(id);
 
         this.assertAuthorExists(dto.authorId);
+
+        // Опублікована стаття не може стати порожньою: її сторінка вже в
+        // індексі. Для planned/draft порожній контент дозволений.
+        if (doc.status === 'published' && !hasContent(dto.blocks)) {
+            throw new BadRequestException({
+                code: RESPONSE_CODE.GUIDE_CONTENT_REQUIRED,
+                message: 'Published guide must keep at least one block',
+            });
+        }
 
         if (doc.datePublished !== null && dto.slug !== doc.slug) {
             throw new ConflictException({
@@ -265,8 +321,32 @@ export class GuidesService {
         return doc;
     }
 
+    /**
+     * Запланована тема → чернетка («почали писати»). Контент не вимагається:
+     * чернетка може бути ще порожньою. Не публічна, тож без revalidate.
+     */
+    async startDraft(id: string): Promise<GuideDocument> {
+        const doc = await this.adminGetById(id);
+        if (doc.status === 'published') {
+            throw new ConflictException({
+                code: RESPONSE_CODE.GUIDE_UNPUBLISH_FIRST,
+                message: 'Unpublish the guide before moving it back to draft',
+            });
+        }
+        doc.status = 'draft';
+        await doc.save();
+        return doc;
+    }
+
     async publish(id: string): Promise<GuideDocument> {
         const doc = await this.adminGetById(id);
+        // Публічна сторінка не може бути порожня.
+        if (!hasContent(doc.blocks)) {
+            throw new BadRequestException({
+                code: RESPONSE_CODE.GUIDE_CONTENT_REQUIRED,
+                message: 'Add at least one block before publishing',
+            });
+        }
         const today = kyivToday();
         doc.status = 'published';
         doc.datePublished = doc.datePublished ?? today;

@@ -23,11 +23,13 @@ import {
     createGuide,
     extractApiErrorCode,
     getApiMessage,
+    startDraftGuide,
     publishGuide,
     unpublishGuide,
     updateGuide,
 } from '@/shared/api';
 
+import { FieldHint } from './FieldHint';
 import { GuideBlockFields } from './GuideBlockFields';
 import { GuideFaqFields } from './GuideFaqFields';
 import { GuideStatusBadge } from './GuideStatusBadge';
@@ -51,7 +53,6 @@ function guideToForm(guide: Guide): EditorFormValues {
         description: guide.description,
         authorId: guide.authorId,
         pillarSlug: guide.pillarSlug ?? '',
-        order: guide.order,
         blocks: guide.blocks.map((b) => ({
             heading: b.heading ?? '',
             text: b.text,
@@ -71,7 +72,6 @@ function formToPayload(values: EditorFormValues): UpsertGuideRequest {
         description: values.description.trim(),
         authorId: values.authorId,
         pillarSlug: values.pillarSlug === '' ? null : values.pillarSlug,
-        order: values.order,
         blocks: values.blocks.map((b) => {
             const heading = b.heading.trim();
             const caption = b.image?.caption?.trim();
@@ -104,8 +104,8 @@ const EMPTY_DEFAULTS: EditorFormValues = {
     description: '',
     authorId: AUTHOR_OPTIONS[0]?.value ?? '',
     pillarSlug: '',
-    order: 1,
-    blocks: [{ heading: '', text: '', image: undefined }],
+    // Порожньо: нова стаття це запланована тема, контент додається пізніше.
+    blocks: [],
     faq: [],
 };
 
@@ -183,15 +183,20 @@ export function GuideEditor({ mode, guideId }: GuideEditorProps) {
         };
     }, [mode, guideId, form]);
 
+    const isPlanned = guide?.status === 'planned';
+    const isDraft = guide?.status === 'draft';
     const isPublished = guide?.status === 'published';
     const isSlugLocked = Boolean(guide && guide.datePublished !== null);
+    const hasContent = Boolean(
+        guide?.blocks.some((b) => b.text.trim() !== '')
+    );
 
     const onSubmit = async (values: EditorFormValues) => {
         const payload = formToPayload(values);
         try {
             if (mode === 'create') {
                 const created = await createGuide(payload);
-                toast.success('Чернетку створено');
+                toast.success('Тему створено');
                 router.push(`/admin/guides/${created.id}`);
             } else if (guideId) {
                 const updated = await updateGuide(guideId, payload);
@@ -274,35 +279,95 @@ export function GuideEditor({ mode, guideId }: GuideEditorProps) {
                 onSubmit={form.handleSubmit(onSubmit)}
                 className="mt-8 space-y-8"
             >
-                <section className="space-y-4">
-                    <UiInput
-                        {...form.register('title')}
-                        label="Назва"
-                        placeholder="Як ФОП приймати оплату від клієнтів"
-                        error={getZodFieldError(errors.title)}
-                        size="lg"
-                    />
-                    <UiInput
-                        {...form.register('description')}
-                        label="Опис"
-                        placeholder="Короткий опис для видачі і соцмереж"
-                        error={getZodFieldError(errors.description)}
-                        size="md"
-                    />
-                    <UiInput
-                        {...form.register('slug')}
-                        label="Адреса (slug)"
-                        placeholder="yak-fop-pryimaty-oplatu"
-                        error={getZodFieldError(errors.slug)}
-                        disabled={isSlugLocked}
-                        description={
-                            isSlugLocked
-                                ? 'Адреса зафіксована після першої публікації.'
-                                : 'Лише малі латинські літери, цифри і дефіси.'
-                        }
-                        size="md"
-                    />
-                    <div className="grid gap-4 sm:grid-cols-2">
+                <section className="space-y-6">
+                    <div>
+                        <UiInput
+                            {...form.register('title')}
+                            label="Назва"
+                            placeholder="Як ФОП приймати оплату від клієнтів"
+                            error={getZodFieldError(errors.title)}
+                            size="lg"
+                        />
+                        <FieldHint>
+                            <p>
+                                Це заголовок статті, який читач побачить
+                                найбільшими буквами вгорі сторінки, і саме його
+                                показує Google у списку результатів пошуку.
+                            </p>
+                            <p>
+                                Напишіть його простими словами, так, як людина
+                                сама набрала б це питання в пошуку. Наприклад:
+                                «Як ФОП приймати оплату від клієнтів».
+                            </p>
+                        </FieldHint>
+                    </div>
+
+                    <div>
+                        <UiInput
+                            {...form.register('description')}
+                            label="Опис"
+                            placeholder="Короткий опис для видачі і соцмереж"
+                            error={getZodFieldError(errors.description)}
+                            size="md"
+                        />
+                        <FieldHint>
+                            <p>
+                                Одне коротке речення про те, про що ця стаття.
+                            </p>
+                            <p>
+                                Його видно в Google одразу під заголовком, ще до
+                                того як людина зайшла на сторінку. Це наче
+                                маленька вивіска: прочитавши її, людина вирішує,
+                                чи цікаво їй натиснути. Напишіть просто і чесно,
+                                без води.
+                            </p>
+                        </FieldHint>
+                    </div>
+
+                    <div>
+                        <UiInput
+                            {...form.register('slug')}
+                            label="Адреса (slug)"
+                            placeholder="yak-fop-pryimaty-oplatu"
+                            error={getZodFieldError(errors.slug)}
+                            disabled={isSlugLocked}
+                            size="md"
+                        />
+                        <FieldHint>
+                            {isSlugLocked ? (
+                                <p>
+                                    Це адреса сторінки в інтернеті (те, що йде
+                                    після <code>/guides/</code> у рядку
+                                    браузера). Її вже не можна змінювати, бо
+                                    стаття опублікована: на неї могли поставити
+                                    посилання інші сайти, і зміна їх зламала б.
+                                </p>
+                            ) : (
+                                <>
+                                    <p>
+                                        Це кінець посилання на вашу статтю, тобто
+                                        те, що люди бачитимуть в адресному рядку
+                                        після <code>/guides/</code>.
+                                    </p>
+                                    <p>
+                                        Правила прості: тільки маленькі
+                                        англійські букви, цифри і риска замість
+                                        пробілу. Не можна великих букв,
+                                        українських літер, пробілів і крапок.
+                                    </p>
+                                    <p>
+                                        Найлегший спосіб: візьміть назву статті,
+                                        напишіть її англійськими буквами і
+                                        поставте риску між словами. Для «Як ФОП
+                                        приймати оплату» вийде{' '}
+                                        <code>yak-fop-pryimaty-oplatu</code>.
+                                    </p>
+                                </>
+                            )}
+                        </FieldHint>
+                    </div>
+
+                    <div>
                         <UiSelect
                             label="Автор"
                             options={AUTHOR_OPTIONS}
@@ -315,54 +380,98 @@ export function GuideEditor({ mode, guideId }: GuideEditorProps) {
                             error={getZodFieldError(errors.authorId)}
                             size="md"
                         />
-                        <UiInput
-                            {...form.register('order', { valueAsNumber: true })}
-                            type="number"
-                            inputMode="numeric"
-                            label="Порядок"
-                            error={getZodFieldError(errors.order)}
+                        <FieldHint>
+                            <p>
+                                Виберіть, від чийого імені написана стаття. Імʼя
+                                і фото цієї людини зʼявляться внизу сторінки,
+                                читачам це додає довіри. Якщо не знаєте, кого
+                                поставити, залиште того, хто вже вибраний.
+                            </p>
+                        </FieldHint>
+                    </div>
+
+                    <div>
+                        <UiSelect
+                            label="Розділ"
+                            options={[
+                                {
+                                    label: 'Це основний гайд (pillar)',
+                                    value: '',
+                                },
+                                ...pillarOptions,
+                            ]}
+                            value={form.watch('pillarSlug')}
+                            onChange={(v) =>
+                                form.setValue('pillarSlug', v, {
+                                    shouldDirty: true,
+                                })
+                            }
                             size="md"
                         />
+                        <FieldHint>
+                            <p>
+                                Тут ви кажете, чи ця стаття головна у своїй темі,
+                                чи вона доповнює якусь головну.
+                            </p>
+                            <p>
+                                <strong>Головна стаття</strong> це велика
+                                оглядова тема, наприклад «Як ФОП приймати
+                                оплату». Якщо пишете саме таку, залиште варіант
+                                «Це основний гайд».
+                            </p>
+                            <p>
+                                <strong>Доповнююча стаття</strong> розкриває одне
+                                вузьке питання всередині великої теми. Наприклад
+                                «Як зробити QR-код» це частинка теми про оплату.
+                                Тоді виберіть тут ту головну статтю, до якої вона
+                                підходить.
+                            </p>
+                            <p>
+                                Що це дає: коли статті звʼязані, внизу кожної
+                                сама собою зʼявиться підказка з посиланням на
+                                сусідню, і читач легко переходитиме від однієї до
+                                іншої.
+                            </p>
+                        </FieldHint>
                     </div>
-                    <UiSelect
-                        label="Розділ"
-                        options={[
-                            {
-                                label: 'Це основний гайд (pillar)',
-                                value: '',
-                            },
-                            ...pillarOptions,
-                        ]}
-                        value={form.watch('pillarSlug')}
-                        onChange={(v) =>
-                            form.setValue('pillarSlug', v, {
-                                shouldDirty: true,
-                            })
-                        }
-                        size="md"
-                    />
                 </section>
 
                 <section className="space-y-4">
-                    <div className="flex items-center justify-between gap-3">
-                        <h2 className="text-foreground text-lg font-semibold tracking-tight">
-                            Блоки
-                        </h2>
-                        <UiButton
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            IconLeft={<Plus className="size-4" />}
-                            onClick={() =>
-                                append({
-                                    heading: '',
-                                    text: '',
-                                    image: undefined,
-                                })
-                            }
-                        >
-                            Додати блок
-                        </UiButton>
+                    <div>
+                        <div className="flex items-center justify-between gap-3">
+                            <h2 className="text-foreground text-lg font-semibold tracking-tight">
+                                Блоки
+                            </h2>
+                            <UiButton
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                IconLeft={<Plus className="size-4" />}
+                                onClick={() =>
+                                    append({
+                                        heading: '',
+                                        text: '',
+                                        image: undefined,
+                                    })
+                                }
+                            >
+                                Додати блок
+                            </UiButton>
+                        </div>
+                        <FieldHint>
+                            <p>
+                                Стаття складається з блоків, які йдуть згори вниз
+                                один за одним. Один блок це один шматочок статті:
+                                невеликий заголовок і текст під ним, за бажанням
+                                з картинкою.
+                            </p>
+                            <p>
+                                Розбивайте статтю на блоки за змістом, так її
+                                набагато легше читати, ніж суцільною стіною
+                                тексту. Стрілками вгору і вниз можна міняти блоки
+                                місцями, а кошиком, прибрати зайвий.
+                            </p>
+                        </FieldHint>
                     </div>
                     {typeof errors.blocks?.message === 'string' && (
                         <p className="text-destructive text-sm">
@@ -398,9 +507,7 @@ export function GuideEditor({ mode, guideId }: GuideEditorProps) {
                         // undefined — збереження відправило б блок без фото.
                         disabled={(mode === 'edit' && !isDirty) || blocksLocked}
                     >
-                        {mode === 'create'
-                            ? 'Створити чернетку'
-                            : 'Зберегти'}
+                        {mode === 'create' ? 'Створити тему' : 'Зберегти'}
                     </UiButton>
 
                     {guide && (
@@ -415,7 +522,59 @@ export function GuideEditor({ mode, guideId }: GuideEditorProps) {
                                 Превʼю
                             </UiButton>
 
-                            {isPublished ? (
+                            {isPlanned && (
+                                <UiButton
+                                    type="button"
+                                    variant="filled"
+                                    size="md"
+                                    disabled={actionPending}
+                                    onClick={() => {
+                                        if (isDirty) {
+                                            toast.error(
+                                                'Спершу збережіть зміни, а потім переносьте в чернетки.'
+                                            );
+                                            return;
+                                        }
+                                        void runAction(
+                                            () => startDraftGuide(guide.id),
+                                            'Перенесено в чернетки'
+                                        );
+                                    }}
+                                >
+                                    Перенести в чернетки
+                                </UiButton>
+                            )}
+
+                            {isDraft && (
+                                <UiButton
+                                    type="button"
+                                    variant="filled"
+                                    size="md"
+                                    disabled={actionPending}
+                                    onClick={() => {
+                                        if (isDirty) {
+                                            toast.error(
+                                                'Спершу збережіть зміни, а потім публікуйте.'
+                                            );
+                                            return;
+                                        }
+                                        if (!hasContent) {
+                                            toast.error(
+                                                'Додайте хоча б один блок тексту, перш ніж публікувати.'
+                                            );
+                                            return;
+                                        }
+                                        void runAction(
+                                            () => publishGuide(guide.id),
+                                            'Гайд опубліковано'
+                                        );
+                                    }}
+                                >
+                                    Опублікувати
+                                </UiButton>
+                            )}
+
+                            {isPublished && (
                                 <UiButton
                                     type="button"
                                     variant="outline"
@@ -435,27 +594,6 @@ export function GuideEditor({ mode, guideId }: GuideEditorProps) {
                                     }}
                                 >
                                     Зняти з публікації
-                                </UiButton>
-                            ) : (
-                                <UiButton
-                                    type="button"
-                                    variant="filled"
-                                    size="md"
-                                    disabled={actionPending}
-                                    onClick={() => {
-                                        if (isDirty) {
-                                            toast.error(
-                                                'Спершу збережіть зміни, а потім публікуйте.'
-                                            );
-                                            return;
-                                        }
-                                        void runAction(
-                                            () => publishGuide(guide.id),
-                                            'Гайд опубліковано'
-                                        );
-                                    }}
-                                >
-                                    Опублікувати
                                 </UiButton>
                             )}
 

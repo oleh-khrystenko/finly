@@ -19,7 +19,6 @@ function dto(overrides: Partial<UpsertGuideRequest> = {}): UpsertGuideRequest {
         description: 'Опис основного гайда для тестів',
         authorId: AUTHOR_ID,
         pillarSlug: null,
-        order: 1,
         blocks: [{ text: 'Текст блоку' }],
         faq: [],
         ...overrides,
@@ -67,11 +66,17 @@ describe('GuidesService (Sprint 28, MongoMemoryReplSet)', () => {
     });
 
     describe('create', () => {
-        it('створює чернетку без дат публікації', async () => {
+        it('створює заплановану тему без дат публікації', async () => {
             const guide = await service.create(dto());
-            expect(guide.status).toBe('draft');
+            expect(guide.status).toBe('planned');
             expect(guide.datePublished).toBeNull();
             expect(guide.dateModified).toBeNull();
+        });
+
+        it('дозволяє тему без контенту (лише назва)', async () => {
+            const guide = await service.create(dto({ blocks: [] }));
+            expect(guide.status).toBe('planned');
+            expect(guide.blocks).toHaveLength(0);
         });
 
         it('відхиляє невідомого автора', async () => {
@@ -95,14 +100,13 @@ describe('GuidesService (Sprint 28, MongoMemoryReplSet)', () => {
         it('відхиляє cluster, що вказує на інший cluster', async () => {
             const pillar = await service.create(dto());
             await service.create(
-                dto({ slug: 'cluster-a', pillarSlug: pillar.slug, order: 1 })
+                dto({ slug: 'cluster-a', pillarSlug: pillar.slug })
             );
             await expect(
                 service.create(
                     dto({
                         slug: 'cluster-b',
                         pillarSlug: 'cluster-a',
-                        order: 2,
                     })
                 )
             ).rejects.toMatchObject({
@@ -118,6 +122,50 @@ describe('GuidesService (Sprint 28, MongoMemoryReplSet)', () => {
         });
     });
 
+    describe('order / reorder', () => {
+        it('нова стаття стає в кінець (order = max + 1)', async () => {
+            const first = await service.create(dto({ slug: 'a' }));
+            const second = await service.create(dto({ slug: 'b' }));
+            const third = await service.create(dto({ slug: 'c' }));
+            expect(first.order).toBe(1);
+            expect(second.order).toBe(2);
+            expect(third.order).toBe(3);
+        });
+
+        it('reorder присвоює послідовні order за порядком id і перегенеровує', async () => {
+            const a = await service.create(dto({ slug: 'a' }));
+            const b = await service.create(dto({ slug: 'b' }));
+            const c = await service.create(dto({ slug: 'c' }));
+
+            await service.reorder([c.id, a.id, b.id]);
+
+            const list = await service.adminList();
+            expect(list.map((g) => g.slug)).toEqual(['c', 'a', 'b']);
+            expect(list.map((g) => g.order)).toEqual([1, 2, 3]);
+            expect(revalidation.revalidate).toHaveBeenCalledTimes(1);
+        });
+
+        it('reorder ігнорує невалідні id, не зсуваючи решту', async () => {
+            const a = await service.create(dto({ slug: 'a' }));
+            const b = await service.create(dto({ slug: 'b' }));
+
+            await service.reorder(['not-an-id', b.id, a.id]);
+
+            const list = await service.adminList();
+            // b отримав order 2 (індекс 1), a — order 3 (індекс 2); невалідний
+            // id пропущено, але індекс збережено, тож b перед a.
+            expect(list.map((g) => g.slug)).toEqual(['b', 'a']);
+        });
+    });
+
+    describe('startDraft', () => {
+        it('переводить заплановану тему в чернетку', async () => {
+            const planned = await service.create(dto());
+            const draft = await service.startDraft(planned.id);
+            expect(draft.status).toBe('draft');
+        });
+    });
+
     describe('publish / unpublish', () => {
         it('публікація ставить дати і тригерить перегенерацію', async () => {
             const draft = await service.create(dto());
@@ -126,6 +174,13 @@ describe('GuidesService (Sprint 28, MongoMemoryReplSet)', () => {
             expect(published.datePublished).not.toBeNull();
             expect(published.dateModified).not.toBeNull();
             expect(revalidation.revalidate).toHaveBeenCalledTimes(1);
+        });
+
+        it('відхиляє публікацію теми без контенту', async () => {
+            const planned = await service.create(dto({ blocks: [] }));
+            await expect(service.publish(planned.id)).rejects.toMatchObject({
+                response: { code: 'GUIDE_CONTENT_REQUIRED' },
+            });
         });
 
         it('зняття з публікації лишає datePublished (slug-lock тримається)', async () => {
@@ -146,6 +201,16 @@ describe('GuidesService (Sprint 28, MongoMemoryReplSet)', () => {
                 service.update(draft.id, dto({ slug: 'new-slug' }))
             ).rejects.toMatchObject({
                 response: { code: 'GUIDE_SLUG_LOCKED' },
+            });
+        });
+
+        it('не дає спорожнити опубліковану статтю', async () => {
+            const draft = await service.create(dto());
+            await service.publish(draft.id);
+            await expect(
+                service.update(draft.id, dto({ blocks: [] }))
+            ).rejects.toMatchObject({
+                response: { code: 'GUIDE_CONTENT_REQUIRED' },
             });
         });
 
@@ -176,9 +241,7 @@ describe('GuidesService (Sprint 28, MongoMemoryReplSet)', () => {
 
         it('забороняє перетворити pillar на cluster, поки має cluster-и', async () => {
             const pillar = await service.create(dto());
-            const other = await service.create(
-                dto({ slug: 'other-pillar', order: 2 })
-            );
+            const other = await service.create(dto({ slug: 'other-pillar' }));
             await service.create(
                 dto({ slug: 'cluster-a', pillarSlug: pillar.slug })
             );

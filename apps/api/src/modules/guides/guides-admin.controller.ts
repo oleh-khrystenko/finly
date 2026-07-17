@@ -14,14 +14,17 @@ import {
     type AdminGuideListItem,
     type CommitGuideImageResponse,
     type GuideImageUploadUrlResponse,
+    type SyncOrganicResult,
 } from '@finly/types';
 
 import { SkipOnboarding } from '../../common/decorators/skip-onboarding.decorator';
 import { AdminGuard } from '../../common/guards/admin.guard';
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
 import { CommitGuideImageDto } from './dto/commit-guide-image.dto';
+import { ReorderGuidesDto } from './dto/reorder-guides.dto';
 import { UpsertGuideDto } from './dto/upsert-guide.dto';
 import { GuideImagesService } from './guide-images.service';
+import { GuidesOrganicService } from './guides-organic.service';
 import { GuidesService } from './guides.service';
 import type { GuideDocument } from './schemas/guide.schema';
 
@@ -40,7 +43,8 @@ import type { GuideDocument } from './schemas/guide.schema';
 export class GuidesAdminController {
     constructor(
         private readonly guidesService: GuidesService,
-        private readonly guideImagesService: GuideImagesService
+        private readonly guideImagesService: GuideImagesService,
+        private readonly organicService: GuidesOrganicService
     ) {}
 
     @Get()
@@ -75,6 +79,24 @@ export class GuidesAdminController {
         return { data: { url } };
     }
 
+    // Ручний синк органічних кліків із Search Console (кнопка в адмінці).
+    @Post('sync-organic')
+    @HttpCode(HttpStatus.OK)
+    async syncOrganic(): Promise<{ data: SyncOrganicResult }> {
+        const data = await this.organicService.syncNow();
+        return { data };
+    }
+
+    // Оголошено ДО `:id`-роутів, інакше `reorder` перехопився б як `:id`.
+    @Patch('reorder')
+    @HttpCode(HttpStatus.OK)
+    async reorder(
+        @Body() dto: ReorderGuidesDto
+    ): Promise<{ data: { ok: true } }> {
+        await this.guidesService.reorder(dto.ids);
+        return { data: { ok: true } };
+    }
+
     @Get(':id')
     async getOne(@Param('id') id: string): Promise<{ data: GuideDocument }> {
         const guide = await this.guidesService.adminGetById(id);
@@ -87,6 +109,15 @@ export class GuidesAdminController {
         @Body() dto: UpsertGuideDto
     ): Promise<{ data: GuideDocument }> {
         const guide = await this.guidesService.update(id, dto);
+        return { data: guide };
+    }
+
+    @Post(':id/start-draft')
+    @HttpCode(HttpStatus.OK)
+    async startDraft(
+        @Param('id') id: string
+    ): Promise<{ data: GuideDocument }> {
+        const guide = await this.guidesService.startDraft(id);
         return { data: guide };
     }
 

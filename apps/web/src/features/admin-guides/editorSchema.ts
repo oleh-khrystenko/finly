@@ -73,19 +73,11 @@ export const EditorFormSchema = z.object({
     authorId: z.string().min(1, 'Оберіть автора'),
     /** `''` → стаття є pillar; інакше slug наявного pillar. */
     pillarSlug: z.string(),
-    order: z
-        // Порожнє поле з `valueAsNumber` дає NaN → schema-level `error` ловить
-        // і type-, і NaN-кейс українською замість дефолтного англомовного Zod.
-        .number({ error: 'Введіть номер порядку (ціле число від 1 до 999)' })
-        .int('Порядок має бути цілим числом')
-        .min(1, 'Порядок має бути не менше 1')
-        .max(999, 'Порядок має бути не більше 999'),
-    // min/max mirror the API `UpsertGuideSchema` so oversized structures fail
-    // inline instead of as a generic server rejection.
-    blocks: z
-        .array(editorBlockSchema)
-        .min(1, 'Додайте хоча б один блок')
-        .max(100, 'Забагато блоків (максимум 100)'),
+    // `order` більше не поле форми: керується стрілками на сторінці списку.
+    // Контент необовʼязковий: запланована тема може бути лише назвою. Наявність
+    // блоку вимагається на публікації (сервер), а не на кожному збереженні.
+    // max віддзеркалює API `UpsertGuideSchema`.
+    blocks: z.array(editorBlockSchema).max(100, 'Забагато блоків (максимум 100)'),
     faq: z.array(editorFaqSchema).max(50, 'Забагато запитань (максимум 50)'),
 });
 

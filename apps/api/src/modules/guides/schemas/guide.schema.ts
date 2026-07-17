@@ -70,6 +70,14 @@ export class Guide {
     @Prop({ type: String, default: null })
     dateModified!: string | null;
 
+    /** Органічні кліки з Google-пошуку за 28 днів (синк із Search Console). */
+    @Prop({ type: Number, default: 0 })
+    organicClicks!: number;
+
+    /** Коли останній раз синкали organicClicks; null — ще ні. */
+    @Prop({ type: Date, default: null })
+    organicSyncedAt!: Date | null;
+
     createdAt!: Date;
     updatedAt!: Date;
 }

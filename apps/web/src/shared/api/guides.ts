@@ -3,6 +3,7 @@ import {
     type CommitGuideImageResponse,
     type Guide,
     type GuideImageUploadUrlResponse,
+    type SyncOrganicResult,
     type UpsertGuideRequest,
 } from '@finly/types';
 
@@ -41,6 +42,14 @@ export async function updateGuide(
     return data.data;
 }
 
+/** Запланована тема → чернетка («почали писати»). */
+export async function startDraftGuide(id: string): Promise<Guide> {
+    const { data } = await apiClient.post<{ data: Guide }>(
+        `/admin/guides/${encodeURIComponent(id)}/start-draft`
+    );
+    return data.data;
+}
+
 export async function publishGuide(id: string): Promise<Guide> {
     const { data } = await apiClient.post<{ data: Guide }>(
         `/admin/guides/${encodeURIComponent(id)}/publish`
@@ -57,6 +66,19 @@ export async function unpublishGuide(id: string): Promise<Guide> {
 
 export async function deleteGuide(id: string): Promise<void> {
     await apiClient.delete(`/admin/guides/${encodeURIComponent(id)}`);
+}
+
+/** Повний список id у новому порядку; сервер присвоює `order` 1..N. */
+export async function reorderGuides(ids: string[]): Promise<void> {
+    await apiClient.patch('/admin/guides/reorder', { ids });
+}
+
+/** Ручний синк органічних кліків із Google Search Console. */
+export async function syncOrganicGuides(): Promise<SyncOrganicResult> {
+    const { data } = await apiClient.post<{ data: SyncOrganicResult }>(
+        '/admin/guides/sync-organic'
+    );
+    return data.data;
 }
 
 export async function requestGuideImageUploadUrl(): Promise<GuideImageUploadUrlResponse> {

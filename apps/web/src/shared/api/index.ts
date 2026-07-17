@@ -85,8 +85,11 @@ export {
     createGuide,
     updateGuide,
     publishGuide,
+    startDraftGuide,
     unpublishGuide,
     deleteGuide,
+    reorderGuides,
+    syncOrganicGuides,
     requestGuideImageUploadUrl,
     commitGuideImage,
 } from './guides';

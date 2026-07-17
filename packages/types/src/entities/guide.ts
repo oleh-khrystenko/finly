@@ -92,6 +92,10 @@ export const GuideSchema = z.object({
     datePublished: guideDateSchema.nullable(),
     /** Bumped on publish of changes — an honest freshness signal, never faked. */
     dateModified: guideDateSchema.nullable(),
+    /** Органічні кліки з Google-пошуку за останні 28 днів (синк із Search Console). */
+    organicClicks: z.number().int().min(0),
+    /** Коли останній раз тягли organicClicks; null — ще не синкали. */
+    organicSyncedAt: z.coerce.date().nullable(),
     createdAt: z.coerce.date(),
     updatedAt: z.coerce.date(),
 });

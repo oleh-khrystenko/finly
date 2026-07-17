@@ -179,6 +179,14 @@ export const ENV = {
         'BRAND_DEMOTED_CLEANUP_DAYS'
     ),
 
+    // Google Search Console (органічні кліки на гайди). Сервіс-акаунт: email +
+    // приватний ключ PEM (у .env одним рядком з екранованими `\n` — розгортаємо
+    // назад перед підписанням JWT). GSC_SITE_URL — property Search Console
+    // (`sc-domain:...` або `https://.../`).
+    GSC_SITE_URL: getEnvVar('GSC_SITE_URL'),
+    GSC_CLIENT_EMAIL: getEnvVar('GSC_CLIENT_EMAIL'),
+    GSC_PRIVATE_KEY: getEnvVar('GSC_PRIVATE_KEY').replace(/\\n/g, '\n'),
+
     ANTHROPIC_API_KEY: getEnvVar('ANTHROPIC_API_KEY'),
 
     // Public help assistant (Sprint 16) — anon, no executions. Own short

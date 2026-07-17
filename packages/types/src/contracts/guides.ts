@@ -26,13 +26,30 @@ export const UpsertGuideSchema = z
         authorId: z.string().min(1),
         /** `null` → стаття є pillar; інакше slug наявного pillar. */
         pillarSlug: guideSlugSchema.nullable(),
-        order: z.number().int().min(1).max(999),
-        blocks: z.array(GuideBlockSchema).min(1).max(100),
+        // Контент необовʼязковий: запланована тема може бути лише назвою.
+        // Наявність блоку вимагається на переході до публікації (service-layer,
+        // `GUIDE_CONTENT_REQUIRED`), а не на кожному збереженні.
+        blocks: z.array(GuideBlockSchema).max(100),
         faq: z.array(GuideFaqItemSchema).max(50),
     })
     .strict();
 
 export type UpsertGuideRequest = z.infer<typeof UpsertGuideSchema>;
+
+/**
+ * Перевпорядкування статей у адмін-списку. `order` більше не редагується
+ * вручну в конструкторі: він задається дією «підняти/опустити» на сторінці
+ * списку. Клієнт шле повний список id у бажаному порядку, сервер присвоює
+ * послідовні `order` (1..N) і перегенеровує публічні сторінки (порядок
+ * впливає на дерево /guides і блок «читайте також»).
+ */
+export const ReorderGuidesSchema = z
+    .object({
+        ids: z.array(z.string().min(1)).min(1).max(500),
+    })
+    .strict();
+
+export type ReorderGuidesRequest = z.infer<typeof ReorderGuidesSchema>;
 
 /**
  * Публічний view статті. Whitelist-parse на web-boundary: строгий shape
@@ -94,7 +111,17 @@ export const AdminGuideListItemSchema = GuideSchema.pick({
     order: true,
     datePublished: true,
     dateModified: true,
+    organicClicks: true,
+    organicSyncedAt: true,
     updatedAt: true,
 });
+
+/** Підсумок ручного синку органіки (кнопка «Оновити» в адмінці). */
+export const SyncOrganicResultSchema = z.object({
+    updated: z.number().int().min(0),
+    totalClicks: z.number().int().min(0),
+});
+
+export type SyncOrganicResult = z.infer<typeof SyncOrganicResultSchema>;
 
 export type AdminGuideListItem = z.infer<typeof AdminGuideListItemSchema>;

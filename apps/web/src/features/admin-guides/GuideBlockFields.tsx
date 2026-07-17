@@ -8,6 +8,7 @@ import UiInput from '@/shared/ui/UiInput';
 import UiTextarea from '@/shared/ui/UiTextarea';
 import { getZodFieldError } from '@/shared/lib';
 
+import { FieldHint } from './FieldHint';
 import { GuideImageField } from './GuideImageField';
 import type { EditorFormValues } from './editorSchema';
 
@@ -79,23 +80,89 @@ export function GuideBlockFields({
             </div>
 
             <div className="mt-4 space-y-4">
-                <UiInput
-                    {...register(`blocks.${index}.heading`)}
-                    placeholder="Заголовок розділу (необовʼязково)"
-                    label="Заголовок"
-                    error={getZodFieldError(blockErrors?.heading)}
-                    size="md"
-                />
+                <div>
+                    <UiInput
+                        {...register(`blocks.${index}.heading`)}
+                        placeholder="Заголовок розділу (необовʼязково)"
+                        label="Заголовок"
+                        error={getZodFieldError(blockErrors?.heading)}
+                        size="md"
+                    />
+                    <FieldHint>
+                        <p>
+                            Маленький заголовок для цього шматка статті (не
+                            плутайте з назвою всієї статті, що вгорі). Наприклад:
+                            «Які реквізити знадобляться». Можна лишити порожнім,
+                            якщо цей блок іде без заголовка.
+                        </p>
+                    </FieldHint>
+                </div>
 
-                <UiTextarea
-                    {...register(`blocks.${index}.text`)}
-                    placeholder="Текст блоку. Підтримується просте форматування (markdown)."
-                    label="Текст"
-                    error={getZodFieldError(blockErrors?.text)}
-                    autoGrow
-                    maxRows={16}
-                    rows={4}
-                />
+                <div>
+                    <UiTextarea
+                        {...register(`blocks.${index}.text`)}
+                        placeholder="Текст блоку. Пишіть звичайними словами."
+                        label="Текст"
+                        error={getZodFieldError(blockErrors?.text)}
+                        autoGrow
+                        maxRows={16}
+                        rows={4}
+                    />
+                    <FieldHint>
+                        <p>
+                            Головний текст цього шматка статті. Пишіть звичайними
+                            словами, так, як пояснили б знайомому за столом.
+                        </p>
+                        <p>
+                            Кілька простих прийомів, якщо захочете щось
+                            оформити:
+                        </p>
+                        <ul>
+                            <li>
+                                Щоб зробити слово <strong>жирним</strong>,
+                                обгорніть його двома зірочками з кожного боку:{' '}
+                                <code>**важливо**</code>.
+                            </li>
+                            <li>
+                                Щоб зробити перелік, починайте кожен рядок з
+                                риски і пробілу.
+                            </li>
+                            <li>
+                                Щоб вставити посилання (клікабельне слово, що веде
+                                на іншу сторінку), напишіть так:{' '}
+                                <code>[слово](адреса)</code>. У квадратних дужках
+                                те слово, яке побачить читач, у круглих, адреса,
+                                куди воно веде.
+                            </li>
+                        </ul>
+                        <p>Про посилання окремо, бо це важливо і корисно:</p>
+                        <ul>
+                            <li>
+                                Щоб відправити читача на іншу вашу статтю, адреса
+                                це <code>/guides/</code> плюс кінець адреси тієї
+                                статті. Наприклад:{' '}
+                                <code>
+                                    [як виставити рахунок](/guides/yak-vystavyty-rakhunok-kliientu)
+                                </code>
+                                .
+                            </li>
+                            <li>
+                                Щоб відправити на головну сторінку Finly, вкажіть
+                                адресу сайту:{' '}
+                                <code>
+                                    [створити QR-код](https://finly.com.ua)
+                                </code>
+                                .
+                            </li>
+                        </ul>
+                        <p>
+                            Такі посилання між статтями корисні подвійно:
+                            читачеві легко перейти до потрібного далі, а пошук у
+                            Google краще розуміє, про що ваш сайт, і охочіше
+                            показує його людям.
+                        </p>
+                    </FieldHint>
+                </div>
 
                 <GuideImageField
                     value={image}

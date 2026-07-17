@@ -8,6 +8,7 @@ import UiInput from '@/shared/ui/UiInput';
 import UiTextarea from '@/shared/ui/UiTextarea';
 import { getZodFieldError } from '@/shared/lib';
 
+import { FieldHint } from './FieldHint';
 import type { EditorFormValues } from './editorSchema';
 
 export function GuideFaqFields({
@@ -23,25 +24,33 @@ export function GuideFaqFields({
 
     return (
         <section>
-            <div className="flex items-center justify-between gap-3">
-                <div>
+            <div>
+                <div className="flex items-center justify-between gap-3">
                     <h2 className="text-foreground text-lg font-semibold tracking-tight">
                         Часті запитання
                     </h2>
-                    <p className="text-muted-foreground mt-1 text-sm">
-                        Необовʼязково. Показуються в кінці статті і в розмітці
-                        для пошуку.
-                    </p>
+                    <UiButton
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        IconLeft={<Plus className="size-4" />}
+                        onClick={() => append({ question: '', answer: '' })}
+                    >
+                        Додати
+                    </UiButton>
                 </div>
-                <UiButton
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    IconLeft={<Plus className="size-4" />}
-                    onClick={() => append({ question: '', answer: '' })}
-                >
-                    Додати
-                </UiButton>
+                <FieldHint>
+                    <p>
+                        Необовʼязковий розділ. Тут можна додати короткі питання,
+                        які часто ставлять люди, і відповіді на них. Вони
+                        зʼявляться в самому кінці статті.
+                    </p>
+                    <p>
+                        Це корисно: іноді Google показує таке питання і відповідь
+                        прямо у результатах пошуку, і людина бачить вашу
+                        відповідь ще до заходу на сайт.
+                    </p>
+                </FieldHint>
             </div>
 
             {fields.length > 0 && (

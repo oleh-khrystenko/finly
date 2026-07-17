@@ -99,6 +99,18 @@ export const RESPONSE_CODE = {
      */
     GUIDE_HAS_CLUSTERS: 'GUIDE_HAS_CLUSTERS',
 
+    /**
+     * Спроба опублікувати статтю без жодного блоку тексту (або зробити
+     * опубліковану статтю порожньою). Публічна сторінка не може бути порожня.
+     */
+    GUIDE_CONTENT_REQUIRED: 'GUIDE_CONTENT_REQUIRED',
+
+    /**
+     * Спроба перевести опубліковану статтю назад у чернетку (startDraft):
+     * спершу треба зняти з публікації, лише потім повертати в роботу.
+     */
+    GUIDE_UNPUBLISH_FIRST: 'GUIDE_UNPUBLISH_FIRST',
+
     // --- guide images error (Sprint 28) ---
     GUIDE_IMAGE_UPLOAD_NOT_FOUND: 'GUIDE_IMAGE_UPLOAD_NOT_FOUND',
     GUIDE_IMAGE_UPLOAD_INVALID: 'GUIDE_IMAGE_UPLOAD_INVALID',
@@ -494,6 +506,8 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.GUIDE_PUBLISHED_DELETE_FORBIDDEN]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.GUIDE_PILLAR_INVALID]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.GUIDE_HAS_CLUSTERS]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.GUIDE_CONTENT_REQUIRED]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.GUIDE_UNPUBLISH_FIRST]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.GUIDE_IMAGE_UPLOAD_NOT_FOUND]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.GUIDE_IMAGE_UPLOAD_INVALID]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.GUIDE_IMAGE_UPLOAD_FAILED]: RESPONSE_TYPE.ERROR,

@@ -43,6 +43,10 @@ process.env.ORPHAN_REMINDER_FINAL_DAYS ??= '6';
 process.env.ORPHAN_CLEANUP_DELETION_DAYS ??= '7';
 process.env.BRAND_PENDING_CLEANUP_DAYS ??= '7';
 process.env.BRAND_DEMOTED_CLEANUP_DAYS ??= '90';
+process.env.GSC_SITE_URL ??= 'sc-domain:test.local';
+process.env.GSC_CLIENT_EMAIL ??= 'test-gsc@test.iam.gserviceaccount.com';
+process.env.GSC_PRIVATE_KEY ??=
+    '-----BEGIN PRIVATE KEY-----\\ntest\\n-----END PRIVATE KEY-----\\n';
 process.env.ANTHROPIC_API_KEY ??= 'test-anthropic-key';
 process.env.HELP_CHAT_MAX_TOKENS ??= '400';
 process.env.HELP_CHAT_IP_LIMIT ??= '20';
