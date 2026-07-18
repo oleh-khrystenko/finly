@@ -41,7 +41,6 @@ const SecuritySection = ({ user, mode }: SecuritySectionProps) => {
     });
 
     const { errors, isSubmitting } = form.formState;
-    const password = form.watch('password');
 
     const hasPassword = user.hasPassword;
 
@@ -163,7 +162,6 @@ const SecuritySection = ({ user, mode }: SecuritySectionProps) => {
                         type="submit"
                         variant="filled"
                         size="md"
-                        disabled={!isPasswordOptional && !password}
                         loading={isSubmitting}
                     >
                         Встановити пароль

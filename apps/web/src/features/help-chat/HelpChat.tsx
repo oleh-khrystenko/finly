@@ -26,7 +26,7 @@ interface ChatMessage {
     content: string;
 }
 
-type Notice = { kind: 'rate-limit' | 'error' } | null;
+type Notice = { kind: 'rate-limit' | 'error' | 'too-long' } | null;
 
 const SUGGESTIONS = [
     'Як створити перший платіжний QR-код?',
@@ -37,10 +37,11 @@ const SUGGESTIONS = [
 
 // `rate-limit` — це per-IP ліміт з добовим вікном (HelpChatRateLimitGuard,
 // 24h), не хвилинний throttle: не обіцяємо «зачекайте хвилину».
-const NOTICE_TEXT: Record<'rate-limit' | 'error', string> = {
+const NOTICE_TEXT: Record<'rate-limit' | 'error' | 'too-long', string> = {
     'rate-limit':
         'Ліміт запитань на сьогодні вичерпано. Спробуйте завтра або перегляньте статті довідки.',
     error: 'Не вдалося отримати відповідь. Спробуйте ще раз.',
+    'too-long': `Питання задовге. Скоротіть його до ${HELP_CHAT_MESSAGE_MAX_LENGTH} символів.`,
 };
 
 let messageCounter = 0;
@@ -67,12 +68,13 @@ export function HelpChat() {
 
     const handleSubmit = useCallback(async () => {
         const trimmed = input.trim();
-        if (
-            !trimmed ||
-            isStreaming ||
-            degraded ||
-            trimmed.length > HELP_CHAT_MESSAGE_MAX_LENGTH
-        ) {
+        if (!trimmed || isStreaming || degraded) {
+            return;
+        }
+        if (trimmed.length > HELP_CHAT_MESSAGE_MAX_LENGTH) {
+            // Не гасимо кнопку — показуємо зрозумілу причину, щоб над-ліміт не
+            // читався як «сайт завис».
+            setNotice({ kind: 'too-long' });
             return;
         }
 
@@ -330,7 +332,7 @@ export function HelpChat() {
                                         variant="filled"
                                         size="sm"
                                         className="shrink-0"
-                                        disabled={!input.trim() || overLimit}
+                                        disabled={!input.trim()}
                                         loading={isStreaming}
                                         onClick={handleSubmit}
                                         aria-label="Надіслати запитання"

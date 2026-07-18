@@ -77,14 +77,17 @@ describe('AmountSection (Sprint 4 §4.6 — money-field; lock-switch → AmountL
         expect(screen.getByText('Скасувати')).toBeInTheDocument();
     });
 
-    it('невалідна сума → save-button disabled', async () => {
+    it('невалідна сума → кнопка клікабельна, показує причину під полем', async () => {
         render(<AmountSection invoice={baseInvoice} onSave={jest.fn()} />);
         fireEvent.click(screen.getByLabelText(/Редагувати: Сума/));
         const input = screen.getByPlaceholderText(/1500,50/);
         fireEvent.change(input, { target: { value: '-100' } });
-        // Save-button disabled.
+        // Кнопка не гасне — причина видима під полем (live).
         const saveBtn = screen.getByText('Зберегти').closest('button');
-        expect(saveBtn).toBeDisabled();
+        expect(saveBtn).not.toBeDisabled();
+        expect(
+            screen.getByText(/Сума не може бути від.ємною/)
+        ).toBeInTheDocument();
     });
 
     it('UA-кома приймається: 1500,50 → save 150050 копійок', async () => {
@@ -112,8 +115,9 @@ describe('AmountSection (Sprint 4 §4.6 — money-field; lock-switch → AmountL
         const reopened = screen.getByPlaceholderText(/1500,50/);
         // Reopen-state: значення з invoice.amount = 150000 → "1500,00".
         expect((reopened as HTMLInputElement).value).toBe('1500,00');
-        // Save-button enabled (parseErr=null після reset).
-        const saveBtn = screen.getByText('Зберегти').closest('button');
-        expect(saveBtn).not.toBeDisabled();
+        // parseErr скинуто після reset — причини під полем більше немає.
+        expect(
+            screen.queryByText(/Введіть число/)
+        ).not.toBeInTheDocument();
     });
 });

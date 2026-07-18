@@ -9,7 +9,6 @@ import {
     EMPTY_VALID_UNTIL_DRAFT,
     ValidUntilField,
     draftFromValue,
-    isValidUntilDraftValid,
     resolveValidUntil,
     type ValidUntilDraft,
 } from '@/entities/invoice';
@@ -50,9 +49,15 @@ export default function ValidUntilSection({ invoice, onSave }: Props) {
 
     const save = async () => {
         const { value, valid } = resolveValidUntil(draft);
-        // Button disabled на невалідному draft-і — це defense-in-depth проти
-        // silent null-write при невалідній даті.
-        if (!valid) return;
+        // Не блокуємо кнопку — на невалідній даті показуємо причину під полем
+        // (порожній ввід live-валідатор не червонить, тож повідомлення тут —
+        // єдиний сигнал користувачу), і не пишемо silent null.
+        if (!valid) {
+            setSaveError(
+                'Введіть дату у форматі ДД.ММ.РРРР або оберіть «Без терміну»'
+            );
+            return;
+        }
         setSaving(true);
         try {
             await onSave({ validUntil: value });
@@ -66,8 +71,6 @@ export default function ValidUntilSection({ invoice, onSave }: Props) {
             setSaving(false);
         }
     };
-
-    const saveBlocked = !isValidUntilDraftValid(draft);
 
     return (
         <div className="space-y-2">
@@ -94,7 +97,10 @@ export default function ValidUntilSection({ invoice, onSave }: Props) {
                 <div className="space-y-3">
                     <ValidUntilField
                         draft={draft}
-                        onChange={setDraft}
+                        onChange={(next) => {
+                            setSaveError(undefined);
+                            setDraft(next);
+                        }}
                         error={saveError}
                     />
                     <div className="flex justify-end gap-2">
@@ -113,7 +119,6 @@ export default function ValidUntilSection({ invoice, onSave }: Props) {
                             variant="filled"
                             size="sm"
                             onClick={() => void save()}
-                            disabled={saveBlocked}
                             loading={saving}
                             IconLeft={<Check />}
                         >
