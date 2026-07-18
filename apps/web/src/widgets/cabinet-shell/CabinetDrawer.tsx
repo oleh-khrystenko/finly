@@ -37,12 +37,9 @@ export default function CabinetDrawer() {
                 >
                     <CabinetNavList items={primary} onNavigate={close} />
                     <CabinetNavList items={secondary} onNavigate={close} />
-
-                    <div className="mt-auto flex flex-col gap-2">
-                        <div className="bg-border h-px" />
-                        <AccountSection onNavigate={close} />
-                    </div>
                 </nav>
+
+                <AccountSection onNavigate={close} />
             </UiSheetContent>
         </UiSheet>
     );

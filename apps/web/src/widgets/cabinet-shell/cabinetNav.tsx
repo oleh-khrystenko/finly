@@ -1,4 +1,10 @@
-import { Briefcase, FolderClosed, CreditCard, LifeBuoy, BookOpen } from 'lucide-react';
+import {
+    Briefcase,
+    FolderClosed,
+    CreditCard,
+    CircleHelp,
+    BookOpen,
+} from 'lucide-react';
 import type { ReactNode } from 'react';
 
 /**
@@ -52,7 +58,7 @@ export const CABINET_SECONDARY_NAV: CabinetNavItem[] = [
     {
         key: 'help',
         label: 'Довідка',
-        icon: <LifeBuoy />,
+        icon: <CircleHelp />,
         href: '/help',
     },
     {
@@ -61,5 +67,6 @@ export const CABINET_SECONDARY_NAV: CabinetNavItem[] = [
         icon: <BookOpen />,
         href: '/admin/guides',
         adminOnly: true,
+        badge: 'Адмін',
     },
 ];

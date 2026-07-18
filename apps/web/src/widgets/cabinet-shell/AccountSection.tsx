@@ -1,95 +1,90 @@
 'use client';
 
-import { usePathname } from 'next/navigation';
-import { User, LogOut } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { User, LogOut, ChevronsUpDown } from 'lucide-react';
 import UiButton from '@/shared/ui/UiButton';
+import UiDropdownMenu from '@/shared/ui/UiDropdownMenu';
+import type { UiDropdownMenuItem } from '@/shared/ui/UiDropdownMenu';
 import { UiAvatar } from '@/shared/ui/UiAvatar';
-import { composeClasses } from '@/shared/lib';
 import { useCabinetAccount } from './useCabinetAccount';
-import {
-    navRowClass,
-    navRowActiveClass,
-    navRowHoverClass,
-    navIconClass,
-} from './styles';
 
 /**
- * Акаунт-кластер (низ sidebar / низ drawer): особистий блок + Профіль + Вийти.
- * Свідомо inline (а не dropdown): на дні full-height sidebar випадне меню
- * розкрилось би за межі viewport. Тема живе окремо у верхній смузі, тож тут
- * лише те, що справді про акаунт і сесію.
+ * Акаунт-меню в аватарці (низ sidebar / низ drawer). Тригер — однорядковий
+ * аватар + ім'я; клік розкриває вгору (`side="top"` — на дні sidebar меню вниз
+ * випало б за viewport) Профіль + Вийти, email — у шапці меню. Смуга з власною
+ * `border-t` + `py-2` тримає ту саму висоту, що copyright-смуга у футері.
  */
 export function AccountSection({ onNavigate }: { onNavigate?: () => void }) {
     const pathname = usePathname();
+    const router = useRouter();
     const { user, fullName, initials, handleLogout } = useCabinetAccount();
     const isProfileActive =
         pathname === '/profile' || pathname.startsWith('/profile/');
 
     if (!user) {
         return (
-            <div className="flex items-center gap-3 px-3 py-2">
-                <div className="bg-secondary size-9 shrink-0 animate-pulse rounded-full" />
-                <div className="flex flex-1 flex-col gap-1.5">
-                    <div className="bg-secondary h-3.5 w-24 animate-pulse rounded" />
-                    <div className="bg-secondary h-3 w-32 animate-pulse rounded" />
-                </div>
+            <div className="border-border flex items-center gap-2.5 border-t px-4 py-2">
+                <div className="bg-secondary size-8 shrink-0 animate-pulse rounded-full" />
+                <div className="bg-secondary h-3.5 w-28 animate-pulse rounded" />
             </div>
         );
     }
 
+    const items: UiDropdownMenuItem[] = [
+        { value: 'profile', label: 'Профіль', icon: <User /> },
+        {
+            value: 'logout',
+            label: 'Вийти',
+            icon: <LogOut />,
+            tone: 'destructive',
+        },
+    ];
+
+    const handleSelect = (value: string) => {
+        onNavigate?.();
+        if (value === 'profile') {
+            router.push('/profile');
+        } else if (value === 'logout') {
+            handleLogout();
+        }
+    };
+
     return (
-        <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-3 px-3 py-2">
-                <UiAvatar
-                    size="sm"
-                    src={user.profile.avatar}
-                    alt={fullName}
-                    fallback={initials}
-                />
-                <div className="flex min-w-0 flex-col">
-                    <span className="truncate text-sm font-medium">
-                        {fullName}
-                    </span>
-                    <span className="text-muted-foreground truncate text-xs">
+        <div className="border-border border-t px-2 py-2">
+            <UiDropdownMenu
+                items={items}
+                onSelect={handleSelect}
+                activeValue={isProfileActive ? 'profile' : undefined}
+                side="top"
+                align="start"
+                size="sm"
+                rootClassName="w-full"
+                className="w-full"
+                header={
+                    <span className="text-muted-foreground block truncate text-xs">
                         {user.email}
                     </span>
-                </div>
-            </div>
-
-            <UiButton
-                as="link"
-                href="/profile"
-                variant="text"
-                size="sm"
-                linkPending={false}
-                onClick={onNavigate}
-                aria-current={isProfileActive ? 'page' : undefined}
-                className={composeClasses(
-                    navRowClass,
-                    isProfileActive ? navRowActiveClass : navRowHoverClass
-                )}
-            >
-                <span className={navIconClass}>
-                    <User />
-                </span>
-                <span>Профіль</span>
-            </UiButton>
-
-            <UiButton
-                type="button"
-                variant="destructive-text"
-                size="sm"
-                onClick={() => {
-                    onNavigate?.();
-                    handleLogout();
-                }}
-                className={composeClasses(navRowClass, 'hover:bg-destructive/10')}
-            >
-                <span className={navIconClass}>
-                    <LogOut />
-                </span>
-                <span>Вийти</span>
-            </UiButton>
+                }
+                trigger={
+                    <UiButton
+                        variant="text"
+                        size="sm"
+                        aria-label="Меню акаунта"
+                        className="min-h-11 w-full rounded-lg px-2 hover:bg-muted lg:min-h-9 [&>span]:flex [&>span]:w-full [&>span]:items-center [&>span]:gap-2.5"
+                    >
+                        <UiAvatar
+                            size="sm"
+                            src={user.profile.avatar}
+                            alt={fullName}
+                            fallback={initials}
+                        />
+                        <span className="text-foreground min-w-0 flex-1 truncate text-left text-sm font-medium">
+                            {fullName}
+                        </span>
+                        <ChevronsUpDown className="text-muted-foreground size-4 shrink-0" />
+                    </UiButton>
+                }
+            />
         </div>
     );
 }

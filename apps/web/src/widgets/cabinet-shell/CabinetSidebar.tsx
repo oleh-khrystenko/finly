@@ -43,9 +43,7 @@ export function CabinetSidebar() {
                 </div>
             </nav>
 
-            <div className="border-border border-t p-3">
-                <AccountSection />
-            </div>
+            <AccountSection />
         </aside>
     );
 }
