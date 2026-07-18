@@ -41,6 +41,9 @@ const SlugPresetWarningDialog = dynamic(
 const MobileMenuSheet = dynamic(
     () => import('@/widgets/header/MobileMenuSheet')
 );
+const CabinetDrawer = dynamic(
+    () => import('@/widgets/cabinet-shell/CabinetDrawer')
+);
 const BrandLogoUploadDialog = dynamic(
     () => import('@/features/brand-logo/BrandLogoUploadDialog')
 );
@@ -76,6 +79,7 @@ export function Overlays() {
             <ResetInvoiceSlugConfirmDialog />
             <SlugPresetWarningDialog />
             <MobileMenuSheet />
+            <CabinetDrawer />
             <BrandLogoUploadDialog />
             <BrandPickerDialog />
             <BrandProrationConfirmDialog />

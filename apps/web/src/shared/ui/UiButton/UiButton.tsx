@@ -243,6 +243,7 @@ const UiButton = forwardRef<
         disabled,
         loading = false,
         collapseLabel = false,
+        linkPending = true,
     } = props;
 
     const blocked = disabled || loading;
@@ -301,6 +302,7 @@ const UiButton = forwardRef<
             disabled: _disabled,
             loading: _loading,
             collapseLabel: _collapseLabel,
+            linkPending: _linkPending,
             children: _children,
             ...anchorProps
         } = props;
@@ -339,6 +341,7 @@ const UiButton = forwardRef<
             disabled: _disabled,
             loading: _loading,
             collapseLabel: _collapseLabel,
+            linkPending: _linkPending,
             children: _children,
             ...linkProps
         } = props;
@@ -359,12 +362,16 @@ const UiButton = forwardRef<
                 }}
                 ref={ref as Ref<HTMLAnchorElement>}
             >
-                <LinkLoadingWrapper
-                    content={innerContent}
-                    explicitLoading={loading}
-                    size={size}
-                    hasGap={hasGap}
-                />
+                {linkPending ? (
+                    <LinkLoadingWrapper
+                        content={innerContent}
+                        explicitLoading={loading}
+                        size={size}
+                        hasGap={hasGap}
+                    />
+                ) : (
+                    content
+                )}
             </Link>
         );
     }
@@ -380,6 +387,7 @@ const UiButton = forwardRef<
         disabled: _disabled,
         loading: _loading,
         collapseLabel: _collapseLabel,
+        linkPending: _linkPending,
         children: _children,
         ...buttonProps
     } = props;
