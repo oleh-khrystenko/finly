@@ -7,6 +7,7 @@ import type {
     UiDropdownMenuProps,
     UiDropdownMenuSize,
     UiDropdownMenuAlign,
+    UiDropdownMenuSide,
 } from './types';
 
 const itemSizeStyles: Record<UiDropdownMenuSize, string> = {
@@ -26,6 +27,11 @@ const alignStyles: Record<UiDropdownMenuAlign, string> = {
     end: 'right-0',
 };
 
+const sideStyles: Record<UiDropdownMenuSide, string> = {
+    bottom: 'top-full mt-1',
+    top: 'bottom-full mb-1',
+};
+
 const UiDropdownMenu = forwardRef<HTMLDivElement, UiDropdownMenuProps>(
     (props, ref) => {
         const {
@@ -35,8 +41,10 @@ const UiDropdownMenu = forwardRef<HTMLDivElement, UiDropdownMenuProps>(
             trigger,
             header,
             align = 'end',
+            side = 'bottom',
             size = 'md',
             className,
+            rootClassName,
             itemClassName,
             badgeClassName,
         } = props;
@@ -44,14 +52,18 @@ const UiDropdownMenu = forwardRef<HTMLDivElement, UiDropdownMenuProps>(
         return (
             <Menu
                 as="div"
-                className="relative inline-flex items-center"
+                className={composeClasses(
+                    'relative inline-flex items-center',
+                    rootClassName
+                )}
                 ref={ref}
             >
                 <MenuButton as={Fragment}>{trigger}</MenuButton>
 
                 <MenuItems
                     className={composeClasses(
-                        'absolute top-full z-50 mt-1 min-w-32',
+                        'absolute z-50 min-w-32',
+                        sideStyles[side],
                         'border-border bg-card rounded-lg border shadow-md',
                         'focus:outline-none',
                         alignStyles[align],
@@ -66,6 +78,7 @@ const UiDropdownMenu = forwardRef<HTMLDivElement, UiDropdownMenuProps>(
                     <div className="space-y-0.5 p-1">
                         {items.map((item) => {
                             const isActive = activeValue === item.value;
+                            const isDestructive = item.tone === 'destructive';
                             return (
                                 <MenuItem key={item.value}>
                                     <button
@@ -74,7 +87,9 @@ const UiDropdownMenu = forwardRef<HTMLDivElement, UiDropdownMenuProps>(
                                         className={composeClasses(
                                             'flex w-full items-center gap-2',
                                             'cursor-pointer rounded-md transition-colors',
-                                            'data-[focus]:bg-accent',
+                                            isDestructive
+                                                ? 'text-destructive data-[focus]:bg-destructive/10'
+                                                : 'data-[focus]:bg-accent',
                                             isActive && 'bg-accent',
                                             itemSizeStyles[size],
                                             iconSizeStyles[size],

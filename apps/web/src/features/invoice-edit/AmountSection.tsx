@@ -135,10 +135,13 @@ export function AmountLockSwitch({
  *
  *  1. Raw string як single source of truth у edit-mode — `parseUaMoney`
  *     робить парс на кожному typing-event; UI бачить format-error live.
- *  2. **Save заблокований** на parse-error: `parseErr !== null` ⇒ `save()`
- *     no-op (повертається без виклику `onSave`). Це закриває payment-
- *     correctness регрес: раніше invalid input + click "Зберегти" зберігав
- *     старе валідне значення зі success-toast — сценарій silent data-loss.
+ *  2. **Save-guard на parse-error** (кнопка лишається клікабельною): при
+ *     `parseErr !== null` `save()` — no-op без виклику `onSave`, а причина вже
+ *     видима під полем (`error={errorMessage}`, live на кожному вводі). Це
+ *     закриває payment-correctness регрес: raніше invalid input + click
+ *     "Зберегти" зберігав старе валідне значення зі success-toast (silent
+ *     data-loss), тепер користувач бачить чому save не пройшов, а не мертву
+ *     кнопку.
  *  3. Lifecycle reset: `startEdit` re-ініціалізує raw з поточного `value`
  *     (formatted), `cancel` повертає у read-mode і чистить parseErr;
  *     `save success` те саме.
@@ -248,11 +251,6 @@ function MoneyEditableField({
                             variant="filled"
                             size="sm"
                             onClick={() => void save()}
-                            // Save заблокований на parse-error — defensive
-                            // duplicate того save-guard-у (button disabled +
-                            // save() no-op): button-disabled чітко комунікує
-                            // стан користувачу, save-guard ловить race.
-                            disabled={parseErr !== null}
                             loading={saving}
                             IconLeft={<Check />}
                         >
