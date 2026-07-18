@@ -44,6 +44,14 @@ interface BaseProps {
      * доступну назву несе саме він.
      */
     collapseLabel?: boolean | UiButtonCollapseBreakpoint;
+    /**
+     * Тільки для `as="link"`. За замовчуванням `true` — під час client-side
+     * навігації показується спінер (`useLinkStatus.pending`) поверх контенту.
+     * Для щільних рядків навігації (sidebar/drawer) це недоречно: спінер
+     * загортає контент у додаткову обгортку і ламає layout рядка (стрибок
+     * розміру). `false` вимикає авто-індикатор, лишаючи explicit `loading`.
+     */
+    linkPending?: boolean;
 }
 
 /**

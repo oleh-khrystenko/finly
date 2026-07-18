@@ -81,7 +81,7 @@ describe('ValidUntilSection (read-mode + ручний ввід дати)', () =>
         expect(saved.toISOString()).toBe('2026-08-15T20:59:59.000Z');
     });
 
-    it('невалідна дата → save заблокований, onSave НЕ викликається', async () => {
+    it('невалідна дата → кнопка клікабельна, показує причину, onSave НЕ викликається', async () => {
         const onSave = jest.fn().mockResolvedValue(undefined);
         render(<ValidUntilSection invoice={baseInvoice} onSave={onSave} />);
         fireEvent.click(screen.getByLabelText('Редагувати: Термін дії'));
@@ -90,9 +90,14 @@ describe('ValidUntilSection (read-mode + ручний ввід дати)', () =>
         // Неіснуюча дата — 31 лютого.
         fireEvent.change(input, { target: { value: '31.02.2026' } });
         const saveBtn = screen.getByText('Зберегти').closest('button');
-        expect(saveBtn).toBeDisabled();
+        expect(saveBtn).not.toBeDisabled();
         fireEvent.click(screen.getByText('Зберегти'));
-        await waitFor(() => expect(onSave).not.toHaveBeenCalled());
+        await waitFor(() =>
+            expect(
+                screen.getByText(/Введіть дату у форматі ДД\.ММ\.РРРР/)
+            ).toBeInTheDocument()
+        );
+        expect(onSave).not.toHaveBeenCalled();
     });
 
     it('режим "Без терміну" → onSave({ validUntil: null })', async () => {

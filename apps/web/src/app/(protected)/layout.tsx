@@ -1,8 +1,7 @@
 import { ReactNode } from 'react';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
-import { Header } from '@/widgets/header';
-import { AppFooter } from '@/widgets/app-footer';
+import { CabinetShell } from '@/widgets/cabinet-shell';
 import { AuthGuard } from '@/features/auth';
 import { ClaimLandingDraftHook } from '@/features/qr-landing-preview';
 import { isPublicHost } from '@/shared/config/publicHosts';
@@ -46,13 +45,9 @@ export default async function ProtectedLayout({
         notFound();
     }
     return (
-        <>
-            <Header />
+        <CabinetShell>
             <ClaimLandingDraftHook />
-            <div className="flex flex-1 flex-col">
-                <AuthGuard>{children}</AuthGuard>
-            </div>
-            <AppFooter />
-        </>
+            <AuthGuard>{children}</AuthGuard>
+        </CabinetShell>
     );
 }

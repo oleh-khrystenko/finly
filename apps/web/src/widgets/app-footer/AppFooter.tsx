@@ -3,11 +3,20 @@ import { Mail } from 'lucide-react';
 import { Copyright } from '@/entities/brand';
 import UiButton from '@/shared/ui/UiButton';
 
-const NAV_LINKS = [
-    { href: '/help', label: 'Довідка' },
+const HELP_LINK = { href: '/help', label: 'Довідка' } as const;
+const LEGAL_LINKS = [
     { href: '/privacy', label: 'Конфіденційність' },
     { href: '/terms', label: 'Умови використання' },
 ] as const;
+
+interface AppFooterProps {
+    /**
+     * Показувати пункт «Довідка». У кабінеті `false` — Довідка тепер
+     * першокласний пункт навігації у бічному меню, дублювати у футері зайве.
+     * На auth/legal-поверхнях (де sidebar немає) лишається `true`.
+     */
+    showHelpLink?: boolean;
+}
 
 /**
  * Мінімальний футер для non-marketing-поверхонь — auth, legal (`/privacy`,
@@ -19,7 +28,11 @@ const NAV_LINKS = [
  * праворуч над кредитами — єдиний візуальний ритм через обидва рядки. Усі
  * лінки internal (cabinet-host `finly.com.ua`), тож `baseUrl` не потрібен.
  */
-export function AppFooter() {
+export function AppFooter({ showHelpLink = true }: AppFooterProps) {
+    const navLinks = showHelpLink
+        ? [HELP_LINK, ...LEGAL_LINKS]
+        : [...LEGAL_LINKS];
+
     return (
         <footer className="bg-card border-border border-t">
             <nav
@@ -27,7 +40,7 @@ export function AppFooter() {
                 className="container mx-auto flex flex-col items-center gap-3 px-6 py-4 sm:flex-row sm:justify-between sm:gap-6"
             >
                 <ul className="flex flex-wrap items-center justify-center gap-x-6 gap-y-1 sm:justify-start">
-                    {NAV_LINKS.map(({ href, label }) => (
+                    {navLinks.map(({ href, label }) => (
                         <li key={href}>
                             <UiButton
                                 as="link"

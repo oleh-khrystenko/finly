@@ -192,6 +192,17 @@ export function GuideEditor({ mode, guideId }: GuideEditorProps) {
     );
 
     const onSubmit = async (values: EditorFormValues) => {
+        // Кнопку не гасимо — на блокуючих станах показуємо зрозумілу причину,
+        // а не мертву кнопку. Під час завантаження картинки блока її `value` ще
+        // undefined, тож збереження відправило б блок без фото.
+        if (blocksLocked) {
+            toast.error('Зачекайте, доки завантажаться зображення блоків');
+            return;
+        }
+        if (mode === 'edit' && !form.formState.isDirty) {
+            toast.error('Немає змін для збереження');
+            return;
+        }
         const payload = formToPayload(values);
         try {
             if (mode === 'create') {
@@ -503,9 +514,6 @@ export function GuideEditor({ mode, guideId }: GuideEditorProps) {
                         variant="filled"
                         size="md"
                         loading={isSubmitting}
-                        // Під час завантаження картинки блока її `value` ще
-                        // undefined — збереження відправило б блок без фото.
-                        disabled={(mode === 'edit' && !isDirty) || blocksLocked}
                     >
                         {mode === 'create' ? 'Створити тему' : 'Зберегти'}
                     </UiButton>

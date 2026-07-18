@@ -18,7 +18,7 @@ import { confirmDeleteAccount } from '@/shared/api';
 import { useDeleteAccountDialogStore } from './deleteAccountDialogStore';
 
 const DeleteAccountFormSchema = z.object({
-    password: z.string().min(1),
+    password: z.string().min(1, 'Введіть пароль для підтвердження'),
 });
 
 type DeleteAccountFormValues = z.input<typeof DeleteAccountFormSchema>;
@@ -34,7 +34,6 @@ export default function DeleteAccountDialog() {
     });
 
     const { errors, isSubmitting } = form.formState;
-    const password = form.watch('password');
 
     const handleOpenChange = (open: boolean) => {
         if (!open && !isSubmitting) {
@@ -94,17 +93,13 @@ export default function DeleteAccountDialog() {
                         <UiPasswordInput
                             {...form.register('password', {
                                 onChange: () => {
-                                    if (errors.password?.type === 'server') {
+                                    if (errors.password) {
                                         form.clearErrors('password');
                                     }
                                 },
                             })}
                             label="Введіть пароль для підтвердження"
-                            error={
-                                errors.password?.type === 'server'
-                                    ? errors.password.message
-                                    : undefined
-                            }
+                            error={errors.password?.message}
                             required
                             size="lg"
                             autoFocus
@@ -124,7 +119,6 @@ export default function DeleteAccountDialog() {
                                 type="submit"
                                 variant="destructive-outline"
                                 size="md"
-                                disabled={!password}
                                 loading={isSubmitting}
                             >
                                 Видалити акаунт
