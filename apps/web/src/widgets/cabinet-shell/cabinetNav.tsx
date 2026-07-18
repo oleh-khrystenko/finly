@@ -67,6 +67,5 @@ export const CABINET_SECONDARY_NAV: CabinetNavItem[] = [
         icon: <BookOpen />,
         href: '/admin/guides',
         adminOnly: true,
-        badge: 'Адмін',
     },
 ];

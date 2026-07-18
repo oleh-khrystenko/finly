@@ -20,6 +20,9 @@ export interface ResolvedNavItem extends CabinetNavItem {
 function resolve(items: CabinetNavItem[], pathname: string): ResolvedNavItem[] {
     return items.map((item) => ({
         ...item,
+        // Будь-який admin-пункт автоматично несе бейдж «Адмін» (якщо не має
+        // власного) — нові адмін-розділи отримають його без ручного дублювання.
+        badge: item.adminOnly ? (item.badge ?? 'Адмін') : item.badge,
         isActive:
             !!item.href &&
             (pathname === item.href || pathname.startsWith(`${item.href}/`)),
