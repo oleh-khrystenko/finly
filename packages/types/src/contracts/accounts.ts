@@ -11,8 +11,11 @@ import {
     businessNameSchema,
     businessSlugSchema,
     businessTypeSchema,
+    regularPaymentPurposeTemplateSchema,
+    systemPaymentPurposeTemplateSchema,
 } from '../entities/business';
 import { autoSlugModeSchema } from '../enums/slug-preset';
+import { PURPOSE_MARKERS } from '../entities/purpose-markers';
 import { ibanZod } from '../validation/iban';
 
 /**
@@ -63,10 +66,41 @@ export const CreateAccountSchema = z
     .object({
         iban: ibanZod,
         name: accountNameSchema.optional(),
+        /**
+         * Sprint 29 — per-account призначення платежу. Не передано або `null` =
+         * успадкувати шаблон отримувача (`business.paymentPurposeTemplate`).
+         * Маркери підстановки заборонені: сторінку звичайного отримувача не
+         * контролює адмін, форма підстановки на ній не рендериться.
+         */
+        paymentPurposeTemplate: regularPaymentPurposeTemplateSchema
+            .nullable()
+            .optional(),
     })
     .strict();
 
 export type CreateAccountRequest = z.infer<typeof CreateAccountSchema>;
+
+/**
+ * Sprint 29 — створення реквізитів системного отримувача (адмінка). Дзеркалить
+ * `CreateAccountSchema` з єдиною відмінністю: призначення приймає маркери
+ * підстановки (`{taxId}`, `{period}`), бо сторінку контролює адмін. Саме тут
+ * живе інваріант «маркери лише у системних»: схему застосовує виключно
+ * адмін-контролер, який попередньо звірив `isSystem` через
+ * `getSystemPayeeBySlugOrThrow`.
+ */
+export const CreateSystemPayeeAccountSchema = z
+    .object({
+        iban: ibanZod,
+        name: accountNameSchema.optional(),
+        paymentPurposeTemplate: systemPaymentPurposeTemplateSchema
+            .nullable()
+            .optional(),
+    })
+    .strict();
+
+export type CreateSystemPayeeAccountRequest = z.infer<
+    typeof CreateSystemPayeeAccountSchema
+>;
 
 /**
  * `UpdateAccountSchema` — partial по edit-allowed підмножині.
@@ -93,14 +127,50 @@ export type CreateAccountRequest = z.infer<typeof CreateAccountSchema>;
  */
 export const UpdateAccountSchema = z
     .object({
-        name: accountNameSchema,
+        /**
+         * Sprint 29 — `null` знімає назву і повертає авто-label
+         * (`deriveAccountLabel`). Entity тримає `name` nullable, а create пише
+         * `dto.name ?? null`, тож без nullable тут поле було одностороннім:
+         * задати назву можна, прибрати вже ні.
+         */
+        name: accountNameSchema.nullable(),
         slug: accountSlugSchema,
         invoiceSlugPresetDefault: autoSlugModeSchema.nullable(),
+        /**
+         * Sprint 29 — per-account призначення; `null` повертає успадкування з
+         * отримувача. Маркери підстановки заборонені (див. `CreateAccountSchema`).
+         */
+        paymentPurposeTemplate: regularPaymentPurposeTemplateSchema.nullable(),
     })
     .partial()
     .strict();
 
 export type UpdateAccountRequest = z.infer<typeof UpdateAccountSchema>;
+
+/**
+ * Sprint 29 — редагування реквізитів системного отримувача (адмінка). Кабінетний
+ * PATCH до них недосяжний: `BusinessAccessGuard` резолвить бізнес за
+ * `ownerId`/`managers`, а у системного запису обидва порожні. Тому окремий
+ * адмін-роут з власним контрактом:
+ *  - `slug` редагується поза Brand-гейтингом (системний запис поза монетизацією),
+ *    штатним rename-шляхом з `AccountSlugHistory` і 308-редіректами;
+ *  - `paymentPurposeTemplate` приймає маркери підстановки;
+ *  - `invoiceSlugPresetDefault` навмисно відсутній: системний отримувач не
+ *    виставляє документів, це поле — налаштування нумерації рахунків ФОП.
+ */
+export const UpdateSystemPayeeAccountSchema = z
+    .object({
+        // `null` знімає назву (симетрично кабінетному `UpdateAccountSchema`).
+        name: accountNameSchema.nullable(),
+        slug: accountSlugSchema,
+        paymentPurposeTemplate: systemPaymentPurposeTemplateSchema.nullable(),
+    })
+    .partial()
+    .strict();
+
+export type UpdateSystemPayeeAccountRequest = z.infer<
+    typeof UpdateSystemPayeeAccountSchema
+>;
 
 /**
  * Sprint 20 — бажане ім'я для перевірки доступності і броні у scope рахунку.
@@ -159,10 +229,25 @@ export const PublicAccountViewSchema = z.object({
         logo: z.string().url().optional(),
         brandDisplayName: brandDisplayNameSchema.nullable().optional(),
     }),
-    nbuLinks: z.object({
-        primary: z.string().url(),
-        legacy: z.string().url(),
-    }),
+    /**
+     * Sprint 29 — `null` для персоналізованих (податкових) реквізитів: посилання
+     * не можна порахувати наперед, поки платник не ввів свій РНОКПП/період.
+     * Фронтенд бачить `personalizationMarkers` і показує форму, а посилання
+     * тягне з персоналізованого ендпоінта після заповнення.
+     */
+    nbuLinks: z
+        .object({
+            primary: z.string().url(),
+            legacy: z.string().url(),
+        })
+        .nullable(),
+    /**
+     * Sprint 29 — маркери підстановки у призначенні (лише для системних
+     * отримувачів із шаблоном-маркерами). Порожній масив — звичайний рахунок
+     * (готовий QR/посилання). Непорожній — публічна сторінка рендерить форму
+     * персоналізації перед генерацією QR.
+     */
+    personalizationMarkers: z.array(z.enum(PURPOSE_MARKERS)).default([]),
 });
 
 export type PublicAccountView = z.infer<typeof PublicAccountViewSchema>;

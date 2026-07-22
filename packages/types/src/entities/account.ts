@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { BANK_LABEL, type BankCode, MVP_BANKS } from '../constants/banks';
+import { businessPaymentPurposeTemplateSchema } from './business';
 import { autoSlugModeSchema } from '../enums/slug-preset';
 import { isWithinNbuCharset } from '../qr/charset';
 import { isWithinByteLimit } from '../qr/limits';
@@ -120,6 +121,11 @@ export const AccountSchema = z.object({
     slug: accountSlugSchema,
     slugLower: accountSlugLowerSchema,
     /**
+     * Sprint 29 — чи slug вручну кастомізований (красивий). Кабінет читає для
+     * допуску реквізитів у каталог. `.default(false)` страхує read.
+     */
+    slugCustomized: z.boolean().default(false),
+    /**
      * §SP-9 — stored derived value, не runtime-computed. Резолвиться через
      * `bankCodeFromIban(iban)` рівно один раз під час `AccountsService.create`
      * і фіксується у документі. На нерозпізнаному МФО (поза `BANK_MFO_MAP`) —
@@ -140,6 +146,31 @@ export const AccountSchema = z.object({
      * але dev-environment-документи проходитимуть Zod-парсинг без падіння).
      */
     invoiceSlugPresetDefault: autoSlugModeSchema.nullable().default(null),
+    /**
+     * Sprint 29 — per-account override призначення платежу. `null` = успадкувати
+     * `business.paymentPurposeTemplate` (точна семантика `Invoice.paymentPurpose`,
+     * лише на рівень вище). Потрібно, бо один отримувач легітимно тримає рахунки
+     * з РІЗНИМИ призначеннями: обласне ГУ ДПС має окремі реквізити під ЄСВ і під
+     * військовий збір, і призначення розносить платіж — воно не може бути спільним
+     * на весь отримувач.
+     *
+     * Маркери підстановки (`{taxId}`) тут дозволені рівно за тим самим правилом,
+     * що на `Business.paymentPurposeTemplate`: лише коли батьківський отримувач
+     * системний. Інваріант живе на write-DTO (кабінетні схеми беруть
+     * `regularPaymentPurposeTemplateSchema`, адмінські — `system…`), бо Account
+     * не бачить `isSystem` батька і виразити refine на entity-рівні не може.
+     *
+     * `.default(null)` страхує read документів, створених до Sprint 29.
+     */
+    paymentPurposeTemplate: businessPaymentPurposeTemplateSchema
+        .nullable()
+        .default(null),
+    /**
+     * Sprint 29 — чи ці реквізити видимі у публічному каталозі. Гранулярність
+     * публічності: рахунок може бути прихований, навіть коли отримувач публічний.
+     * `.default(false)` страхує read існуючих документів без поля.
+     */
+    catalogVisible: z.boolean().default(false),
     deletedAt: z.coerce.date().nullable(),
     createdAt: z.coerce.date(),
     updatedAt: z.coerce.date(),

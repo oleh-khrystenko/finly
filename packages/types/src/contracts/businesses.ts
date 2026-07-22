@@ -3,12 +3,14 @@ import { z } from 'zod';
 import { brandDisplayNameSchema } from '../entities/brand';
 import {
     businessNameSchema,
-    businessPaymentPurposeTemplateSchema,
     businessSlugSchema,
     businessTypeSchema,
+    regularPaymentPurposeTemplateSchema,
+    systemPaymentPurposeTemplateSchema,
     taxationSystemSchema,
     type Business,
 } from '../entities/business';
+import { CATALOG_CATEGORIES } from '../enums/catalog-category';
 import {
     isTaxationAllowedForType,
     isVatAllowedTaxationSystem,
@@ -129,7 +131,7 @@ const createIndividualVariant = z
         type: z.literal('individual'),
         name: businessNameSchema,
         taxId: individualTaxIdZod,
-        paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
+        paymentPurposeTemplate: regularPaymentPurposeTemplateSchema,
         claimIdempotencyKey: claimIdempotencyKeyField,
     })
     .strict();
@@ -141,7 +143,7 @@ const createFopVariant = z
         taxId: individualTaxIdZod,
         taxationSystem: taxationSystemSchema,
         isVatPayer: z.boolean(),
-        paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
+        paymentPurposeTemplate: regularPaymentPurposeTemplateSchema,
         claimIdempotencyKey: claimIdempotencyKeyField,
     })
     .strict()
@@ -154,7 +156,7 @@ const createTovVariant = z
         taxId: legalEntityTaxIdZod,
         taxationSystem: taxationSystemSchema,
         isVatPayer: z.boolean(),
-        paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
+        paymentPurposeTemplate: regularPaymentPurposeTemplateSchema,
         claimIdempotencyKey: claimIdempotencyKeyField,
     })
     .strict()
@@ -169,7 +171,7 @@ const createOrganizationVariant = z
         type: z.literal('organization'),
         name: businessNameSchema,
         taxId: legalEntityTaxIdZod,
-        paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
+        paymentPurposeTemplate: regularPaymentPurposeTemplateSchema,
         claimIdempotencyKey: claimIdempotencyKeyField,
     })
     .strict();
@@ -182,6 +184,130 @@ export const CreateBusinessSchema = z.discriminatedUnion('type', [
 ]);
 
 export type CreateBusinessRequest = z.infer<typeof CreateBusinessSchema>;
+
+/**
+ * Sprint 29 — `CreateSystemPayeeSchema`: адмін створює системного отримувача
+ * (податкова, фонди) будь-якого типу, включно з фізособою. Дзеркалить
+ * `CreateBusinessSchema` з трьома відмінностями:
+ *  - призначення приймає маркери підстановки (`systemPaymentPurposeTemplateSchema`);
+ *  - немає `claimIdempotencyKey` (системний запис не проходить anon-claim);
+ *  - опційний `catalogVisible` — чи одразу показувати у каталозі (дефолт `false`).
+ *
+ * Власність (`ownerId: null`, `managers: []`) і прапор `isSystem` ставить сервіс,
+ * клієнт їх не передає.
+ */
+const systemCatalogVisibleField = z.boolean().optional();
+const systemCategoryField = z.enum(CATALOG_CATEGORIES).optional();
+
+const createSystemIndividualVariant = z
+    .object({
+        type: z.literal('individual'),
+        name: businessNameSchema,
+        taxId: individualTaxIdZod,
+        paymentPurposeTemplate: systemPaymentPurposeTemplateSchema,
+        catalogVisible: systemCatalogVisibleField,
+        catalogCategory: systemCategoryField,
+    })
+    .strict();
+
+const createSystemFopVariant = z
+    .object({
+        type: z.literal('fop'),
+        name: businessNameSchema,
+        taxId: individualTaxIdZod,
+        taxationSystem: taxationSystemSchema,
+        isVatPayer: z.boolean(),
+        paymentPurposeTemplate: systemPaymentPurposeTemplateSchema,
+        catalogVisible: systemCatalogVisibleField,
+        catalogCategory: systemCategoryField,
+    })
+    .strict()
+    .refine(taxationVatCheck, taxationVatRefineOptions);
+
+const createSystemTovVariant = z
+    .object({
+        type: z.literal('tov'),
+        name: businessNameSchema,
+        taxId: legalEntityTaxIdZod,
+        taxationSystem: taxationSystemSchema,
+        isVatPayer: z.boolean(),
+        paymentPurposeTemplate: systemPaymentPurposeTemplateSchema,
+        catalogVisible: systemCatalogVisibleField,
+        catalogCategory: systemCategoryField,
+    })
+    .strict()
+    .refine(taxationVatCheck, taxationVatRefineOptions)
+    .refine(
+        (data) => isTaxationAllowedForType('tov', data.taxationSystem),
+        taxationSystemAllowedRefineOptions
+    );
+
+const createSystemOrganizationVariant = z
+    .object({
+        type: z.literal('organization'),
+        name: businessNameSchema,
+        taxId: legalEntityTaxIdZod,
+        paymentPurposeTemplate: systemPaymentPurposeTemplateSchema,
+        catalogVisible: systemCatalogVisibleField,
+        catalogCategory: systemCategoryField,
+    })
+    .strict();
+
+export const CreateSystemPayeeSchema = z.discriminatedUnion('type', [
+    createSystemIndividualVariant,
+    createSystemFopVariant,
+    createSystemTovVariant,
+    createSystemOrganizationVariant,
+]);
+
+export type CreateSystemPayeeRequest = z.infer<typeof CreateSystemPayeeSchema>;
+
+/**
+ * Sprint 29 — редагування системного отримувача (адмін). Partial single-shape
+ * (`type` immutable post-creation, як `UpdateBusinessSchema`). Відмінності від
+ * `UpdateBusinessSchema`:
+ *  - `paymentPurposeTemplate` приймає маркери підстановки (`systemPaymentPurpose-
+ *    TemplateSchema`), бо сторінку контролює адмін;
+ *  - додає `catalogCategory` — адмін курує категорію (звичайний користувач її не
+ *    редагує, тому вона поза `UpdateBusinessSchema`);
+ *  - `slug` редагується поза Brand-гейтингом (перевіряє сервіс).
+ *
+ * Coupled `taxationSystem × isVatPayer` і type-binding — safety-net на DTO-рівні;
+ * повний type-aware чек живе у `BusinessesService.update` (читає document-resident
+ * `type`), як і для звичайного PATCH.
+ */
+export const UpdateSystemPayeeSchema = z
+    .object({
+        name: businessNameSchema,
+        slug: businessSlugSchema,
+        taxId: payerTaxIdZod,
+        taxationSystem: taxationSystemSchema.nullable(),
+        isVatPayer: z.boolean().nullable(),
+        paymentPurposeTemplate: systemPaymentPurposeTemplateSchema,
+        catalogCategory: z.enum(CATALOG_CATEGORIES),
+    })
+    .partial()
+    .strict()
+    .refine(
+        (data) => {
+            if (
+                data.taxationSystem === undefined ||
+                data.isVatPayer === undefined
+            ) {
+                return true;
+            }
+            if (data.taxationSystem === null || data.isVatPayer === null) {
+                return true;
+            }
+            return (
+                isVatAllowedTaxationSystem(data.taxationSystem) ||
+                !data.isVatPayer
+            );
+        },
+        { message: 'INVALID_VAT_FOR_TAXATION_SYSTEM', path: ['isVatPayer'] }
+    );
+
+export type UpdateSystemPayeeRequest = z.infer<typeof UpdateSystemPayeeSchema>;
 
 /**
  * `UpdateBusinessSchema` — partial по edit-allowed підмножині. Sprint 7 залишає
@@ -239,7 +365,7 @@ export const UpdateBusinessSchema = z
          */
         taxationSystem: taxationSystemSchema.nullable(),
         isVatPayer: z.boolean().nullable(),
-        paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
+        paymentPurposeTemplate: regularPaymentPurposeTemplateSchema,
         seoIndexEnabled: z.boolean(),
     })
     .partial()
@@ -281,6 +407,50 @@ export const BusinessSlugCandidateSchema = z
     .strict();
 
 export type BusinessSlugCandidate = z.infer<typeof BusinessSlugCandidateSchema>;
+
+/**
+ * Sprint 29 — тіло тогла видимості рівня у каталозі (отримувач / реквізити).
+ * Один булевий намір; допуск (`canEnterCatalog`) перевіряє сервіс.
+ */
+export const SetCatalogVisibilitySchema = z
+    .object({ visible: z.boolean() })
+    .strict();
+
+export type SetCatalogVisibilityRequest = z.infer<
+    typeof SetCatalogVisibilitySchema
+>;
+
+/**
+ * Sprint 29 — тіло схвалення запиту на публічність (адмін): опційна категорія
+ * каталогу, яку адмін призначає у момент схвалення (природний момент курації).
+ * Без неї категорія лишається поточною (дефолт `business`).
+ */
+export const ApprovePublicityRequestSchema = z
+    .object({ category: z.enum(CATALOG_CATEGORIES).optional() })
+    .strict();
+
+export type ApprovePublicityRequest = z.infer<
+    typeof ApprovePublicityRequestSchema
+>;
+
+/**
+ * Sprint 29 — тіло відхилення запиту на публічність (адмін). Причина показується
+ * користувачу, тож обовʼязкова і коротка; це UI-текст, не QR-payload, тож без
+ * NBU-charset обмеження.
+ */
+export const RejectPublicityRequestSchema = z
+    .object({
+        reason: z
+            .string()
+            .trim()
+            .min(1, { message: 'INVALID_REJECTION_REASON_REQUIRED' })
+            .max(500, { message: 'INVALID_REJECTION_REASON_TOO_LONG' }),
+    })
+    .strict();
+
+export type RejectPublicityRequest = z.infer<
+    typeof RejectPublicityRequestSchema
+>;
 
 /**
  * Sprint 9 §SP-4 + §4.4 — list/getBySlug response shape для cabinet-зони.
@@ -326,6 +496,33 @@ export type BusinessWithCounts = Business & {
  * `bankCode | null`, `ibanMask` (`•{last4}`). UI рендерить картки з bank-label-
  * row conditional на `bankCode !== null` (§SP-9 null-fallback rule).
  */
+/**
+ * Sprint 29 — публічний каталог отримувачів (головна pay-хоста). Whitelist:
+ * жодних реквізитів у JSON (той самий інваріант, що `PublicBusinessSchema`),
+ * лише `ibanMask` як disambiguator. Секції за категоріями, порожні відсутні.
+ */
+export const CatalogPayeeSchema = z.object({
+    type: businessTypeSchema,
+    name: businessNameSchema,
+    slug: businessSlugSchema,
+    accounts: z.array(PublicAccountListItemSchema),
+});
+
+export type CatalogPayee = z.infer<typeof CatalogPayeeSchema>;
+
+export const CatalogSectionSchema = z.object({
+    category: z.enum(CATALOG_CATEGORIES),
+    payees: z.array(CatalogPayeeSchema),
+});
+
+export type CatalogSection = z.infer<typeof CatalogSectionSchema>;
+
+export const PublicCatalogSchema = z.object({
+    sections: z.array(CatalogSectionSchema),
+});
+
+export type PublicCatalogView = z.infer<typeof PublicCatalogSchema>;
+
 export const PublicBusinessSchema = z.object({
     type: businessTypeSchema,
     name: businessNameSchema,

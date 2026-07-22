@@ -58,6 +58,9 @@ const TECHNICAL = [
     // public-handler потрапить у рекурсивний rewrite. Reserved тут блокує
     // створення такого slug-а на write-path.
     'host-pay',
+    // Sprint 29 — public API endpoint `/businesses/public/catalog` (каталог
+    // отримувачів). Бізнес зі slug `catalog` затінив би цей роут.
+    'catalog',
 ] as const;
 
 const SYSTEM = [

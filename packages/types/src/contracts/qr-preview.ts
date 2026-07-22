@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import {
     businessNameSchema,
-    businessPaymentPurposeTemplateSchema,
+    regularPaymentPurposeTemplateSchema,
 } from '../entities/business';
 import { ibanZod } from '../validation/iban';
 import { individualTaxIdZod } from '../validation/tax-id';
@@ -37,7 +37,7 @@ export const QrPreviewInputSchema = z
         receiverName: businessNameSchema,
         iban: ibanZod,
         taxId: individualTaxIdZod,
-        purpose: businessPaymentPurposeTemplateSchema,
+        purpose: regularPaymentPurposeTemplateSchema,
     })
     .strict();
 

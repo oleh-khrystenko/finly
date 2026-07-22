@@ -74,6 +74,59 @@ export const RESPONSE_CODE = {
      */
     ADMIN_ACCESS_REQUIRED: 'ADMIN_ACCESS_REQUIRED',
 
+    // --- system payees error (Sprint 29) ---
+    /**
+     * Адмінська операція над системним отримувачем не знайшла запис за slug,
+     * АБО запис існує, але не є системним (`isSystem: false`). Обидва випадки
+     * зливаємо в один 404, щоб адмін-поверхня не підтверджувала існування
+     * звичайних бізнесів користувачів.
+     */
+    SYSTEM_PAYEE_NOT_FOUND: 'SYSTEM_PAYEE_NOT_FOUND',
+
+    // --- publicity / catalog (Sprint 29) ---
+    /**
+     * Запит на публічність вимагає красивого (кастомного) slug у отримувача:
+     * каталог не приймає авто-згенеровану адресу. Красивий slug доступний на
+     * тарифі «Бренд» — апсел.
+     */
+    PUBLICITY_REQUIRES_CUSTOM_SLUG: 'PUBLICITY_REQUIRES_CUSTOM_SLUG',
+    /**
+     * Недопустимий перехід стану запиту: подання, коли вже pending/approved;
+     * скасування, коли немає активного запиту; схвалення/відхилення адміном
+     * запиту не у стані pending. Message несе конкретику.
+     */
+    PUBLICITY_INVALID_STATE: 'PUBLICITY_INVALID_STATE',
+    /**
+     * Спроба увімкнути видимість рівня у каталозі, коли він недопущений
+     * (отримувач не схвалений/не системний або slug не кастомний).
+     */
+    CATALOG_VISIBILITY_NOT_ELIGIBLE: 'CATALOG_VISIBILITY_NOT_ELIGIBLE',
+    /**
+     * Персоналізований QR/посилання запитано без усіх значень підстановки
+     * (напр. немає РНОКПП чи періоду). Форму заповнено не повністю.
+     */
+    PERSONALIZATION_INCOMPLETE: 'PERSONALIZATION_INCOMPLETE',
+    /**
+     * Призначення з підставленими значеннями персоналізації перевищило ліміт
+     * NBU (довгий шаблон + максимальні значення полів). QR згенерувати не можна.
+     */
+    PERSONALIZATION_TOO_LONG: 'PERSONALIZATION_TOO_LONG',
+    /**
+     * У призначенні звичайного отримувача (або його реквізитів) вжито маркер
+     * підстановки `{taxId}`/`{period}`/`{fullName}`. Маркери існують лише у
+     * системних записів, чию публічну сторінку контролює адмін і яка рендерить
+     * форму підстановки. Zod-refine-повідомлення
+     * (`regularPaymentPurposeTemplateSchema`) підіймається сюди через
+     * `ZOD_ISSUE_CODE_TO_RESPONSE_CODE`, щоб не злитись у generic VALIDATION_ERROR.
+     */
+    PURPOSE_MARKERS_NOT_ALLOWED: 'PURPOSE_MARKERS_NOT_ALLOWED',
+    /**
+     * У шаблоні системного отримувача є токен `{word}`, якого немає у словнику
+     * маркерів. Форма підстановки його не заповнить, тож у QR потрапив би
+     * літеральний `{word}` — зіпсований платіж.
+     */
+    PURPOSE_MARKER_UNKNOWN: 'PURPOSE_MARKER_UNKNOWN',
+
     // --- guides error (Sprint 28) ---
     GUIDE_NOT_FOUND: 'GUIDE_NOT_FOUND',
     /**
@@ -265,7 +318,8 @@ export const RESPONSE_CODE = {
      * бо UX-recovery різний: тут користувач має обрати іншу систему зі
      * скороченого списку, не прибрати поле і не змінити VAT.
      */
-    TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE: 'TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE',
+    TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE:
+        'TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE',
     /**
      * Sprint 14 — vanity-slug edit. PATCH `slug` потрапив у reserved-список
      * (`qr`, `api`, `host-pay`, …) — slug не може ні створюватись, ні
@@ -501,6 +555,14 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.PAYLOAD_TOO_LARGE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.ONBOARDING_INCOMPLETE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.ADMIN_ACCESS_REQUIRED]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.SYSTEM_PAYEE_NOT_FOUND]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.PUBLICITY_REQUIRES_CUSTOM_SLUG]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.PUBLICITY_INVALID_STATE]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.CATALOG_VISIBILITY_NOT_ELIGIBLE]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.PERSONALIZATION_INCOMPLETE]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.PERSONALIZATION_TOO_LONG]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.PURPOSE_MARKERS_NOT_ALLOWED]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.PURPOSE_MARKER_UNKNOWN]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.GUIDE_NOT_FOUND]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.GUIDE_SLUG_LOCKED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.GUIDE_PUBLISHED_DELETE_FORBIDDEN]: RESPONSE_TYPE.ERROR,
