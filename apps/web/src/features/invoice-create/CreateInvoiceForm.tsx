@@ -40,6 +40,7 @@ import {
     choiceToSlugInput,
     isAutoSlugMode,
     isValidUntilDraftValid,
+    resolveAccountPurposeTemplate,
     resolveValidUntil,
     useSlugPresetWarningStore,
     type InvoiceFormatChoice,
@@ -50,8 +51,9 @@ interface Props {
     business: Business;
     /**
      * Sprint 9 §SP-6 — Account, що володіє новим інвойсом. `invoiceSlugPresetDefault`
-     * читається з account-доку (per-account нумерація). `business` лишається
-     * для `paymentPurposeTemplate` (template-fallback resolution у purpose-input).
+     * читається з account-доку (per-account нумерація). Sprint 29 — звідси ж
+     * береться `paymentPurposeTemplate` рівня рахунку: template-fallback у
+     * purpose-input мусить показувати те, що реально піде у банк.
      */
     account: Account;
 }
@@ -284,6 +286,13 @@ export default function CreateInvoiceForm({ business, account }: Props) {
 
     const homeDefault = account.invoiceSlugPresetDefault;
     const initialChoice = useMemo(() => defaultSlugChoice(account), [account]);
+    // Sprint 29 — підказка «за замовчуванням» мусить дзеркалити backend-ланцюг
+    // `invoice → account → business`, інакше форма обіцяє шаблон отримувача, а у
+    // `payeeSnapshot` і QR лягає шаблон рахунку.
+    const inheritedPurposeTemplate = resolveAccountPurposeTemplate(
+        account.paymentPurposeTemplate,
+        business.paymentPurposeTemplate
+    );
 
     const form = useForm<FormValues>({
         resolver: createInvoiceResolver,
@@ -372,7 +381,8 @@ export default function CreateInvoiceForm({ business, account }: Props) {
     // Галочка «запам'ятати» доречна лише коли вибір — авто-режим, відмінний від
     // поточного домашнього формату (ручний ввід не зберігається; збіг з дефолтом
     // нема що запам'ятовувати).
-    const canRemember = isAutoSlugMode(slugChoice) && slugChoice !== effectiveHome;
+    const canRemember =
+        isAutoSlugMode(slugChoice) && slugChoice !== effectiveHome;
 
     const applyChoice = (next: InvoiceFormatChoice): void => {
         setValue('slugChoice', next, { shouldDirty: true });
@@ -544,7 +554,7 @@ export default function CreateInvoiceForm({ business, account }: Props) {
                                         const v = e.target.value;
                                         field.onChange(v === '' ? null : v);
                                     }}
-                                    placeholder={`За замовчуванням: «${business.paymentPurposeTemplate}»`}
+                                    placeholder={`За замовчуванням: «${inheritedPurposeTemplate}»`}
                                     error={getZodFieldError(fieldState.error)}
                                     autoGrow
                                     maxRows={4}

@@ -2,6 +2,7 @@ import type { InvoicePayeeSnapshot } from '@finly/types';
 import {
     effectiveInvoicePurpose,
     isInvoicePurposeRuntimeInherited,
+    resolveAccountPurposeTemplate,
     resolveInvoicePayeePurpose,
 } from './effectiveInvoicePurpose';
 
@@ -112,5 +113,31 @@ describe('isInvoicePurposeRuntimeInherited', () => {
     it('false коли paymentPurpose non-null (explicit override, не наслідування)', () => {
         expect(isInvoicePurposeRuntimeInherited(null, 'Custom')).toBe(false);
         expect(isInvoicePurposeRuntimeInherited(snap, 'Custom')).toBe(false);
+    });
+});
+
+// Mirror backend `resolveAccountPurposeTemplate`
+// (`apps/api/src/modules/accounts/payload-mapper.ts`). Ланцюг успадкування
+// трирівневий: `invoice → account → business`. Якщо кабінет пропустить рівень
+// рахунку, форма підказуватиме шаблон отримувача, а у `payeeSnapshot` і QR
+// ляже шаблон рахунку.
+describe('resolveAccountPurposeTemplate (account-level mirror)', () => {
+    it('шаблон рахунку перекриває шаблон отримувача', () => {
+        expect(
+            resolveAccountPurposeTemplate('ЄСВ за {period}', 'Оплата послуг')
+        ).toBe('ЄСВ за {period}');
+    });
+
+    it('null на рахунку успадковує шаблон отримувача', () => {
+        expect(resolveAccountPurposeTemplate(null, 'Оплата послуг')).toBe(
+            'Оплата послуг'
+        );
+    });
+
+    it('порожній рядок на рахунку НЕ вважається сигналом успадкування', () => {
+        // Симетрично `effectiveInvoicePurpose`: сигнал успадкування — лише
+        // `null`. Non-empty гарантує write-side Zod, resolver лишається сирим
+        // passthrough, як і на бекенді.
+        expect(resolveAccountPurposeTemplate('', 'Оплата послуг')).toBe('');
     });
 });

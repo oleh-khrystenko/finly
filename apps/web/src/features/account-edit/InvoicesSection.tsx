@@ -14,10 +14,11 @@ interface Props {
     businessSlug: string;
     accountSlug: string;
     /**
-     * Template з batch-fetched `Business` на parent-page. Lifted-down до
-     * `InvoiceCard` для inheritance fallback (`paymentPurpose ?? template`).
+     * Уже resolved шаблон рівня рахунку (`resolveAccountPurposeTemplate` на
+     * parent-page). Lifted-down до `InvoiceCard` для inheritance fallback
+     * (`paymentPurpose ?? template`).
      */
-    businessPaymentPurposeTemplate: string;
+    inheritedPaymentPurposeTemplate: string;
 }
 
 const PAGE_SIZE = 10;
@@ -66,7 +67,7 @@ function extractMessage(err: unknown): string {
 export default function InvoicesSection({
     businessSlug,
     accountSlug,
-    businessPaymentPurposeTemplate,
+    inheritedPaymentPurposeTemplate,
 }: Props) {
     const [data, setData] = useState<SectionData | null>(null);
     const [error, setError] = useState<SectionError | null>(null);
@@ -225,8 +226,8 @@ export default function InvoicesSection({
                                 invoice={inv}
                                 businessSlug={businessSlug}
                                 accountSlug={accountSlug}
-                                businessPaymentPurposeTemplate={
-                                    businessPaymentPurposeTemplate
+                                inheritedPaymentPurposeTemplate={
+                                    inheritedPaymentPurposeTemplate
                                 }
                             />
                         ))}

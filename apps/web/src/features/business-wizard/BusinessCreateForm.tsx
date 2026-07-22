@@ -14,7 +14,7 @@ import {
     TAXATION_SYSTEMS,
     TAXATION_SYSTEM_LABEL,
     businessNameSchema,
-    businessPaymentPurposeTemplateSchema,
+    regularPaymentPurposeTemplateSchema,
     isTaxationAllowedForType,
     requiresTaxation,
     type BusinessType,
@@ -104,7 +104,7 @@ const FormSchema = z
                     taxIdParse.error.issues[0]?.message ?? 'INVALID_TAX_ID',
             });
         }
-        const purposeParse = businessPaymentPurposeTemplateSchema.safeParse(
+        const purposeParse = regularPaymentPurposeTemplateSchema.safeParse(
             data.paymentPurposeTemplate
         );
         if (!purposeParse.success) {

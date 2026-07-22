@@ -24,6 +24,7 @@ import {
     updateInvoice,
 } from '@/shared/api';
 import { OwnershipBadge, isBusinessBranded } from '@/entities/business';
+import { resolveAccountPurposeTemplate } from '@/entities/invoice';
 import {
     matchActiveSlugReservation,
     useApplyPendingSlug,
@@ -412,7 +413,10 @@ export default function InvoiceCabinetPage() {
                 />
                 <PaymentDetailsCard
                     invoice={invoice}
-                    business={business}
+                    inheritedPaymentPurposeTemplate={resolveAccountPurposeTemplate(
+                        account.paymentPurposeTemplate,
+                        business.paymentPurposeTemplate
+                    )}
                     onSave={onSave}
                 />
 

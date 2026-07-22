@@ -10,9 +10,12 @@ import {
     extractApiErrorCode,
     getApiMessage,
     getBusinessBySlug,
+    requestBusinessPublicity,
     reserveBusinessSlug,
     resetBusinessSlug,
+    setBusinessCatalogVisibility,
     updateBusiness,
+    withdrawBusinessPublicity,
 } from '@/shared/api';
 import type { BusinessBrand, BusinessWithCounts } from '@finly/types';
 import { OwnershipBadge, isBusinessBranded } from '@/entities/business';
@@ -36,6 +39,7 @@ import {
     AccountsSection,
     EditableBusinessName,
     PublicSection,
+    PublicitySection,
     RequisitesCard,
     scheduleDeleteWithUndo,
     useDeleteBusinessConfirmStore,
@@ -187,6 +191,99 @@ export default function BusinessSlugPage() {
         onTaken: handleSlugTaken,
     });
 
+    // Sprint 29 — публічність. Ці ендпоінти повертають `Business` без лічильників
+    // (вони не змінюються), тож зберігаємо наявні accountsCount/invoicesCount.
+    const handleRequestPublicity = useCallback(async () => {
+        if (!business) return;
+        try {
+            const updated = await requestBusinessPublicity(business.slug);
+            setBusiness((prev) =>
+                prev
+                    ? {
+                          ...updated,
+                          accountsCount: prev.accountsCount,
+                          invoicesCount: prev.invoicesCount,
+                      }
+                    : prev
+            );
+            toast.success('Заявку в каталог подано');
+        } catch (err) {
+            const msg = getApiMessage(extractApiErrorCode(err), 'businesses');
+            toast.error(msg);
+            throw new Error(msg);
+        }
+    }, [business]);
+
+    // Ендпоінт відкликання один, але дій дві: заявка на розгляді ще не давала
+    // місця в каталозі, а схвалений отримувач з нього виходить. Повідомлення
+    // мусить збігатися з тим, що користувач щойно натиснув, тож секція викликає
+    // окремий колбек на кожен стан, а не гадає за неї сторінка.
+    const withdrawPublicity = useCallback(
+        async (successMessage: string) => {
+            if (!business) return;
+            try {
+                const updated = await withdrawBusinessPublicity(business.slug);
+                setBusiness((prev) =>
+                    prev
+                        ? {
+                              ...updated,
+                              accountsCount: prev.accountsCount,
+                              invoicesCount: prev.invoicesCount,
+                          }
+                        : prev
+                );
+                toast.success(successMessage);
+            } catch (err) {
+                const msg = getApiMessage(
+                    extractApiErrorCode(err),
+                    'businesses'
+                );
+                toast.error(msg);
+                throw new Error(msg);
+            }
+        },
+        [business]
+    );
+
+    const handleCancelPublicityRequest = useCallback(
+        () => withdrawPublicity('Заявку скасовано'),
+        [withdrawPublicity]
+    );
+
+    const handleLeaveCatalog = useCallback(
+        () => withdrawPublicity('Отримувача прибрано з каталогу'),
+        [withdrawPublicity]
+    );
+
+    const handleToggleCatalogVisibility = useCallback(
+        async (visible: boolean) => {
+            if (!business) return;
+            try {
+                const updated = await setBusinessCatalogVisibility(
+                    business.slug,
+                    visible
+                );
+                setBusiness((prev) =>
+                    prev
+                        ? {
+                              ...updated,
+                              accountsCount: prev.accountsCount,
+                              invoicesCount: prev.invoicesCount,
+                          }
+                        : prev
+                );
+            } catch (err) {
+                const msg = getApiMessage(
+                    extractApiErrorCode(err),
+                    'businesses'
+                );
+                toast.error(msg);
+                throw new Error(msg);
+            }
+        },
+        [business]
+    );
+
     const handleSubscribe = useCallback(() => {
         if (!business) return Promise.resolve();
         return startSubscriptionCheckout(
@@ -276,6 +373,13 @@ export default function BusinessSlugPage() {
                 subscribePriceLabel={subscribeLabel}
                 initialReservation={!isPaid && desiredSlug ? reservation : null}
                 autoStartSlugEdit={autoEditSlug}
+            />
+            <PublicitySection
+                business={business}
+                onRequest={handleRequestPublicity}
+                onCancelRequest={handleCancelPublicityRequest}
+                onLeaveCatalog={handleLeaveCatalog}
+                onToggleVisibility={handleToggleCatalogVisibility}
             />
             <BrandSection
                 business={business}

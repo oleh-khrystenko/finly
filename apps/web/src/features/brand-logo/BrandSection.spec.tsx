@@ -36,6 +36,14 @@ function makeBusiness(brand: BusinessBrand | null): Business {
         deletedAt: null,
         brandedAt: null,
         brand,
+        isSystem: false,
+        slugCustomized: false,
+        catalogVisible: false,
+        publicityStatus: 'none',
+        publicityRequestedAt: null,
+        publicityReviewedAt: null,
+        publicityRejectionReason: null,
+        catalogCategory: 'business',
         createdAt: new Date('2026-06-01'),
         updatedAt: new Date('2026-06-01'),
     };
@@ -81,7 +89,11 @@ describe('BrandSection', () => {
     it('pending бренд: статус «Очікує оплати» + підказка про авто-застосування', () => {
         renderSection({
             active: null,
-            pending: { ...SLOT, uploadedAt: new Date('2026-06-10'), demoted: false },
+            pending: {
+                ...SLOT,
+                uploadedAt: new Date('2026-06-10'),
+                demoted: false,
+            },
         });
         expect(screen.getByText('Очікує оплати')).toBeInTheDocument();
         expect(

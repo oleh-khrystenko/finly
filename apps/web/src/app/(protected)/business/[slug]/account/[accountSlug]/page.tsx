@@ -19,9 +19,11 @@ import {
     getBusinessBySlug,
     reserveAccountSlug,
     resetAccountSlug,
+    setAccountCatalogVisibility,
     updateAccount,
 } from '@/shared/api';
 import { OwnershipBadge, isBusinessBranded } from '@/entities/business';
+import { resolveAccountPurposeTemplate } from '@/entities/invoice';
 import {
     matchActiveSlugReservation,
     useApplyPendingSlug,
@@ -40,6 +42,7 @@ import UiPageContainer from '@/shared/ui/UiPageContainer';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
 import {
+    AccountCatalogSection,
     DangerSection,
     EditableAccountName,
     InvoicesSection,
@@ -293,6 +296,36 @@ export default function AccountCabinetPage() {
 
     const last4 = account.iban.slice(-4);
 
+    // Sprint 29 — тогл видимості цих реквізитів у каталозі.
+    const handleToggleCatalog = async (visible: boolean) => {
+        const businessSlug = business.slug;
+        const accountSlug = account.slug;
+        try {
+            const updated = await setAccountCatalogVisibility(
+                businessSlug,
+                accountSlug,
+                visible
+            );
+            setData((prev) =>
+                prev &&
+                prev.business.slug === businessSlug &&
+                prev.account.slug === accountSlug
+                    ? {
+                          ...prev,
+                          account: {
+                              ...updated,
+                              invoicesCount: prev.account.invoicesCount,
+                          },
+                      }
+                    : prev
+            );
+        } catch (err) {
+            const msg = getApiMessage(extractErrorCode(err), 'accounts');
+            toast.error(msg);
+            throw new Error(msg);
+        }
+    };
+
     const handleDelete = () => {
         openDeleteConfirm(account, account.invoicesCount, () => {
             scheduleAccountDeleteWithUndo({
@@ -384,7 +417,15 @@ export default function AccountCabinetPage() {
             <InvoicesSection
                 businessSlug={business.slug}
                 accountSlug={account.slug}
-                businessPaymentPurposeTemplate={business.paymentPurposeTemplate}
+                inheritedPaymentPurposeTemplate={resolveAccountPurposeTemplate(
+                    account.paymentPurposeTemplate,
+                    business.paymentPurposeTemplate
+                )}
+            />
+            <AccountCatalogSection
+                business={business}
+                account={account}
+                onToggle={handleToggleCatalog}
             />
             <RequisitesSection account={account} />
             <DangerSection onDelete={handleDelete} />

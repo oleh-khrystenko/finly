@@ -1,7 +1,7 @@
 'use client';
 
 import {
-    businessPaymentPurposeTemplateSchema,
+    regularPaymentPurposeTemplateSchema,
     type Business,
 } from '@finly/types';
 import UiTextarea from '@/shared/ui/UiTextarea';
@@ -39,7 +39,7 @@ export default function PurposeSection({ business, onSave }: Props) {
                 />
             )}
             validate={(v) => {
-                const r = businessPaymentPurposeTemplateSchema.safeParse(v);
+                const r = regularPaymentPurposeTemplateSchema.safeParse(v);
                 return r.success
                     ? null
                     : (mapValidationCode(r.error.issues[0]?.message) ?? null);
