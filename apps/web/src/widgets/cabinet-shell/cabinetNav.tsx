@@ -4,6 +4,8 @@ import {
     CreditCard,
     CircleHelp,
     BookOpen,
+    Landmark,
+    Inbox,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 
@@ -66,6 +68,20 @@ export const CABINET_SECONDARY_NAV: CabinetNavItem[] = [
         label: 'Гайди',
         icon: <BookOpen />,
         href: '/admin/guides',
+        adminOnly: true,
+    },
+    {
+        key: 'admin-payees',
+        label: 'Отримувачі каталогу',
+        icon: <Landmark />,
+        href: '/admin/payees',
+        adminOnly: true,
+    },
+    {
+        key: 'admin-publicity',
+        label: 'Запити на публічність',
+        icon: <Inbox />,
+        href: '/admin/publicity',
         adminOnly: true,
     },
 ];
