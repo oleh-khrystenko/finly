@@ -1,7 +1,7 @@
 import { ReactNode } from 'react';
 import type { Metadata } from 'next';
 
-import { AdminGuideGate } from '@/features/admin-guides';
+import { AdminGate } from '@/entities/user';
 
 // Адмін-розділ поза індексом: суто внутрішній інструмент.
 export const metadata: Metadata = {
@@ -13,5 +13,5 @@ export default function AdminGuidesLayout({
 }: {
     children: ReactNode;
 }) {
-    return <AdminGuideGate>{children}</AdminGuideGate>;
+    return <AdminGate>{children}</AdminGate>;
 }
