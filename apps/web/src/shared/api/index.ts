@@ -1,4 +1,9 @@
-export { apiClient, getAccessToken, setAccessToken } from './client';
+export {
+    apiClient,
+    getAccessToken,
+    PublicApiError,
+    setAccessToken,
+} from './client';
 export { extractApiErrorCode } from './extractApiErrorCode';
 export { getApiMessage } from './mapApiCode';
 export {
@@ -53,6 +58,9 @@ export {
     checkBusinessSlugAvailability,
     reserveBusinessSlug,
     deleteBusiness,
+    requestBusinessPublicity,
+    withdrawBusinessPublicity,
+    setBusinessCatalogVisibility,
     getPublicBusinessView,
 } from './businesses';
 export {
@@ -64,7 +72,9 @@ export {
     checkAccountSlugAvailability,
     reserveAccountSlug,
     deleteAccount,
+    setAccountCatalogVisibility,
     getPublicAccountView,
+    getPersonalizedNbuLinks,
 } from './accounts';
 export {
     listInvoices,
@@ -93,3 +103,19 @@ export {
     requestGuideImageUploadUrl,
     commitGuideImage,
 } from './guides';
+export {
+    adminListPayees,
+    adminCreatePayee,
+    adminGetPayee,
+    adminUpdatePayee,
+    adminDeletePayee,
+    adminCreatePayeeAccount,
+    adminUpdatePayeeAccount,
+    adminDeletePayeeAccount,
+    adminSetPayeeCatalogVisibility,
+    adminSetPayeeAccountCatalogVisibility,
+    adminListPublicityQueue,
+    adminListApprovedPublicity,
+    adminApprovePublicity,
+    adminRejectPublicity,
+} from './admin-payees';

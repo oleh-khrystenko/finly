@@ -106,9 +106,43 @@ export async function reserveBusinessSlug(
     return data.data;
 }
 
-export async function deleteBusiness(slug: string): Promise<CascadeDeleteResult> {
+export async function deleteBusiness(
+    slug: string
+): Promise<CascadeDeleteResult> {
     const { data } = await apiClient.delete<{ data: CascadeDeleteResult }>(
         `/businesses/me/${encodeURIComponent(slug)}`
+    );
+    return data.data;
+}
+
+/** Sprint 29 — подати запит на публічність (потрапляння у каталог). */
+export async function requestBusinessPublicity(
+    slug: string
+): Promise<Business> {
+    const { data } = await apiClient.post<{ data: Business }>(
+        `/businesses/me/${encodeURIComponent(slug)}/publicity-request`
+    );
+    return data.data;
+}
+
+/** Sprint 29 — скасувати запит або зняти отримувача з каталогу. */
+export async function withdrawBusinessPublicity(
+    slug: string
+): Promise<Business> {
+    const { data } = await apiClient.delete<{ data: Business }>(
+        `/businesses/me/${encodeURIComponent(slug)}/publicity-request`
+    );
+    return data.data;
+}
+
+/** Sprint 29 — тогл видимості отримувача у каталозі (лише після схвалення). */
+export async function setBusinessCatalogVisibility(
+    slug: string,
+    visible: boolean
+): Promise<Business> {
+    const { data } = await apiClient.patch<{ data: Business }>(
+        `/businesses/me/${encodeURIComponent(slug)}/catalog-visibility`,
+        { visible }
     );
     return data.data;
 }

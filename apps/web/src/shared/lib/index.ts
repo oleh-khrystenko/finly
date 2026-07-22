@@ -11,7 +11,7 @@ export { getZodFieldError } from './getZodFieldError';
 export { focusFirstInvalidField } from './focusFirstInvalidField';
 export { INTL_LOCALE, formatLocalDate, pluralizeUa } from './intl';
 export { authEvents, type AuthEvent } from './authEvents';
-export { kyivEndOfDayInstant, formatKyivDate } from './kyivTz';
+export { kyivEndOfDayInstant, formatKyivDate, kyivYearMonth } from './kyivTz';
 export { uaDateToIso, isoToUaDate } from './uaDate';
 export {
     parseUaMoney,
