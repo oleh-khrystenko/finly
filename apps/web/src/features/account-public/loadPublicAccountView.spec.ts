@@ -39,6 +39,7 @@ describe('loadPublicAccountView', () => {
             primary: 'https://qr.bank.gov.ua/abc',
             legacy: 'https://bank.gov.ua/qr/abc',
         },
+        personalizationMarkers: [],
     };
 
     it('успіх: fetch /api/businesses/public/{biz}/account/{acc} + повертає parsed shape', async () => {
@@ -74,9 +75,9 @@ describe('loadPublicAccountView', () => {
             statusText: 'Internal Server Error',
         });
 
-        await expect(
-            loadPublicAccountView('biz', 'acc')
-        ).rejects.toThrow(/500/);
+        await expect(loadPublicAccountView('biz', 'acc')).rejects.toThrow(
+            /500/
+        );
     });
 
     it('encodeURIComponent для обох сегментів', async () => {
@@ -93,9 +94,9 @@ describe('loadPublicAccountView', () => {
 
     it('crash якщо API_INTERNAL_URL не виставлений', async () => {
         delete process.env.API_INTERNAL_URL;
-        await expect(
-            loadPublicAccountView('biz', 'acc')
-        ).rejects.toThrow(/API_INTERNAL_URL/);
+        await expect(loadPublicAccountView('biz', 'acc')).rejects.toThrow(
+            /API_INTERNAL_URL/
+        );
         process.env.API_INTERNAL_URL = 'http://api:4000';
     });
 

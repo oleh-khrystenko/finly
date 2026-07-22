@@ -79,6 +79,7 @@ function makeView(
             primary: 'https://qr.bank.gov.ua/abc',
             legacy: 'https://bank.gov.ua/qr/abc',
         },
+        personalizationMarkers: [],
         ...overrides,
     };
 }
@@ -151,6 +152,39 @@ describe('HostPayAccountPage — slug lookup', () => {
                     slug: 'ivanenko',
                     accountSlug: 'aBc12345',
                 }),
+            })
+        ).rejects.toThrow('NEXT_PERMANENT_REDIRECT:/IvanEnko/aBc12345');
+    });
+
+    it('Sprint 29 — canonical redirect зберігає query персонального посилання', async () => {
+        mockLoadPublicAccountView.mockResolvedValue(makeView());
+
+        await expect(
+            HostPayAccountPage({
+                params: Promise.resolve({
+                    slug: 'ivanenko',
+                    accountSlug: 'aBc12345',
+                }),
+                searchParams: Promise.resolve({
+                    taxId: '3456789012',
+                    period: '2026-07',
+                }),
+            })
+        ).rejects.toThrow(
+            'NEXT_PERMANENT_REDIRECT:/IvanEnko/aBc12345?taxId=3456789012&period=2026-07'
+        );
+    });
+
+    it('Sprint 29 — порожній query не додає "?" до canonical', async () => {
+        mockLoadPublicAccountView.mockResolvedValue(makeView());
+
+        await expect(
+            HostPayAccountPage({
+                params: Promise.resolve({
+                    slug: 'ivanenko',
+                    accountSlug: 'aBc12345',
+                }),
+                searchParams: Promise.resolve({}),
             })
         ).rejects.toThrow('NEXT_PERMANENT_REDIRECT:/IvanEnko/aBc12345');
     });

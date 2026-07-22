@@ -5,6 +5,11 @@ jest.mock('@/shared/config', () => ({
     },
 }));
 
+const getHost = jest.fn<string | null, []>();
+jest.mock('next/headers', () => ({
+    headers: async () => ({ get: () => getHost() }),
+}));
+
 import { loadGuideSlugsSafe } from '@/features/guides';
 
 // Sitemap споживає build-safe враппер: він сам деградує до [] при недоступному
@@ -24,6 +29,7 @@ const loadGuideSlugsMock = loadGuideSlugsSafe as jest.MockedFunction<
 
 beforeEach(() => {
     loadGuideSlugsMock.mockResolvedValue(['yak-fop-pryimaty-oplatu']);
+    getHost.mockReturnValue('finly.com.ua');
 });
 
 describe('sitemap', () => {
@@ -66,5 +72,18 @@ describe('sitemap', () => {
 
         expect(urls).not.toContain('https://finly.com.ua/privacy');
         expect(urls).not.toContain('https://finly.com.ua/terms');
+    });
+});
+
+/**
+ * `/sitemap.xml` містить крапку, тож matcher `proxy.ts` його не переписує і
+ * pay-хост доходить до цього ж handler-а. Без host-guard-у він віддавав би
+ * cabinet-URL-и під публічним платіжним хостом (крос-хостові дублікати).
+ * Власна мапа pay-хоста живе в API і адресується з `robots.ts`.
+ */
+describe('sitemap (host-aware)', () => {
+    it('pay host: порожня мапа, жодного cabinet-URL', async () => {
+        getHost.mockReturnValue('pay.finly.com.ua');
+        await expect(sitemap()).resolves.toEqual([]);
     });
 });
