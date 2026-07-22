@@ -6,10 +6,12 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { THROTTLERS } from './common/http/throttle-policy';
 import { OnboardingInterceptor } from './common/interceptors/onboarding.interceptor';
 import { ENV } from './config/env';
 import { RedisModule } from './common/modules/redis.module';
 import { AccountsModule } from './modules/accounts/accounts.module';
+import { AdminPayeesModule } from './modules/admin-payees/admin-payees.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { BusinessesModule } from './modules/businesses/businesses.module';
 import { EmailModule } from './modules/email/email.module';
@@ -29,55 +31,12 @@ import { GuidesModule } from './modules/guides/guides.module';
         ConfigModule.forRoot({
             isGlobal: true,
         }),
+        // Реєстр named-throttler-ів (імена, ліміти і призначення кожного бакета)
+        // живе у `common/http/throttle-policy.ts` разом зі `skipThrottlersExcept`:
+        // guard проганяє кожен бакет на кожному роуті, тож скіп-мапу треба рахувати
+        // від повного списку, інакше новий бакет тихо затінює наявні роути.
         ThrottlerModule.forRoot({
-            // Named throttlers: дефолтний — для cabinet/auth/AI/storage/payments
-            // (60 req/min на IP як guard від abuse). Окрема `public-payment`-
-            // policy — для public-payment endpoints (`PublicBusinessesController`,
-            // `PublicInvoicesController`): за NAT/CDN/Next-server-proxy багато
-            // різних клієнтів виглядають для API як один IP, і дефолтний 60/min
-            // блокує реальні платежі (сторінка робить >=3 виклики: JSON view +
-            // 2 QR PNG; миттєвий шквал 20 клієнтів вичерпує budget). Захист
-            // зберігається — limit просто вищий під специфіку зони. Apply через
-            // `@Throttle({ 'public-payment': ... })` + `@SkipThrottle({ default:
-            // true })` на public-контролерах.
-            //
-            // Sprint 8 §8.1 — окремий `'qr-preview'` bucket (10/min/IP) для
-            // anon `POST /qr/preview`. Restrictive за дизайном: payload-
-            // перебір тут потенційно дешевший за full payment-page-hit (нема
-            // БД-lookup-у), і легітимний UX (анонім заповнює форму один раз)
-            // вкладається в 10/min навіть з NAT-агрегацією. Apply через
-            // `@Throttle({ 'qr-preview': ... })` + `@SkipThrottle({ default:
-            // true })` на `QrController`.
-            throttlers: [
-                { name: 'default', ttl: 60000, limit: 60 },
-                { name: 'public-payment', ttl: 60000, limit: 600 },
-                { name: 'qr-preview', ttl: 60000, limit: 10 },
-                // Sprint 16 — anon help assistant (`POST /ai/help/chat`).
-                // Coarse per-minute burst guard; the real wallet caps are the
-                // per-IP 24h limit and global daily budget in
-                // HelpChatRateLimitGuard. Apply via `@Throttle({ 'help-chat' })`
-                // + `@SkipThrottle({ default: true })`.
-                { name: 'help-chat', ttl: 60000, limit: 20 },
-                // Sprint 20 — live-перевірка доступності slug (authorized, усі
-                // рівні). Користувач друкує ім'я і запити йдуть debounce-ом —
-                // 30/min/IP вистачає на нормальний ввід, але стримує перебір.
-                { name: 'slug-availability', ttl: 60000, limit: 30 },
-                // Sprint 21 — живе прев'ю кастомного бренду
-                // (`BrandController.preview`, authorized). Окремий бакет, щоб НЕ
-                // ділити лічильник з анонімним `qr-preview`: інакше скан з того ж
-                // IP (NAT) міг би заблокувати прев'ю платного клієнта і навпаки.
-                // Кожен виклик важкий (download + bake + 2 рендери), але
-                // debounce-флоу живого прев'ю легітимно дає кілька запитів
-                // поспіль — 20/min вистачає на правки лого/назви, стримуючи
-                // перебір. Apply через `@Throttle({ 'brand-preview' })`.
-                { name: 'brand-preview', ttl: 60000, limit: 20 },
-                // Sprint 28 — публічний read-only контент гайдів. Споживач —
-                // server-side fetch web-у (сторінки, sitemap, OG), тож усі
-                // клієнти виглядають одним IP: високий ліміт як у
-                // public-payment, окремий бакет щоб не ділити лічильник з
-                // платіжною зоною.
-                { name: 'public-content', ttl: 60000, limit: 600 },
-            ],
+            throttlers: [...THROTTLERS],
         }),
         ScheduleModule.forRoot(),
         MongooseModule.forRoot(ENV.MONGODB_URI),
@@ -96,6 +55,7 @@ import { GuidesModule } from './modules/guides/guides.module';
         QrModule,
         AiModule,
         GuidesModule,
+        AdminPayeesModule,
     ],
     controllers: [AppController],
     providers: [

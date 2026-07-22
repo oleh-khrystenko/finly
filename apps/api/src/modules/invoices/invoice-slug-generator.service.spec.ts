@@ -130,7 +130,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                 accountId,
                 slugInput: { kind: 'explicit', humanPart: 'inv-2026' },
                 paymentPurpose: null,
-                businessPaymentPurposeTemplate: 'Оплата',
+                inheritedPaymentPurposeTemplate: 'Оплата',
             });
             expect(result.slug).toMatch(/^inv-2026-[A-Za-z0-9]{8}$/);
             expect(result.slugPreset).toBeNull();
@@ -146,7 +146,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                 accountId,
                 slugInput: { kind: 'random' },
                 paymentPurpose: null,
-                businessPaymentPurposeTemplate: 'Оплата',
+                inheritedPaymentPurposeTemplate: 'Оплата',
             });
             expect(result.slug).toMatch(/^[A-Za-z0-9]{8}$/);
             expect(result.slugPreset).toBeNull();
@@ -162,7 +162,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                 accountId,
                 slugInput: { kind: 'preset', preset: 'simple' },
                 paymentPurpose: null,
-                businessPaymentPurposeTemplate: 'Оплата',
+                inheritedPaymentPurposeTemplate: 'Оплата',
             });
             expect(result.slug).toMatch(/^inv-001-[A-Za-z0-9]{8}$/);
             expect(result.slugPreset).toBe('simple');
@@ -177,7 +177,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                     accountId,
                     slugInput: { kind: 'preset', preset: 'simple' },
                     paymentPurpose: null,
-                    businessPaymentPurposeTemplate: 'Оплата',
+                    inheritedPaymentPurposeTemplate: 'Оплата',
                 });
                 const expected = String(i).padStart(3, '0');
                 expect(r.slug.startsWith(`inv-${expected}-`)).toBe(true);
@@ -212,7 +212,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                 accountId,
                 slugInput: { kind: 'preset', preset: 'simple' },
                 paymentPurpose: null,
-                businessPaymentPurposeTemplate: 'Оплата',
+                inheritedPaymentPurposeTemplate: 'Оплата',
             });
             // НЕ inv-1000 (це був би regression — counter забрудненим explicit-doc).
             expect(result.slug).toMatch(/^inv-001-[A-Za-z0-9]{8}$/);
@@ -241,7 +241,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                 accountId,
                 slugInput: { kind: 'preset', preset: 'simple' },
                 paymentPurpose: null,
-                businessPaymentPurposeTemplate: 'Оплата',
+                inheritedPaymentPurposeTemplate: 'Оплата',
             });
             expect(result.slug).toMatch(/^inv-001-[A-Za-z0-9]{8}$/);
             expect(result.slugCounter).toBe(1);
@@ -321,7 +321,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                 accountId,
                 slugInput: { kind: 'preset', preset: 'simple' },
                 paymentPurpose: null,
-                businessPaymentPurposeTemplate: 'Оплата',
+                inheritedPaymentPurposeTemplate: 'Оплата',
             });
             expect(r.slug).toMatch(/^inv-004-[A-Za-z0-9]{8}$/);
             expect(r.slugCounter).toBe(4);
@@ -366,7 +366,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                 accountId,
                 slugInput: { kind: 'preset', preset: 'simple' },
                 paymentPurpose: null,
-                businessPaymentPurposeTemplate: 'Оплата',
+                inheritedPaymentPurposeTemplate: 'Оплата',
             });
             expect(r.slug).toMatch(/^inv-006-[A-Za-z0-9]{8}$/);
             expect(r.slugCounter).toBe(6);
@@ -414,7 +414,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                 accountId,
                 slugInput: { kind: 'preset', preset: 'with-month' },
                 paymentPurpose: null,
-                businessPaymentPurposeTemplate: 'Оплата',
+                inheritedPaymentPurposeTemplate: 'Оплата',
             });
             const { year, month } = getKyivYearMonth(new Date());
             const yyyy = year;
@@ -447,7 +447,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                 accountId,
                 slugInput: { kind: 'preset', preset: 'with-month' },
                 paymentPurpose: null,
-                businessPaymentPurposeTemplate: 'Оплата',
+                inheritedPaymentPurposeTemplate: 'Оплата',
             });
             // Все одно 001 — попередній місяць має окремий counter-namespace.
             const yyyy = year;
@@ -486,7 +486,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                     accountId,
                     slugInput: { kind: 'preset', preset: 'with-month' },
                     paymentPurpose: null,
-                    businessPaymentPurposeTemplate: 'Оплата',
+                    inheritedPaymentPurposeTemplate: 'Оплата',
                 });
                 expect(r.slug).toMatch(/^2026-06-001-[A-Za-z0-9]{8}$/);
             } finally {
@@ -502,7 +502,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                 accountId,
                 slugInput: { kind: 'preset', preset: 'with-year' },
                 paymentPurpose: null,
-                businessPaymentPurposeTemplate: 'Оплата',
+                inheritedPaymentPurposeTemplate: 'Оплата',
             });
             const { year } = getKyivYearMonth(new Date());
             expect(r.slug).toMatch(new RegExp(`^${year}-001-[A-Za-z0-9]{8}$`));
@@ -524,7 +524,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                     accountId,
                     slugInput: { kind: 'preset', preset: 'with-year' },
                     paymentPurpose: null,
-                    businessPaymentPurposeTemplate: 'Оплата',
+                    inheritedPaymentPurposeTemplate: 'Оплата',
                 });
                 expect(r.slug).toMatch(/^2027-001-[A-Za-z0-9]{8}$/);
             } finally {
@@ -540,7 +540,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                 accountId,
                 slugInput: { kind: 'preset', preset: 'with-purpose' },
                 paymentPurpose: 'Оплата за консультацію',
-                businessPaymentPurposeTemplate: 'Default biz',
+                inheritedPaymentPurposeTemplate: 'Default biz',
             });
             expect(r.slug).toMatch(/^oplata-za-konsultatsiiu-[A-Za-z0-9]{8}$/);
             expect(r.slugPreset).toBe('with-purpose');
@@ -552,7 +552,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                 accountId,
                 slugInput: { kind: 'preset', preset: 'with-purpose' },
                 paymentPurpose: null,
-                businessPaymentPurposeTemplate: 'Послуги веб-розробки',
+                inheritedPaymentPurposeTemplate: 'Послуги веб-розробки',
             });
             expect(r.slug).toMatch(/^posluhy-veb-rozrobky-[A-Za-z0-9]{8}$/);
             expect(r.slugPreset).toBe('with-purpose');
@@ -564,7 +564,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                 accountId,
                 slugInput: { kind: 'preset', preset: 'with-purpose' },
                 paymentPurpose: '🎉🎁',
-                businessPaymentPurposeTemplate: 'Default',
+                inheritedPaymentPurposeTemplate: 'Default',
             });
             expect(r.slug).toMatch(/^[A-Za-z0-9]{8}$/);
             expect(r.slugPreset).toBeNull(); // НЕ 'with-purpose'!
@@ -576,7 +576,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                 accountId,
                 slugInput: { kind: 'preset', preset: 'with-purpose' },
                 paymentPurpose: 'М’ясо',
-                businessPaymentPurposeTemplate: 'Default',
+                inheritedPaymentPurposeTemplate: 'Default',
             });
             expect(r.slug).toMatch(/^miaso-[A-Za-z0-9]{8}$/);
         });
@@ -587,7 +587,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                 accountId,
                 slugInput: { kind: 'preset', preset: 'with-purpose' },
                 paymentPurpose: 'Замовлення 147',
-                businessPaymentPurposeTemplate: 'Default',
+                inheritedPaymentPurposeTemplate: 'Default',
             });
             expect(r.slug).toMatch(/^zamovlennia-147-[A-Za-z0-9]{8}$/);
         });
@@ -608,7 +608,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                     accountId,
                     slugInput: { kind: 'random' },
                     paymentPurpose: null,
-                    businessPaymentPurposeTemplate: 'Default',
+                    inheritedPaymentPurposeTemplate: 'Default',
                 })
             ).rejects.toThrow(InternalServerErrorException);
 
@@ -631,7 +631,7 @@ describe('InvoiceSlugGeneratorService (Sprint 4 §4.1)', () => {
                 accountId,
                 slugInput: { kind: 'random' },
                 paymentPurpose: null,
-                businessPaymentPurposeTemplate: 'Default',
+                inheritedPaymentPurposeTemplate: 'Default',
             });
             expect(r.slug).toMatch(/^[A-Za-z0-9]{8}$/);
             expect(calls).toBe(3);

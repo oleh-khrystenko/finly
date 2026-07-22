@@ -26,8 +26,9 @@
         "migration:nested-slug-lower": "ts-node scripts/migrations/2026-06-03-nested-slug-lower.ts",
         "migration:slug-customized": "ts-node scripts/migrations/2026-06-10-slug-customized-backfill.ts",
         "migration:businesses-brand": "ts-node scripts/migrations/2026-06-18-businesses-brand-null.ts",
-        "migration:all": "pnpm migration:slug-lower && pnpm migration:invoices-payee-snapshot && pnpm migration:accounts-null-auto-name && pnpm migration:nested-slug-lower && pnpm migration:slug-customized && pnpm migration:businesses-brand && pnpm migration:guides-seed",
+        "migration:all": "pnpm migration:slug-lower && pnpm migration:invoices-payee-snapshot && pnpm migration:accounts-null-auto-name && pnpm migration:nested-slug-lower && pnpm migration:slug-customized && pnpm migration:businesses-brand && pnpm migration:guides-seed && pnpm migration:publicity-defaults",
         "migration:guides-seed": "ts-node scripts/migrations/2026-07-15-guides-seed.ts",
+        "migration:publicity-defaults": "ts-node scripts/migrations/2026-07-21-publicity-defaults.ts",
         "migration:drop-legacy": "ts-node scripts/migrations/2026-07-17-drop-legacy-collections.ts",
         "migration:drop-legacy:force": "ts-node scripts/migrations/2026-07-17-drop-legacy-collections.ts --force"
     },

@@ -46,6 +46,14 @@ const HTTP_STATUS_TO_ERROR_CODE: Partial<Record<HttpStatus, ResponseCode>> = {
 const ZOD_ISSUE_CODE_TO_RESPONSE_CODE: Record<string, ResponseCode> = {
     AMOUNT_LOCKED_REQUIRES_AMOUNT:
         RESPONSE_CODE.INVOICE_AMOUNT_LOCKED_REQUIRES_AMOUNT,
+    // Sprint 29 — маркери підстановки у призначенні. Доменні coupled-rule-и
+    // (маркер легальний лише у системного отримувача), не field-format, тож
+    // піднімаємо у власний response-code: інакше адмін бачив би generic
+    // VALIDATION_ERROR замість пояснення, що саме не так із шаблоном.
+    // Обидва refine живуть і на Business.paymentPurposeTemplate, і на
+    // Account.paymentPurposeTemplate (per-account override, Sprint 29).
+    PURPOSE_MARKERS_NOT_ALLOWED: RESPONSE_CODE.PURPOSE_MARKERS_NOT_ALLOWED,
+    PURPOSE_MARKER_UNKNOWN: RESPONSE_CODE.PURPOSE_MARKER_UNKNOWN,
 };
 
 /**

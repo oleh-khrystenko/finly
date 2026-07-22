@@ -14,12 +14,15 @@ import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import {
     buildQrDownloadFilename,
     PublicBusinessSchema,
+    PublicCatalogSchema,
     RESPONSE_CODE,
     type PublicBusinessView,
+    type PublicCatalogView,
 } from '@finly/types';
 
 import { SkipOnboarding } from '../../common/decorators/skip-onboarding.decorator';
 import { PUBLIC_PAGE_CACHE_CONTROL } from '../../common/http/public-cache';
+import { skipThrottlersExcept } from '../../common/http/throttle-policy';
 import { ENV } from '../../config/env';
 import {
     Account,
@@ -34,6 +37,10 @@ import { QrService } from '../qr/qr.service';
 import { Business, type BusinessDocument } from './schemas/business.schema';
 import { BrandMarkCacheService } from './brand-mark-cache.service';
 import { buildPublicBrandView } from './brand-public-view';
+import {
+    isPublicAccountListed,
+    resolvePublicIndexEnabled,
+} from './public-index-policy';
 import { BusinessesService } from './businesses.service';
 
 /**
@@ -56,9 +63,13 @@ import { BusinessesService } from './businesses.service';
  * leak-vector лише через `nbuLinks` на per-account-page (Base64URL у платіжній
  * команді банку), не у JSON.
  *
- * **Throttle policy** — `'public-payment'` 600/min/IP.
+ * **Throttle policy** — `'public-payment'` 600/min/IP. Скіп рахується від повного
+ * реєстру бакетів (`skipThrottlersExcept`), а не `{ default: true }`: guard
+ * проганяє кожен named-бакет на кожному роуті, тож нижчі (`qr-preview` 10/хв)
+ * тіньовили б оголошені 600 до ефективних 10. Гостро саме тут, бо сторінки тягне
+ * Next server-side одним IP контейнера, а Sprint 29 завів на pay-хост краулерів.
  */
-@SkipThrottle({ default: true })
+@SkipThrottle(skipThrottlersExcept('public-payment'))
 @Throttle({ 'public-payment': { limit: 600, ttl: 60000 } })
 @Controller('businesses/public')
 export class PublicBusinessesController {
@@ -90,13 +101,18 @@ export class PublicBusinessesController {
                 seoIndexEnabled: true,
                 deletedAt: null,
             })
-            .select('_id slug updatedAt')
+            .select(
+                '_id slug updatedAt seoIndexEnabled isSystem catalogVisible'
+            )
             .sort({ createdAt: -1 })
             .lean<
                 Array<{
                     _id: unknown;
                     slug: string;
                     updatedAt?: Date;
+                    seoIndexEnabled: boolean;
+                    isSystem?: boolean;
+                    catalogVisible?: boolean;
                 }>
             >()
             .exec();
@@ -106,13 +122,14 @@ export class PublicBusinessesController {
                 businessId: { $in: businessIds },
                 deletedAt: null,
             })
-            .select('businessId slug updatedAt')
+            .select('businessId slug updatedAt catalogVisible')
             .sort({ createdAt: 1 })
             .lean<
                 Array<{
                     businessId: unknown;
                     slug: string;
                     updatedAt?: Date;
+                    catalogVisible?: boolean;
                 }>
             >()
             .exec();
@@ -125,17 +142,35 @@ export class PublicBusinessesController {
         }
 
         const baseUrl = ENV.PAY_PUBLIC_URL.replace(/\/$/, '');
-        const urls: Array<{ loc: string; lastmod?: Date }> = [];
+        // Sprint 29 — головна pay-хоста (каталог) стала індексованою, але лише
+        // коли каталог непорожній: на порожньому сторінка рендерить пояснювач і
+        // сама віддає `noindex` (`app/host-pay/page.tsx`). Безумовний запис тут
+        // означав би URL у sitemap з noindex на сторінці — помилку в Search
+        // Console на першому ж індексованому URL хоста. Умова мусить збігатися з
+        // тією, що керує метаданими сторінки.
+        const catalog = await this.businessesService.getPublicCatalog();
+        const urls: Array<{ loc: string; lastmod?: Date }> =
+            catalog.sections.length > 0 ? [{ loc: `${baseUrl}/` }] : [];
         for (const business of businesses) {
             const businessAccounts =
                 accountsByBusiness.get(String(business._id)) ?? [];
-            if (businessAccounts.length !== 1) {
+            // Sprint 29 — приховані рівні системного отримувача випадають із
+            // sitemap за тим самим предикатом, що керує `robots` на сторінці
+            // (`resolvePublicIndexEnabled`). Розбіжність між sitemap і сторінкою
+            // означала б URL із `noindex`, поданий Google, тобто помилку в Search
+            // Console. Кількість рахунків рахуємо по ПОВНОМУ списку: root віддає
+            // умовний 307 на єдиний рахунок незалежно від видимості в каталозі.
+            if (
+                businessAccounts.length !== 1 &&
+                resolvePublicIndexEnabled(business)
+            ) {
                 urls.push({
                     loc: `${baseUrl}/${business.slug}`,
                     lastmod: business.updatedAt,
                 });
             }
             for (const account of businessAccounts) {
+                if (!resolvePublicIndexEnabled(business, account)) continue;
                 urls.push({
                     loc: `${baseUrl}/${business.slug}/${account.slug}`,
                     lastmod: account.updatedAt ?? business.updatedAt,
@@ -144,6 +179,18 @@ export class PublicBusinessesController {
         }
 
         return buildSitemapXml(urls);
+    }
+
+    /**
+     * Sprint 29 — публічний каталог отримувачів (головна pay-хоста). Оголошено
+     * ДО `:slug`, інакше `catalog` перехопився б як business-slug.
+     */
+    @SkipOnboarding()
+    @Get('catalog')
+    @Header('Cache-Control', PUBLIC_PAGE_CACHE_CONTROL)
+    async getCatalog(): Promise<{ data: PublicCatalogView }> {
+        const catalog = await this.businessesService.getPublicCatalog();
+        return { data: PublicCatalogSchema.parse(catalog) };
     }
 
     @SkipOnboarding()
@@ -159,15 +206,22 @@ export class PublicBusinessesController {
         // логіки писати не треба, reuse-имо існуючий canonical-case
         // redirect-механізм.
         const business = await this.getBusinessOrThrow(slug);
-        const accounts = await this.accountModel
+        const allAccounts = await this.accountModel
             .find({ businessId: business._id })
             .sort({ createdAt: 1 })
             .exec();
+        // Приховані реквізити системного отримувача не потрапляють у список
+        // (`isPublicAccountListed`): картка каталогу веде саме сюди, і застарілий
+        // державний IBAN інакше лишався б поруч з новим. Для звичайних
+        // отримувачів список незмінний — прапорець керує лише каталогом.
+        const accounts = allAccounts.filter((a) =>
+            isPublicAccountListed(business, a)
+        );
         const view = PublicBusinessSchema.parse({
             type: business.type,
             name: business.name,
             slug: business.slug,
-            seoIndexEnabled: business.seoIndexEnabled,
+            seoIndexEnabled: resolvePublicIndexEnabled(business),
             ...buildPublicBrandView(business),
             accounts: accounts.map((a) => ({
                 slug: a.slug,

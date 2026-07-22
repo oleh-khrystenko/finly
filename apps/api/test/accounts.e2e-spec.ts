@@ -508,6 +508,30 @@ describe('Accounts E2E (Sprint 9 §SP-1..§SP-3)', () => {
             );
         });
 
+        // Sprint 29 — `name: null` знімає назву і повертає авто-label. До цього
+        // поле було одностороннім: задати назву можна, прибрати вже ні.
+        it('name: null знімає назву — 200', async () => {
+            const user = await createUser();
+            const { businessSlug, accountSlug } = await seedAccount(user);
+            await supertest(app.getHttpServer())
+                .patch(
+                    `/api/businesses/me/${businessSlug}/accounts/${accountSlug}`
+                )
+                .set('Authorization', bearerFor(user))
+                .send({ name: 'Резерв' })
+                .expect(200);
+            const res = await supertest(app.getHttpServer())
+                .patch(
+                    `/api/businesses/me/${businessSlug}/accounts/${accountSlug}`
+                )
+                .set('Authorization', bearerFor(user))
+                .send({ name: null })
+                .expect(200);
+            expect(
+                (res.body as { data: { name: string | null } }).data.name
+            ).toBeNull();
+        });
+
         it('invoiceSlugPresetDefault editable — 200', async () => {
             const user = await createUser();
             const { businessSlug, accountSlug } = await seedAccount(user);
@@ -753,8 +777,12 @@ describe('Accounts E2E (Sprint 9 §SP-1..§SP-3)', () => {
                 'ibanMask',
                 'name',
                 'nbuLinks',
+                'personalizationMarkers',
                 'slug',
             ]);
+            // Sprint 29 — звичайний рахунок: без персоналізації, посилання готові.
+            expect(data.personalizationMarkers).toEqual([]);
+            expect(data.nbuLinks).not.toBeNull();
             expect(data.ibanMask).toBe('•6001');
             expect(data).not.toHaveProperty('iban');
             expect(data).not.toHaveProperty('taxId');

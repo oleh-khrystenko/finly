@@ -16,17 +16,26 @@ import {
     type FilterQuery,
 } from 'mongoose';
 import {
+    CATALOG_CATEGORIES,
+    DEFAULT_CATALOG_CATEGORY,
+    DEFAULT_PUBLICITY_STATUS,
     RESPONSE_CODE,
     SLUG_AVAILABILITY_STATUS,
     VAT_ALLOWED_TAXATION_SYSTEMS,
+    canEnterCatalog,
     isTaxIdValidForType,
     isTaxationAllowedForType,
     requiresTaxation,
     type BusinessType,
     type BusinessWithCounts,
+    type CatalogCategory,
+    type CatalogPayee,
     type CreateBusinessRequest,
+    type CreateSystemPayeeRequest,
+    type PublicCatalogView,
     type SlugAvailabilityStatus,
     type UpdateBusinessRequest,
+    type UpdateSystemPayeeRequest,
 } from '@finly/types';
 
 import { assertSlugEditAllowed } from '../../common/billing/assert-access';
@@ -105,6 +114,28 @@ const CREATE_LOCK_RETRY_DELAY_MS = 150;
  *   filter блокує update (повертає null), fallback `exists()`-запит
  *   розрізняє 404 (документу немає) vs 400 (`INVALID_VAT_FOR_TAXATION_SYSTEM`).
  */
+/**
+ * Sprint 29 — контекст `update`, що не є полем `UpdateBusinessRequest`. Винесено
+ * в об'єкт замість чергових позиційних аргументів: обидва прапорці ставить лише
+ * адмін-flow системного отримувача, і читати їх на місці виклику треба за іменем.
+ */
+export interface UpdateBusinessOptions {
+    /**
+     * Довірене адмін-поле категорії каталогу. Іде повз `UpdateBusinessRequest`
+     * (звичайний користувач категорію не редагує), щоб потрапити у той самий
+     * атомарний запис.
+     */
+    adminCatalogCategory?: CatalogCategory;
+    /**
+     * Чи споживати активну slug-бронь користувача при успішному rename
+     * (Sprint 20 механіка). `true` за замовчуванням — кабінетний flow, де
+     * `userId` це власник бізнесу. `false` для адмінського редагування
+     * системного отримувача: `userId` там це адмін, чия бронь стосується його
+     * власного бізнесу, а системний запис живе поза slug-монетизацією.
+     */
+    consumeSlugReservation?: boolean;
+}
+
 @Injectable()
 export class BusinessesService {
     private readonly logger = new Logger(BusinessesService.name);
@@ -438,14 +469,492 @@ export class BusinessesService {
         }
     }
 
+    /**
+     * Sprint 29 — створення системного отримувача (податкова, фонди) адміном.
+     * Нічий (`ownerId: null`, `managers: []`) і `isSystem: true`, тож поза
+     * claim-flow, бухгалтерськими вибірками і orphan-cleanup. На відміну від
+     * `create`:
+     *  - без per-user локу і count-лімітів (не належить користувачу);
+     *  - без anon-claim replay;
+     *  - без per-owner taxId-дубль-перевірки (немає власника; кілька обласних
+     *    ГУ ДПС мають різні ЄДРПОУ, тож у практиці колізій немає, а випадковий
+     *    дубль ловить partial-unique індекс і мапиться у 409 нижче);
+     *  - призначення приймає маркери підстановки (валідовано у write-DTO).
+     */
+    async createSystemPayee(
+        dto: CreateSystemPayeeRequest
+    ): Promise<BusinessDocument> {
+        const taxationFields =
+            dto.type === 'fop' || dto.type === 'tov'
+                ? {
+                      taxationSystem: dto.taxationSystem,
+                      isVatPayer: dto.isVatPayer,
+                  }
+                : { taxationSystem: null, isVatPayer: null };
+
+        const slug = await this.slugGenerator.generateRandomSlug();
+        try {
+            return await this.businessModel.create({
+                type: dto.type,
+                name: dto.name,
+                taxId: dto.taxId,
+                paymentPurposeTemplate: dto.paymentPurposeTemplate,
+                ...taxationFields,
+                slug,
+                slugLower: slug.toLowerCase(),
+                ownerId: null,
+                managers: [],
+                isSystem: true,
+                // Системні отримувачі — публічна інфраструктура, індексуємо
+                // їх сторінки за замовчуванням (canonical дедуплікує варіанти з
+                // параметрами персоналізації).
+                seoIndexEnabled: true,
+                catalogVisible: dto.catalogVisible ?? false,
+                catalogCategory:
+                    dto.catalogCategory ?? DEFAULT_CATALOG_CATEGORY,
+            });
+        } catch (err) {
+            if (isDuplicateKeyError(err)) {
+                const keyPattern = readKeyPattern(err);
+                if (keyPattern.taxId === 1) {
+                    throw new ConflictException({
+                        code: RESPONSE_CODE.BUSINESS_TAX_ID_DUPLICATE,
+                        message:
+                            'System payee with this tax id and type already exists',
+                    });
+                }
+                this.logger.error(
+                    `Slug collision race for system payee "${slug}" (slugLower=${slug.toLowerCase()})`
+                );
+                throw new InternalServerErrorException({
+                    code: RESPONSE_CODE.SLUG_GENERATION_FAILED,
+                    message: 'Slug collision; please retry',
+                });
+            }
+            throw err;
+        }
+    }
+
+    /**
+     * Sprint 29 — lookup системного отримувача для адмінських операцій.
+     * Повертає документ лише якщо він існує І є системним; не-системний бізнес
+     * або відсутній запис зливаються у 404, щоб адмін-поверхня не підтверджувала
+     * існування звичайних бізнесів користувачів.
+     */
+    async getSystemPayeeBySlugOrThrow(slug: string): Promise<BusinessDocument> {
+        const business = await this.businessModel
+            .findOne({ slugLower: slug.toLowerCase(), isSystem: true })
+            .exec();
+        if (!business) {
+            throw new NotFoundException({
+                code: RESPONSE_CODE.SYSTEM_PAYEE_NOT_FOUND,
+                message: 'System payee not found',
+            });
+        }
+        return business;
+    }
+
+    /** Sprint 29 — список системних отримувачів для адмінки. */
+    async listSystemPayees(): Promise<BusinessDocument[]> {
+        return this.businessModel
+            .find({ isSystem: true })
+            .sort({ createdAt: -1 })
+            .exec();
+    }
+
+    /**
+     * Sprint 29 — редагування системного отримувача (адмін). Reuse `update` для
+     * бізнес-полів і slug-rename (з історією й 308-редіректами); slug-edit поза
+     * Brand-гейтингом (`isBranded: true` — системний запис поза монетизацією).
+     * Категорія каталогу — окреме адмін-поле, іде довіреним override у той самий
+     * атомарний запис. Викликати ЛИШЕ після `getSystemPayeeBySlugOrThrow` (гарантія
+     * `isSystem`): `update` лукапить за `slugLower` без `isSystem`-фільтра.
+     *
+     * `consumeSlugReservation: false` — перейменування системного запису НЕ чіпає
+     * slug-бронь адміна: вона належить його власному бізнесу, а не цій операції.
+     */
+    async updateSystemPayee(
+        slug: string,
+        dto: UpdateSystemPayeeRequest,
+        adminUserId: string
+    ): Promise<BusinessDocument> {
+        const { catalogCategory, ...businessFields } = dto;
+        return this.update(slug, businessFields, true, adminUserId, true, {
+            adminCatalogCategory: catalogCategory,
+            consumeSlugReservation: false,
+        });
+    }
+
+    /**
+     * Sprint 29 — подання запиту на публічність (кабінет). Гейт: красивий
+     * (кастомний) slug обовʼязковий, бо каталог не приймає авто-адресу (красивий
+     * slug = тариф «Бренд»). Дозволено лише зі стану `none`/`rejected`; фільтр
+     * робить перехід атомарним проти double-submit.
+     */
+    async requestPublicity(
+        business: BusinessDocument
+    ): Promise<BusinessDocument> {
+        if (!business.slugCustomized) {
+            throw new BadRequestException({
+                code: RESPONSE_CODE.PUBLICITY_REQUIRES_CUSTOM_SLUG,
+                message: 'Publicity requires a custom slug',
+            });
+        }
+        const updated = await this.businessModel
+            .findOneAndUpdate(
+                {
+                    _id: business._id,
+                    // `$in: [null, ...]` матчить і документ БЕЗ поля: `publicityStatus`
+                    // зʼявився у Sprint 29, а Mongoose-дефолт `'none'` застосовується
+                    // лише на insert. Без цього кожен отримувач, створений до спринту,
+                    // назавжди отримував би 409 на «Подати заявку» — фільтр не матчив
+                    // би документ, і `findOneAndUpdate` віддавав би null. Беквіл
+                    // (`migration:publicity-defaults`) вирівнює дані, але фільтр мусить
+                    // бути толерантним і до її запуску.
+                    publicityStatus: { $in: [null, 'none', 'rejected'] },
+                },
+                {
+                    $set: {
+                        publicityStatus: 'pending',
+                        publicityRequestedAt: new Date(),
+                        publicityRejectionReason: null,
+                    },
+                },
+                { new: true }
+            )
+            .exec();
+        if (!updated) {
+            throw new ConflictException({
+                code: RESPONSE_CODE.PUBLICITY_INVALID_STATE,
+                message: 'Publicity request already active',
+            });
+        }
+        return updated;
+    }
+
+    /**
+     * Sprint 29 — скасування запиту (кабінет): з `pending` (відкликати) або
+     * `approved` (зняти з каталогу) назад у `none`. Прапори видимості не чіпаємо:
+     * `none` і так блокує допуск на читанні, а наступне схвалення робить чисте
+     * скидання (`approvePublicity`).
+     */
+    async withdrawPublicity(
+        business: BusinessDocument
+    ): Promise<BusinessDocument> {
+        const updated = await this.businessModel
+            .findOneAndUpdate(
+                {
+                    _id: business._id,
+                    publicityStatus: { $in: ['pending', 'approved'] },
+                },
+                { $set: { publicityStatus: 'none' } },
+                { new: true }
+            )
+            .exec();
+        if (!updated) {
+            throw new ConflictException({
+                code: RESPONSE_CODE.PUBLICITY_INVALID_STATE,
+                message: 'No active publicity request to withdraw',
+            });
+        }
+        return updated;
+    }
+
+    /** Sprint 29 — черга запитів на публічність (адмінка), найстаріші зверху. */
+    async listPublicityQueue(): Promise<BusinessDocument[]> {
+        return this.businessModel
+            .find({ publicityStatus: 'pending' })
+            .sort({ publicityRequestedAt: 1 })
+            .exec();
+    }
+
+    /**
+     * Sprint 29 — схвалені користувацькі отримувачі (адмінка). Каталог це
+     * вітрина довіри, тож адмін мусить бачити, кого вже впустив, і мати змогу
+     * забрати схвалення (`rejectPublicity`) без правки в БД. Системні записи не
+     * тут: ними керує `AdminPayeesController`.
+     */
+    async listApprovedPublicity(): Promise<BusinessDocument[]> {
+        return this.businessModel
+            .find({ publicityStatus: 'approved', isSystem: { $ne: true } })
+            .sort({ publicityReviewedAt: -1 })
+            .exec();
+    }
+
+    /**
+     * Sprint 29 — схвалення запиту (адмінка). Атомарно: переводить `pending` →
+     * `approved` І скидає обидва прапори видимості (отримувач + його реквізити)
+     * на `false`. Видимості на рівні документів немає взагалі: каталог показує
+     * отримувачів і реквізити, а документ це персональний виставлений рахунок.
+     * Це і є інваріант «дефолт після схвалення все
+     * приховане»: користувач сам вмикає видимість потрібних рівнів після
+     * схвалення. Reset саме тут (а не на скасуванні) гарантує чистий старт при
+     * КОЖНОМУ схваленні, незалежно від попередньої історії.
+     */
+    async approvePublicity(
+        slug: string,
+        category?: CatalogCategory
+    ): Promise<BusinessDocument> {
+        const session = await this.connection.startSession();
+        try {
+            let approved: BusinessDocument | null = null;
+            await session.withTransaction(async () => {
+                const updated = await this.businessModel
+                    .findOneAndUpdate(
+                        {
+                            slugLower: slug.toLowerCase(),
+                            isSystem: { $ne: true },
+                            publicityStatus: 'pending',
+                        },
+                        {
+                            $set: {
+                                publicityStatus: 'approved',
+                                publicityReviewedAt: new Date(),
+                                publicityRejectionReason: null,
+                                catalogVisible: false,
+                                ...(category
+                                    ? { catalogCategory: category }
+                                    : {}),
+                            },
+                        },
+                        { new: true, session }
+                    )
+                    .exec();
+                if (!updated) {
+                    throw new ConflictException({
+                        code: RESPONSE_CODE.PUBLICITY_INVALID_STATE,
+                        message:
+                            'No pending publicity request for this business',
+                    });
+                }
+                await this.accountModel.updateMany(
+                    { businessId: updated._id },
+                    { $set: { catalogVisible: false } },
+                    { session }
+                );
+                approved = updated;
+            });
+            return approved!;
+        } catch (err) {
+            if (isTransactionsUnsupportedError(err)) {
+                this.logger.error(
+                    `Publicity approve failed: replica-set required. slug=${slug}. Original: ${
+                        err instanceof Error ? err.message : String(err)
+                    }`
+                );
+                throw new InternalServerErrorException({
+                    code: RESPONSE_CODE.TRANSACTION_REQUIRES_REPLICA_SET,
+                    message:
+                        'Publicity approval requires Mongo replica-set; check MONGODB_URI',
+                });
+            }
+            throw err;
+        } finally {
+            await session.endSession();
+        }
+    }
+
+    /**
+     * Sprint 29 — відхилення запиту (адмінка) з причиною для користувача.
+     *
+     * Приймає і `approved`, не лише `pending`: каталог це вітрина довіри, і
+     * схвалений запис, що виявився недоброчесним, мусить зніматися тим самим
+     * важелем, а не правкою в БД. Перехід у `rejected` сам виводить запис із
+     * каталогу (`canEnterCatalog` пускає лише `approved`), а повторне схвалення
+     * скидає обидва прапори видимості наново.
+     */
+    async rejectPublicity(
+        slug: string,
+        reason: string
+    ): Promise<BusinessDocument> {
+        const updated = await this.businessModel
+            .findOneAndUpdate(
+                {
+                    slugLower: slug.toLowerCase(),
+                    isSystem: { $ne: true },
+                    publicityStatus: { $in: ['pending', 'approved'] },
+                },
+                {
+                    $set: {
+                        publicityStatus: 'rejected',
+                        publicityReviewedAt: new Date(),
+                        publicityRejectionReason: reason,
+                    },
+                },
+                { new: true }
+            )
+            .exec();
+        if (!updated) {
+            throw new ConflictException({
+                code: RESPONSE_CODE.PUBLICITY_INVALID_STATE,
+                message: 'No pending or approved publicity for this business',
+            });
+        }
+        return updated;
+    }
+
+    /**
+     * Sprint 29 — тогл видимості отримувача у каталозі (кабінет). Увімкнути
+     * можна лише коли рівень допущений (`canEnterCatalog`): отримувач схвалений
+     * і має красивий slug. Вимкнути — завжди.
+     */
+    async setCatalogVisibility(
+        business: BusinessDocument,
+        visible: boolean
+    ): Promise<BusinessDocument> {
+        if (
+            visible &&
+            !canEnterCatalog({
+                isSystem: business.isSystem,
+                publicityStatus: business.publicityStatus,
+                slugCustomized: business.slugCustomized,
+            })
+        ) {
+            throw new BadRequestException({
+                code: RESPONSE_CODE.CATALOG_VISIBILITY_NOT_ELIGIBLE,
+                message: 'Business is not eligible for the catalog',
+            });
+        }
+        const updated = await this.businessModel
+            .findOneAndUpdate(
+                { _id: business._id },
+                { $set: { catalogVisible: visible } },
+                { new: true }
+            )
+            .exec();
+        if (!updated) {
+            throw new NotFoundException({
+                code: RESPONSE_CODE.BUSINESS_NOT_FOUND,
+                message: 'Business disappeared between guard and update',
+            });
+        }
+        return updated;
+    }
+
+    /**
+     * Sprint 29 — публічний каталог для головної pay-хоста. Допущені отримувачі
+     * (системні або схвалені, з красивим slug і увімкненою видимістю) з їхніми
+     * допущеними реквізитами, згруповані за категоріями. Whitelist: реквізити
+     * (IBAN/taxId) не віддаються JSON-ом, лише `ibanMask` як disambiguator.
+     */
+    async getPublicCatalog(): Promise<PublicCatalogView> {
+        // Гейт красивого slug — лише для користувацьких (схвалених) отримувачів;
+        // системні поза монетизацією і проходять з авто-slug (`canEnterCatalog`).
+        const businesses = await this.businessModel
+            .find({
+                catalogVisible: true,
+                deletedAt: null,
+                $or: [
+                    { isSystem: true },
+                    { publicityStatus: 'approved', slugCustomized: true },
+                ],
+            })
+            .select('_id type name slug catalogCategory isSystem')
+            .sort({ name: 1 })
+            .lean<
+                Array<{
+                    _id: Types.ObjectId;
+                    type: BusinessType;
+                    name: string;
+                    slug: string;
+                    // `.lean()` не застосовує Mongoose-дефолти, а поле зʼявилось
+                    // у Sprint 29 — у документах, створених раніше, його фізично
+                    // немає. Тип чесно це відображає; фолбек — на групуванні.
+                    catalogCategory?: CatalogCategory;
+                    isSystem: boolean;
+                }>
+            >()
+            .exec();
+
+        const businessById = new Map(
+            businesses.map((b) => [b._id.toString(), b] as const)
+        );
+        const businessIds = businesses.map((b) => b._id);
+        const accounts = await this.accountModel
+            .find({
+                businessId: { $in: businessIds },
+                catalogVisible: true,
+                deletedAt: null,
+            })
+            .select('businessId slug name bankCode iban slugCustomized')
+            .sort({ createdAt: 1 })
+            .lean<
+                Array<{
+                    businessId: Types.ObjectId;
+                    slug: string;
+                    name: string | null;
+                    bankCode: CatalogPayee['accounts'][number]['bankCode'];
+                    iban: string;
+                    slugCustomized: boolean;
+                }>
+            >()
+            .exec();
+
+        const accountsByBusiness = new Map<string, CatalogPayee['accounts']>();
+        for (const account of accounts) {
+            const key = account.businessId.toString();
+            const parent = businessById.get(key);
+            if (!parent) {
+                continue;
+            }
+            // Той самий гейт на рівні рахунку: красивий slug обов'язковий лише
+            // для користувацьких отримувачів, системні проходять з авто-slug.
+            if (!parent.isSystem && !account.slugCustomized) {
+                continue;
+            }
+            const bucket = accountsByBusiness.get(key) ?? [];
+            bucket.push({
+                slug: account.slug,
+                name: account.name,
+                bankCode: account.bankCode,
+                ibanMask: `•${account.iban.slice(-4)}`,
+            });
+            accountsByBusiness.set(key, bucket);
+        }
+
+        const payeesByCategory = new Map<CatalogCategory, CatalogPayee[]>();
+        for (const business of businesses) {
+            const payee: CatalogPayee = {
+                type: business.type,
+                name: business.name,
+                slug: business.slug,
+                accounts: accountsByBusiness.get(business._id.toString()) ?? [],
+            };
+            // Фолбек на дефолтну секцію обовʼязковий: документ без
+            // `catalogCategory` (створений до Sprint 29 і схвалений без явної
+            // категорії) інакше осів би у кошику з ключем `undefined`, якого
+            // немає у `CATALOG_CATEGORIES` — і зник би з каталогу мовчки, при
+            // увімкненій видимості й схваленому запиті.
+            const category =
+                business.catalogCategory ?? DEFAULT_CATALOG_CATEGORY;
+            const bucket = payeesByCategory.get(category) ?? [];
+            bucket.push(payee);
+            payeesByCategory.set(category, bucket);
+        }
+
+        // Порядок секцій — як у CATALOG_CATEGORIES; порожні відсутні.
+        const sections = CATALOG_CATEGORIES.filter(
+            (category) => (payeesByCategory.get(category)?.length ?? 0) > 0
+        ).map((category) => ({
+            category,
+            payees: payeesByCategory.get(category)!,
+        }));
+
+        return { sections };
+    }
+
     async getOwnedAndManaged(
         userId: string,
         isBookkeeperMode: boolean
     ): Promise<BusinessDocument[]> {
         const userObjectId = new Types.ObjectId(userId);
+        // Sprint 29 — `isSystem: { $ne: true }` як explicit authz-межа: системний
+        // отримувач ніколи не потрапляє у кабінетний список як «свій». Він і так
+        // виключений структурно (ownerId: null + managers: []), але явний фільтр
+        // тримає інваріант, якщо колись системному отримувачу додадуть менеджера.
         const filter = isBookkeeperMode
-            ? { ownerId: null, managers: userObjectId }
-            : { ownerId: userObjectId };
+            ? { ownerId: null, managers: userObjectId, isSystem: { $ne: true } }
+            : { ownerId: userObjectId, isSystem: { $ne: true } };
         return this.businessModel.find(filter).sort({ createdAt: -1 }).exec();
     }
 
@@ -468,9 +977,11 @@ export class BusinessesService {
         isBookkeeperMode: boolean
     ): Promise<BusinessWithCounts[]> {
         const userObjectId = new Types.ObjectId(userId);
+        // Sprint 29 — див. `getOwnedAndManaged`: системний отримувач виключений
+        // з кабінетного списку явним `isSystem: { $ne: true }`.
         const matchFilter = isBookkeeperMode
-            ? { ownerId: null, managers: userObjectId }
-            : { ownerId: userObjectId };
+            ? { ownerId: null, managers: userObjectId, isSystem: { $ne: true } }
+            : { ownerId: userObjectId, isSystem: { $ne: true } };
         const result = await this.businessModel
             .aggregate([
                 { $match: matchFilter },
@@ -523,6 +1034,35 @@ export class BusinessesService {
                             ],
                         },
                         id: { $toString: '$_id' },
+                        // Sprint 29 — aggregation не застосовує Mongoose-дефолти,
+                        // а беквілу під нові прапори немає: документ, створений
+                        // до спринту, віддав би поля відсутніми там, де контракт
+                        // `BusinessWithCounts` обіцяє boolean/enum (блок
+                        // «Публічність» і перемикач каталогу читають саме їх).
+                        isSystem: { $ifNull: ['$isSystem', false] },
+                        catalogVisible: { $ifNull: ['$catalogVisible', false] },
+                        slugCustomized: { $ifNull: ['$slugCustomized', false] },
+                        publicityStatus: {
+                            $ifNull: [
+                                '$publicityStatus',
+                                DEFAULT_PUBLICITY_STATUS,
+                            ],
+                        },
+                        publicityRequestedAt: {
+                            $ifNull: ['$publicityRequestedAt', null],
+                        },
+                        publicityReviewedAt: {
+                            $ifNull: ['$publicityReviewedAt', null],
+                        },
+                        publicityRejectionReason: {
+                            $ifNull: ['$publicityRejectionReason', null],
+                        },
+                        catalogCategory: {
+                            $ifNull: [
+                                '$catalogCategory',
+                                DEFAULT_CATALOG_CATEGORY,
+                            ],
+                        },
                     },
                 },
                 {
@@ -595,8 +1135,10 @@ export class BusinessesService {
         userId: string,
         // Sprint 19 — чи позначати новий slug як кастомний. true для user-PATCH
         // (vanity), false для reset-slug (авто). Впливає лише при rename.
-        markSlugCustomized = true
+        markSlugCustomized = true,
+        options: UpdateBusinessOptions = {}
     ): Promise<BusinessDocument> {
+        const { adminCatalogCategory, consumeSlugReservation = true } = options;
         const slugLower = slug.toLowerCase();
 
         // Sprint 14 — vanity-slug edit. Detection by lowercase різниця
@@ -758,6 +1300,9 @@ export class BusinessesService {
         // update Business + optional revert-cleanup). slugLower additionally
         // у $set для збереження інваріанту `slugLower === slug.toLowerCase()`.
         const setPayload: Record<string, unknown> = { ...dto };
+        if (adminCatalogCategory !== undefined) {
+            setPayload.catalogCategory = adminCatalogCategory;
+        }
         if (slugRenaming) {
             setPayload.slugLower = newSlugLower!;
             setPayload.slugCustomized = markSlugCustomized;
@@ -768,7 +1313,8 @@ export class BusinessesService {
                 slugLower,
                 newSlugLower,
                 hasCoupledFields,
-                userId
+                userId,
+                consumeSlugReservation
             );
         }
         if (slugCaseOnlyChange) {
@@ -921,7 +1467,8 @@ export class BusinessesService {
         oldLower: string,
         newLower: string,
         hasCoupledFields: boolean,
-        userId: string
+        userId: string,
+        consumeSlugReservation: boolean
     ): Promise<BusinessDocument> {
         const session = await this.connection.startSession();
         try {
@@ -934,6 +1481,7 @@ export class BusinessesService {
                     oldLower,
                     hasCoupledFields,
                     userId,
+                    consumeSlugReservation,
                     session
                 );
             });
@@ -982,6 +1530,7 @@ export class BusinessesService {
         oldLower: string,
         hasCoupledFields: boolean,
         userId: string,
+        consumeSlugReservation: boolean,
         session: ClientSession
     ): Promise<BusinessDocument> {
         const newLower = setPayload.slugLower as string;
@@ -998,10 +1547,17 @@ export class BusinessesService {
         // Sprint 20 — атомарно споживаємо власну бронь користувача разом із
         // записом slug (whichever name; одна бронь на користувача, після rename
         // вона у будь-якому разі неактуальна).
-        await this.slugReservations.consumeForUser(
-            new Types.ObjectId(userId),
-            session
-        );
+        // Sprint 29 — крім адмінського перейменування системного отримувача:
+        // там `userId` це адмін (потрібен лише як контекст перевірки чужих
+        // броней), а його власна бронь тримає ім'я для ЙОГО бізнесу. Споживання
+        // знищило б чужу для цієї операції бронь; системний запис до
+        // slug-монетизації взагалі не належить.
+        if (consumeSlugReservation) {
+            await this.slugReservations.consumeForUser(
+                new Types.ObjectId(userId),
+                session
+            );
+        }
 
         const updated = await this.businessModel
             .findOneAndUpdate(

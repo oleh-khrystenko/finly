@@ -2,8 +2,14 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
 import {
     BUSINESS_TYPES,
+    CATALOG_CATEGORIES,
+    DEFAULT_CATALOG_CATEGORY,
+    DEFAULT_PUBLICITY_STATUS,
+    PUBLICITY_STATUSES,
     TAXATION_SYSTEMS,
     type BusinessType,
+    type CatalogCategory,
+    type PublicityStatus,
     type TaxationSystem,
 } from '@finly/types';
 
@@ -197,6 +203,58 @@ export class Business {
     seoIndexEnabled!: boolean;
 
     /**
+     * Sprint 29 — системний отримувач, створений адміном (податкова, фонди).
+     * `true` ⇒ `ownerId: null` + `managers: []` (нічий, керується лише адмінкою),
+     * маркери підстановки у `paymentPurposeTemplate` дозволені. Запис невидимий
+     * для claim-flow, бухгалтерських вибірок і orphan-cleanup (ті ходять через
+     * `ownerId`/`managers`, які тут порожні). Дефолт `false` — усі наявні бізнеси
+     * звичайні.
+     */
+    @Prop({ type: Boolean, default: false })
+    isSystem!: boolean;
+
+    /**
+     * Sprint 29 — чи отримувач видимий у публічному каталозі. Гранулярна
+     * публічність: власний прапор також на кожних реквізитах (`Account.
+     * catalogVisible`). Глибше не йде: документ це персональний виставлений
+     * рахунок, у каталозі йому місця немає. Дефолт прихований; допуск у каталог
+     * додатково вимагає красивого slug (окремий зріз).
+     */
+    @Prop({ type: Boolean, default: false })
+    catalogVisible!: boolean;
+
+    /**
+     * Sprint 29 — стан запиту на публічність. Звичайний бізнес потрапляє у
+     * каталог лише через `approved`; системний — без запиту (лишається `none`).
+     */
+    @Prop({
+        type: String,
+        enum: PUBLICITY_STATUSES,
+        default: DEFAULT_PUBLICITY_STATUS,
+    })
+    publicityStatus!: PublicityStatus;
+
+    @Prop({ type: Date, default: null })
+    publicityRequestedAt!: Date | null;
+
+    @Prop({ type: Date, default: null })
+    publicityReviewedAt!: Date | null;
+
+    @Prop({ type: String, default: null })
+    publicityRejectionReason!: string | null;
+
+    /**
+     * Sprint 29 — категорія-секція у публічному каталозі. Призначає адмін
+     * (системним при створенні, користувацьким при схваленні). Дефолт `business`.
+     */
+    @Prop({
+        type: String,
+        enum: CATALOG_CATEGORIES,
+        default: DEFAULT_CATALOG_CATEGORY,
+    })
+    catalogCategory!: CatalogCategory;
+
+    /**
      * Soft-delete. Sprint 3 рішення C2 робить hard-delete + 5s frontend-Undo;
      * це поле залишене **навмисно невикористаним** на майбутнє — нульовий
      * coст у схемі, дає опцію передумати без міграції. Якщо у Phase 1.5+
@@ -291,6 +349,46 @@ BusinessSchema.index(
 // `brand.pending.uploadedAt` старішим за поріг. Sparse: переважна більшість
 // бізнесів без pending-бренду взагалі не потрапляють в index.
 BusinessSchema.index({ 'brand.pending.uploadedAt': 1 }, { sparse: true });
+
+// Sprint 29 — черга запитів на публічність (адмінка). Partial-index лише на
+// pending: черга завжди фільтрує саме цей стан, а переважна більшість бізнесів
+// (none/approved) в index не потрапляє. Сортування за requestedAt — найстаріші
+// зверху.
+BusinessSchema.index(
+    { publicityStatus: 1, publicityRequestedAt: 1 },
+    { partialFilterExpression: { publicityStatus: 'pending' } }
+);
+
+// Sprint 29 — список схвалених користувацьких отримувачів (адмінка). Partial-
+// index на `approved` окремо від pending-черги: partial-index під pending для
+// цього запиту непридатний (предикат `approved` не імплікує filter-expression),
+// тож без нього вибірка йшла б COLLSCAN-ом по бізнесах усіх користувачів з
+// blocking sort. Компаунд з `publicityReviewedAt` дає ще й порядок сортування.
+BusinessSchema.index(
+    { publicityStatus: 1, publicityReviewedAt: -1 },
+    { partialFilterExpression: { publicityStatus: 'approved' } }
+);
+
+// Sprint 29 — список системних отримувачів (адмінка). Partial: системних
+// записів одиниці на всю колекцію, тож index малий, а без нього кожен рендер
+// адмін-списку сканував би всі бізнеси продукту.
+BusinessSchema.index(
+    { isSystem: 1, createdAt: -1 },
+    { partialFilterExpression: { isSystem: true } }
+);
+
+// Sprint 29 — запит публічного каталогу (головна pay-хоста, гаряча path).
+// Partial-index лише на `catalogVisible: true` — найселективніший предикат
+// фільтра каталогу: у ньому лише куровані/схвалені-і-увімкнені записи, тобто
+// index не читає всю колекцію бізнесів. Компаунд з `name` дає ще й порядок для
+// `sort({ name: 1 })`; решту предикатів (`slugCustomized`, `isSystem`/
+// `publicityStatus: approved`, `deletedAt`) Mongo фільтрує вже над цим малим
+// кандидат-сетом. Без нього кожен рендер головної робив би COLLSCAN, вартість
+// якого росла б з повною кількістю бізнесів усіх користувачів.
+BusinessSchema.index(
+    { catalogVisible: 1, name: 1 },
+    { partialFilterExpression: { catalogVisible: true } }
+);
 
 // Sprint 10 §SP-11 — partial-unique `(ownerId, claimIdempotencyKey)` для
 // anon-claim dedup. `partialFilterExpression: { claimIdempotencyKey: { $type:

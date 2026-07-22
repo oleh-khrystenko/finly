@@ -57,10 +57,13 @@ describe('BusinessesService', () => {
     let accountModel: jest.Mocked<{
         countDocuments: jest.Mock;
         deleteMany: jest.Mock;
+        updateMany: jest.Mock;
+        find: jest.Mock;
     }>;
     let invoiceModel: jest.Mocked<{
         countDocuments: jest.Mock;
         deleteMany: jest.Mock;
+        updateMany: jest.Mock;
     }>;
     let counterModel: jest.Mocked<{
         deleteMany: jest.Mock;
@@ -124,10 +127,13 @@ describe('BusinessesService', () => {
         accountModel = {
             countDocuments: jest.fn().mockResolvedValue(0),
             deleteMany: jest.fn().mockResolvedValue({ deletedCount: 0 }),
+            updateMany: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
+            find: jest.fn(),
         };
         invoiceModel = {
             countDocuments: jest.fn().mockResolvedValue(0),
             deleteMany: jest.fn().mockResolvedValue({ deletedCount: 0 }),
+            updateMany: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
         };
         counterModel = {
             deleteMany: jest.fn().mockResolvedValue({ deletedCount: 0 }),
@@ -505,6 +511,255 @@ describe('BusinessesService', () => {
             businessModel.find.mockReturnValue({ sort: sortSpy });
             await service.getOwnedAndManaged(userId.toString(), false);
             expect(sortSpy).toHaveBeenCalledWith({ createdAt: -1 });
+        });
+
+        // Sprint 29 — системний отримувач ніколи не потрапляє у кабінетний
+        // список як «свій» (явна authz-межа поверх структурного виключення).
+        it('bookkeeper OFF — виключає системних отримувачів', async () => {
+            businessModel.find.mockReturnValue(mockExec([]));
+            await service.getOwnedAndManaged(userId.toString(), false);
+            const filter = businessModel.find.mock.calls[0]![0];
+            expect(filter.isSystem).toEqual({ $ne: true });
+        });
+
+        it('bookkeeper ON — виключає системних отримувачів', async () => {
+            businessModel.find.mockReturnValue(mockExec([]));
+            await service.getOwnedAndManaged(userId.toString(), true);
+            const filter = businessModel.find.mock.calls[0]![0];
+            expect(filter.isSystem).toEqual({ $ne: true });
+        });
+    });
+
+    // Sprint 29 — системні отримувачі (податкова, фонди).
+    describe('createSystemPayee', () => {
+        it('створює нічий системний запис із заданим catalogVisible', async () => {
+            businessModel.create.mockResolvedValue({ slug: 'IvanEnko' });
+            await service.createSystemPayee({
+                type: 'organization',
+                name: 'Головне управління ДПС',
+                taxId: '12345678',
+                paymentPurposeTemplate: 'Єдиний внесок {taxId} за {period}',
+                catalogVisible: true,
+            });
+            const doc = businessModel.create.mock.calls[0]![0];
+            expect(doc).toMatchObject({
+                isSystem: true,
+                ownerId: null,
+                managers: [],
+                catalogVisible: true,
+                taxationSystem: null,
+                isVatPayer: null,
+            });
+        });
+
+        it('catalogVisible за замовчуванням false', async () => {
+            businessModel.create.mockResolvedValue({ slug: 'IvanEnko' });
+            await service.createSystemPayee({
+                type: 'individual',
+                name: 'Фонд',
+                taxId: '1234567899',
+                paymentPurposeTemplate: 'Благодійний внесок',
+            });
+            const doc = businessModel.create.mock.calls[0]![0];
+            expect(doc.catalogVisible).toBe(false);
+        });
+    });
+
+    describe('getSystemPayeeBySlugOrThrow', () => {
+        it('кидає SYSTEM_PAYEE_NOT_FOUND, коли запис не системний або відсутній', async () => {
+            businessModel.findOne.mockReturnValue({
+                exec: jest.fn().mockResolvedValue(null),
+            });
+            await expect(
+                service.getSystemPayeeBySlugOrThrow('dps-lviv')
+            ).rejects.toMatchObject({
+                response: { code: RESPONSE_CODE.SYSTEM_PAYEE_NOT_FOUND },
+            });
+            // Фільтр обмежений системними записами.
+            const filter = businessModel.findOne.mock.calls[0]![0];
+            expect(filter.isSystem).toBe(true);
+        });
+    });
+
+    // Sprint 29 — публічність / каталог.
+    describe('publicity', () => {
+        const businessDoc = (
+            overrides: Record<string, unknown> = {}
+        ): BusinessDocument =>
+            ({
+                _id: new Types.ObjectId(),
+                slug: 'ivanenko',
+                slugCustomized: true,
+                isSystem: false,
+                publicityStatus: 'none',
+                catalogVisible: false,
+                ...overrides,
+            }) as unknown as BusinessDocument;
+
+        const okUpdate = (doc: unknown) =>
+            businessModel.findOneAndUpdate.mockReturnValue({
+                exec: jest.fn().mockResolvedValue(doc),
+            });
+
+        it('requestPublicity — блокує без красивого slug', async () => {
+            await expect(
+                service.requestPublicity(businessDoc({ slugCustomized: false }))
+            ).rejects.toMatchObject({
+                response: {
+                    code: RESPONSE_CODE.PUBLICITY_REQUIRES_CUSTOM_SLUG,
+                },
+            });
+            expect(businessModel.findOneAndUpdate).not.toHaveBeenCalled();
+        });
+
+        it('requestPublicity — переводить у pending лише зі стану none/rejected', async () => {
+            okUpdate({ publicityStatus: 'pending' });
+            await service.requestPublicity(businessDoc());
+            const [filter, update] =
+                businessModel.findOneAndUpdate.mock.calls[0]!;
+            // `null` у списку матчить документ БЕЗ поля: `publicityStatus`
+            // зʼявився у Sprint 29, а Mongoose-дефолт діє лише на insert. Без
+            // нього кожен pre-Sprint-29 отримувач діставав би 409 назавжди.
+            expect(filter.publicityStatus).toEqual({
+                $in: [null, 'none', 'rejected'],
+            });
+            expect(update.$set.publicityStatus).toBe('pending');
+        });
+
+        it('requestPublicity — конфлікт, коли запит уже активний', async () => {
+            okUpdate(null);
+            await expect(
+                service.requestPublicity(businessDoc())
+            ).rejects.toMatchObject({
+                response: { code: RESPONSE_CODE.PUBLICITY_INVALID_STATE },
+            });
+        });
+
+        it('withdrawPublicity — конфлікт, коли немає активного запиту', async () => {
+            okUpdate(null);
+            await expect(
+                service.withdrawPublicity(businessDoc())
+            ).rejects.toMatchObject({
+                response: { code: RESPONSE_CODE.PUBLICITY_INVALID_STATE },
+            });
+        });
+
+        it('approvePublicity — скидає всі прапори видимості у транзакції', async () => {
+            okUpdate({
+                _id: new Types.ObjectId(),
+                publicityStatus: 'approved',
+            });
+            await service.approvePublicity('ivanenko');
+            const [, update] = businessModel.findOneAndUpdate.mock.calls[0]!;
+            expect(update.$set.publicityStatus).toBe('approved');
+            expect(update.$set.catalogVisible).toBe(false);
+            expect(accountModel.updateMany).toHaveBeenCalledWith(
+                expect.any(Object),
+                { $set: { catalogVisible: false } },
+                expect.any(Object)
+            );
+        });
+
+        it('rejectPublicity — зберігає причину', async () => {
+            okUpdate({ publicityStatus: 'rejected' });
+            await service.rejectPublicity('ivanenko', 'Немає підтвердження');
+            const [, update] = businessModel.findOneAndUpdate.mock.calls[0]!;
+            expect(update.$set.publicityStatus).toBe('rejected');
+            expect(update.$set.publicityRejectionReason).toBe(
+                'Немає підтвердження'
+            );
+        });
+
+        it('setCatalogVisibility — блокує увімкнення для недопущеного', async () => {
+            await expect(
+                service.setCatalogVisibility(
+                    businessDoc({ publicityStatus: 'pending' }),
+                    true
+                )
+            ).rejects.toMatchObject({
+                response: {
+                    code: RESPONSE_CODE.CATALOG_VISIBILITY_NOT_ELIGIBLE,
+                },
+            });
+        });
+
+        it('setCatalogVisibility — вмикає для схваленого з красивим slug', async () => {
+            okUpdate({ catalogVisible: true });
+            const result = await service.setCatalogVisibility(
+                businessDoc({ publicityStatus: 'approved' }),
+                true
+            );
+            expect(result.catalogVisible).toBe(true);
+        });
+    });
+
+    describe('getPublicCatalog', () => {
+        const leanChain = (data: unknown) => ({
+            select: () => ({
+                sort: () => ({
+                    lean: () => ({
+                        exec: jest.fn().mockResolvedValue(data),
+                    }),
+                }),
+            }),
+        });
+
+        it('фільтрує лише допущених і групує за категоріями', async () => {
+            const bizId = new Types.ObjectId();
+            businessModel.find.mockReturnValue(
+                leanChain([
+                    {
+                        _id: bizId,
+                        type: 'organization',
+                        name: 'ДПС',
+                        slug: 'dps-lviv',
+                        catalogCategory: 'state',
+                        isSystem: true,
+                    },
+                ])
+            );
+            accountModel.find.mockReturnValue(
+                leanChain([
+                    {
+                        businessId: bizId,
+                        slug: 'esv',
+                        name: 'ЄСВ',
+                        bankCode: null,
+                        iban: 'UA000000000000000000000006001',
+                        slugCustomized: false,
+                    },
+                ])
+            );
+
+            const result = await service.getPublicCatalog();
+
+            // Фільтр отримувачів — видимі, не видалені, системні АБО схвалені.
+            // Гейт красивого slug — лише на схвалених користувацьких (у гілці $or),
+            // системні проходять з авто-slug.
+            const filter = businessModel.find.mock.calls[0]![0];
+            expect(filter).toMatchObject({
+                catalogVisible: true,
+                deletedAt: null,
+            });
+            expect(filter.slugCustomized).toBeUndefined();
+            expect(filter.$or).toEqual([
+                { isSystem: true },
+                { publicityStatus: 'approved', slugCustomized: true },
+            ]);
+
+            expect(result.sections).toHaveLength(1);
+            expect(result.sections[0].category).toBe('state');
+            expect(result.sections[0].payees[0]).toMatchObject({
+                slug: 'dps-lviv',
+                accounts: [{ slug: 'esv', ibanMask: '•6001' }],
+            });
+        });
+
+        it('порожній каталог → жодної секції', async () => {
+            businessModel.find.mockReturnValue(leanChain([]));
+            accountModel.find.mockReturnValue(leanChain([]));
+            const result = await service.getPublicCatalog();
+            expect(result.sections).toEqual([]);
         });
     });
 

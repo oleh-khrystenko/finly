@@ -94,6 +94,25 @@ export class Account {
     @Prop({ type: String, enum: AUTO_SLUG_MODES, default: null })
     invoiceSlugPresetDefault!: AutoSlugMode | null;
 
+    /**
+     * Sprint 29 — per-account override призначення платежу. `null` = успадкувати
+     * `business.paymentPurposeTemplate` (дзеркало `Invoice.paymentPurpose`).
+     * Потрібно для системних отримувачів: обласне ГУ ДПС тримає окремі реквізити
+     * під ЄСВ і під військовий збір, а призначення саме й розносить платіж.
+     * Format-валідація (length, byte, NBU-charset, допустимість маркерів
+     * підстановки) — Zod write-DTO.
+     */
+    @Prop({ type: String, trim: true, default: null })
+    paymentPurposeTemplate!: string | null;
+
+    /**
+     * Sprint 29 — чи ці реквізити видимі у публічному каталозі. Гранулярна
+     * публічність: рахунок можна приховати, навіть коли отримувач публічний.
+     * Дефолт прихований.
+     */
+    @Prop({ type: Boolean, default: false })
+    catalogVisible!: boolean;
+
     @Prop({ type: Date, default: null })
     deletedAt!: Date | null;
 

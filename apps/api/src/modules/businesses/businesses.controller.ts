@@ -39,6 +39,7 @@ import type { UserDocument } from '../users/schemas/user.schema';
 import { toSlugReservationView } from '../slug-reservation/slug-reservation.service';
 import { BusinessAccessGuard, CurrentBusiness } from './business-access.guard';
 import { BusinessesService } from './businesses.service';
+import { SetCatalogVisibilityDto } from './dto/set-catalog-visibility.dto';
 import { UpdateBusinessDto } from './dto/update-business.dto';
 import type { BusinessDocument } from './schemas/business.schema';
 
@@ -225,6 +226,46 @@ export class BusinessesController {
             user._id.toString()
         );
         return { data: toSlugReservationView(reservation) };
+    }
+
+    /**
+     * Sprint 29 — подання запиту на публічність (потрапляння у каталог). Гейт
+     * красивого slug і стан-машина живуть у сервісі.
+     */
+    @Post(':slug/publicity-request')
+    @UseGuards(BusinessAccessGuard)
+    @HttpCode(HttpStatus.OK)
+    async requestPublicity(
+        @CurrentBusiness() business: BusinessDocument
+    ): Promise<{ data: BusinessDocument }> {
+        const updated = await this.businessesService.requestPublicity(business);
+        return { data: updated };
+    }
+
+    /** Sprint 29 — скасування запиту або зняття отримувача з каталогу. */
+    @Delete(':slug/publicity-request')
+    @UseGuards(BusinessAccessGuard)
+    @HttpCode(HttpStatus.OK)
+    async withdrawPublicity(
+        @CurrentBusiness() business: BusinessDocument
+    ): Promise<{ data: BusinessDocument }> {
+        const updated =
+            await this.businessesService.withdrawPublicity(business);
+        return { data: updated };
+    }
+
+    /** Sprint 29 — тогл видимості отримувача у каталозі (діє лише після схвалення). */
+    @Patch(':slug/catalog-visibility')
+    @UseGuards(BusinessAccessGuard)
+    async setCatalogVisibility(
+        @CurrentBusiness() business: BusinessDocument,
+        @Body() dto: SetCatalogVisibilityDto
+    ): Promise<{ data: BusinessDocument }> {
+        const updated = await this.businessesService.setCatalogVisibility(
+            business,
+            dto.visible
+        );
+        return { data: updated };
     }
 
     @Delete(':slug')

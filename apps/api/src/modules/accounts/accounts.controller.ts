@@ -30,6 +30,7 @@ import {
 import type { BusinessDocument } from '../businesses/schemas/business.schema';
 import { toSlugReservationView } from '../slug-reservation/slug-reservation.service';
 import type { UserDocument } from '../users/schemas/user.schema';
+import { SetCatalogVisibilityDto } from '../businesses/dto/set-catalog-visibility.dto';
 import { AccountAccessGuard, CurrentAccount } from './account-access.guard';
 import { AccountsService } from './accounts.service';
 import { CreateAccountDto } from './dto/create-account.dto';
@@ -165,6 +166,25 @@ export class AccountsController {
             user._id.toString()
         );
         return { data: toSlugReservationView(reservation) };
+    }
+
+    /**
+     * Sprint 29 — тогл видимості реквізитів у каталозі. Увімкнути можна лише
+     * коли батьківський отримувач публічний і сам рахунок має красивий slug.
+     */
+    @Patch(':accountSlug/catalog-visibility')
+    @UseGuards(AccountAccessGuard)
+    async setCatalogVisibility(
+        @CurrentBusiness() business: BusinessDocument,
+        @CurrentAccount() account: AccountDocument,
+        @Body() dto: SetCatalogVisibilityDto
+    ): Promise<{ data: AccountDocument }> {
+        const updated = await this.accountsService.setCatalogVisibility(
+            account,
+            business,
+            dto.visible
+        );
+        return { data: updated };
     }
 
     @Delete(':accountSlug')

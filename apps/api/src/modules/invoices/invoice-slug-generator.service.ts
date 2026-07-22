@@ -98,8 +98,13 @@ export interface GenerateInvoiceSlugInput {
      * Zod гарантує non-empty (`Business.paymentPurposeTemplate.min(1)`), тож
      * generator може покладатись на наявність bottom-string без додаткової
      * перевірки.
+     *
+     * Sprint 29 — саме *успадкований* шаблон, а не business-шаблон: викликач
+     * передає `resolveAccountPurposeTemplate(business, account)`, бо рахунок
+     * може мати власне призначення (ЄСВ окремо від військового збору). Інакше
+     * slug у URL розійшовся б з призначенням у payload для таких рахунків.
      */
-    businessPaymentPurposeTemplate: string;
+    inheritedPaymentPurposeTemplate: string;
 }
 
 export interface GenerateInvoiceSlugResult {
@@ -216,7 +221,7 @@ export class InvoiceSlugGeneratorService {
                     input.slugInput.preset,
                     effectiveInvoicePurpose(
                         input.paymentPurpose,
-                        input.businessPaymentPurposeTemplate
+                        input.inheritedPaymentPurposeTemplate
                     ),
                     tail,
                     session

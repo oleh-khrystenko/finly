@@ -182,6 +182,34 @@ describe('buildPayloadInputFromInvoice (Sprint 9 §9.1 — приймає 3 па
             );
             expect(result.purpose).toBe('Послуги web-розробки');
         });
+
+        // Sprint 29 — ланцюг успадкування трирівневий: invoice → account →
+        // business. Рахунок з власним призначенням (ЄСВ окремо від військового
+        // збору) не має «провалюватись» одразу на шаблон отримувача, інакше
+        // документ під ним пішов би в банк з чужим призначенням.
+        it('invoice.paymentPurpose === null → account-override перекриває business-шаблон', () => {
+            const result = buildPayloadInputFromInvoice(
+                makeBusiness({
+                    paymentPurposeTemplate: 'Оплата за послуги',
+                }),
+                makeAccount({
+                    paymentPurposeTemplate: 'Військовий збір',
+                } as Partial<AccountDocument>),
+                makeInvoice({ paymentPurpose: null })
+            );
+            expect(result.purpose).toBe('Військовий збір');
+        });
+
+        it('invoice.paymentPurpose non-null перекриває і account-override', () => {
+            const result = buildPayloadInputFromInvoice(
+                makeBusiness(),
+                makeAccount({
+                    paymentPurposeTemplate: 'Військовий збір',
+                } as Partial<AccountDocument>),
+                makeInvoice({ paymentPurpose: 'Оплата за консультацію' })
+            );
+            expect(result.purpose).toBe('Оплата за консультацію');
+        });
     });
 
     describe('validUntil (Kyiv-tz конвертація)', () => {
