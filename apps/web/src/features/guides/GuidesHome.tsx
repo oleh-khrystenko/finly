@@ -19,7 +19,8 @@ export function GuidesHome({ tree }: { tree: PublicGuidesTree }) {
                 </h1>
                 <p className="text-muted-foreground mx-auto mt-3 max-w-xl text-base leading-relaxed">
                     Практичні гайди про те, як приймати оплату, виставляти
-                    рахунки і працювати з платіжними QR-кодами за стандартом НБУ.
+                    рахунки і працювати з платіжними QR-кодами за стандартом
+                    НБУ.
                 </p>
             </header>
 

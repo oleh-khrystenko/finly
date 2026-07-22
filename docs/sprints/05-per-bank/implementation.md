@@ -47,9 +47,9 @@
 База — НБУ legacy payload-link `https://bank.gov.ua/qr/<b64>` (наш
 `nbuLinks.legacy`).
 
-| Платформа | Перетворення | Результат |
-| --------- | ------------ | --------- |
-| **iOS** | `https` → `<iosScheme>` | `mono://bank.gov.ua/qr/<b64>` |
+| Платформа   | Перетворення                                                                                            | Результат                                                                         |
+| ----------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| **iOS**     | `https` → `<iosScheme>`                                                                                 | `mono://bank.gov.ua/qr/<b64>`                                                     |
 | **Android** | `https` → `intent`, suffix `#Intent;scheme=https;package=<pkg>;S.browser_fallback_url=<Play Store>;end` | `intent://bank.gov.ua/qr/<b64>#Intent;scheme=https;package=com.ftband.mono;…;end` |
 
 `iosScheme: null` (Ощад/Райф — приватна схема невідома) → білдер повертає `null`
@@ -63,11 +63,11 @@ Desktop — теж fallback (банк-додатків немає).
 ### `packages/types` (чиста логіка, host-agnostic)
 
 - `src/constants/banks.ts`
-  - `BANK_APP_LAUNCH: Record<BankCode, { iosScheme: string | null; androidPackage: string }>`
-    — мапа для 10 банків `MVP_BANKS`.
-  - `buildBankAppLink(nbuLegacyLink, bank, platform)` — будує iOS/Android лінк
-    або `null`.
-  - `type BankAppPlatform = 'ios' | 'android'`.
+    - `BANK_APP_LAUNCH: Record<BankCode, { iosScheme: string | null; androidPackage: string }>`
+      — мапа для 10 банків `MVP_BANKS`.
+    - `buildBankAppLink(nbuLegacyLink, bank, platform)` — будує iOS/Android лінк
+      або `null`.
+    - `type BankAppPlatform = 'ios' | 'android'`.
 - `src/constants/banks.spec.ts` — 6 unit-тестів (підміна протоколу, null-fallback,
   intent-формат, exhaustiveness по `MVP_BANKS`).
 

@@ -1,6 +1,10 @@
 'use client';
 
-import { Disclosure, DisclosureButton, DisclosurePanel } from '@headlessui/react';
+import {
+    Disclosure,
+    DisclosureButton,
+    DisclosurePanel,
+} from '@headlessui/react';
 import { ChevronDown } from 'lucide-react';
 import { composeClasses } from '@/shared/lib';
 import type { UiDisclosureAlign, UiDisclosureProps } from './types';

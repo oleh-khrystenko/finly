@@ -1,9 +1,6 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
-import type {
-    BusinessType,
-    PublicAccountListItem,
-} from '@finly/types';
+import type { BusinessType, PublicAccountListItem } from '@finly/types';
 import PublicBusinessView from './PublicBusinessView';
 
 const TWO_ACCOUNTS: PublicAccountListItem[] = [

@@ -30,7 +30,10 @@ import UiSpinner from '@/shared/ui/UiSpinner';
 
 type LimitsState =
     | { kind: 'loading' }
-    | { kind: 'ready'; typeVerdicts?: Record<BusinessType, { allowed: boolean }> };
+    | {
+          kind: 'ready';
+          typeVerdicts?: Record<BusinessType, { allowed: boolean }>;
+      };
 
 function BusinessNewContent() {
     const searchParams = useSearchParams();

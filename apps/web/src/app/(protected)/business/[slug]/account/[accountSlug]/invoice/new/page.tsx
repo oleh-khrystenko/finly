@@ -136,9 +136,7 @@ export default function NewInvoicePage() {
             >
                 Назад до реквізитів
             </UiButton>
-            <UiPageHeading className="md:text-4xl">
-                Новий рахунок
-            </UiPageHeading>
+            <UiPageHeading className="md:text-4xl">Новий рахунок</UiPageHeading>
             {/*
              * `key={account.slug}` — force-remount RHF на account change.
              * Без цього `useForm.defaultValues` ініціалізується раз, і

@@ -459,9 +459,7 @@ describe('proxy', () => {
 
             expect(mockRewrite).toHaveBeenCalledTimes(1);
             const url: URL = mockRewrite.mock.calls[0][0];
-            expect(url.pathname).toBe(
-                '/host-pay/IvanEnko/aBc12345/inv-001'
-            );
+            expect(url.pathname).toBe('/host-pay/IvanEnko/aBc12345/inv-001');
         });
 
         it('Branch A3 case-preserved у всіх 3 сегментах', () => {
@@ -471,9 +469,7 @@ describe('proxy', () => {
             proxy(req);
 
             const url: URL = mockRewrite.mock.calls[0][0];
-            expect(url.pathname).toBe(
-                '/host-pay/IvanEnko/AbCdEfGh/Inv-Vanity'
-            );
+            expect(url.pathname).toBe('/host-pay/IvanEnko/AbCdEfGh/Inv-Vanity');
         });
 
         it('Branch A3 + reserved business-slug → 404', () => {

@@ -1,7 +1,4 @@
-import {
-    QrPreviewInputSchema,
-    QrPreviewResponseSchema,
-} from './qr-preview';
+import { QrPreviewInputSchema, QrPreviewResponseSchema } from './qr-preview';
 
 const VALID_IBAN = 'UA213223130000026007233566001';
 const VALID_RNOKPP = '1234567899';
@@ -19,17 +16,15 @@ describe('QrPreviewInputSchema', () => {
         expect(result.success).toBe(true);
     });
 
-    it.each([
-        'receiverName',
-        'iban',
-        'taxId',
-        'purpose',
-    ] as const)('rejects payload з відсутнім полем %s', (field) => {
-        const { [field]: _omit, ...without } = VALID_INPUT;
-        void _omit;
-        const result = QrPreviewInputSchema.safeParse(without);
-        expect(result.success).toBe(false);
-    });
+    it.each(['receiverName', 'iban', 'taxId', 'purpose'] as const)(
+        'rejects payload з відсутнім полем %s',
+        (field) => {
+            const { [field]: _omit, ...without } = VALID_INPUT;
+            void _omit;
+            const result = QrPreviewInputSchema.safeParse(without);
+            expect(result.success).toBe(false);
+        }
+    );
 
     it('rejects невалідний IBAN (failed mod-97 checksum)', () => {
         const result = QrPreviewInputSchema.safeParse({
@@ -137,7 +132,7 @@ describe('QrPreviewInputSchema', () => {
     it('rejects non-NBU char у receiverName (emoji ☕)', () => {
         const result = QrPreviewInputSchema.safeParse({
             ...VALID_INPUT,
-            receiverName: '☕ Кав\'ярня',
+            receiverName: "☕ Кав'ярня",
         });
         expect(result.success).toBe(false);
         if (!result.success) {

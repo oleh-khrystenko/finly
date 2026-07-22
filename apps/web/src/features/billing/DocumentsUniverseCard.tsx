@@ -70,9 +70,7 @@ export default function DocumentsUniverseCard({ catalog, profile }: Props) {
                         </p>
                     </div>
                     <div className="border-border rounded-lg border p-4">
-                        <p className="text-muted-foreground text-xs">
-                            Сховище
-                        </p>
+                        <p className="text-muted-foreground text-xs">Сховище</p>
                         <p className="text-foreground mt-1 text-2xl font-semibold">
                             {Math.round(credits.storageBytesUsed / 1e9)} ГБ
                         </p>
@@ -100,7 +98,10 @@ export default function DocumentsUniverseCard({ catalog, profile }: Props) {
                                 </p>
                             </div>
                             <span className="text-foreground text-sm font-semibold">
-                                {formatPrice(tier.priceAmount, catalog.currency)}
+                                {formatPrice(
+                                    tier.priceAmount,
+                                    catalog.currency
+                                )}
                                 <span className="text-muted-foreground text-xs font-normal">
                                     {' '}
                                     /міс

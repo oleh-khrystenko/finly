@@ -97,7 +97,8 @@ export default function UiSlugEditor({
 
     // Lowercase-порівняння — для пропуску availability-check власного імені
     // (зміна лише регістру свого slug тривіально «вільна»).
-    const isUnchanged = draft.trim().toLowerCase() === currentSlug.toLowerCase();
+    const isUnchanged =
+        draft.trim().toLowerCase() === currentSlug.toLowerCase();
     // Точне порівняння — для no-op-короткозамикання Save: зміна лише регістру
     // (`ivanenko` → `IvanEnko`) — валідна платна правка (бекенд: slugCaseOnlyChange),
     // тож вона НЕ no-op і має дійти до запису.
@@ -332,7 +333,7 @@ export default function UiSlugEditor({
                             setDraft(reservation.desiredSlug);
                             setMode('edit');
                         }}
-                        className="w-full sm:w-auto sm:ml-auto"
+                        className="w-full sm:ml-auto sm:w-auto"
                     >
                         Обрати інше ім&apos;я
                     </UiButton>

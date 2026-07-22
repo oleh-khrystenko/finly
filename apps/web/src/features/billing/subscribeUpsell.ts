@@ -64,9 +64,7 @@ export async function startSubscriptionCheckout(
         });
         window.location.href = checkoutUrl;
     } catch (err) {
-        if (
-            extractApiErrorCode(err) === RESPONSE_CODE.BILLING_ALREADY_ACTIVE
-        ) {
+        if (extractApiErrorCode(err) === RESPONSE_CODE.BILLING_ALREADY_ACTIVE) {
             window.location.href = '/billing';
             return;
         }

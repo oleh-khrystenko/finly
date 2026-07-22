@@ -122,7 +122,9 @@ async function cli(): Promise<void> {
 
         for (const o of result.outcomes) {
             if (!o.existed) {
-                console.log(`[migration:drop-legacy] skip   ${o.name} (не існує)`);
+                console.log(
+                    `[migration:drop-legacy] skip   ${o.name} (не існує)`
+                );
             } else if (o.dropped) {
                 console.log(
                     `[migration:drop-legacy] DROP   ${o.name} (${o.count} док.)`
@@ -140,7 +142,9 @@ async function cli(): Promise<void> {
             );
         } else {
             console.log('[migration:drop-legacy] applied', {
-                dropped: result.outcomes.filter((o) => o.dropped).map((o) => o.name),
+                dropped: result.outcomes
+                    .filter((o) => o.dropped)
+                    .map((o) => o.name),
             });
         }
     } finally {

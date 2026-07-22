@@ -77,7 +77,9 @@ export const EditorFormSchema = z.object({
     // Контент необовʼязковий: запланована тема може бути лише назвою. Наявність
     // блоку вимагається на публікації (сервер), а не на кожному збереженні.
     // max віддзеркалює API `UpsertGuideSchema`.
-    blocks: z.array(editorBlockSchema).max(100, 'Забагато блоків (максимум 100)'),
+    blocks: z
+        .array(editorBlockSchema)
+        .max(100, 'Забагато блоків (максимум 100)'),
     faq: z.array(editorFaqSchema).max(50, 'Забагато запитань (максимум 50)'),
 });
 

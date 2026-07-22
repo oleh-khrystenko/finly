@@ -47,9 +47,9 @@ describe('PublicAccountView (Sprint 9 §SP-4 + §SP-9)', () => {
                     }}
                 />
             );
-            expect(
-                screen.getByRole('heading', { level: 1 })
-            ).toHaveTextContent('ФОП Іваненко');
+            expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+                'ФОП Іваненко'
+            );
             const requisites = screen.getByText('Реквізити').closest('div')!;
             expect(requisites).toHaveTextContent('•2580');
             expect(requisites).not.toHaveTextContent('ПриватБанк');

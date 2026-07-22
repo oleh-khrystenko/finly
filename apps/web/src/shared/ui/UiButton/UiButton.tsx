@@ -214,7 +214,12 @@ interface CommonProps {
     loading: boolean;
 }
 
-const getCommonProps = ({ className, variant, size, loading }: CommonProps) => ({
+const getCommonProps = ({
+    className,
+    variant,
+    size,
+    loading,
+}: CommonProps) => ({
     className,
     'data-variant': variant,
     'data-size': size,
@@ -258,7 +263,9 @@ const UiButton = forwardRef<
         // `disabled` без `loading` — справжній disabled-state: greyed-out +
         // not-allowed cursor. `loading` навмисно НЕ грейкає кнопку, щоб
         // користувач бачив "запит у роботі", а не "кнопка вимкнена".
-        disabled && !loading && 'opacity-50 cursor-not-allowed pointer-events-none',
+        disabled &&
+            !loading &&
+            'opacity-50 cursor-not-allowed pointer-events-none',
         loading && 'cursor-wait pointer-events-none',
         variant === 'icon'
             ? iconSizeStyles[size]
@@ -285,8 +292,18 @@ const UiButton = forwardRef<
         size,
         collapseLabel,
     });
-    const content = wrapContent({ content: innerContent, loading, size, hasGap });
-    const commonProps = getCommonProps({ className: classes, variant, size, loading });
+    const content = wrapContent({
+        content: innerContent,
+        loading,
+        size,
+        hasGap,
+    });
+    const commonProps = getCommonProps({
+        className: classes,
+        variant,
+        size,
+        loading,
+    });
     const accessibilityProps = getLinkAccessibilityProps(blocked);
 
     // Type guard: Native anchor element

@@ -83,7 +83,10 @@ describe('getApiMessage', () => {
 
         it('TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE — ПКУ розд. XIV гл. 1 (групи 1/2 заборонені для ТОВ)', () => {
             expect(
-                getApiMessage('TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE', 'businesses')
+                getApiMessage(
+                    'TAXATION_SYSTEM_NOT_ALLOWED_FOR_TYPE',
+                    'businesses'
+                )
             ).toBe(
                 'Ця система оподаткування недоступна для обраного типу отримувача'
             );

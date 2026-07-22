@@ -137,7 +137,8 @@ function AccountCard({
             <span className="font-mono">{mask}</span>
         </>
     );
-    const primaryText = customName ?? (bankLabel ? `${bankLabel} ${mask}` : mask);
+    const primaryText =
+        customName ?? (bankLabel ? `${bankLabel} ${mask}` : mask);
 
     // Уся картка — клікабельне посилання на сторінку реквізитів. `UiLink`
     // variant="unstyled" створений саме для card-links (візуал несе вкладений

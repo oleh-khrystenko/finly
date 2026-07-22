@@ -170,9 +170,7 @@ function SigninContent() {
                     : resolveLandingClaimPayload();
             await sendMagicLink(email, purposeForResend, undefined, {
                 ...claimPayload,
-                termsVersion: agreedToTerms
-                    ? CURRENT_TERMS_VERSION
-                    : undefined,
+                termsVersion: agreedToTerms ? CURRENT_TERMS_VERSION : undefined,
             });
             startResendTimer();
         } catch {
@@ -331,9 +329,7 @@ function SigninContent() {
             // anon-claim; landingDraft + claimIdempotencyKey НЕ прокидаємо.
             // termsVersion прокидаємо, якщо user уже погодився на email-step.
             await sendMagicLink(email, 'reset-password', undefined, {
-                termsVersion: agreedToTerms
-                    ? CURRENT_TERMS_VERSION
-                    : undefined,
+                termsVersion: agreedToTerms ? CURRENT_TERMS_VERSION : undefined,
             });
             toast.success(sentMessage);
             startResendTimer();
@@ -370,9 +366,7 @@ function SigninContent() {
             await awaitLandingDraftHydration();
             await sendMagicLink(email, 'login', undefined, {
                 ...resolveLandingClaimPayload(),
-                termsVersion: agreedToTerms
-                    ? CURRENT_TERMS_VERSION
-                    : undefined,
+                termsVersion: agreedToTerms ? CURRENT_TERMS_VERSION : undefined,
             });
             startResendTimer();
             setState('magic-link-sent');

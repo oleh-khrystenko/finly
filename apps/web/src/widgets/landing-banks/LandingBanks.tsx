@@ -27,7 +27,7 @@ export function LandingBanks() {
                  * При некратній 5/2 кількості банків останній рядок неповний —
                  * `justify-items` лишає елементи ліворуч, лого однакові.
                  */}
-                <ul className="mx-auto grid max-w-3xl grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-5 px-6">
+                <ul className="mx-auto grid max-w-3xl grid-cols-2 gap-x-4 gap-y-8 px-6 sm:grid-cols-5">
                     {MVP_BANKS.map((code) => (
                         <li
                             key={code}

@@ -155,9 +155,7 @@ function logoInner(): string {
         join(__dirname, 'assets', 'finly-logo.svg'),
         'utf8'
     );
-    return svg
-        .replace(/^[\s\S]*?<svg[^>]*>/, '')
-        .replace(/<\/svg>\s*$/, '');
+    return svg.replace(/^[\s\S]*?<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');
 }
 
 /** Лого Finly, вписане у квадрат `logoSize` з лівим-верхом у `(x, y)`. */
@@ -271,7 +269,10 @@ async function main(): Promise<void> {
         textBandSvg(BRAND_TEXT.nbuStandard, CAPTION_BAND),
         'band-nbu-standard.png'
     );
-    await writePng(textBandSvg(BRAND_TEXT.slogan, SLOGAN_BAND), 'band-slogan.png');
+    await writePng(
+        textBandSvg(BRAND_TEXT.slogan, SLOGAN_BAND),
+        'band-slogan.png'
+    );
     await writePng(logoBandSvg(), 'band-finly.png');
     await writePng(centerSquareSvg(), 'center-finly-square.png');
     await writePng(centerRectSvg(), 'center-finly-rect.png');

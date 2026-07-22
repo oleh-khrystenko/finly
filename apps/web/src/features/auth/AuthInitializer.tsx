@@ -4,11 +4,7 @@ import { useEffect, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { CURRENT_TERMS_VERSION, validateSameOriginPath } from '@finly/types';
 
-import {
-    clearPendingPostLoginTarget,
-    getMe,
-    refreshToken,
-} from '@/shared/api';
+import { clearPendingPostLoginTarget, getMe, refreshToken } from '@/shared/api';
 import { useAuthStore } from '@/entities/user';
 import { useTermsReacceptDialogStore } from './termsReacceptDialogStore';
 

@@ -9,7 +9,7 @@ export function Copyright() {
 
     return (
         <div className="border-border border-t">
-            <div className="container mx-auto flex flex-col items-center gap-1 px-6 pb-2 pt-4 sm:pt-2 text-center text-sm sm:flex-row sm:justify-between sm:gap-0 sm:text-left">
+            <div className="container mx-auto flex flex-col items-center gap-1 px-6 pt-4 pb-2 text-center text-sm sm:flex-row sm:justify-between sm:gap-0 sm:pt-2 sm:text-left">
                 <p className="text-muted-foreground">
                     © {year} Finly. Всі права захищено.
                 </p>

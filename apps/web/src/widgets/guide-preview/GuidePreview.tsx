@@ -88,7 +88,11 @@ export function GuidePreview({ guideId }: { guideId: string }) {
                     </UiButton>
                 </div>
             </div>
-            <GuideArticleView guide={toPublic(guide)} pillar={null} related={[]} />
+            <GuideArticleView
+                guide={toPublic(guide)}
+                pillar={null}
+                related={[]}
+            />
         </>
     );
 }

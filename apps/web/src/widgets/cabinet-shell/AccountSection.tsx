@@ -70,7 +70,7 @@ export function AccountSection({ onNavigate }: { onNavigate?: () => void }) {
                         variant="text"
                         size="sm"
                         aria-label="Меню акаунта"
-                        className="min-h-11 w-full rounded-lg px-2 hover:bg-muted lg:min-h-9 [&>span]:flex [&>span]:w-full [&>span]:items-center [&>span]:gap-2.5"
+                        className="hover:bg-muted min-h-11 w-full rounded-lg px-2 lg:min-h-9 [&>span]:flex [&>span]:w-full [&>span]:items-center [&>span]:gap-2.5"
                     >
                         <UiAvatar
                             size="sm"

@@ -7,8 +7,10 @@ import { InputHTMLAttributes, ReactNode } from 'react';
  * як svg-adornment всередині padded-wrapper); тут wrapper без padding, prefix
  * має власний bg-secondary для візуального розмежування.
  */
-export interface UiPrefixInputProps
-    extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size' | 'prefix'> {
+export interface UiPrefixInputProps extends Omit<
+    InputHTMLAttributes<HTMLInputElement>,
+    'size' | 'prefix'
+> {
     /** Текст префікса (наприклад `pay.finly.com.ua/`). */
     prefix: ReactNode;
     /** Inline error message під полем. Перемикає border на destructive. */

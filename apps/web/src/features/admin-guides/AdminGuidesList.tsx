@@ -18,7 +18,11 @@ import UiButton from '@/shared/ui/UiButton';
 import UiLink from '@/shared/ui/UiLink';
 import UiSpinner from '@/shared/ui/UiSpinner';
 import UiChipGroup from '@/shared/ui/UiChipGroup';
-import { adminListGuides, reorderGuides, syncOrganicGuides } from '@/shared/api';
+import {
+    adminListGuides,
+    reorderGuides,
+    syncOrganicGuides,
+} from '@/shared/api';
 
 import { FieldHint } from './FieldHint';
 import { GuideStatusBadge } from './GuideStatusBadge';
@@ -356,8 +360,9 @@ function TabHint({ tab }: { tab: GuideStatus }) {
             <p>
                 Статті, які зараз видно на сайті і в пошуку. Стрілками задаєте
                 порядок, у якому вони стоять на сторінці гайдів: основні гайди
-                рухаються між собою (кожен разом зі своїми розділами), а розділи,
-                лише всередині свого гайда. Порядок зберігається одразу.
+                рухаються між собою (кожен разом зі своїми розділами), а
+                розділи, лише всередині свого гайда. Порядок зберігається
+                одразу.
             </p>
             <p>
                 Біля кожної статті видно, скільки разів на неї перейшли з пошуку
@@ -450,7 +455,9 @@ function PublishedList({
                                                 : 'Показати розділи'
                                         }
                                         aria-expanded={expanded}
-                                        onClick={() => onToggle(group.pillar.id)}
+                                        onClick={() =>
+                                            onToggle(group.pillar.id)
+                                        }
                                     >
                                         <ChevronRight
                                             className={`size-5 transition-transform duration-200 ${
@@ -569,7 +576,9 @@ function GuideCardLink({
             <div className="text-muted-foreground mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
                 <span>{kind}</span>
                 <span aria-hidden>·</span>
-                <span>Оновлено {DATE_FMT.format(new Date(item.updatedAt))}</span>
+                <span>
+                    Оновлено {DATE_FMT.format(new Date(item.updatedAt))}
+                </span>
                 {showOrganic && (
                     <>
                         <span aria-hidden>·</span>

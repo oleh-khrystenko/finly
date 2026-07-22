@@ -21,17 +21,15 @@ describe('LandingDraftSchema', () => {
         expect(result.success).toBe(true);
     });
 
-    it.each([
-        'receiverName',
-        'iban',
-        'taxId',
-        'purpose',
-    ] as const)('rejects draft з відсутнім полем %s', (field) => {
-        const { [field]: _omit, ...without } = VALID_DRAFT;
-        void _omit;
-        const result = LandingDraftSchema.safeParse(without);
-        expect(result.success).toBe(false);
-    });
+    it.each(['receiverName', 'iban', 'taxId', 'purpose'] as const)(
+        'rejects draft з відсутнім полем %s',
+        (field) => {
+            const { [field]: _omit, ...without } = VALID_DRAFT;
+            void _omit;
+            const result = LandingDraftSchema.safeParse(without);
+            expect(result.success).toBe(false);
+        }
+    );
 
     it('rejects 8-digit ЄДРПОУ (anon-форма зачинена на individual + РНОКПП)', () => {
         const result = LandingDraftSchema.safeParse({
@@ -52,7 +50,7 @@ describe('LandingDraftSchema', () => {
     it('rejects non-NBU charset у receiverName (emoji)', () => {
         const result = LandingDraftSchema.safeParse({
             ...VALID_DRAFT,
-            receiverName: '☕ Кав\'ярня',
+            receiverName: "☕ Кав'ярня",
         });
         expect(result.success).toBe(false);
     });

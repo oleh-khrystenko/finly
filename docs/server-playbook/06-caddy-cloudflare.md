@@ -1,17 +1,17 @@
 # 06 — Caddy + Cloudflare
 
-Goal: Caddy on the host, Cloudflare in front. TLS terminated by Caddy with a Cloudflare *Origin Certificate* (15 years, no Let's Encrypt rate limits, no LE renewal logic to babysit). Cloudflare proxy mode = "Full (strict)".
+Goal: Caddy on the host, Cloudflare in front. TLS terminated by Caddy with a Cloudflare _Origin Certificate_ (15 years, no Let's Encrypt rate limits, no LE renewal logic to babysit). Cloudflare proxy mode = "Full (strict)".
 
 ## 1. DNS in Cloudflare
 
 In the Cloudflare dashboard for `<DOMAIN>`:
 
-| Type | Name | Content | Proxy |
-|---|---|---|---|
-| A | @ | `<IPV4>` | proxied (orange cloud) |
-| AAAA | @ | `<IPV6>` | proxied |
-| CNAME | www | `<DOMAIN>` | proxied |
-| CNAME | pay | `<DOMAIN>` | proxied |
+| Type  | Name | Content    | Proxy                  |
+| ----- | ---- | ---------- | ---------------------- |
+| A     | @    | `<IPV4>`   | proxied (orange cloud) |
+| AAAA  | @    | `<IPV6>`   | proxied                |
+| CNAME | www  | `<DOMAIN>` | proxied                |
+| CNAME | pay  | `<DOMAIN>` | proxied                |
 
 SSL/TLS → Overview → set to **Full (strict)**. `Always Use HTTPS` ON, `Automatic HTTPS Rewrites` ON, `Min TLS Version` 1.2.
 
@@ -141,12 +141,14 @@ curl -sk --resolve "<DOMAIN>:443:<IPV4>" https://<DOMAIN>/ -o /dev/null -w "%{ht
 ```
 
 Expected:
+
 - HTTPS via Cloudflare returns `200`.
 - HSTS header present, `X-Frame-Options: DENY`, `Content-Encoding: zstd|gzip|br` (depending on client), no `Server: Caddy`.
 
 ## 7. Cloudflare WAF / firewall (optional but cheap)
 
 In Cloudflare → Security → WAF:
+
 - Enable **OWASP managed ruleset** (free plan).
 - Enable **Cloudflare managed ruleset** (paid plans).
 - Bot Fight Mode → ON.

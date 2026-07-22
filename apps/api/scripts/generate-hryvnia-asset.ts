@@ -56,7 +56,9 @@ function buildSvg(): string {
     const vbWidth = Number(vbWidthRaw);
     const vbHeight = Number(vbHeightRaw);
     if (!vbWidth || !vbHeight) {
-        throw new Error(`hryvnia-symbol.svg: некоректний viewBox "${glyphViewBox}"`);
+        throw new Error(
+            `hryvnia-symbol.svg: некоректний viewBox "${glyphViewBox}"`
+        );
     }
 
     const glyphWidth = (GLYPH_HEIGHT * vbWidth) / vbHeight;

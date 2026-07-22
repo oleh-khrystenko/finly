@@ -39,10 +39,7 @@ jest.mock('sonner', () => ({
     },
 }));
 
-import {
-    QrPreviewInputSchema,
-    type QrPreviewInput,
-} from '@finly/types';
+import { QrPreviewInputSchema, type QrPreviewInput } from '@finly/types';
 
 import { QrLandingResult } from '../QrLandingResult';
 import { useQrLandingDraftStore } from '@/entities/qr-landing-draft';

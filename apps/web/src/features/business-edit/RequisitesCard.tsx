@@ -29,10 +29,7 @@ export default function RequisitesCard({ business, onSave }: Props) {
                 </div>
                 {hasTaxationFields(business) && (
                     <div className="py-6">
-                        <TaxationSection
-                            business={business}
-                            onSave={onSave}
-                        />
+                        <TaxationSection business={business} onSave={onSave} />
                     </div>
                 )}
                 <div className="pt-6">

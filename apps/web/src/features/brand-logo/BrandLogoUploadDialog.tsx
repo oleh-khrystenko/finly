@@ -224,7 +224,9 @@ export default function BrandLogoUploadDialog() {
                                     type="button"
                                     variant="outline"
                                     size="md"
-                                    onClick={() => fileInputRef.current?.click()}
+                                    onClick={() =>
+                                        fileInputRef.current?.click()
+                                    }
                                 >
                                     Оберіть файл
                                 </UiButton>
@@ -289,7 +291,8 @@ export default function BrandLogoUploadDialog() {
                                 />
                                 <div className="mt-1 flex items-center justify-between">
                                     <span className="text-muted-foreground text-sm">
-                                        Косметичний підпис, не впливає на платіж.
+                                        Косметичний підпис, не впливає на
+                                        платіж.
                                     </span>
                                     <span
                                         className={
@@ -382,8 +385,8 @@ function PaywallView({
     return (
         <div className="space-y-4">
             <p className="text-foreground text-base">
-                Логотип збережено. Кастомний бренд доступний на тарифі «Бренд», і
-                логотип застосується автоматично після оплати.
+                Логотип збережено. Кастомний бренд доступний на тарифі «Бренд»,
+                і логотип застосується автоматично після оплати.
             </p>
             <UiButton
                 type="button"

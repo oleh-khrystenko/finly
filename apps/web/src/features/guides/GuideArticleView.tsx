@@ -35,7 +35,9 @@ export function GuideArticleView({
         ? DATE_FMT.format(new Date(guide.dateModified))
         : null;
     // Pillar page links its clusters; a cluster page links back to its pillar.
-    const relatedHeading = guide.pillarSlug ? 'Читайте також' : 'У цьому розділі';
+    const relatedHeading = guide.pillarSlug
+        ? 'Читайте також'
+        : 'У цьому розділі';
 
     return (
         <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6 md:py-14 lg:px-8">
@@ -49,7 +51,10 @@ export function GuideArticleView({
                     </UiLink>
                     {pillar && (
                         <>
-                            <ChevronRight className="size-3.5" aria-hidden="true" />
+                            <ChevronRight
+                                className="size-3.5"
+                                aria-hidden="true"
+                            />
                             <UiLink
                                 as="link"
                                 href={`/guides/${pillar.slug}`}
@@ -82,7 +87,10 @@ export function GuideArticleView({
                 <AuthorCard authorId={guide.authorId} />
 
                 {related.length > 0 && (
-                    <section className="mt-10" aria-labelledby="related-heading">
+                    <section
+                        className="mt-10"
+                        aria-labelledby="related-heading"
+                    >
                         <h2
                             id="related-heading"
                             className="text-foreground text-base font-semibold tracking-tight"
@@ -91,7 +99,10 @@ export function GuideArticleView({
                         </h2>
                         <div className="mt-3 grid gap-3 sm:grid-cols-2">
                             {related.map((item) => (
-                                <GuideArticleCard key={item.slug} guide={item} />
+                                <GuideArticleCard
+                                    key={item.slug}
+                                    guide={item}
+                                />
                             ))}
                         </div>
                     </section>

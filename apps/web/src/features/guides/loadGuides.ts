@@ -54,9 +54,7 @@ export async function loadGuideView(
     );
     if (res.status === 404) return null;
     if (!res.ok) {
-        throw new Error(
-            `Guide fetch failed: ${res.status} ${res.statusText}`
-        );
+        throw new Error(`Guide fetch failed: ${res.status} ${res.statusText}`);
     }
     const json = (await res.json()) as { data: unknown };
     return PublicGuideViewSchema.parse(json.data);

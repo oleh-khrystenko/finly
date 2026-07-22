@@ -41,11 +41,13 @@ export const vatChoiceToBool = (v: VatChoice): boolean => v === 'yes';
  * Заголовок radio-card-секції залежить від системи — на Спрощеній-3 це питання
  * про **ставку**, на Загальній — про **факт реєстрації**.
  */
-export const VAT_CHOICE_SECTION_LABEL: Record<VatAllowedTaxationSystem, string> =
-    {
-        'simplified-3': 'Як ви платите ПДВ?',
-        general: 'Реєстрація платником ПДВ',
-    };
+export const VAT_CHOICE_SECTION_LABEL: Record<
+    VatAllowedTaxationSystem,
+    string
+> = {
+    'simplified-3': 'Як ви платите ПДВ?',
+    general: 'Реєстрація платником ПДВ',
+};
 
 const OPTIONS_BY_SYSTEM: Record<
     VatAllowedTaxationSystem,
@@ -83,7 +85,8 @@ const OPTIONS_BY_SYSTEM: Record<
 
 export const getVatChoiceOptions = (
     system: VatAllowedTaxationSystem
-): ReadonlyArray<UiRadioCardGroupOption<VatChoice>> => OPTIONS_BY_SYSTEM[system];
+): ReadonlyArray<UiRadioCardGroupOption<VatChoice>> =>
+    OPTIONS_BY_SYSTEM[system];
 
 /**
  * Type-guard для звуження `TaxationSystem` до `VatAllowedTaxationSystem` без

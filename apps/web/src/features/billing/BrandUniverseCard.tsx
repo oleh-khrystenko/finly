@@ -70,8 +70,7 @@ export default function BrandUniverseCard({
     // відхиляє BILLING_PAST_DUE — період минув, пропорційна доплата була б
     // нульовою і розширення діставалось би безкоштовно. Безкоштовні дії
     // (прикріплення у вільний слот, відкріплення, зменшення) лишаються.
-    const pastDue =
-        entitled && profile.status === SUBSCRIPTION_STATUS.PAST_DUE;
+    const pastDue = entitled && profile.status === SUBSCRIPTION_STATUS.PAST_DUE;
     const capacity = entitled ? profile.brand.capacity : 0;
     const attachedIds = entitled ? profile.brand.attachedBusinessIds : [];
     // Заплановане зменшення (діє з наступного списання, скасовне до межі циклу).

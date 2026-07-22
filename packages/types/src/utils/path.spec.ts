@@ -8,9 +8,7 @@ describe('validateSameOriginPath', () => {
 
         it('accepts a path with query string', () => {
             expect(
-                validateSameOriginPath(
-                    '/business/foo/account/bar?ref=invite',
-                ),
+                validateSameOriginPath('/business/foo/account/bar?ref=invite')
             ).toBe(true);
         });
 

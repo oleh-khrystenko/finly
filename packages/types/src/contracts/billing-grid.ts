@@ -90,9 +90,7 @@ export const billingGridSchema = z
     })
     .superRefine((grid, ctx) => {
         const sizes = grid.documents.tiers.map((t) => t.size);
-        const sorted = [...sizes].every(
-            (s, i) => i === 0 || sizes[i - 1] < s
-        );
+        const sorted = [...sizes].every((s, i) => i === 0 || sizes[i - 1] < s);
         if (!sorted) {
             ctx.addIssue({
                 code: z.ZodIssueCode.custom,
@@ -246,7 +244,9 @@ export function proratedShare(
 
 function assertNonNegativeInt(value: number, name: string): void {
     if (!Number.isInteger(value) || value < 0) {
-        throw new Error(`${name} must be a non-negative integer (got ${value})`);
+        throw new Error(
+            `${name} must be a non-negative integer (got ${value})`
+        );
     }
 }
 

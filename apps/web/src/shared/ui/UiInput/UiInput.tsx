@@ -51,7 +51,11 @@ const UiInput = forwardRef<HTMLInputElement, UiInputProps>((props, ref) => {
     const inputId = externalId ?? generatedId;
     const errorId = `${inputId}-error`;
     const descriptionId = `${inputId}-description`;
-    const describedBy = error ? errorId : description ? descriptionId : undefined;
+    const describedBy = error
+        ? errorId
+        : description
+          ? descriptionId
+          : undefined;
 
     const iconClass = composeClasses(
         'shrink-0 text-muted-foreground flex items-center justify-center',

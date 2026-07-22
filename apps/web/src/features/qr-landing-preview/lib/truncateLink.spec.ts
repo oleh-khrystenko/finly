@@ -2,9 +2,9 @@ import { truncateLink } from './truncateLink';
 
 describe('truncateLink', () => {
     it('обрізає host + 10 chars payload-у з ellipsis', () => {
-        expect(
-            truncateLink('https://qr.bank.gov.ua/eyJ0eXAiOiJKV1Qi')
-        ).toBe('https://qr.bank.gov.ua/eyJ0eXAiOi…');
+        expect(truncateLink('https://qr.bank.gov.ua/eyJ0eXAiOiJKV1Qi')).toBe(
+            'https://qr.bank.gov.ua/eyJ0eXAiOi…'
+        );
     });
 
     it('повертає link unchanged якщо немає slash після scheme (degenerate)', () => {
@@ -12,9 +12,9 @@ describe('truncateLink', () => {
     });
 
     it('кастомний payloadHeadChars контролює ширину', () => {
-        expect(
-            truncateLink('https://qr.bank.gov.ua/abcdefghij', 3)
-        ).toBe('https://qr.bank.gov.ua/abc…');
+        expect(truncateLink('https://qr.bank.gov.ua/abcdefghij', 3)).toBe(
+            'https://qr.bank.gov.ua/abc…'
+        );
     });
 
     it('host-only URL (no payload) — повертає as-is без зайвого ellipsis (short-circuit guard)', () => {
@@ -37,8 +37,8 @@ describe('truncateLink', () => {
         // бачить trusted host + початок payload-у. Якщо у Sprint 9+
         // потрібна точніша обробка multi-segment host-aliases — це окремий
         // task на parser-level (`new URL(...)` + path-split).
-        expect(
-            truncateLink('https://bank.gov.ua/qr/eyJ0eXAiOiJKV1Qi')
-        ).toBe('https://bank.gov.ua/qr/eyJ0eXA…');
+        expect(truncateLink('https://bank.gov.ua/qr/eyJ0eXAiOiJKV1Qi')).toBe(
+            'https://bank.gov.ua/qr/eyJ0eXA…'
+        );
     });
 });

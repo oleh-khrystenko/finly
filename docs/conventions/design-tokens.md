@@ -30,13 +30,13 @@ Feature / Page / Widget / shared/ui/
 
 **Нейтрали — inverted-paper схема на одній tone-axis (hue 65 ↔ 85), дзеркальна за темою.** Розподіл за **роллю токена**, не за L:
 
-| Роль                                                                                  | Light hue              | Dark hue             | L-поведінка                  |
-| ------------------------------------------------------------------------------------- | ---------------------- | -------------------- | ---------------------------- |
-| **Surfaces** (background, card, muted, secondary, accent, border, input)              | **85** (paper-cream)   | **65** (warm-brown)  | Світлі у light, темні у dark |
-| **Text** (foreground, muted-foreground, card/secondary/accent/muted-foreground)       | **65** (warm-brown)    | **85** (paper-cream) | Темні у light, світлі у dark |
-| **`primary-foreground`** (CTA-button label)                                           | **85** (paper, L≈0.99) | **65** (brown, L≈0.18) | Інверсія за темою          |
-| **`success-foreground`** (success-state label)                                        | **85** (paper, L≈0.99) | **65** (brown, L≈0.18) | Інверсія за темою          |
-| **`destructive-foreground`** (alarm-button label)                                     | **85** (paper, L≈0.99) | **85** (paper, L≈0.98) | **Завжди світлий**           |
+| Роль                                                                            | Light hue              | Dark hue               | L-поведінка                  |
+| ------------------------------------------------------------------------------- | ---------------------- | ---------------------- | ---------------------------- |
+| **Surfaces** (background, card, muted, secondary, accent, border, input)        | **85** (paper-cream)   | **65** (warm-brown)    | Світлі у light, темні у dark |
+| **Text** (foreground, muted-foreground, card/secondary/accent/muted-foreground) | **65** (warm-brown)    | **85** (paper-cream)   | Темні у light, світлі у dark |
+| **`primary-foreground`** (CTA-button label)                                     | **85** (paper, L≈0.99) | **65** (brown, L≈0.18) | Інверсія за темою            |
+| **`success-foreground`** (success-state label)                                  | **85** (paper, L≈0.99) | **65** (brown, L≈0.18) | Інверсія за темою            |
+| **`destructive-foreground`** (alarm-button label)                               | **85** (paper, L≈0.99) | **85** (paper, L≈0.98) | **Завжди світлий**           |
 
 Chroma нейтралів ≤ 0.018 — ледь-помітний tint без cafe-yellow агресії.
 
@@ -44,21 +44,21 @@ Chroma нейтралів ≤ 0.018 — ледь-помітний tint без ca
 
 **Акцентні кольори насичені:** `primary` (emerald hue 158), `destructive` (теракот hue 25), `success` (pure-green hue 145), `warning` (amber hue 75).
 
-| Група           | Tailwind-клас                                                       | CSS-змінна                                            | Призначення                                 |
-| --------------- | ------------------------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------- |
-| **Background**  | `bg-background`                                                     | `var(--background)`                                   | Фон сторінки                                |
-| **Foreground**  | `text-foreground`, `bg-foreground`                                  | `var(--foreground)`                                   | Основний текст, інвертовані елементи        |
-| **Card**        | `bg-card`, `text-card-foreground`                                   | `var(--card)`, `var(--card-foreground)`               | Фон карток, текст на картках                |
-| **Primary**     | `bg-primary`, `text-primary`, `text-primary-foreground`             | `var(--primary)`, `var(--primary-foreground)`         | CTA кнопки, акценти                         |
-| **Secondary**   | `bg-secondary`, `text-secondary-foreground`                         | `var(--secondary)`, `var(--secondary-foreground)`     | Subtle surfaces (icon badges, hover states) |
-| **Muted**       | `bg-muted`, `text-muted-foreground`                                 | `var(--muted)`, `var(--muted-foreground)`             | Muted surfaces, другорядний текст           |
-| **Accent**      | `bg-accent`, `text-accent-foreground`                               | `var(--accent)`, `var(--accent-foreground)`           | Accent surfaces (hover states)              |
-| **Destructive** | `bg-destructive`, `text-destructive`, `text-destructive-foreground` | `var(--destructive)`, `var(--destructive-foreground)` | Помилки, деструктивні дії                   |
-| **Border**      | `border-border`                                                     | `var(--border)`                                       | Межі, роздільники                           |
-| **Input**       | `bg-input`, `border-input`                                          | `var(--input)`                                        | Input borders/bg                            |
-| **Ring**        | `ring-ring`                                                         | `var(--ring)`                                         | Focus rings                                 |
+| Група           | Tailwind-клас                                                       | CSS-змінна                                            | Призначення                                               |
+| --------------- | ------------------------------------------------------------------- | ----------------------------------------------------- | --------------------------------------------------------- |
+| **Background**  | `bg-background`                                                     | `var(--background)`                                   | Фон сторінки                                              |
+| **Foreground**  | `text-foreground`, `bg-foreground`                                  | `var(--foreground)`                                   | Основний текст, інвертовані елементи                      |
+| **Card**        | `bg-card`, `text-card-foreground`                                   | `var(--card)`, `var(--card-foreground)`               | Фон карток, текст на картках                              |
+| **Primary**     | `bg-primary`, `text-primary`, `text-primary-foreground`             | `var(--primary)`, `var(--primary-foreground)`         | CTA кнопки, акценти                                       |
+| **Secondary**   | `bg-secondary`, `text-secondary-foreground`                         | `var(--secondary)`, `var(--secondary-foreground)`     | Subtle surfaces (icon badges, hover states)               |
+| **Muted**       | `bg-muted`, `text-muted-foreground`                                 | `var(--muted)`, `var(--muted-foreground)`             | Muted surfaces, другорядний текст                         |
+| **Accent**      | `bg-accent`, `text-accent-foreground`                               | `var(--accent)`, `var(--accent-foreground)`           | Accent surfaces (hover states)                            |
+| **Destructive** | `bg-destructive`, `text-destructive`, `text-destructive-foreground` | `var(--destructive)`, `var(--destructive-foreground)` | Помилки, деструктивні дії                                 |
+| **Border**      | `border-border`                                                     | `var(--border)`                                       | Межі, роздільники                                         |
+| **Input**       | `bg-input`, `border-input`                                          | `var(--input)`                                        | Input borders/bg                                          |
+| **Ring**        | `ring-ring`                                                         | `var(--ring)`                                         | Focus rings                                               |
 | **Success**     | `text-success`, `bg-success`, `text-success-foreground`             | `var(--success)`, `var(--success-foreground)`         | Успішні стани, toast notifications, label на success-fill |
-| **Warning**     | `text-warning`, `bg-warning`                                        | `var(--warning)`                                      | Попередження, toast notifications           |
+| **Warning**     | `text-warning`, `bg-warning`                                        | `var(--warning)`                                      | Попередження, toast notifications                         |
 
 **Utility tokens:**
 
@@ -68,16 +68,16 @@ Chroma нейтралів ≤ 0.018 — ледь-помітний tint без ca
 
 **Theme-invariant tokens** — мають однакове значення у `:root` і `.dark`, бо описують фізичний об'єкт ілюстрації, а не елемент UI. Не плутати з surfaces/text-токенами вище — ті інвертуються за темою.
 
-| Токен            | Значення                | Tailwind-клас       | Призначення                                                                                          |
-| ---------------- | ----------------------- | ------------------- | ---------------------------------------------------------------------------------------------------- |
-| `--device-frame` | `oklch(0.1 0.008 65)`   | `bg-device-frame`   | Корпус device-mockup-у (рамка/Dynamic Island PhoneMockup). Завжди near-black — фізичний space-gray. |
+| Токен            | Значення              | Tailwind-клас     | Призначення                                                                                         |
+| ---------------- | --------------------- | ----------------- | --------------------------------------------------------------------------------------------------- |
+| `--device-frame` | `oklch(0.1 0.008 65)` | `bg-device-frame` | Корпус device-mockup-у (рамка/Dynamic Island PhoneMockup). Завжди near-black — фізичний space-gray. |
 
 **Brand-plate tokens** — світла підложка під завантажений логотип отримувача на pay-сторінках (`UiBrandLogo`). Лого зроблене під білий фон QR (темний друк на прозорому), тож йому ЗАВЖДИ потрібна світла поверхня незалежно від UI-теми. На відміну від theme-invariant вище, значення **не однакове** у двох темах: у dark підложка приглушеніша (L=0.94), щоб світла картка не била по очах. Це власна категорія — світлий surface в обох темах, з різним L.
 
-| Токен                  | Light                   | Dark                    | Tailwind-клас             | Призначення                                  |
-| ---------------------- | ----------------------- | ----------------------- | ------------------------- | -------------------------------------------- |
-| `--brand-plate`        | `oklch(0.98 0.005 85)`  | `oklch(0.94 0.006 85)`  | `bg-brand-plate`          | Підложка під лого отримувача                  |
-| `--brand-plate-border` | `oklch(0.95 0.008 85)`  | `oklch(0.88 0.006 85)`  | `border-brand-plate-border` | Межа підложки (ледь помітна light, чітка dark) |
+| Токен                      | Light                  | Dark                   | Tailwind-клас                 | Призначення                                                    |
+| -------------------------- | ---------------------- | ---------------------- | ----------------------------- | -------------------------------------------------------------- |
+| `--brand-plate`            | `oklch(0.98 0.005 85)` | `oklch(0.94 0.006 85)` | `bg-brand-plate`              | Підложка під лого отримувача                                   |
+| `--brand-plate-border`     | `oklch(0.95 0.008 85)` | `oklch(0.88 0.006 85)` | `border-brand-plate-border`   | Межа підложки (ледь помітна light, чітка dark)                 |
 | `--brand-plate-foreground` | `oklch(0.2 0.018 65)`  | `oklch(0.2 0.018 65)`  | `text-brand-plate-foreground` | Підпис бренду на плашці (тема-незалежний, темний у обох темах) |
 
 ## Rules
@@ -114,14 +114,14 @@ Chroma нейтралів ≤ 0.018 — ледь-помітний tint без ca
 
 Системна шкала розмірів. Беремо розмір **за роллю елемента**, не «на око»:
 
-| Токен               | px    | Призначення                                                       |
-| ------------------- | ----- | ----------------------------------------------------------------- |
+| Токен               | px    | Призначення                                                             |
+| ------------------- | ----- | ----------------------------------------------------------------------- |
 | `text-sm`           | 14    | **підлога** — хінти/описи, помилки, лейбли над інпутом, вторинний текст |
-| `text-base`         | 16    | body, абзаци, лейбли read-view (key-value рядки)                  |
-| `text-lg`           | 18    | значення поля (read-view), lead                                   |
-| `text-2xl`          | 24    | заголовок секції (h2)                                             |
-| `text-3xl → md:4xl` | 30→36 | заголовок сторінки (h1)                                           |
-| `text-xs`           | 12    | **резерв** — лише рідкісні щільні блоки, не за замовчуванням       |
+| `text-base`         | 16    | body, абзаци, лейбли read-view (key-value рядки)                        |
+| `text-lg`           | 18    | значення поля (read-view), lead                                         |
+| `text-2xl`          | 24    | заголовок секції (h2)                                                   |
+| `text-3xl → md:4xl` | 30→36 | заголовок сторінки (h1)                                                 |
+| `text-xs`           | 12    | **резерв** — лише рідкісні щільні блоки, не за замовчуванням            |
 
 **Правила:**
 
@@ -149,12 +149,12 @@ border-primary/30  -- замість border-blue-200
 
 ## Винятки
 
-| Контекст                              | Що дозволено                             | Причина                                                                     |
-| ------------------------------------- | ---------------------------------------- | --------------------------------------------------------------------------- |
-| `shared/styles/`                      | oklch-значення в CSS-змінних             | Тут визначаються самі токени                                                |
-| `shared/icons/`                       | Hex-значення у SVG `fill`/`stroke`       | Брендові іконки (Google, Stripe) з офіційними кольорами                     |
-| `white` / `black`                     | `text-white`, `bg-black/50`              | Універсальні константи (контрастний текст, overlay backdrop)                |
-| Inline `style` для динамічних значень | `style={{ backgroundColor: userColor }}` | Runtime-значення, що не можуть бути токеном (user avatar color, chart data) |
+| Контекст                                       | Що дозволено                             | Причина                                                                                                                                                                    |
+| ---------------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `shared/styles/`                               | oklch-значення в CSS-змінних             | Тут визначаються самі токени                                                                                                                                               |
+| `shared/icons/`                                | Hex-значення у SVG `fill`/`stroke`       | Брендові іконки (Google, Stripe) з офіційними кольорами                                                                                                                    |
+| `white` / `black`                              | `text-white`, `bg-black/50`              | Універсальні константи (контрастний текст, overlay backdrop)                                                                                                               |
+| Inline `style` для динамічних значень          | `style={{ backgroundColor: userColor }}` | Runtime-значення, що не можуть бути токеном (user avatar color, chart data)                                                                                                |
 | Метадані (`viewport.themeColor`, web-манифест) | Літерал з `shared/styles/themeColors.ts` | Платформа читає ці значення до CSS, тож `var(--*)` неможливий. Літерали живуть в одному файлі під `shared/styles/` як sRGB-проєкція `--background` — не розсипані хардкоди |
 
 ## Scope

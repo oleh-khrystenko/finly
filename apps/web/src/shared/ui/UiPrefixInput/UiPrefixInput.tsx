@@ -31,7 +31,10 @@ const UiPrefixInput = forwardRef<HTMLInputElement, UiPrefixInputProps>(
         );
         return (
             <div>
-                <div className={wrapperClass} data-state={error ? 'error' : undefined}>
+                <div
+                    className={wrapperClass}
+                    data-state={error ? 'error' : undefined}
+                >
                     <span
                         aria-hidden
                         className="bg-secondary text-muted-foreground flex shrink-0 items-center px-3 py-2 font-mono text-base select-none"

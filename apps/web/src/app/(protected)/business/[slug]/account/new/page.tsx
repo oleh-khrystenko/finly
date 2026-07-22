@@ -4,10 +4,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { AxiosError } from 'axios';
-import {
-    getApiMessage,
-    getBusinessBySlug,
-} from '@/shared/api';
+import { getApiMessage, getBusinessBySlug } from '@/shared/api';
 import type { BusinessWithCounts } from '@finly/types';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
 import UiPageHeading from '@/shared/ui/UiPageHeading';

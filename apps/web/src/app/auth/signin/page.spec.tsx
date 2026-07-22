@@ -1,5 +1,11 @@
 import React from 'react';
-import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import {
+    act,
+    render,
+    screen,
+    fireEvent,
+    waitFor,
+} from '@testing-library/react';
 import { AxiosError } from 'axios';
 
 jest.mock('@/shared/config', () => ({
@@ -272,8 +278,7 @@ describe('SigninPage — sendMagicLink call-sites (Sprint 10)', () => {
         await submitEmailWithTerms('returning@user.com');
 
         // На password-step тиснемо submit з порожнім паролем.
-        const passwordInput =
-            screen.getByPlaceholderText('Введіть пароль');
+        const passwordInput = screen.getByPlaceholderText('Введіть пароль');
         fireEvent.change(passwordInput, { target: { value: 'wrong' } });
         fireEvent.click(screen.getByRole('button', { name: /^Увійти$/ }));
 

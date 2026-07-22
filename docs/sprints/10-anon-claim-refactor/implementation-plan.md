@@ -22,6 +22,7 @@
 ## Епік 10.0 — Shared types (`@finly/types`)
 
 ### Скоуп
+
 - Новий `packages/types/src/contracts/landing-draft.ts`:
     - `LandingDraftSchema = QrPreviewInputSchema.pick({ receiverName, iban, taxId, purpose })`.
     - `mapLandingDraftToCreateBusinessRequest(draft, claimIdempotencyKey): CreateIndividualBusinessRequest`.
@@ -36,6 +37,7 @@
     - `business.spec.ts` оновити — idempotency-key optional.
 
 ### Gate-критерій
+
 - `pnpm --filter @finly/types build` зелений.
 - `pnpm --filter @finly/types test` зелений.
 - Downstream `api`/`web` build навмисно ламаються — OK.
@@ -45,6 +47,7 @@
 ## Епік 10.1 — Backend (`apps/api`)
 
 ### Скоуп
+
 - Новий `LandingClaimModule` + `LandingClaimService.attemptLandingClaim(ctx, draft, claimIdempotencyKey)` з 3-state response (`success` | `business-failed` | `account-failed`).
 - `BusinessesService.create(userId, dto, isBookkeeperMode)` extension — pre-check на `claimIdempotencyKey` + 11000-replay через partial-unique-index `(ownerId, claimIdempotencyKey)`.
 - `Business`-schema + `claimIdempotencyKey?: string` + sparse-compound-unique-index з `partialFilterExpression: { claimIdempotencyKey: { $type: 'string' } }`.
@@ -56,6 +59,7 @@
 - Specs: 3 кейси `BusinessesService.create` + 5 кейсів `sendMagicLink` + 4 кейси `verifyMagicLink` + 3 кейси `stampAcceptedTerms` + 3 кейси `LandingClaimService`.
 
 ### Gate-критерій
+
 - `pnpm --filter api build` зелений.
 - `pnpm --filter api test` зелений.
 - `pnpm --filter api -- jest ...` цільові spec-и зелені.
@@ -66,6 +70,7 @@
 ## Епік 10.2 — Frontend (`apps/web`)
 
 ### Скоуп
+
 - Новий `shared/lib/useHasHydrated.ts` — generic move з `features/qr-landing-preview/lib/`; Sprint 8 callsite `QrLandingBlock` оновити на новий signature.
 - `qrLandingDraftStore`:
     - Granular `intent`-state-machine (`'claim-business-pending' | 'claim-account-pending' | 'claim-failed-business' | 'claim-failed-account'`).
@@ -87,11 +92,13 @@
 - Specs: signin 6 + verify 6 + AuthGuard 3 + useHasHydrated 3 + `useClaimLandingDraft` regression.
 
 ### Gate-критерій
+
 - `pnpm --filter web build` зелений.
 - `pnpm --filter web test` зелений.
 - `pnpm lint` без нових warnings.
 
 ### Split-trigger
+
 Якщо коміт-diff перевищує ~20 файлів — розділити на 10.2a (store + hooks + api + useHasHydrated) і 10.2b (pages + signin + verify + AuthGuard + CTA-revert). За дефолтом — один коміт.
 
 ---
@@ -99,12 +106,14 @@
 ## Епік 10.3 — Docs
 
 ### Скоуп
+
 - `CLAUDE.md`:
     - Module Dependency Map: + `LandingClaimModule` (depends on `BusinessesModule` + `AccountsModule`, imported by `AuthModule`).
     - Known Complexities: 4 нових пункти — Sprint 10 claim-flow architecture, magic-link dedup × landingDraft overwrite з `KEEPTTL`, `Business.claimIdempotencyKey` partial-unique-index, terms-pre-stamp у verifyMagicLink.
 - `docs/manual-checks/README.md`: CLAIM-1..7 UAT-пункти.
 
 ### Gate-критерій
+
 - Documentation review pass (manual).
 
 ---

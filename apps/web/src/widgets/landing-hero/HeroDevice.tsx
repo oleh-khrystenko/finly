@@ -109,10 +109,22 @@ function buildScreenMatrix(boxW: number, boxH: number): string {
     for (let i = 0; i < 9; i += 1) t[i] /= t[8];
     // column-major 4×4 з 3×3 гомографії (Z-вісь — тотожна).
     const m = [
-        t[0], t[3], 0, t[6],
-        t[1], t[4], 0, t[7],
-        0, 0, 1, 0,
-        t[2], t[5], 0, t[8],
+        t[0],
+        t[3],
+        0,
+        t[6],
+        t[1],
+        t[4],
+        0,
+        t[7],
+        0,
+        0,
+        1,
+        0,
+        t[2],
+        t[5],
+        0,
+        t[8],
     ];
     return `matrix3d(${m.map((n) => n.toFixed(6)).join(',')})`;
 }
@@ -141,7 +153,7 @@ export function HeroDevice() {
     }, []);
 
     return (
-        <div className="relative right-0 w-full lg:absolute lg:top-0 lg:-right-[20%] xl:-right-[10%] 2xl:right-0 lg:aspect-4/3 lg:h-full lg:w-auto">
+        <div className="relative right-0 w-full lg:absolute lg:top-0 lg:-right-[20%] lg:aspect-4/3 lg:h-full lg:w-auto xl:-right-[10%] 2xl:right-0">
             {/* Вікно. На мобільному — портретний кадр 3:4, що наближає телефон
                 майже на весь екран і клипає поля; з sm — повне фото 4:3. Маска-
                 фейд живе тут, бо краї мають танути на видимих межах вікна (на
@@ -265,7 +277,7 @@ function ScreenContent() {
                 <p className="text-[13px] font-medium tracking-[0.2em] text-white/55 uppercase">
                     До сплати
                 </p>
-                <p className="mt-2 text-[42px] leading-none font-bold tracking-tight tabular-nums text-white">
+                <p className="mt-2 text-[42px] leading-none font-bold tracking-tight text-white tabular-nums">
                     1 500,00
                     <span className="ml-1.5 text-2xl font-semibold text-white/50">
                         грн

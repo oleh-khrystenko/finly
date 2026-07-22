@@ -51,7 +51,9 @@ export default function EditableBusinessName({ name, onSave }: Props) {
             setEditing(false);
             setError(undefined);
         } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : 'Не вдалося зберегти');
+            setError(
+                err instanceof Error ? err.message : 'Не вдалося зберегти'
+            );
         } finally {
             setSaving(false);
         }

@@ -31,7 +31,8 @@ describe('bankCodeFromIban', () => {
     // Конструюємо валідно-формат-овий UA IBAN з конкретним МФО на позиціях 5-10
     // (1-indexed). Checksum-цифри `21` тут не валідні структурно — це OK, бо
     // `bankCodeFromIban` не робить checksum-перевірки (це job `ibanZod`).
-    const ibanWithMfo = (mfo: string): string => `UA21${mfo}0000026007233566001`;
+    const ibanWithMfo = (mfo: string): string =>
+        `UA21${mfo}0000026007233566001`;
 
     it.each(Object.entries(BANK_MFO_MAP))(
         'резолвить МФО %s → %s',

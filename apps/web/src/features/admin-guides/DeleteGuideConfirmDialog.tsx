@@ -5,11 +5,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 import { UiConfirmDialog } from '@/shared/ui/UiConfirmDialog';
-import {
-    deleteGuide,
-    extractApiErrorCode,
-    getApiMessage,
-} from '@/shared/api';
+import { deleteGuide, extractApiErrorCode, getApiMessage } from '@/shared/api';
 
 import { useDeleteGuideDialogStore } from './deleteGuideDialogStore';
 

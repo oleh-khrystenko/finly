@@ -32,7 +32,9 @@ interface Props {
  */
 export default function ValidUntilSection({ invoice, onSave }: Props) {
     const [editing, setEditing] = useState(false);
-    const [draft, setDraft] = useState<ValidUntilDraft>(EMPTY_VALID_UNTIL_DRAFT);
+    const [draft, setDraft] = useState<ValidUntilDraft>(
+        EMPTY_VALID_UNTIL_DRAFT
+    );
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState<string | undefined>();
 

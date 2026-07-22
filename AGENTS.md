@@ -4,15 +4,15 @@
 
 ## Tech Stack
 
-| Layer | Technology | Version / Role |
-| ----- | ---------- | -------------- |
-| Core | TypeScript, Node.js, pnpm, Turborepo | TS 5.9, Node 20, pnpm 10 workspaces |
-| Web | Next.js, React, Zustand, Tailwind CSS, next-themes | Next 16 App Router, React 19, FSD, single-locale UA |
-| API | NestJS, Passport, nestjs-zod, @nestjs/throttler/schedule | Nest 11, JWT + Google OAuth, global ZodValidationPipe |
-| Data | MongoDB, Mongoose, Redis, ioredis | Mongoose 8 documents, Mongo transactions, Redis locks/rate/session state |
-| Product Engines | @finly/types, qrcode, sharp, opentype.js | Zod contracts, NBU payload 002/003, branded PNG QR rendering |
-| Integrations | WayForPay, Resend, Anthropic, Cloudflare R2 | billing, email, public help chat, media storage |
-| Testing | Jest, Supertest, MongoMemoryServer, jsdom | API unit/e2e, web unit/component, shared contract tests |
+| Layer           | Technology                                               | Version / Role                                                           |
+| --------------- | -------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Core            | TypeScript, Node.js, pnpm, Turborepo                     | TS 5.9, Node 20, pnpm 10 workspaces                                      |
+| Web             | Next.js, React, Zustand, Tailwind CSS, next-themes       | Next 16 App Router, React 19, FSD, single-locale UA                      |
+| API             | NestJS, Passport, nestjs-zod, @nestjs/throttler/schedule | Nest 11, JWT + Google OAuth, global ZodValidationPipe                    |
+| Data            | MongoDB, Mongoose, Redis, ioredis                        | Mongoose 8 documents, Mongo transactions, Redis locks/rate/session state |
+| Product Engines | @finly/types, qrcode, sharp, opentype.js                 | Zod contracts, NBU payload 002/003, branded PNG QR rendering             |
+| Integrations    | WayForPay, Resend, Anthropic, Cloudflare R2              | billing, email, public help chat, media storage                          |
+| Testing         | Jest, Supertest, MongoMemoryServer, jsdom                | API unit/e2e, web unit/component, shared contract tests                  |
 
 ## Architecture Overview
 

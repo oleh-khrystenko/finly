@@ -4,28 +4,28 @@ First production VPS bring-up of Finly. Executed by Claude Code CLI running on t
 
 ## System state
 
-| Item | Value |
-|---|---|
-| Hostname | `finly-prod-1` |
-| Public IPv4 | `51.68.172.94` |
-| Provider | OVH (VPS-2, 8 GB / 2 vCPU / 80 GB SSD) |
-| OS | Ubuntu 24.04 LTS |
-| Kernel | `6.8.0-111` running; `6.8.0-117` queued for next reboot (auto-reboot Sunday 04:00 UTC) |
-| Uptime at report | 9h 53m |
-| Load avg | 1.17 (build/migration artefacts settling) |
-| Disk | 13 / 72 GB used (18%) |
-| Swap | 4 GB active (~268 KiB in use) |
-| Services active | `ssh`, `ufw`, `fail2ban`, `docker`, `caddy`, `sysstat` |
-| Containers | `finly-api-1`, `finly-web-1`, `finly-redis-1` — all `Up 32m` |
+| Item             | Value                                                                                  |
+| ---------------- | -------------------------------------------------------------------------------------- |
+| Hostname         | `finly-prod-1`                                                                         |
+| Public IPv4      | `51.68.172.94`                                                                         |
+| Provider         | OVH (VPS-2, 8 GB / 2 vCPU / 80 GB SSD)                                                 |
+| OS               | Ubuntu 24.04 LTS                                                                       |
+| Kernel           | `6.8.0-111` running; `6.8.0-117` queued for next reboot (auto-reboot Sunday 04:00 UTC) |
+| Uptime at report | 9h 53m                                                                                 |
+| Load avg         | 1.17 (build/migration artefacts settling)                                              |
+| Disk             | 13 / 72 GB used (18%)                                                                  |
+| Swap             | 4 GB active (~268 KiB in use)                                                          |
+| Services active  | `ssh`, `ufw`, `fail2ban`, `docker`, `caddy`, `sysstat`                                 |
+| Containers       | `finly-api-1`, `finly-web-1`, `finly-redis-1` — all `Up 32m`                           |
 
 ## Network end-to-end (через Cloudflare)
 
-| URL | Status | Notes |
-|---|---|---|
-| `https://finly.com.ua/` | `200` | HSTS, X-Frame-Options DENY, X-Content-Type-Options nosniff, `cf-ray` FRA |
-| `https://pay.finly.com.ua/` | `404` | Host-isolation invariant (proxy.ts Branch B) — очікувано |
-| `https://www.finly.com.ua/` | `301` → `https://finly.com.ua/` | Caddy `www.` block |
-| `https://finly.com.ua/api/health` | `200` `{"status":"ok","environment":"production"}` | Cabinet API healthcheck through Caddy reverse-proxy |
+| URL                               | Status                                             | Notes                                                                    |
+| --------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------ |
+| `https://finly.com.ua/`           | `200`                                              | HSTS, X-Frame-Options DENY, X-Content-Type-Options nosniff, `cf-ray` FRA |
+| `https://pay.finly.com.ua/`       | `404`                                              | Host-isolation invariant (proxy.ts Branch B) — очікувано                 |
+| `https://www.finly.com.ua/`       | `301` → `https://finly.com.ua/`                    | Caddy `www.` block                                                       |
+| `https://finly.com.ua/api/health` | `200` `{"status":"ok","environment":"production"}` | Cabinet API healthcheck through Caddy reverse-proxy                      |
 
 ## Security
 
@@ -36,16 +36,16 @@ First production VPS bring-up of Finly. Executed by Claude Code CLI running on t
 
 ## Backups
 
-| Item | Value |
-|---|---|
-| Tool | `restic` 0.16.4 |
-| Repo | `s3:https://<R2>.r2.cloudflarestorage.com/finly-backups` |
-| Repo id | `5bf4057ac5` |
-| First snapshot | `c7b39528` — 54 files / 55 KiB (configs + mongodump 5448 B + redis dir) |
-| Cron | `15 3 * * *` daily |
-| Retention | 7 daily / 4 weekly / 6 monthly |
-| Integrity check | Sunday `restic check --read-data-subset=5%` |
-| Password storage | `/root/.restic-password` (on VPS) + user's password manager (off-VPS) |
+| Item             | Value                                                                   |
+| ---------------- | ----------------------------------------------------------------------- |
+| Tool             | `restic` 0.16.4                                                         |
+| Repo             | `s3:https://<R2>.r2.cloudflarestorage.com/finly-backups`                |
+| Repo id          | `5bf4057ac5`                                                            |
+| First snapshot   | `c7b39528` — 54 files / 55 KiB (configs + mongodump 5448 B + redis dir) |
+| Cron             | `15 3 * * *` daily                                                      |
+| Retention        | 7 daily / 4 weekly / 6 monthly                                          |
+| Integrity check  | Sunday `restic check --read-data-subset=5%`                             |
+| Password storage | `/root/.restic-password` (on VPS) + user's password manager (off-VPS)   |
 
 ## Pending — browser smoke tests + ops follow-up
 
@@ -70,7 +70,7 @@ First production VPS bring-up of Finly. Executed by Claude Code CLI running on t
 
 ### Pre-existing sshd hardening file
 
-При Phase B було знайдено `/etc/ssh/sshd_config.d/01-finly-hardening.conf` (subset hardening, що ми збиралися ставити). Джерело невідоме — OVH template чи ранній manual ssh. Runbook поклав `99-hardening.conf` зверху; lexical order у `sshd_config.d` гарантує що 99 override-ує 01. Конфлікту немає, але **варто перевірити **`01-finly-hardening.conf` під час наступного maintenance**.
+При Phase B було знайдено `/etc/ssh/sshd_config.d/01-finly-hardening.conf` (subset hardening, що ми збиралися ставити). Джерело невідоме — OVH template чи ранній manual ssh. Runbook поклав `99-hardening.conf` зверху; lexical order у `sshd_config.d` гарантує що 99 override-ує 01. Конфлікту немає, але **варто перевірити **`01-finly-hardening.conf` під час наступного maintenance\*\*.
 
 ### Tooling deviations from runbook
 

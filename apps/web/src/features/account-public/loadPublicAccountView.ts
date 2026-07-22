@@ -1,7 +1,4 @@
-import {
-    PublicAccountViewSchema,
-    type PublicAccountView,
-} from '@finly/types';
+import { PublicAccountViewSchema, type PublicAccountView } from '@finly/types';
 
 /**
  * Sprint 9 §SP-4 — server-side fetch публічного view per-account вивіски для

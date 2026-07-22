@@ -6,13 +6,14 @@ Goal: notice an outage before customers do, and have the right commands ready wh
 
 Pick one. All have free tiers.
 
-| Service | Notes |
-|---|---|
-| [UptimeRobot](https://uptimerobot.com/) | Easy, dumb, reliable. 50 monitors free, 5-min interval. |
-| [Healthchecks.io](https://healthchecks.io/) | Best for *cron monitoring* (alerts when a job fails to run). 20 checks free. |
-| [BetterStack / Better Uptime](https://betterstack.com/) | Nicer UI, on-call rotations on paid tier. |
+| Service                                                 | Notes                                                                        |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| [UptimeRobot](https://uptimerobot.com/)                 | Easy, dumb, reliable. 50 monitors free, 5-min interval.                      |
+| [Healthchecks.io](https://healthchecks.io/)             | Best for _cron monitoring_ (alerts when a job fails to run). 20 checks free. |
+| [BetterStack / Better Uptime](https://betterstack.com/) | Nicer UI, on-call rotations on paid tier.                                    |
 
 Add at minimum:
+
 - HTTPS check on `https://<DOMAIN>/` — alert on non-200 or > 5 s.
 - HTTPS check on the app's `/api/health` if exposed — same.
 - A "passive" Healthchecks.io ping in the nightly backup cron (see `08-backups.md`) — alerts when the backup fails to run.
@@ -22,33 +23,39 @@ These run from outside your VPS, so they catch the failure modes your local chec
 ## 2. Built-in commands you'll actually use
 
 **Is the site up?**
+
 ```bash
 curl -sS -o /dev/null -w "%{http_code} ttfb=%{time_starttransfer}s total=%{time_total}s\n" -L --max-time 8 https://<DOMAIN>/
 ```
 
 **Containers healthy?**
+
 ```bash
 docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 docker compose -f /opt/<PROJECT>/compose.yaml ps
 ```
 
 **Recent app logs?**
+
 ```bash
 docker compose -f /opt/<PROJECT>/compose.yaml logs --tail=200 -f
 docker logs -f --tail=200 <PROJECT>-api-1
 ```
 
 **Caddy access log (per-request)?**
+
 ```bash
 sudo tail -f /var/log/caddy/<PROJECT>.log | jq -c '{ts, status, request: .request.uri, ms: (.duration*1000|round)}'
 ```
 
 **System errors (last hour)?**
+
 ```bash
 sudo journalctl -p err --since '1 hour ago' --no-pager
 ```
 
 **Resource snapshot?**
+
 ```bash
 htop                     # interactive
 top -bn1 | head -20      # batch
@@ -58,6 +65,7 @@ docker stats --no-stream
 ```
 
 **fail2ban activity?**
+
 ```bash
 sudo fail2ban-client status sshd
 sudo fail2ban-client banned
@@ -87,15 +95,15 @@ To save costs and noise on a tiny VPS, this is optional. The outside-in uptime c
 
 ## 5. Logs that matter
 
-| Path | What's there |
-|---|---|
+| Path                           | What's there                                                          |
+| ------------------------------ | --------------------------------------------------------------------- |
 | `/var/log/caddy/<PROJECT>.log` | One line per HTTP request (Caddy structured JSON). Rotated 10 MB × 5. |
-| `journalctl -u caddy` | Caddy startup / config errors. |
-| `journalctl -u docker` | Docker daemon events; OOM kills. |
-| `docker logs <name>` | App stdout/stderr per container. |
-| `/var/log/auth.log` | SSH attempts (mostly fail2ban-actioned brute force noise). |
-| `/var/log/cyanship-backup.log` | Output of the nightly backup script (see `08-backups.md`). |
-| `journalctl -k --since today` | Kernel messages, including `[UFW BLOCK]` (firewall drops). |
+| `journalctl -u caddy`          | Caddy startup / config errors.                                        |
+| `journalctl -u docker`         | Docker daemon events; OOM kills.                                      |
+| `docker logs <name>`           | App stdout/stderr per container.                                      |
+| `/var/log/auth.log`            | SSH attempts (mostly fail2ban-actioned brute force noise).            |
+| `/var/log/cyanship-backup.log` | Output of the nightly backup script (see `08-backups.md`).            |
+| `journalctl -k --since today`  | Kernel messages, including `[UFW BLOCK]` (firewall drops).            |
 
 ## 6. Verification
 

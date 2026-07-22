@@ -54,71 +54,77 @@ Use `compose.yaml`. New repos should ship that name. If you inherit a `docker-co
 
 ## 4. Healthchecks
 
-Without healthchecks `restart: unless-stopped` only catches *crashes*, not *hangs*. Add per-service blocks. Example for the cyanship.com stack:
+Without healthchecks `restart: unless-stopped` only catches _crashes_, not _hangs_. Add per-service blocks. Example for the cyanship.com stack:
 
 ```yaml
 services:
-  redis:
-    image: redis:7-alpine
-    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
-    volumes:
-      - redis_data:/data
-    networks:
-      - internal
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
-      start_period: 5s
-    restart: unless-stopped
+    redis:
+        image: redis:7-alpine
+        command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+        volumes:
+            - redis_data:/data
+        networks:
+            - internal
+        healthcheck:
+            test: ['CMD', 'redis-cli', 'ping']
+            interval: 30s
+            timeout: 3s
+            retries: 3
+            start_period: 5s
+        restart: unless-stopped
 
-  api:
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
-    env_file: .env
-    depends_on:
-      redis:
-        condition: service_healthy
-    networks:
-      - internal
-    healthcheck:
-      test: ["CMD-SHELL", "wget --spider -q http://127.0.0.1:${API_PORT}/api/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-    restart: unless-stopped
+    api:
+        build:
+            context: .
+            dockerfile: apps/api/Dockerfile
+        env_file: .env
+        depends_on:
+            redis:
+                condition: service_healthy
+        networks:
+            - internal
+        healthcheck:
+            test:
+                [
+                    'CMD-SHELL',
+                    'wget --spider -q http://127.0.0.1:${API_PORT}/api/health',
+                ]
+            interval: 30s
+            timeout: 5s
+            retries: 3
+            start_period: 30s
+        restart: unless-stopped
 
-  web:
-    build:
-      context: .
-      dockerfile: apps/web/Dockerfile
-    env_file: .env
-    depends_on:
-      api:
-        condition: service_healthy
-    ports:
-      - "127.0.0.1:3000:3000"
-    networks:
-      - internal
-    healthcheck:
-      test: ["CMD-SHELL", "wget --spider -q http://$$HOSTNAME:${WEB_PORT}/"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 60s
-    restart: unless-stopped
+    web:
+        build:
+            context: .
+            dockerfile: apps/web/Dockerfile
+        env_file: .env
+        depends_on:
+            api:
+                condition: service_healthy
+        ports:
+            - '127.0.0.1:3000:3000'
+        networks:
+            - internal
+        healthcheck:
+            test:
+                ['CMD-SHELL', 'wget --spider -q http://$$HOSTNAME:${WEB_PORT}/']
+            interval: 30s
+            timeout: 5s
+            retries: 3
+            start_period: 60s
+        restart: unless-stopped
 
 networks:
-  internal:
+    internal:
 
 volumes:
-  redis_data:
+    redis_data:
 ```
 
 Notes:
+
 - `127.0.0.1:3000:3000` — the only port published on the host. Caddy proxies to this.
 - `api` and `redis` stay on the `internal` network, never reachable from outside.
 - `depends_on … condition: service_healthy` makes `compose up` wait for upstream health.

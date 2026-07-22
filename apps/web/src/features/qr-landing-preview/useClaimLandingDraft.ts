@@ -3,10 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import {
-    isOnboardingComplete,
-    LandingDraftSchema,
-} from '@finly/types';
+import { isOnboardingComplete, LandingDraftSchema } from '@finly/types';
 
 import { useAuthStore } from '@/entities/user';
 import { useQrLandingDraftStore } from '@/entities/qr-landing-draft';

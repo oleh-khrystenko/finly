@@ -143,7 +143,10 @@ export default function BillingPage() {
                         />
                     )}
 
-                    <DocumentsUniverseCard catalog={catalog} profile={profile} />
+                    <DocumentsUniverseCard
+                        catalog={catalog}
+                        profile={profile}
+                    />
 
                     <RecentPayments reloadKey={String(reloadKey)} />
                 </>

@@ -273,16 +273,19 @@ describe('CreateBusinessSchema', () => {
                 'simplified-2',
                 'simplified-3',
                 'general',
-            ] as const)('accepts fop + %s (усі 4 системи)', (taxationSystem) => {
-                const result = CreateBusinessSchema.safeParse({
-                    ...baseFields,
-                    type: 'fop',
-                    taxId: VALID_RNOKPP,
-                    taxationSystem,
-                    isVatPayer: false,
-                });
-                expect(result.success).toBe(true);
-            });
+            ] as const)(
+                'accepts fop + %s (усі 4 системи)',
+                (taxationSystem) => {
+                    const result = CreateBusinessSchema.safeParse({
+                        ...baseFields,
+                        type: 'fop',
+                        taxId: VALID_RNOKPP,
+                        taxationSystem,
+                        isVatPayer: false,
+                    });
+                    expect(result.success).toBe(true);
+                }
+            );
         });
     });
 });
@@ -428,7 +431,6 @@ describe('UpdateBusinessSchema', () => {
         });
         expect(result.success).toBe(true);
     });
-
 });
 
 describe('PublicBusinessSchema (Sprint 9 — list-view замість single-account-view)', () => {

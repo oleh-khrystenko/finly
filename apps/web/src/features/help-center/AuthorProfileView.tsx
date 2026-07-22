@@ -3,10 +3,7 @@ import { ArrowLeft, Linkedin, Send, Globe, GraduationCap } from 'lucide-react';
 
 import UiButton from '@/shared/ui/UiButton';
 import UiLink from '@/shared/ui/UiLink';
-import {
-    getArticlesByAuthor,
-    type HelpAuthor,
-} from '@/entities/help-article';
+import { getArticlesByAuthor, type HelpAuthor } from '@/entities/help-article';
 
 import { HelpArticleCard } from './HelpArticleCard';
 

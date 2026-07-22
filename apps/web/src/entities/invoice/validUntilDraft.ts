@@ -18,7 +18,10 @@ export interface ValidUntilDraft {
     raw: string;
 }
 
-export const EMPTY_VALID_UNTIL_DRAFT: ValidUntilDraft = { mode: 'none', raw: '' };
+export const EMPTY_VALID_UNTIL_DRAFT: ValidUntilDraft = {
+    mode: 'none',
+    raw: '',
+};
 
 /**
  * `Date` → `YYYY-MM-DD` у Europe/Kyiv tz. `getFullYear/Month/Date` дали б

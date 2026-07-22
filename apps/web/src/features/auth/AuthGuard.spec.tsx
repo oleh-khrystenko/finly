@@ -16,8 +16,10 @@ jest.mock('sonner', () => ({
 }));
 
 jest.mock('@finly/types', () => ({
-    isOnboardingComplete: (profile: { firstName?: string; lastName?: string }) =>
-        Boolean(profile?.firstName && profile?.lastName),
+    isOnboardingComplete: (profile: {
+        firstName?: string;
+        lastName?: string;
+    }) => Boolean(profile?.firstName && profile?.lastName),
 }));
 
 jest.mock('@/shared/ui/UiFullPageLoader', () => {
