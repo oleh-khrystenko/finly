@@ -158,10 +158,18 @@ export class PublicBusinessesController {
             // sitemap за тим самим предикатом, що керує `robots` на сторінці
             // (`resolvePublicIndexEnabled`). Розбіжність між sitemap і сторінкою
             // означала б URL із `noindex`, поданий Google, тобто помилку в Search
-            // Console. Кількість рахунків рахуємо по ПОВНОМУ списку: root віддає
-            // умовний 307 на єдиний рахунок незалежно від видимості в каталозі.
+            // Console. Кількість рахунків рахуємо по СПИСКУ ПУБЛІЧНОЇ СТОРІНКИ
+            // (`isPublicAccountListed`): root-сторінка робить 307 на єдиний
+            // рахунок саме за відфільтрованим `view.accounts`
+            // (`host-pay/[slug]/page.tsx`), тож рахунок по повному списку подавав
+            // би Google root-URL системного отримувача з одним видимим і одним
+            // прихованим рахунком — URL, що завжди відповідає редіректом
+            // («Page with redirect» у Search Console).
+            const listedAccounts = businessAccounts.filter((account) =>
+                isPublicAccountListed(business, account)
+            );
             if (
-                businessAccounts.length !== 1 &&
+                listedAccounts.length !== 1 &&
                 resolvePublicIndexEnabled(business)
             ) {
                 urls.push({
