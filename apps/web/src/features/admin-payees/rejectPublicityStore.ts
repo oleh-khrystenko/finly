@@ -10,7 +10,7 @@ import { create } from 'zustand';
  * забрати схвалення у того, хто вже в каталозі. Ендпоінт один, копія різна, бо
  * для користувача це різні події.
  */
-export type RejectPublicityMode = 'pending' | 'approved';
+type RejectPublicityMode = 'pending' | 'approved';
 
 interface State {
     isOpen: boolean;
