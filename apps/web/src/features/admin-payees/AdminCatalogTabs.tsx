@@ -3,8 +3,8 @@
 import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 
-import UiButton from '@/shared/ui/UiButton';
-import { composeClasses } from '@/shared/lib';
+import UiTabs from '@/shared/ui/UiTabs';
+import type { UiTabNavItem } from '@/shared/ui/UiTabs';
 import { usePublicityCountStore } from './publicityCountStore';
 
 /**
@@ -14,11 +14,6 @@ import { usePublicityCountStore } from './publicityCountStore';
  * під-сторінках CRUD (`/admin/payees/[slug]` лишає активним таб «Отримувачі»).
  */
 const QUEUE_HREF = '/admin/publicity';
-
-const TABS = [
-    { label: 'Отримувачі', href: '/admin/payees' },
-    { label: 'Запити', href: QUEUE_HREF },
-] as const;
 
 export function AdminCatalogTabs() {
     const pathname = usePathname();
@@ -35,52 +30,26 @@ export function AdminCatalogTabs() {
         if (!onQueuePage) void refresh();
     }, [onQueuePage, refresh]);
 
+    const showCount = count !== null && count > 0;
+    const items: UiTabNavItem[] = [
+        { value: 'payees', label: 'Отримувачі', href: '/admin/payees' },
+        {
+            value: 'publicity',
+            label: 'Запити',
+            href: QUEUE_HREF,
+            // Число «на розгляді» має привертати увагу — primary-тон badge.
+            count: showCount ? count : undefined,
+            countTone: 'primary',
+            ariaLabel: showCount ? `Запити, ${count} на розгляді` : undefined,
+        },
+    ];
+
     return (
-        <nav
+        <UiTabs
+            as="nav"
             aria-label="Розділи каталогу"
-            className="border-border mb-8 border-b"
-        >
-            <ul className="flex gap-1">
-                {TABS.map((tab) => {
-                    const isActive =
-                        pathname === tab.href ||
-                        pathname.startsWith(`${tab.href}/`);
-                    const showCount =
-                        tab.href === QUEUE_HREF && count !== null && count > 0;
-                    return (
-                        <li key={tab.href}>
-                            <UiButton
-                                as="link"
-                                href={tab.href}
-                                variant="text"
-                                size="md"
-                                linkPending={false}
-                                aria-current={isActive ? 'page' : undefined}
-                                aria-label={
-                                    showCount
-                                        ? `${tab.label}, ${count} на розгляді`
-                                        : undefined
-                                }
-                                className={composeClasses(
-                                    '-mb-px min-h-11 border-b-2',
-                                    isActive
-                                        ? 'border-primary text-foreground!'
-                                        : 'border-transparent'
-                                )}
-                            >
-                                <span className="inline-flex items-center gap-2">
-                                    {tab.label}
-                                    {showCount && (
-                                        <span className="bg-primary/10 text-primary inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-xs leading-none font-semibold">
-                                            {count}
-                                        </span>
-                                    )}
-                                </span>
-                            </UiButton>
-                        </li>
-                    );
-                })}
-            </ul>
-        </nav>
+            className="mb-8"
+            items={items}
+        />
     );
 }

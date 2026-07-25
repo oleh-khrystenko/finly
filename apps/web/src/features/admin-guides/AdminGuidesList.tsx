@@ -17,7 +17,7 @@ import type { AdminGuideListItem, GuideStatus } from '@finly/types';
 import UiButton from '@/shared/ui/UiButton';
 import UiLink from '@/shared/ui/UiLink';
 import UiSpinner from '@/shared/ui/UiSpinner';
-import UiChipGroup from '@/shared/ui/UiChipGroup';
+import UiTabs, { uiTabPanelProps } from '@/shared/ui/UiTabs';
 import {
     adminListGuides,
     reorderGuides,
@@ -49,6 +49,8 @@ const TAB_LABEL: Record<GuideStatus, string> = {
     draft: 'Чернетки',
     published: 'Опубліковані',
 };
+
+const TAB_PANEL_ID = 'admin-guides-panel';
 
 const kindLabel = (item: AdminGuideListItem): string =>
     item.pillarSlug === null ? 'Основний гайд' : 'Розділ';
@@ -262,23 +264,22 @@ export function AdminGuidesList() {
 
                 {state.phase === 'ready' && items.length > 0 && (
                     <>
-                        <UiChipGroup
-                            options={TAB_ORDER.map((s) => ({
+                        <UiTabs
+                            aria-label="Статуси гайдів"
+                            panelId={TAB_PANEL_ID}
+                            items={TAB_ORDER.map((s) => ({
                                 value: s,
-                                label: (
-                                    <span className="flex items-center gap-2">
-                                        {TAB_LABEL[s]}
-                                        <span className="bg-muted text-muted-foreground rounded-full px-1.5 text-xs font-medium">
-                                            {counts[s]}
-                                        </span>
-                                    </span>
-                                ),
+                                label: TAB_LABEL[s],
+                                count: counts[s],
                             }))}
                             value={tab}
-                            onChange={(v) => setTab(v as GuideStatus)}
+                            onChange={setTab}
                         />
 
-                        <div className="mt-5">
+                        <div
+                            {...uiTabPanelProps(TAB_PANEL_ID, TAB_LABEL[tab])}
+                            className="mt-5"
+                        >
                             <TabHint tab={tab} />
 
                             <div className="mt-4">

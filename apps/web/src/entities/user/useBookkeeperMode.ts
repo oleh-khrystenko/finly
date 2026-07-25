@@ -28,8 +28,8 @@ export function useBookkeeperMode() {
 
     const setBookkeeper = useCallback(
         async (next: boolean) => {
-            // No-op, якщо контекст уже активний — UiChipGroup і так не
-            // викликає onChange на повторний вибір, це лише захист.
+            // No-op, якщо контекст уже активний — UiTabs і так не викликає
+            // onChange на повторний вибір того самого табу, це лише захист.
             if (!user || user.worksAsBookkeeper === next) return;
 
             const previous = user.worksAsBookkeeper;
