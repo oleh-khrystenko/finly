@@ -13,7 +13,6 @@ import {
 
 import {
     adminApprovePublicity,
-    adminListApprovedPublicity,
     adminListPublicityQueue,
     extractApiErrorCode,
     getApiMessage,
@@ -24,6 +23,8 @@ import UiButton from '@/shared/ui/UiButton';
 import UiLink from '@/shared/ui/UiLink';
 import UiSelect from '@/shared/ui/UiSelect';
 import UiSpinner from '@/shared/ui/UiSpinner';
+import { AdminCatalogTabs } from './AdminCatalogTabs';
+import { usePublicityCountStore } from './publicityCountStore';
 import { useRejectPublicityStore } from './rejectPublicityStore';
 
 const DATE_FMT = new Intl.DateTimeFormat('uk-UA', {
@@ -38,8 +39,8 @@ type LoadState = { phase: 'loading' } | { phase: 'error' } | { phase: 'ready' };
 export function AdminPublicityQueue() {
     const [state, setState] = useState<LoadState>({ phase: 'loading' });
     const [queue, setQueue] = useState<Business[]>([]);
-    const [approved, setApproved] = useState<Business[]>([]);
     const openReject = useRejectPublicityStore((s) => s.open);
+    const setCount = usePublicityCountStore((s) => s.setCount);
 
     // Guard на обидва шляхи завантаження (перший рендер і ручний reload після
     // схвалення/відхилення): відповідь, що прийшла після розмонтування, нічого
@@ -52,20 +53,21 @@ export function AdminPublicityQueue() {
         };
     }, []);
 
-    // Обидва списки тягнуться однаково і завжди разом (черга і схвалені —
-    // дві секції одного екрана), тож завантаження одне на компонент.
+    // Схвалені переїхали у вкладку «Отримувачі», тож тут лишилась тільки черга.
+    // Довжину черги пишемо у спільний стор — бейдж на табі оновлюється одразу
+    // після схвалення/відхилення без окремого запиту.
     const load = useCallback(() => {
-        Promise.all([adminListPublicityQueue(), adminListApprovedPublicity()])
-            .then(([loadedQueue, loadedApproved]) => {
+        adminListPublicityQueue()
+            .then((loadedQueue) => {
                 if (!mountedRef.current) return;
                 setQueue(loadedQueue);
-                setApproved(loadedApproved);
+                setCount(loadedQueue.length);
                 setState({ phase: 'ready' });
             })
             .catch(() => {
                 if (mountedRef.current) setState({ phase: 'error' });
             });
-    }, []);
+    }, [setCount]);
 
     useEffect(() => {
         load();
@@ -73,6 +75,8 @@ export function AdminPublicityQueue() {
 
     return (
         <main className="mx-auto max-w-4xl px-4 py-10 sm:px-6 md:py-14 lg:px-8">
+            <AdminCatalogTabs />
+
             <header>
                 <h1 className="text-foreground text-2xl font-semibold tracking-tight md:text-3xl">
                     Запити на публічність
@@ -133,91 +137,7 @@ export function AdminPublicityQueue() {
                     </div>
                 )}
             </div>
-
-            {/* Схвалені: каталог це вітрина довіри, тож адмін мусить бачити,
-                кого вже впустив, і мати змогу забрати схвалення одним кліком. */}
-            {state.phase === 'ready' && approved.length > 0 && (
-                <section className="mt-12">
-                    <h2 className="text-foreground text-lg font-semibold">
-                        Схвалені отримувачі
-                    </h2>
-                    <p className="text-muted-foreground mt-1 text-sm">
-                        Видимість у каталозі кожен вмикає сам. Схвалення можна
-                        забрати: отримувач зникне з каталогу, його публічні
-                        сторінки і QR працюватимуть далі.
-                    </p>
-                    <div className="mt-4 space-y-3">
-                        {approved.map((payee) => (
-                            <ApprovedCard
-                                key={payee.id}
-                                payee={payee}
-                                onRevoke={() =>
-                                    openReject({
-                                        slug: payee.slug,
-                                        payeeName: formatPayeeName(
-                                            payee.type,
-                                            payee.name
-                                        ),
-                                        mode: 'approved',
-                                        onRejected: load,
-                                    })
-                                }
-                            />
-                        ))}
-                    </div>
-                </section>
-            )}
         </main>
-    );
-}
-
-function ApprovedCard({
-    payee,
-    onRevoke,
-}: {
-    payee: Business;
-    onRevoke: () => void;
-}) {
-    const publicUrl = `${ENV.NEXT_PUBLIC_PAY_PUBLIC_URL.replace(/\/$/, '')}/${payee.slug}`;
-    return (
-        <div className="border-border bg-card flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4">
-            <div className="min-w-0">
-                <p className="text-foreground truncate font-medium">
-                    {formatPayeeName(payee.type, payee.name)}
-                </p>
-                <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                    <span>{CATALOG_CATEGORY_LABEL[payee.catalogCategory]}</span>
-                    <span aria-hidden>·</span>
-                    <span>
-                        {payee.catalogVisible
-                            ? 'Показується в каталозі'
-                            : 'Приховано власником'}
-                    </span>
-                </div>
-            </div>
-            <div className="flex shrink-0 items-center gap-3">
-                <UiLink
-                    as="a"
-                    href={publicUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    variant="unstyled"
-                    aria-label="Відкрити публічну сторінку в новій вкладці"
-                    className="text-muted-foreground hover:text-primary inline-flex items-center gap-1 text-sm transition-colors"
-                >
-                    Переглянути
-                    <ExternalLink className="size-4" aria-hidden />
-                </UiLink>
-                <UiButton
-                    type="button"
-                    variant="destructive-outline"
-                    size="sm"
-                    onClick={onRevoke}
-                >
-                    Прибрати з каталогу
-                </UiButton>
-            </div>
-        </div>
     );
 }
 

@@ -5,7 +5,6 @@ import {
     CircleHelp,
     BookOpen,
     Landmark,
-    Inbox,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 
@@ -26,6 +25,12 @@ export interface CabinetNavItem {
     /** Показувати лише для `role === 'admin'`. */
     adminOnly?: boolean;
     badge?: string;
+    /**
+     * Додаткові префікси шляху, за яких пункт лишається активним. Потрібно, коли
+     * один пункт веде на розділ із кількома табами-роутами (каталог: сторінка
+     * «Отримувачі» на `href` + «Запити» на `/admin/publicity`).
+     */
+    matchPrefixes?: string[];
 }
 
 /** Робочі поверхні — верх sidebar. */
@@ -71,17 +76,13 @@ export const CABINET_SECONDARY_NAV: CabinetNavItem[] = [
         adminOnly: true,
     },
     {
-        key: 'admin-payees',
-        label: 'Отримувачі каталогу',
+        // Каталог і черга публічності — два таби одного розділу, тож один пункт.
+        // `matchPrefixes` тримає його активним і на сторінці «Запити».
+        key: 'admin-catalog',
+        label: 'Каталог',
         icon: <Landmark />,
         href: '/admin/payees',
-        adminOnly: true,
-    },
-    {
-        key: 'admin-publicity',
-        label: 'Запити на публічність',
-        icon: <Inbox />,
-        href: '/admin/publicity',
+        matchPrefixes: ['/admin/publicity'],
         adminOnly: true,
     },
 ];

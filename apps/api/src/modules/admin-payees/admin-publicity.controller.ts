@@ -8,10 +8,12 @@ import {
     Post,
     UseGuards,
 } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 
 import { SkipOnboarding } from '../../common/decorators/skip-onboarding.decorator';
 import { AdminGuard } from '../../common/guards/admin.guard';
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
+import { skipThrottlersExcept } from '../../common/http/throttle-policy';
 import { BusinessesService } from '../businesses/businesses.service';
 import type { BusinessDocument } from '../businesses/schemas/business.schema';
 import { ApprovePublicityDto } from './dto/approve-publicity.dto';
@@ -26,6 +28,8 @@ import { RejectPublicityDto } from './dto/reject-publicity.dto';
 @Controller('admin/publicity')
 @UseGuards(JwtActiveGuard, AdminGuard)
 @SkipOnboarding()
+// Staff-зона за логіном: throttle вимкнено повністю (як решта кабінету).
+@SkipThrottle(skipThrottlersExcept())
 export class AdminPublicityController {
     constructor(private readonly businessesService: BusinessesService) {}
 

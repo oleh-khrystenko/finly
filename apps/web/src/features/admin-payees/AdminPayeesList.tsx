@@ -1,50 +1,78 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { AlertCircle, Landmark, Plus } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+    AlertCircle,
+    BadgeCheck,
+    ExternalLink,
+    Landmark,
+    Plus,
+} from 'lucide-react';
 import {
     BUSINESS_TYPE_LABEL,
     CATALOG_CATEGORY_LABEL,
     type Business,
 } from '@finly/types';
 
-import { adminListPayees } from '@/shared/api';
+import { adminListApprovedPublicity, adminListPayees } from '@/shared/api';
 import { formatPayeeName } from '@/entities/business';
+import { ENV } from '@/shared/config/env';
 import UiButton from '@/shared/ui/UiButton';
 import UiLink from '@/shared/ui/UiLink';
 import UiSpinner from '@/shared/ui/UiSpinner';
+import { AdminCatalogTabs } from './AdminCatalogTabs';
+import { useRejectPublicityStore } from './rejectPublicityStore';
 
 type LoadState = { phase: 'loading' } | { phase: 'error' } | { phase: 'ready' };
 
 export function AdminPayeesList() {
     const [state, setState] = useState<LoadState>({ phase: 'loading' });
-    const [payees, setPayees] = useState<Business[]>([]);
+    // Два джерела одного каталогу: системні (заведені адміном руками) і схвалені
+    // заявки користувачів. Тримаємо окремо, бо картки і дії різні, а бейдж
+    // «Схвалено» має відрізнити впущеного від створеного.
+    const [systemPayees, setSystemPayees] = useState<Business[]>([]);
+    const [approved, setApproved] = useState<Business[]>([]);
+    const openReject = useRejectPublicityStore((s) => s.open);
 
+    const mountedRef = useRef(true);
     useEffect(() => {
-        let active = true;
-        adminListPayees()
-            .then((loaded) => {
-                if (!active) return;
-                setPayees(loaded);
-                setState({ phase: 'ready' });
-            })
-            .catch(() => {
-                if (active) setState({ phase: 'error' });
-            });
+        mountedRef.current = true;
         return () => {
-            active = false;
+            mountedRef.current = false;
         };
     }, []);
 
+    const load = useCallback(() => {
+        Promise.all([adminListPayees(), adminListApprovedPublicity()])
+            .then(([system, approvedList]) => {
+                if (!mountedRef.current) return;
+                setSystemPayees(system);
+                setApproved(approvedList);
+                setState({ phase: 'ready' });
+            })
+            .catch(() => {
+                if (mountedRef.current) setState({ phase: 'error' });
+            });
+    }, []);
+
+    useEffect(() => {
+        load();
+    }, [load]);
+
+    const total = systemPayees.length + approved.length;
+
     return (
         <main className="mx-auto max-w-4xl px-4 py-10 sm:px-6 md:py-14 lg:px-8">
+            <AdminCatalogTabs />
+
             <header className="flex items-center justify-between gap-4">
                 <div>
                     <h1 className="text-foreground text-2xl font-semibold tracking-tight md:text-3xl">
-                        Системні отримувачі
+                        Отримувачі каталогу
                     </h1>
                     <p className="text-muted-foreground mt-1 text-sm">
-                        Загальні отримувачі каталогу: податкова, фонди, збори.
+                        Системні отримувачі та схвалені заявки, що показуються в
+                        каталозі.
                     </p>
                 </div>
                 <UiButton
@@ -72,25 +100,42 @@ export function AdminPayeesList() {
                     </div>
                 )}
 
-                {state.phase === 'ready' && payees.length === 0 && (
+                {state.phase === 'ready' && total === 0 && (
                     <div className="border-border bg-muted/40 mx-auto flex max-w-md flex-col items-center gap-3 rounded-xl border p-8 text-center">
                         <span className="bg-primary/10 text-primary flex size-10 items-center justify-center rounded-lg">
                             <Landmark className="size-5" aria-hidden />
                         </span>
                         <p className="text-foreground text-sm font-medium">
-                            Системних отримувачів ще немає
+                            У каталозі поки нікого
                         </p>
                         <p className="text-muted-foreground text-sm">
-                            Створіть першого, щоб він зʼявився у публічному
-                            каталозі.
+                            Створіть системного отримувача або схваліть заявку у
+                            вкладці «Запити».
                         </p>
                     </div>
                 )}
 
-                {state.phase === 'ready' && payees.length > 0 && (
+                {state.phase === 'ready' && total > 0 && (
                     <div className="space-y-2">
-                        {payees.map((payee) => (
+                        {systemPayees.map((payee) => (
                             <PayeeRow key={payee.id} payee={payee} />
+                        ))}
+                        {approved.map((payee) => (
+                            <ApprovedRow
+                                key={payee.id}
+                                payee={payee}
+                                onRevoke={() =>
+                                    openReject({
+                                        slug: payee.slug,
+                                        payeeName: formatPayeeName(
+                                            payee.type,
+                                            payee.name
+                                        ),
+                                        mode: 'approved',
+                                        onRejected: load,
+                                    })
+                                }
+                            />
                         ))}
                     </div>
                 )}
@@ -124,5 +169,67 @@ function PayeeRow({ payee }: { payee: Business }) {
                 )}
             </div>
         </UiLink>
+    );
+}
+
+/**
+ * Рядок схваленої заявки. На відміну від системного отримувача, запис належить
+ * користувачу, тож адмін його не редагує (нема лінка в CRUD) — лише переглядає
+ * публічну сторінку і за потреби забирає з каталогу. Бейдж «Схвалено» — суто
+ * адмінський маркер походження, у публічний каталог не потрапляє.
+ */
+function ApprovedRow({
+    payee,
+    onRevoke,
+}: {
+    payee: Business;
+    onRevoke: () => void;
+}) {
+    const publicUrl = `${ENV.NEXT_PUBLIC_PAY_PUBLIC_URL.replace(/\/$/, '')}/${payee.slug}`;
+    return (
+        <div className="border-border bg-card flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4">
+            <div className="min-w-0">
+                <div className="flex min-w-0 items-center gap-2">
+                    <p className="text-foreground truncate font-medium">
+                        {formatPayeeName(payee.type, payee.name)}
+                    </p>
+                    <span className="bg-success/10 text-success inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium">
+                        <BadgeCheck className="size-3.5" aria-hidden />
+                        Схвалено
+                    </span>
+                </div>
+                <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                    <span>{CATALOG_CATEGORY_LABEL[payee.catalogCategory]}</span>
+                    <span aria-hidden>·</span>
+                    <span>
+                        {payee.catalogVisible
+                            ? 'Показується в каталозі'
+                            : 'Приховано власником'}
+                    </span>
+                </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-3">
+                <UiLink
+                    as="a"
+                    href={publicUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    variant="unstyled"
+                    aria-label="Відкрити публічну сторінку в новій вкладці"
+                    className="text-muted-foreground hover:text-primary inline-flex items-center gap-1 text-sm transition-colors"
+                >
+                    Переглянути
+                    <ExternalLink className="size-4" aria-hidden />
+                </UiLink>
+                <UiButton
+                    type="button"
+                    variant="destructive-outline"
+                    size="sm"
+                    onClick={onRevoke}
+                >
+                    Прибрати з каталогу
+                </UiButton>
+            </div>
+        </div>
     );
 }

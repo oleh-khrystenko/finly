@@ -11,6 +11,7 @@ import {
     Post,
     UseGuards,
 } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { ZodValidationPipe } from 'nestjs-zod';
 import {
     CreateSystemPayeeSchema,
@@ -23,6 +24,7 @@ import { SkipOnboarding } from '../../common/decorators/skip-onboarding.decorato
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AdminGuard } from '../../common/guards/admin.guard';
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
+import { skipThrottlersExcept } from '../../common/http/throttle-policy';
 import { AccountsService } from '../accounts/accounts.service';
 import type { AccountDocument } from '../accounts/schemas/account.schema';
 import { BusinessesService } from '../businesses/businesses.service';
@@ -47,6 +49,8 @@ import { UpdateSystemPayeeDto } from './dto/update-system-payee.dto';
 @Controller('admin/payees')
 @UseGuards(JwtActiveGuard, AdminGuard)
 @SkipOnboarding()
+// Staff-зона за логіном: throttle вимкнено повністю (див. AdminPublicityController).
+@SkipThrottle(skipThrottlersExcept())
 export class AdminPayeesController {
     constructor(
         private readonly businessesService: BusinessesService,

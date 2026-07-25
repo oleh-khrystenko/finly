@@ -12,6 +12,7 @@ import {
     UnauthorizedException,
     UseGuards,
 } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import {
     MAGIC_LINK_PURPOSE,
     RESPONSE_CODE,
@@ -23,6 +24,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { SkipOnboarding } from '../../common/decorators/skip-onboarding.decorator';
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { skipThrottlersExcept } from '../../common/http/throttle-policy';
 import { AuthService } from '../auth/auth.service';
 import {
     SlugReservationService,
@@ -36,6 +38,8 @@ import { mapUserToProfileResponse } from './user-profile.mapper';
 import { UsersService } from './users.service';
 
 @Controller('users')
+// Кабінет за логіном: throttle вимкнено повністю (див. BusinessesController).
+@SkipThrottle(skipThrottlersExcept())
 export class UsersController {
     constructor(
         private readonly usersService: UsersService,

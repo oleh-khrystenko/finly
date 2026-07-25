@@ -10,7 +10,7 @@ import {
     Query,
     UseGuards,
 } from '@nestjs/common';
-import { SkipThrottle, Throttle } from '@nestjs/throttler';
+import { SkipThrottle } from '@nestjs/throttler';
 import { ZodValidationPipe } from 'nestjs-zod';
 import {
     AccountSlugCandidateSchema,
@@ -23,6 +23,7 @@ import {
 import { CurrentBusinessBranded } from '../../common/decorators/current-business-branded.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
+import { skipThrottlersExcept } from '../../common/http/throttle-policy';
 import {
     BusinessAccessGuard,
     CurrentBusiness,
@@ -48,6 +49,8 @@ import type { AccountDocument } from './schemas/account.schema';
  */
 @Controller('businesses/me/:slug/accounts')
 @UseGuards(JwtActiveGuard, BusinessAccessGuard)
+// Кабінет за логіном: throttle вимкнено повністю (див. BusinessesController).
+@SkipThrottle(skipThrottlersExcept())
 export class AccountsController {
     constructor(private readonly accountsService: AccountsService) {}
 
@@ -123,15 +126,6 @@ export class AccountsController {
      */
     @Get(':accountSlug/slug-availability')
     @UseGuards(AccountAccessGuard)
-    // Лише власний бакет `slug-availability` (30/min) — skip інших named-
-    // throttler-ів, що інакше тіньовили б ліміт (див. businesses.controller).
-    @Throttle({ 'slug-availability': { limit: 30, ttl: 60_000 } })
-    @SkipThrottle({
-        default: true,
-        'public-payment': true,
-        'qr-preview': true,
-        'help-chat': true,
-    })
     async checkSlugAvailability(
         @CurrentUser() user: UserDocument,
         @CurrentAccount() account: AccountDocument,

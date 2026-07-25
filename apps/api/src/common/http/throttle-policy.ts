@@ -26,11 +26,11 @@ export const THROTTLERS = [
     // 20 клієнтів вичерпує budget). Захист зберігається — limit просто вищий під
     // специфіку зони.
     { name: 'public-payment', ttl: 60000, limit: 600 },
-    // Sprint 8 §8.1 — anon `POST /qr/preview`. Restrictive за дизайном:
-    // payload-перебір тут потенційно дешевший за full payment-page-hit (нема
-    // БД-lookup-у), і легітимний UX (анонім заповнює форму один раз) вкладається
-    // в 10/min навіть з NAT-агрегацією.
-    { name: 'qr-preview', ttl: 60000, limit: 10 },
+    // Sprint 8 §8.1 — anon `POST /qr/preview`. payload-перебір тут потенційно
+    // дешевший за full payment-page-hit (нема БД-lookup-у), тож ліміт лишається
+    // помірним, але 30/min (не 10) — щоб анонімні користувачі за спільною IP
+    // (NAT/CDN), які активно граються з формою, не ловили хибний 429.
+    { name: 'qr-preview', ttl: 60000, limit: 30 },
     // Sprint 16 — anon help assistant (`POST /ai/help/chat`). Coarse per-minute
     // burst guard; реальні wallet-cap-и — per-IP 24h limit і global daily budget
     // у `HelpChatRateLimitGuard`.
@@ -43,8 +43,9 @@ export const THROTTLERS = [
     // authorized). Окремий бакет, щоб НЕ ділити лічильник з анонімним
     // `qr-preview`: інакше скан з того ж IP (NAT) міг би заблокувати прев'ю
     // платного клієнта і навпаки. Кожен виклик важкий (download + bake + 2
-    // рендери), але debounce-флоу легітимно дає кілька запитів поспіль.
-    { name: 'brand-preview', ttl: 60000, limit: 20 },
+    // рендери), але debounce-флоу легітимно дає кілька запитів поспіль. 60/min —
+    // із запасом на активне налаштування бренду за спільною IP.
+    { name: 'brand-preview', ttl: 60000, limit: 60 },
     // Sprint 28 — публічний read-only контент гайдів. Споживач — server-side
     // fetch web-у (сторінки, sitemap, OG), тож усі клієнти виглядають одним IP:
     // високий ліміт як у public-payment, окремий бакет щоб не ділити лічильник з
