@@ -20,6 +20,8 @@ import { ENV } from '@/shared/config/env';
 import UiButton from '@/shared/ui/UiButton';
 import UiLink from '@/shared/ui/UiLink';
 import UiSpinner from '@/shared/ui/UiSpinner';
+import UiPageContainer from '@/shared/ui/UiPageContainer';
+import UiPageHeading from '@/shared/ui/UiPageHeading';
 import { AdminCatalogTabs } from './AdminCatalogTabs';
 import { useRejectPublicityStore } from './rejectPublicityStore';
 
@@ -62,14 +64,12 @@ export function AdminPayeesList() {
     const total = systemPayees.length + approved.length;
 
     return (
-        <main className="mx-auto max-w-4xl px-4 py-10 sm:px-6 md:py-14 lg:px-8">
+        <UiPageContainer>
             <AdminCatalogTabs />
 
             <header className="flex items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-foreground text-2xl font-semibold tracking-tight md:text-3xl">
-                        Отримувачі каталогу
-                    </h1>
+                    <UiPageHeading>Отримувачі каталогу</UiPageHeading>
                     <p className="text-muted-foreground mt-1 text-sm">
                         Системні отримувачі та схвалені заявки, що показуються в
                         каталозі.
@@ -140,7 +140,7 @@ export function AdminPayeesList() {
                     </div>
                 )}
             </div>
-        </main>
+        </UiPageContainer>
     );
 }
 

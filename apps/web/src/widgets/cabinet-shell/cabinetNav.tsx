@@ -22,8 +22,6 @@ export interface CabinetNavItem {
     href?: string;
     /** Disabled-тизер із бейджем «Незабаром» замість активного лінка. */
     comingSoon?: boolean;
-    /** Показувати лише для `role === 'admin'`. */
-    adminOnly?: boolean;
     badge?: string;
     /**
      * Додаткові префікси шляху, за яких пункт лишається активним. Потрібно, коли
@@ -68,12 +66,19 @@ export const CABINET_SECONDARY_NAV: CabinetNavItem[] = [
         icon: <CircleHelp />,
         href: '/help',
     },
+];
+
+/**
+ * Адмін-розділи — рендеряться одним рядком «Адмін» з попап-меню
+ * (`CabinetAdminGroup`) і лише для `role === 'admin'`. Групування замінило
+ * per-item бейджі «Адмін».
+ */
+export const CABINET_ADMIN_NAV: CabinetNavItem[] = [
     {
         key: 'admin-guides',
         label: 'Гайди',
         icon: <BookOpen />,
         href: '/admin/guides',
-        adminOnly: true,
     },
     {
         // Каталог і черга публічності — два таби одного розділу, тож один пункт.
@@ -83,6 +88,5 @@ export const CABINET_SECONDARY_NAV: CabinetNavItem[] = [
         icon: <Landmark />,
         href: '/admin/payees',
         matchPrefixes: ['/admin/publicity'],
-        adminOnly: true,
     },
 ];

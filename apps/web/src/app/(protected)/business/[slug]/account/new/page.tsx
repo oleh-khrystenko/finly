@@ -82,8 +82,8 @@ function NewAccountContent() {
     // не торкає store і render-иться одразу).
     if (fromLanding && !hasHydrated) {
         return (
-            <UiPageContainer className="py-16">
-                <div className="flex justify-center">
+            <UiPageContainer narrow>
+                <div className="flex flex-1 items-center justify-center">
                     <UiSpinner size="md" />
                 </div>
             </UiPageContainer>
@@ -92,8 +92,8 @@ function NewAccountContent() {
 
     if (!isDataCurrent && !isErrorCurrent) {
         return (
-            <UiPageContainer className="py-16">
-                <div className="flex justify-center">
+            <UiPageContainer narrow>
+                <div className="flex flex-1 items-center justify-center">
                     <UiSpinner size="md" />
                 </div>
             </UiPageContainer>
@@ -102,7 +102,7 @@ function NewAccountContent() {
 
     if (isErrorCurrent && error) {
         return (
-            <UiPageContainer className="space-y-6 py-12">
+            <UiPageContainer narrow className="space-y-6">
                 <UiSectionCard title={error.message}>
                     <p className="text-muted-foreground mt-2 text-sm">
                         Поверніться до отримувача і повторіть.
@@ -130,10 +130,8 @@ function NewAccountContent() {
         : undefined;
 
     return (
-        <UiPageContainer className="space-y-6 py-10 md:py-14">
-            <UiPageHeading className="md:text-4xl">
-                Додати реквізити
-            </UiPageHeading>
+        <UiPageContainer narrow className="space-y-6">
+            <UiPageHeading>Додати реквізити</UiPageHeading>
             <AccountCreateForm
                 businessSlug={business.slug}
                 prefillIban={prefillIban}
@@ -147,8 +145,8 @@ export default function NewAccountPage() {
     return (
         <Suspense
             fallback={
-                <UiPageContainer className="py-16">
-                    <div className="flex justify-center">
+                <UiPageContainer narrow>
+                    <div className="flex flex-1 items-center justify-center">
                         <UiSpinner size="md" />
                     </div>
                 </UiPageContainer>

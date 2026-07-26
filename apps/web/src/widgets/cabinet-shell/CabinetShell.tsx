@@ -1,7 +1,6 @@
 'use client';
 
 import { ReactNode } from 'react';
-import { AppFooter } from '@/widgets/app-footer';
 import { CabinetSidebar } from './CabinetSidebar';
 import { CabinetTopbar } from './CabinetTopbar';
 
@@ -10,8 +9,9 @@ import { CabinetTopbar } from './CabinetTopbar';
  * від контенту. Замінив старий `Header` над контентом — навігацію винесено з
  * аватар-меню у виділене бічне меню.
  *
- * Футер лишається мінімальним (юридика + підтримка), Довідку прибрано —
- * вона тепер першокласний пункт навігації у sidebar.
+ * Футера під контентом немає — юридика (Конфіденційність, Умови) і підтримка
+ * живуть в акаунт-меню внизу sidebar/drawer (`AccountSection`), контент займає
+ * всю висоту.
  */
 export function CabinetShell({ children }: { children: ReactNode }) {
     return (
@@ -20,8 +20,9 @@ export function CabinetShell({ children }: { children: ReactNode }) {
 
             <div className="flex min-w-0 flex-1 flex-col">
                 <CabinetTopbar />
-                <main className="flex flex-1 flex-col">{children}</main>
-                <AppFooter showHelpLink={false} />
+                {/* Не `<main>`: landmark несе сама сторінка (`UiPageContainer`
+                    вже є `<main>`), два вкладені main — невалідний HTML. */}
+                <div className="flex flex-1 flex-col">{children}</div>
             </div>
         </div>
     );

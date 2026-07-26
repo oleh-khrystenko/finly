@@ -6,6 +6,7 @@ import { isOnboardingComplete } from '@finly/types';
 import UiFullPageLoader from '@/shared/ui/UiFullPageLoader';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
 import UiPageHeading from '@/shared/ui/UiPageHeading';
+import UiWorkspaceColumns from '@/shared/ui/UiWorkspaceColumns';
 import { isValidRedirect } from '@/shared/lib';
 import { useAuthStore } from '@/entities/user';
 import { ProfileForm, SecuritySection, DangerZone } from '@/features/profile';
@@ -36,24 +37,46 @@ function ProfileContent() {
         router.push('/business');
     };
 
+    // Онбординг — фокус на одній дії: вузька колонка, лише форма.
+    if (mode === 'new') {
+        return (
+            <UiPageContainer narrow>
+                <UiPageHeading>Заповніть профіль</UiPageHeading>
+
+                <div className="mt-6">
+                    <ProfileForm
+                        user={user}
+                        editable
+                        onboardingMode
+                        onSaved={handleProfileSaved}
+                    />
+                </div>
+            </UiPageContainer>
+        );
+    }
+
+    // Звичайний профіль — той самий двоколонковий патерн, що деталки:
+    // зліва робочий стовп (особисті дані), справа допоміжний (безпека,
+    // небезпечна зона).
     return (
-        <UiPageContainer className="py-16">
-            <UiPageHeading>
-                {mode === 'new' ? 'Заповніть профіль' : 'Профіль'}
-            </UiPageHeading>
+        <UiPageContainer className="space-y-6">
+            <UiPageHeading>Профіль</UiPageHeading>
 
-            <div className="mt-10 space-y-6">
-                <ProfileForm
-                    user={user}
-                    editable={mode === 'new' || mode === null}
-                    onboardingMode={mode === 'new'}
-                    onSaved={handleProfileSaved}
-                />
-
-                {mode !== 'new' && <SecuritySection user={user} mode={mode} />}
-
-                {mode === null && <DangerZone />}
-            </div>
+            <UiWorkspaceColumns
+                main={
+                    <ProfileForm
+                        user={user}
+                        editable={mode === null}
+                        onSaved={handleProfileSaved}
+                    />
+                }
+                aside={
+                    <>
+                        <SecuritySection user={user} mode={mode} />
+                        {mode === null && <DangerZone />}
+                    </>
+                }
+            />
         </UiPageContainer>
     );
 }

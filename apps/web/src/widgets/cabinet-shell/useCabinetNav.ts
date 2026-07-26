@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation';
 import { useAuthStore } from '@/entities/user';
 import {
+    CABINET_ADMIN_NAV,
     CABINET_PRIMARY_NAV,
     CABINET_SECONDARY_NAV,
     type CabinetNavItem,
@@ -26,9 +27,6 @@ function resolve(items: CabinetNavItem[], pathname: string): ResolvedNavItem[] {
         );
         return {
             ...item,
-            // Будь-який admin-пункт автоматично несе бейдж «Адмін» (якщо не має
-            // власного) — нові адмін-розділи отримають його без ручного дублювання.
-            badge: item.adminOnly ? (item.badge ?? 'Адмін') : item.badge,
             isActive: prefixes.some(
                 (p) => pathname === p || pathname.startsWith(`${p}/`)
             ),
@@ -41,10 +39,10 @@ export function useCabinetNav() {
     const isAdmin = useAuthStore((s) => s.user?.role === 'admin');
 
     const primary = resolve(CABINET_PRIMARY_NAV, pathname);
-    const secondary = resolve(
-        CABINET_SECONDARY_NAV.filter((item) => !item.adminOnly || isAdmin),
-        pathname
-    );
+    const secondary = resolve(CABINET_SECONDARY_NAV, pathname);
+    // Адмін-пункти живуть окремою групою (акордеон «Адмін» під secondary);
+    // для не-адміна група порожня і не рендериться взагалі.
+    const admin = isAdmin ? resolve(CABINET_ADMIN_NAV, pathname) : [];
 
-    return { primary, secondary };
+    return { primary, secondary, admin };
 }

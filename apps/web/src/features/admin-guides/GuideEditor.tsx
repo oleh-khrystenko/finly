@@ -16,6 +16,8 @@ import UiButton from '@/shared/ui/UiButton';
 import UiInput from '@/shared/ui/UiInput';
 import UiSelect from '@/shared/ui/UiSelect';
 import UiSpinner from '@/shared/ui/UiSpinner';
+import UiPageContainer from '@/shared/ui/UiPageContainer';
+import UiPageHeading from '@/shared/ui/UiPageHeading';
 import { getZodFieldError } from '@/shared/lib';
 import {
     adminGetGuide,
@@ -236,7 +238,10 @@ export function GuideEditor({ mode, guideId }: GuideEditorProps) {
 
     if (loadError) {
         return (
-            <main className="mx-auto max-w-3xl px-4 py-14 text-center sm:px-6">
+            <UiPageContainer
+                narrow
+                className="items-center justify-center text-center"
+            >
                 <p className="text-muted-foreground text-sm">
                     Не вдалося завантажити гайд. Перевірте посилання.
                 </p>
@@ -250,7 +255,7 @@ export function GuideEditor({ mode, guideId }: GuideEditorProps) {
                 >
                     До списку
                 </UiButton>
-            </main>
+            </UiPageContainer>
         );
     }
 
@@ -265,7 +270,7 @@ export function GuideEditor({ mode, guideId }: GuideEditorProps) {
     const { errors, isSubmitting, isDirty } = form.formState;
 
     return (
-        <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6 md:py-14 lg:px-8">
+        <UiPageContainer narrow>
             <UiButton
                 as="link"
                 href="/admin/guides"
@@ -277,9 +282,9 @@ export function GuideEditor({ mode, guideId }: GuideEditorProps) {
             </UiButton>
 
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                <h1 className="text-foreground text-2xl font-semibold tracking-tight md:text-3xl">
+                <UiPageHeading>
                     {mode === 'create' ? 'Новий гайд' : 'Редагування гайда'}
-                </h1>
+                </UiPageHeading>
                 {guide && <GuideStatusBadge status={guide.status} />}
             </div>
 
@@ -619,6 +624,6 @@ export function GuideEditor({ mode, guideId }: GuideEditorProps) {
                     )}
                 </div>
             </form>
-        </main>
+        </UiPageContainer>
     );
 }

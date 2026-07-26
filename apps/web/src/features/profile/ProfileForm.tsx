@@ -98,9 +98,11 @@ const ProfileForm = ({
                 <dd className="text-foreground mt-1">{user.email}</dd>
             </dl>
 
+            {/* Поля капнуті: у широкому робочому стовпі full-width інпут на
+                тисячу пікселів нечитабельний, довжина поля ≠ ширина картки. */}
             <form
                 onSubmit={form.handleSubmit(onSubmit)}
-                className="mt-4 space-y-4"
+                className="mt-4 max-w-md space-y-4"
             >
                 <div>
                     <label className="text-muted-foreground mb-1.5 block text-sm">

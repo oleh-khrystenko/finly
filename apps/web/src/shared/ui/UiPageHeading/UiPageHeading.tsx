@@ -4,7 +4,7 @@ import type { UiPageHeadingProps } from './types';
 const UiPageHeading = ({ children, className }: UiPageHeadingProps) => (
     <h1
         className={composeClasses(
-            'text-foreground text-3xl font-bold tracking-tight',
+            'text-foreground text-2xl font-bold tracking-tight',
             className
         )}
     >

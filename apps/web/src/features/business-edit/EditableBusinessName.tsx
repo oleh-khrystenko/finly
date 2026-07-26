@@ -98,7 +98,7 @@ export default function EditableBusinessName({ name, onSave }: Props) {
 
     return (
         <div className="flex min-w-0 items-center justify-between gap-2">
-            <h1 className="text-foreground min-w-0 text-3xl font-bold tracking-tight break-words md:text-4xl">
+            <h1 className="text-foreground min-w-0 text-2xl font-bold tracking-tight break-words">
                 {name}
             </h1>
             <UiButton

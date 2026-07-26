@@ -30,6 +30,7 @@ import UiBreadcrumb from '@/shared/ui/UiBreadcrumb';
 import UiButton from '@/shared/ui/UiButton';
 import UiInput from '@/shared/ui/UiInput';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
+import UiPageHeading from '@/shared/ui/UiPageHeading';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSelect from '@/shared/ui/UiSelect';
 import UiSwitch from '@/shared/ui/UiSwitch';
@@ -159,18 +160,18 @@ export function AdminPayeeForm({ existing }: { existing?: Business }) {
     const handleSubmit = isEdit ? submitEdit : submitCreate;
 
     return (
-        <UiPageContainer className="space-y-6 py-10 md:py-14">
+        <UiPageContainer narrow className="space-y-6">
             <UiBreadcrumb
                 items={[
                     { label: 'Системні отримувачі', href: '/admin/payees' },
                     { label: isEdit ? 'Редагування' : 'Створення' },
                 ]}
             />
-            <h1 className="text-foreground text-2xl font-semibold tracking-tight md:text-3xl">
+            <UiPageHeading>
                 {isEdit
                     ? 'Редагування отримувача'
                     : 'Новий системний отримувач'}
-            </h1>
+            </UiPageHeading>
 
             <UiSectionCard title="Основне">
                 <div className="mt-4 space-y-4">

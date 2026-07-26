@@ -12,6 +12,7 @@ import { taxIdFieldConfig } from '@/entities/business';
 import { useBookkeeperMode } from '@/entities/user';
 import { usePendingDeletesStore } from '@/features/business-edit/pendingDeletesStore';
 import UiButton from '@/shared/ui/UiButton';
+import UiCardGrid from '@/shared/ui/UiCardGrid';
 import UiNavCard from '@/shared/ui/UiNavCard';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
 import UiPageHeading from '@/shared/ui/UiPageHeading';
@@ -96,8 +97,8 @@ export default function BusinessListPage() {
 
     if (items === null && !error) {
         return (
-            <UiPageContainer className="py-16">
-                <div className="flex justify-center">
+            <UiPageContainer>
+                <div className="flex flex-1 items-center justify-center">
                     <UiSpinner size="md" />
                 </div>
             </UiPageContainer>
@@ -110,7 +111,7 @@ export default function BusinessListPage() {
     const isEmpty = visibleItems.length === 0;
 
     return (
-        <UiPageContainer className="space-y-6 py-10 md:py-14">
+        <UiPageContainer className="space-y-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
                 <UiPageHeading>Отримувачі</UiPageHeading>
                 {!isEmpty && (
@@ -220,11 +221,11 @@ function CreateBusinessButton({ children }: { children: ReactNode }) {
 
 function BusinessGrid({ items }: { items: BusinessWithCounts[] }) {
     return (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <UiCardGrid>
             {items.map((business) => (
                 <BusinessCard key={business.id} business={business} />
             ))}
-        </div>
+        </UiCardGrid>
     );
 }
 

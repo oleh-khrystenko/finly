@@ -90,8 +90,8 @@ export default function NewInvoicePage() {
 
     if (!isDataCurrent && !isErrorCurrent) {
         return (
-            <UiPageContainer className="py-16">
-                <div className="flex justify-center">
+            <UiPageContainer narrow>
+                <div className="flex flex-1 items-center justify-center">
                     <UiSpinner size="md" />
                 </div>
             </UiPageContainer>
@@ -100,7 +100,7 @@ export default function NewInvoicePage() {
 
     if (isErrorCurrent && error) {
         return (
-            <UiPageContainer className="space-y-6 py-12">
+            <UiPageContainer narrow className="space-y-6">
                 <UiSectionCard title={error.message}>
                     <p className="text-muted-foreground mt-2 text-sm">
                         Поверніться до реквізитів і повторіть.
@@ -125,7 +125,7 @@ export default function NewInvoicePage() {
     const { business, account } = data;
 
     return (
-        <UiPageContainer className="space-y-10 py-12 md:py-16">
+        <UiPageContainer narrow className="space-y-6">
             <UiButton
                 as="link"
                 href={`/business/${business.slug}/account/${account.slug}#invoices`}
@@ -136,7 +136,7 @@ export default function NewInvoicePage() {
             >
                 Назад до реквізитів
             </UiButton>
-            <UiPageHeading className="md:text-4xl">Новий рахунок</UiPageHeading>
+            <UiPageHeading>Новий рахунок</UiPageHeading>
             {/*
              * `key={account.slug}` — force-remount RHF на account change.
              * Без цього `useForm.defaultValues` ініціалізується раз, і

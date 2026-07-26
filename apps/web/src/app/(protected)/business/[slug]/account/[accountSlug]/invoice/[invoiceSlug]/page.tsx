@@ -42,6 +42,7 @@ import UiBreadcrumb from '@/shared/ui/UiBreadcrumb';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
+import UiWorkspaceColumns from '@/shared/ui/UiWorkspaceColumns';
 import {
     PaymentDetailsCard,
     SlugSection,
@@ -244,8 +245,8 @@ export default function InvoiceCabinetPage() {
 
     if (!isDataCurrent && !error) {
         return (
-            <UiPageContainer className="py-16">
-                <div className="flex justify-center">
+            <UiPageContainer>
+                <div className="flex flex-1 items-center justify-center">
                     <UiSpinner size="md" />
                 </div>
             </UiPageContainer>
@@ -262,8 +263,8 @@ export default function InvoiceCabinetPage() {
     }
     if (!data || !isDataCurrent) {
         return (
-            <UiPageContainer className="py-16">
-                <div className="flex justify-center">
+            <UiPageContainer>
+                <div className="flex flex-1 items-center justify-center">
                     <UiSpinner size="md" />
                 </div>
             </UiPageContainer>
@@ -327,8 +328,8 @@ export default function InvoiceCabinetPage() {
     };
 
     return (
-        <UiPageContainer className="space-y-6 py-8 md:py-12">
-            <div className="flex flex-col gap-4">
+        <UiPageContainer className="space-y-6">
+            <div className="flex flex-col gap-3">
                 {/* Лінія 1 — хлібні крихти, наодинці */}
                 <UiBreadcrumb
                     items={[
@@ -345,7 +346,7 @@ export default function InvoiceCabinetPage() {
                     ]}
                 />
                 {/* Лінія 2 — slug-заголовок, наодинці */}
-                <h1 className="text-foreground min-w-0 font-mono text-3xl font-bold tracking-tight break-all md:text-4xl">
+                <h1 className="text-foreground min-w-0 font-mono text-2xl font-bold tracking-tight break-all">
                     {invoice.slug}
                 </h1>
                 {/* Лінія 3 — метадані власності + дія створення */}
@@ -368,76 +369,87 @@ export default function InvoiceCabinetPage() {
                 </div>
             </div>
 
-            <div className="space-y-4">
-                <SlugSection
-                    invoice={invoice}
-                    businessSlug={business.slug}
-                    accountSlug={accountSlug}
-                    brandVersion={qrBrandVersion(
-                        business.brand?.active?.logoUrl
-                    )}
-                    payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
-                    isPaid={isPaid}
-                    defaultMode={account.invoiceSlugPresetDefault}
-                    onSave={onSave}
-                    onResetSlug={handleResetSlug}
-                    checkSlugAvailability={(slug) =>
-                        checkInvoiceSlugAvailability(
-                            business.slug,
-                            accountSlug,
-                            invoice.slug,
-                            slug
-                        ).then((r) => r.status)
-                    }
-                    reserveSlug={(slug) =>
-                        reserveInvoiceSlug(
-                            business.slug,
-                            accountSlug,
-                            invoice.slug,
-                            slug
-                        )
-                    }
-                    onSubscribe={handleSubscribe}
-                    subscribePriceLabel={subscribeLabel}
-                    initialReservation={
-                        !isPaid && desiredSlug ? reservation : null
-                    }
-                    autoStartSlugEdit={autoEditSlug}
-                />
-                <BrandSection
-                    business={business}
-                    isPaid={isPaid}
-                    onSubscribe={handleSubscribe}
-                    subscribePriceLabel={subscribeLabel}
-                    onApplied={handleBrandApplied}
-                />
-                <PaymentDetailsCard
-                    invoice={invoice}
-                    inheritedPaymentPurposeTemplate={resolveAccountPurposeTemplate(
-                        account.paymentPurposeTemplate,
-                        business.paymentPurposeTemplate
-                    )}
-                    onSave={onSave}
-                />
+            <UiWorkspaceColumns
+                main={
+                    <>
+                        <SlugSection
+                            invoice={invoice}
+                            businessSlug={business.slug}
+                            accountSlug={accountSlug}
+                            brandVersion={qrBrandVersion(
+                                business.brand?.active?.logoUrl
+                            )}
+                            payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
+                            isPaid={isPaid}
+                            defaultMode={account.invoiceSlugPresetDefault}
+                            onSave={onSave}
+                            onResetSlug={handleResetSlug}
+                            checkSlugAvailability={(slug) =>
+                                checkInvoiceSlugAvailability(
+                                    business.slug,
+                                    accountSlug,
+                                    invoice.slug,
+                                    slug
+                                ).then((r) => r.status)
+                            }
+                            reserveSlug={(slug) =>
+                                reserveInvoiceSlug(
+                                    business.slug,
+                                    accountSlug,
+                                    invoice.slug,
+                                    slug
+                                )
+                            }
+                            onSubscribe={handleSubscribe}
+                            subscribePriceLabel={subscribeLabel}
+                            initialReservation={
+                                !isPaid && desiredSlug ? reservation : null
+                            }
+                            autoStartSlugEdit={autoEditSlug}
+                        />
+                        <PaymentDetailsCard
+                            invoice={invoice}
+                            inheritedPaymentPurposeTemplate={resolveAccountPurposeTemplate(
+                                account.paymentPurposeTemplate,
+                                business.paymentPurposeTemplate
+                            )}
+                            onSave={onSave}
+                        />
+                    </>
+                }
+                aside={
+                    <>
+                        <BrandSection
+                            business={business}
+                            isPaid={isPaid}
+                            onSubscribe={handleSubscribe}
+                            subscribePriceLabel={subscribeLabel}
+                            onApplied={handleBrandApplied}
+                        />
 
-                <UiSectionCard title="Небезпечна зона" variant="destructive">
-                    <p className="text-muted-foreground mt-2 text-sm">
-                        Видалення повне і незворотне. Клієнт, що має збережене
-                        посилання, не зможе оплатити.
-                    </p>
-                    <div className="mt-4">
-                        <UiButton
-                            type="button"
-                            variant="destructive-outline"
-                            size="md"
-                            onClick={handleDelete}
-                            IconLeft={<Trash2 />}
+                        <UiSectionCard
+                            title="Небезпечна зона"
+                            variant="destructive"
                         >
-                            Видалити рахунок
-                        </UiButton>
-                    </div>
-                </UiSectionCard>
-            </div>
+                            <p className="text-muted-foreground mt-2 text-sm">
+                                Видалення повне і незворотне. Клієнт, що має
+                                збережене посилання, не зможе оплатити.
+                            </p>
+                            <div className="mt-4">
+                                <UiButton
+                                    type="button"
+                                    variant="destructive-outline"
+                                    size="md"
+                                    onClick={handleDelete}
+                                    IconLeft={<Trash2 />}
+                                >
+                                    Видалити рахунок
+                                </UiButton>
+                            </div>
+                        </UiSectionCard>
+                    </>
+                }
+            />
         </UiPageContainer>
     );
 }
@@ -455,7 +467,7 @@ function ErrorPage({ code }: { code: string }) {
                   : getApiMessage(code, 'invoices');
 
     return (
-        <UiPageContainer className="space-y-6 py-12">
+        <UiPageContainer className="space-y-6">
             <UiSectionCard title={message}>
                 <p className="text-muted-foreground mt-2 text-sm">
                     Поверніться до отримувача і оберіть інші реквізити.

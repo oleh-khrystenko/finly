@@ -35,6 +35,7 @@ import UiBreadcrumb from '@/shared/ui/UiBreadcrumb';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
+import UiWorkspaceColumns from '@/shared/ui/UiWorkspaceColumns';
 import {
     AccountsSection,
     EditableBusinessName,
@@ -300,8 +301,8 @@ export default function BusinessSlugPage() {
 
     if (business === null && !error) {
         return (
-            <UiPageContainer className="py-16">
-                <div className="flex justify-center">
+            <UiPageContainer>
+                <div className="flex flex-1 items-center justify-center">
                     <UiSpinner size="md" />
                 </div>
             </UiPageContainer>
@@ -317,9 +318,9 @@ export default function BusinessSlugPage() {
     const typeLabel = BUSINESS_TYPE_LABEL[business.type];
 
     return (
-        <UiPageContainer className="space-y-6 py-10 md:py-14">
+        <UiPageContainer className="space-y-6">
             {/* Top toolbar: breadcrumb + identity heading. */}
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-3">
                 {/* Лінія 1 — хлібні крихти, наодинці */}
                 <UiBreadcrumb
                     items={[
@@ -329,6 +330,8 @@ export default function BusinessSlugPage() {
                 />
                 {/* Лінія 2 — тип + назва з inline-edit, наодинці */}
                 <div className="flex min-w-0 flex-col gap-1">
+                    {/* Орг.-правова форма — частина юридичної назви, не kicker:
+                        титул-tier (`text-xl`) за design-tokens.md §3 п.5. */}
                     <p className="text-muted-foreground text-xl font-semibold tracking-wide uppercase">
                         {typeLabel}
                     </p>
@@ -357,59 +360,81 @@ export default function BusinessSlugPage() {
                 </div>
             </div>
 
-            <PublicSection
-                business={business}
-                payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
-                isPaid={isPaid}
-                onSave={handlePatch}
-                onResetSlug={handleResetSlug}
-                checkSlugAvailability={(slug) =>
-                    checkBusinessSlugAvailability(business.slug, slug).then(
-                        (r) => r.status
-                    )
+            <UiWorkspaceColumns
+                main={
+                    <>
+                        <PublicSection
+                            business={business}
+                            payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
+                            isPaid={isPaid}
+                            onSave={handlePatch}
+                            onResetSlug={handleResetSlug}
+                            checkSlugAvailability={(slug) =>
+                                checkBusinessSlugAvailability(
+                                    business.slug,
+                                    slug
+                                ).then((r) => r.status)
+                            }
+                            reserveSlug={(slug) =>
+                                reserveBusinessSlug(business.slug, slug)
+                            }
+                            onSubscribe={handleSubscribe}
+                            subscribePriceLabel={subscribeLabel}
+                            initialReservation={
+                                !isPaid && desiredSlug ? reservation : null
+                            }
+                            autoStartSlugEdit={autoEditSlug}
+                        />
+                        <AccountsSection businessSlug={business.slug} />
+                        <RequisitesCard
+                            business={business}
+                            onSave={handlePatch}
+                        />
+                    </>
                 }
-                reserveSlug={(slug) => reserveBusinessSlug(business.slug, slug)}
-                onSubscribe={handleSubscribe}
-                subscribePriceLabel={subscribeLabel}
-                initialReservation={!isPaid && desiredSlug ? reservation : null}
-                autoStartSlugEdit={autoEditSlug}
-            />
-            <PublicitySection
-                business={business}
-                onRequest={handleRequestPublicity}
-                onCancelRequest={handleCancelPublicityRequest}
-                onLeaveCatalog={handleLeaveCatalog}
-                onToggleVisibility={handleToggleCatalogVisibility}
-            />
-            <BrandSection
-                business={business}
-                isPaid={isPaid}
-                onSubscribe={handleSubscribe}
-                subscribePriceLabel={subscribeLabel}
-                onApplied={handleBrandApplied}
-            />
-            <AccountsSection businessSlug={business.slug} />
-            <RequisitesCard business={business} onSave={handlePatch} />
+                aside={
+                    <>
+                        <PublicitySection
+                            business={business}
+                            onRequest={handleRequestPublicity}
+                            onCancelRequest={handleCancelPublicityRequest}
+                            onLeaveCatalog={handleLeaveCatalog}
+                            onToggleVisibility={handleToggleCatalogVisibility}
+                        />
+                        <BrandSection
+                            business={business}
+                            isPaid={isPaid}
+                            onSubscribe={handleSubscribe}
+                            subscribePriceLabel={subscribeLabel}
+                            onApplied={handleBrandApplied}
+                        />
 
-            {/* Danger zone */}
-            <UiSectionCard title="Небезпечна зона" variant="destructive">
-                <p className="text-muted-foreground mt-2 text-base">
-                    Видалення повне і незворотне. Усі реквізити і виставлені
-                    рахунки цього отримувача будуть видалені. Клієнти, які мають
-                    збережене посилання, не зможуть оплатити.
-                </p>
-                <div className="mt-4">
-                    <UiButton
-                        type="button"
-                        variant="destructive-outline"
-                        size="md"
-                        onClick={handleDelete}
-                        IconLeft={<Trash2 />}
-                    >
-                        Видалити отримувача
-                    </UiButton>
-                </div>
-            </UiSectionCard>
+                        {/* Danger zone */}
+                        <UiSectionCard
+                            title="Небезпечна зона"
+                            variant="destructive"
+                        >
+                            <p className="text-muted-foreground mt-2 text-base">
+                                Видалення повне і незворотне. Усі реквізити і
+                                виставлені рахунки цього отримувача будуть
+                                видалені. Клієнти, які мають збережене
+                                посилання, не зможуть оплатити.
+                            </p>
+                            <div className="mt-4">
+                                <UiButton
+                                    type="button"
+                                    variant="destructive-outline"
+                                    size="md"
+                                    onClick={handleDelete}
+                                    IconLeft={<Trash2 />}
+                                >
+                                    Видалити отримувача
+                                </UiButton>
+                            </div>
+                        </UiSectionCard>
+                    </>
+                }
+            />
         </UiPageContainer>
     );
 }
@@ -423,7 +448,7 @@ function ErrorPage({ code }: { code: string }) {
               : getApiMessage(code, 'businesses');
 
     return (
-        <UiPageContainer className="space-y-6 py-12">
+        <UiPageContainer className="space-y-6">
             <UiSectionCard title={message}>
                 <p className="text-muted-foreground mt-2 text-sm">
                     Поверніться до списку отримувачів і оберіть іншого.

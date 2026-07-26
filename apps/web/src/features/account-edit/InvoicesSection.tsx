@@ -5,6 +5,7 @@ import { FileText, Plus } from 'lucide-react';
 import { type Invoice } from '@finly/types';
 import { extractApiErrorCode, getApiMessage, listInvoices } from '@/shared/api';
 import UiButton from '@/shared/ui/UiButton';
+import UiCardGrid from '@/shared/ui/UiCardGrid';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
 import { usePendingInvoiceDeletesStore } from '@/features/invoice-edit';
@@ -219,7 +220,7 @@ export default function InvoicesSection({
 
             {visibleItems !== null && visibleItems.length > 0 && (
                 <div className="mt-4 space-y-3">
-                    <div className="grid gap-4 sm:grid-cols-2">
+                    <UiCardGrid>
                         {visibleItems.map((inv) => (
                             <InvoiceCard
                                 key={inv.id}
@@ -231,7 +232,7 @@ export default function InvoicesSection({
                                 }
                             />
                         ))}
-                    </div>
+                    </UiCardGrid>
                     {hasMore && (
                         <div className="flex justify-center pt-2">
                             <UiButton

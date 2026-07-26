@@ -35,8 +35,13 @@ export default function DocumentsUniverseCard({ catalog, profile }: Props) {
     const muted = !docs.enabled;
 
     return (
+        // Оболонка і шкала заголовка — ті самі, що у `UiSectionCard`
+        // (`p-4 md:p-6`, h2 `text-lg`): картка стоїть в одному стосі з
+        // `RecentPayments`, різні паддінги читалися б як збій верстки.
+        // Власний `<section>` лишається через складнішу шапку: іконка +
+        // підзаголовок + бейдж, чого `UiSectionCard` не приймає.
         <section
-            className={`bg-card rounded-xl border p-6 md:p-8 ${muted ? 'opacity-90' : ''}`}
+            className={`bg-card rounded-xl border p-4 md:p-6 ${muted ? 'opacity-90' : ''}`}
         >
             <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-3">
@@ -44,7 +49,7 @@ export default function DocumentsUniverseCard({ catalog, profile }: Props) {
                         <FileText className="size-5" />
                     </span>
                     <div>
-                        <h2 className="text-foreground text-xl font-semibold tracking-tight">
+                        <h2 className="text-foreground text-lg font-semibold tracking-tight">
                             Документи
                         </h2>
                         <p className="text-muted-foreground text-sm">
@@ -61,17 +66,19 @@ export default function DocumentsUniverseCard({ catalog, profile }: Props) {
 
             {active && credits ? (
                 <div className="mt-6 grid grid-cols-2 gap-4">
+                    {/* Значення поля — `text-lg` за шкалою; `text-2xl` там
+                        зарезервований під h1 сторінки. */}
                     <div className="border-border rounded-lg border p-4">
-                        <p className="text-muted-foreground text-xs">
+                        <p className="text-muted-foreground text-sm">
                             Баланс кредитів
                         </p>
-                        <p className="text-foreground mt-1 text-2xl font-semibold">
+                        <p className="text-foreground mt-1 text-lg font-semibold">
                             {credits.balance}
                         </p>
                     </div>
                     <div className="border-border rounded-lg border p-4">
-                        <p className="text-muted-foreground text-xs">Сховище</p>
-                        <p className="text-foreground mt-1 text-2xl font-semibold">
+                        <p className="text-muted-foreground text-sm">Сховище</p>
+                        <p className="text-foreground mt-1 text-lg font-semibold">
                             {Math.round(credits.storageBytesUsed / 1e9)} ГБ
                         </p>
                     </div>

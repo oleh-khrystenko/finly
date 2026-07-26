@@ -18,6 +18,8 @@ import UiButton from '@/shared/ui/UiButton';
 import UiLink from '@/shared/ui/UiLink';
 import UiSpinner from '@/shared/ui/UiSpinner';
 import UiTabs, { uiTabPanelProps } from '@/shared/ui/UiTabs';
+import UiPageContainer from '@/shared/ui/UiPageContainer';
+import UiPageHeading from '@/shared/ui/UiPageHeading';
 import {
     adminListGuides,
     reorderGuides,
@@ -213,12 +215,10 @@ export function AdminGuidesList() {
     for (const it of items) counts[it.status] += 1;
 
     return (
-        <main className="mx-auto max-w-4xl px-4 py-10 sm:px-6 md:py-14 lg:px-8">
+        <UiPageContainer>
             <header className="flex items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-foreground text-2xl font-semibold tracking-tight md:text-3xl">
-                        Гайди
-                    </h1>
+                    <UiPageHeading>Гайди</UiPageHeading>
                     <p className="text-muted-foreground mt-1 text-sm">
                         Керування статтями розділу гайдів.
                     </p>
@@ -325,7 +325,7 @@ export function AdminGuidesList() {
                     </>
                 )}
             </div>
-        </main>
+        </UiPageContainer>
     );
 }
 

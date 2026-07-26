@@ -20,6 +20,7 @@ import UiBreadcrumb from '@/shared/ui/UiBreadcrumb';
 import UiButton from '@/shared/ui/UiButton';
 import UiInput from '@/shared/ui/UiInput';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
+import UiPageHeading from '@/shared/ui/UiPageHeading';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 
 import { collectFieldErrors, type FieldErrors } from './fieldErrors';
@@ -97,7 +98,7 @@ export function AdminPayeeAccountForm({ payee, account }: Props) {
     };
 
     return (
-        <UiPageContainer className="space-y-6 py-10 md:py-14">
+        <UiPageContainer narrow className="space-y-6">
             <UiBreadcrumb
                 items={[
                     { label: 'Системні отримувачі', href: '/admin/payees' },
@@ -108,9 +109,7 @@ export function AdminPayeeAccountForm({ payee, account }: Props) {
                     { label: 'Реквізити' },
                 ]}
             />
-            <h1 className="text-foreground text-2xl font-semibold tracking-tight md:text-3xl">
-                Редагування реквізитів
-            </h1>
+            <UiPageHeading>Редагування реквізитів</UiPageHeading>
 
             <UiSectionCard title="Основне">
                 <div className="mt-4 space-y-4">

@@ -41,8 +41,8 @@ export function AdminPayeeEdit({ slug }: { slug: string }) {
 
     if (state.phase === 'loading') {
         return (
-            <UiPageContainer className="py-16">
-                <div className="flex justify-center">
+            <UiPageContainer narrow>
+                <div className="flex flex-1 items-center justify-center">
                     <UiSpinner size="md" />
                 </div>
             </UiPageContainer>
@@ -50,7 +50,7 @@ export function AdminPayeeEdit({ slug }: { slug: string }) {
     }
     if (state.phase === 'error') {
         return (
-            <UiPageContainer className="py-12">
+            <UiPageContainer narrow className="justify-center">
                 <UiSectionCard title="Отримувача не знайдено">
                     <div className="mt-4">
                         <UiButton

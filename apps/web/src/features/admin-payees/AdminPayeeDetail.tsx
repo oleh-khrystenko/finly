@@ -29,6 +29,7 @@ import UiBreadcrumb from '@/shared/ui/UiBreadcrumb';
 import UiButton from '@/shared/ui/UiButton';
 import UiInput from '@/shared/ui/UiInput';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
+import UiPageHeading from '@/shared/ui/UiPageHeading';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
 import UiSwitch from '@/shared/ui/UiSwitch';
@@ -73,8 +74,8 @@ export function AdminPayeeDetail({ slug }: { slug: string }) {
 
     if (state.phase === 'loading') {
         return (
-            <UiPageContainer className="py-16">
-                <div className="flex justify-center">
+            <UiPageContainer narrow>
+                <div className="flex flex-1 items-center justify-center">
                     <UiSpinner size="md" />
                 </div>
             </UiPageContainer>
@@ -82,7 +83,7 @@ export function AdminPayeeDetail({ slug }: { slug: string }) {
     }
     if (state.phase === 'error') {
         return (
-            <UiPageContainer className="py-12">
+            <UiPageContainer narrow className="justify-center">
                 <UiSectionCard title="Отримувача не знайдено">
                     <div className="mt-4">
                         <UiButton
@@ -199,7 +200,7 @@ export function AdminPayeeDetail({ slug }: { slug: string }) {
     };
 
     return (
-        <UiPageContainer className="space-y-6 py-10 md:py-14">
+        <UiPageContainer narrow className="space-y-6">
             <UiBreadcrumb
                 items={[
                     { label: 'Системні отримувачі', href: '/admin/payees' },
@@ -210,9 +211,9 @@ export function AdminPayeeDetail({ slug }: { slug: string }) {
                 <p className="text-muted-foreground text-sm font-semibold tracking-wide uppercase">
                     {BUSINESS_TYPE_LABEL[business.type]}
                 </p>
-                <h1 className="text-foreground text-2xl font-bold tracking-tight break-words md:text-3xl">
+                <UiPageHeading className="break-words">
                     {formatPayeeName(business.type, business.name)}
-                </h1>
+                </UiPageHeading>
                 <p className="text-muted-foreground mt-1 text-sm">
                     /{business.slug}
                 </p>

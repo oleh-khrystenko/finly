@@ -5,6 +5,7 @@ import { CreditCard, Plus } from 'lucide-react';
 import { BANK_LABEL, type AccountWithCounts } from '@finly/types';
 import { extractApiErrorCode, getApiMessage, listAccounts } from '@/shared/api';
 import UiButton from '@/shared/ui/UiButton';
+import UiCardGrid from '@/shared/ui/UiCardGrid';
 import UiNavCard from '@/shared/ui/UiNavCard';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
@@ -117,7 +118,7 @@ export default function AccountsSection({ businessSlug }: Props) {
                 !isErrorCurrent && <EmptyState createHref={createHref} />}
 
             {visibleItems !== null && visibleItems.length > 0 && (
-                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <UiCardGrid className="mt-4">
                     {visibleItems.map((account) => (
                         <AccountCard
                             key={account.id}
@@ -125,7 +126,7 @@ export default function AccountsSection({ businessSlug }: Props) {
                             businessSlug={businessSlug}
                         />
                     ))}
-                </div>
+                </UiCardGrid>
             )}
         </UiSectionCard>
     );

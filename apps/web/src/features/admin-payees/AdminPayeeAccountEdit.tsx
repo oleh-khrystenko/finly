@@ -60,8 +60,8 @@ export function AdminPayeeAccountEdit({
 
     if (state.phase === 'loading') {
         return (
-            <UiPageContainer className="py-16">
-                <div className="flex justify-center">
+            <UiPageContainer narrow>
+                <div className="flex flex-1 items-center justify-center">
                     <UiSpinner size="md" />
                 </div>
             </UiPageContainer>
@@ -69,7 +69,7 @@ export function AdminPayeeAccountEdit({
     }
     if (state.phase === 'error') {
         return (
-            <UiPageContainer className="py-12">
+            <UiPageContainer narrow className="justify-center">
                 <UiSectionCard title="Реквізити не знайдено">
                     <div className="mt-4">
                         <UiButton

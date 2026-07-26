@@ -23,6 +23,8 @@ import UiButton from '@/shared/ui/UiButton';
 import UiLink from '@/shared/ui/UiLink';
 import UiSelect from '@/shared/ui/UiSelect';
 import UiSpinner from '@/shared/ui/UiSpinner';
+import UiPageContainer from '@/shared/ui/UiPageContainer';
+import UiPageHeading from '@/shared/ui/UiPageHeading';
 import { AdminCatalogTabs } from './AdminCatalogTabs';
 import { usePublicityCountStore } from './publicityCountStore';
 import { useRejectPublicityStore } from './rejectPublicityStore';
@@ -74,13 +76,11 @@ export function AdminPublicityQueue() {
     }, [load]);
 
     return (
-        <main className="mx-auto max-w-4xl px-4 py-10 sm:px-6 md:py-14 lg:px-8">
+        <UiPageContainer>
             <AdminCatalogTabs />
 
             <header>
-                <h1 className="text-foreground text-2xl font-semibold tracking-tight md:text-3xl">
-                    Запити на публічність
-                </h1>
+                <UiPageHeading>Запити на публічність</UiPageHeading>
                 <p className="text-muted-foreground mt-1 text-sm">
                     Заявки користувачів на додавання отримувача в каталог.
                 </p>
@@ -137,7 +137,7 @@ export function AdminPublicityQueue() {
                     </div>
                 )}
             </div>
-        </main>
+        </UiPageContainer>
     );
 }
 
