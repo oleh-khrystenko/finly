@@ -68,8 +68,8 @@ export default function PublicitySection({
             return (
                 <div className="flex flex-col gap-3">
                     <p className="text-foreground text-base">
-                        Заявку подано. Вона на розгляді, ми повідомимо про
-                        рішення.
+                        Заявку подано, вона на розгляді. Рішення зʼявиться у
+                        цьому блоці.
                     </p>
                     <div>
                         <UiButton

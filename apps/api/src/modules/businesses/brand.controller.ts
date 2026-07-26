@@ -89,8 +89,7 @@ export class BrandController {
      * Власний бакет `brand-preview` (20/min): кожен виклик робить download +
      * bake + два рендери — важче за звичайний роут. НЕ ділимо лічильник з
      * анонімним `qr-preview`, щоб скан з того ж IP не блокував прев'ю платного
-     * клієнта. Skip інших named-бакетів, щоб вони не тіньовили поріг
-     * (прецедент `slug-availability`).
+     * клієнта. Skip інших named-бакетів, щоб вони не тіньовили поріг.
      */
     @Post('preview')
     @HttpCode(HttpStatus.OK)

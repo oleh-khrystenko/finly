@@ -35,10 +35,6 @@ export const THROTTLERS = [
     // burst guard; реальні wallet-cap-и — per-IP 24h limit і global daily budget
     // у `HelpChatRateLimitGuard`.
     { name: 'help-chat', ttl: 60000, limit: 20 },
-    // Sprint 20 — live-перевірка доступності slug (authorized, усі рівні).
-    // Користувач друкує ім'я і запити йдуть debounce-ом: 30/min/IP вистачає на
-    // нормальний ввід, але стримує перебір.
-    { name: 'slug-availability', ttl: 60000, limit: 30 },
     // Sprint 21 — живе прев'ю кастомного бренду (`BrandController.preview`,
     // authorized). Окремий бакет, щоб НЕ ділити лічильник з анонімним
     // `qr-preview`: інакше скан з того ж IP (NAT) міг би заблокувати прев'ю
