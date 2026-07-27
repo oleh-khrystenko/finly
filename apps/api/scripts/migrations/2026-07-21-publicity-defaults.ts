@@ -22,7 +22,10 @@
  */
 
 import 'dotenv/config';
-import { DEFAULT_CATALOG_CATEGORY } from '@finly/types';
+import {
+    DEFAULT_CATALOG_CATEGORY,
+    DEFAULT_PUBLICITY_STATUS,
+} from '@finly/types';
 import mongoose from 'mongoose';
 
 type Db = NonNullable<typeof mongoose.connection.db>;
@@ -38,7 +41,7 @@ export interface MigrationResult {
 const BUSINESS_DEFAULTS: Record<string, unknown> = {
     isSystem: false,
     catalogVisible: false,
-    publicityStatus: 'none',
+    publicityStatus: DEFAULT_PUBLICITY_STATUS,
     publicityRequestedAt: null,
     publicityReviewedAt: null,
     publicityRejectionReason: null,

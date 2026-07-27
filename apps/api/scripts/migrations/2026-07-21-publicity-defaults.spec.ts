@@ -1,4 +1,7 @@
-import { DEFAULT_CATALOG_CATEGORY } from '@finly/types';
+import {
+    DEFAULT_CATALOG_CATEGORY,
+    DEFAULT_PUBLICITY_STATUS,
+} from '@finly/types';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import mongoose from 'mongoose';
 
@@ -45,12 +48,10 @@ describe('migration 2026-07-21-publicity-defaults', () => {
         await db
             .collection(BUSINESSES_COLLECTION)
             .insertOne({ name: 'ФОП Петренко', slugLower: 'petrenko' });
-        await db
-            .collection(ACCOUNTS_COLLECTION)
-            .insertOne({
-                slugLower: 'main',
-                iban: 'UA000000000000000000000000000',
-            });
+        await db.collection(ACCOUNTS_COLLECTION).insertOne({
+            slugLower: 'main',
+            iban: 'UA000000000000000000000000000',
+        });
 
         const result = await runMigration(db);
         expect(result).toEqual({
@@ -64,7 +65,7 @@ describe('migration 2026-07-21-publicity-defaults', () => {
         expect(business).toMatchObject({
             isSystem: false,
             catalogVisible: false,
-            publicityStatus: 'none',
+            publicityStatus: DEFAULT_PUBLICITY_STATUS,
             publicityRequestedAt: null,
             publicityReviewedAt: null,
             publicityRejectionReason: null,
