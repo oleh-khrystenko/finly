@@ -89,40 +89,45 @@ export default function PublicitySection({
         if (business.publicityStatus === 'approved') {
             return (
                 <div className="flex flex-col gap-4">
-                    {!business.slugCustomized && (
+                    {business.slugCustomized ? (
+                        <label
+                            htmlFor="catalog-toggle"
+                            className="flex cursor-pointer flex-col gap-1"
+                        >
+                            <span className="flex items-center justify-between gap-3">
+                                <span className="text-foreground text-lg font-medium">
+                                    {business.catalogVisible
+                                        ? 'Отримувач показується в каталозі'
+                                        : 'Отримувач прихований з каталогу'}
+                                </span>
+                                <UiSwitch
+                                    id="catalog-toggle"
+                                    className="shrink-0"
+                                    checked={business.catalogVisible}
+                                    disabled={busy}
+                                    onChange={(next) =>
+                                        void run(() => onToggleVisibility(next))
+                                    }
+                                />
+                            </span>
+                            <span className="text-muted-foreground text-sm">
+                                Видимістю окремих реквізитів керуйте на сторінці
+                                кожного рахунку.
+                            </span>
+                        </label>
+                    ) : (
                         // Схвалення лишилось, а красиве посилання злетіло: у
                         // каталог запис не потрапляє (гейт на читанні), тож
                         // пояснюємо це замість мовчазної порожньої вітрини.
+                        // Перемикач тут не рендеримо: увімкнення гарантовано
+                        // впало б на сервері (`canEnterCatalog` вимагає красивого
+                        // slug), і тост суперечив би заголовку «схвалено» (той
+                        // самий патерн, що `AccountCatalogSection`).
                         <UiUpsellNote
                             message="Отримувача схвалено, але зараз він не показується в каталозі: у нього немає красивого посилання. Воно доступне на тарифі «Бренд»."
                             ctaLabel="Обрати тариф"
                         />
                     )}
-                    <label
-                        htmlFor="catalog-toggle"
-                        className="flex cursor-pointer flex-col gap-1"
-                    >
-                        <span className="flex items-center justify-between gap-3">
-                            <span className="text-foreground text-lg font-medium">
-                                {business.catalogVisible
-                                    ? 'Отримувач показується в каталозі'
-                                    : 'Отримувач прихований з каталогу'}
-                            </span>
-                            <UiSwitch
-                                id="catalog-toggle"
-                                className="shrink-0"
-                                checked={business.catalogVisible}
-                                disabled={busy}
-                                onChange={(next) =>
-                                    void run(() => onToggleVisibility(next))
-                                }
-                            />
-                        </span>
-                        <span className="text-muted-foreground text-sm">
-                            Видимістю окремих реквізитів керуйте на сторінці
-                            кожного рахунку.
-                        </span>
-                    </label>
                     <div>
                         <UiButton
                             type="button"
