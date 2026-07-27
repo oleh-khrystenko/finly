@@ -1,9 +1,10 @@
-import { BusinessSchema } from './business';
+import { BusinessSchema, systemPaymentPurposeTemplateSchema } from './business';
 import {
     buildPersonalizedPurpose,
     containsPurposeMarker,
     findKnownPurposeMarkers,
     findUnknownPurposeMarkers,
+    hasUnmatchedPurposeBraces,
     purposeMarkerToken,
     substitutePurposeMarkers,
     uniquePurposeMarkers,
@@ -48,6 +49,20 @@ describe('purpose markers', () => {
                 taxId: '1234567890',
             })
         ).toBe('ЄСВ 1234567890 код { taxId }');
+    });
+
+    it('hasUnmatchedPurposeBraces ловить незакриті і вкладені дужки', () => {
+        // Токен-патерн такі уламки не матчить, тож findUnknownPurposeMarkers
+        // для них порожній — без окремої перевірки одрукована дужка їхала б
+        // літерально у призначення податкового платежу.
+        expect(hasUnmatchedPurposeBraces('ЄСВ {taxId за {period}')).toBe(true);
+        expect(hasUnmatchedPurposeBraces('a{b{taxId}d}e')).toBe(true);
+        expect(hasUnmatchedPurposeBraces('ЄСВ taxId} за {period}')).toBe(true);
+        expect(hasUnmatchedPurposeBraces('ЄСВ {taxId')).toBe(true);
+        expect(hasUnmatchedPurposeBraces('ЄСВ {taxId} за {period}')).toBe(
+            false
+        );
+        expect(hasUnmatchedPurposeBraces('Оплата за послуги')).toBe(false);
     });
 
     it('purposeMarkerToken огортає у фігурні дужки', () => {
@@ -133,10 +148,71 @@ const SYSTEM_BASE = {
     updatedAt: '2026-05-01T10:00:00.000Z',
 };
 
+describe('systemPaymentPurposeTemplateSchema — незбалансовані дужки', () => {
+    it('шаблон з незакритою дужкою відхиляється, а не тихо губить маркер', () => {
+        // Регресія: `{taxId за ` патерн не матчив, unknown-перевірка мовчала,
+        // і форма рендерила лише поле періоду.
+        const result = systemPaymentPurposeTemplateSchema.safeParse(
+            'ЄСВ {taxId за {period}'
+        );
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            expect(result.error.issues[0]!.message).toBe(
+                'PURPOSE_MARKER_UNBALANCED'
+            );
+        }
+    });
+
+    it('вкладені дужки відхиляються', () => {
+        const result =
+            systemPaymentPurposeTemplateSchema.safeParse('a{b{taxId}d}e');
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            expect(result.error.issues[0]!.message).toBe(
+                'PURPOSE_MARKER_UNBALANCED'
+            );
+        }
+    });
+
+    it('збалансований шаблон з відомими маркерами проходить', () => {
+        expect(
+            systemPaymentPurposeTemplateSchema.safeParse(
+                'Єдиний внесок {taxId} за {period}'
+            ).success
+        ).toBe(true);
+    });
+});
+
 describe('BusinessSchema — системний отримувач (Sprint 29)', () => {
     it('приймає нічий системний запис із порожніми managers і маркерами', () => {
         const result = BusinessSchema.safeParse(SYSTEM_BASE);
         expect(result.success).toBe(true);
+    });
+
+    it('системний запис із власником відхиляється (corrupt state)', () => {
+        const result = BusinessSchema.safeParse({
+            ...SYSTEM_BASE,
+            ownerId: '507f1f77bcf86cd799439012',
+        });
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            expect(result.error.issues[0]!.message).toBe(
+                'SYSTEM_PAYEE_MUST_BE_OWNERLESS'
+            );
+        }
+    });
+
+    it('системний запис із керівниками відхиляється (corrupt state)', () => {
+        const result = BusinessSchema.safeParse({
+            ...SYSTEM_BASE,
+            managers: ['507f1f77bcf86cd799439013'],
+        });
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            expect(result.error.issues[0]!.message).toBe(
+                'SYSTEM_PAYEE_MUST_BE_OWNERLESS'
+            );
+        }
     });
 
     it('звичайний бізнес із маркером у призначенні відхиляється', () => {
@@ -149,6 +225,35 @@ describe('BusinessSchema — системний отримувач (Sprint 29)',
         if (!result.success) {
             expect(result.error.issues[0]!.message).toBe(
                 'PURPOSE_MARKERS_NOT_ALLOWED'
+            );
+        }
+    });
+
+    // Read-side дзеркало write-side `systemPaymentPurposeTemplateSchema`:
+    // corrupt-документ із побитим шаблоном не має проходити entity-parse,
+    // інакше літеральний уривок їхав би у призначення податкового платежу.
+    it('системний запис із незакритою дужкою у шаблоні відхиляється', () => {
+        const result = BusinessSchema.safeParse({
+            ...SYSTEM_BASE,
+            paymentPurposeTemplate: 'ЄСВ {taxId за {period}',
+        });
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            expect(result.error.issues[0]!.message).toBe(
+                'PURPOSE_MARKER_UNBALANCED'
+            );
+        }
+    });
+
+    it('системний запис із невідомим маркером у шаблоні відхиляється', () => {
+        const result = BusinessSchema.safeParse({
+            ...SYSTEM_BASE,
+            paymentPurposeTemplate: 'ЄСВ { taxId } за {period}',
+        });
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            expect(result.error.issues[0]!.message).toBe(
+                'PURPOSE_MARKER_UNKNOWN'
             );
         }
     });

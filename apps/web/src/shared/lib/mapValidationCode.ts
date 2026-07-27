@@ -72,6 +72,15 @@ const VALIDATION_MESSAGES: Record<string, string> = {
     INVALID_NAME_CHARSET:
         'Назва містить символи, які не підтримує платіжний QR-код. Використовуйте лише букви, цифри та звичайну пунктуацію',
 
+    // --- Назва реквізитів (accountNameSchema) ---
+    INVALID_ACCOUNT_NAME_REQUIRED: 'Введіть назву',
+    INVALID_ACCOUNT_NAME_CHAR_LENGTH:
+        'Назва занадто довга. Максимум 60 символів',
+    INVALID_ACCOUNT_NAME_BYTE_LENGTH:
+        'Назва занадто довга для платіжного QR-коду. Скоротіть її',
+    INVALID_ACCOUNT_NAME_CHARSET:
+        'Назва містить символи, які не підтримує платіжний QR-код. Використовуйте лише букви, цифри та звичайну пунктуацію',
+
     // --- Призначення платежу ---
     INVALID_PURPOSE_REQUIRED: 'Введіть призначення платежу',
     INVALID_PURPOSE_CHAR_LENGTH:
@@ -86,6 +95,12 @@ const VALIDATION_MESSAGES: Record<string, string> = {
     // у QR буквально.
     PURPOSE_MARKERS_NOT_ALLOWED:
         'Приберіть підстановки у фігурних дужках: у призначення потрапить саме той текст, який ви написали',
+    // Sprint 29 — шаблон системного отримувача (адмін-форми). Невідомий токен
+    // форма підстановки не заповнить, тож він reject-иться на write.
+    PURPOSE_MARKER_UNKNOWN:
+        'У призначенні є маркер, якого система не знає. Перевірте назву у фігурних дужках',
+    PURPOSE_MARKER_UNBALANCED:
+        'У призначенні незакрита фігурна дужка. Перевірте маркери',
 
     // --- Сума інвойсу ---
     INVALID_AMOUNT_OVERFLOW: 'Сума занадто велика. Максимум 999 999 999,99 грн',

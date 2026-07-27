@@ -7,6 +7,7 @@ import { Pencil, Plus, Trash2 } from 'lucide-react';
 import {
     BANK_LABEL,
     BUSINESS_TYPE_LABEL,
+    RESPONSE_CODE,
     accountNameSchema,
     deriveAccountLabel,
     ibanZod,
@@ -38,8 +39,11 @@ import { mapFieldMessage } from './fieldErrors';
 import { useDeleteAdminPayeeAccountConfirmStore } from './deleteAdminPayeeAccountConfirmStore';
 import { useDeleteAdminPayeeConfirmStore } from './deleteAdminPayeeConfirmStore';
 
+// `not-found` і `error` розділені: тимчасовий збій (мережа, 429, 500) не можна
+// показувати як ствердне «запису не існує» — це підштовхує адміна створити дубль.
 type LoadState =
     | { phase: 'loading' }
+    | { phase: 'not-found' }
     | { phase: 'error' }
     | { phase: 'ready'; business: Business; accounts: AccountWithCounts[] };
 
@@ -67,8 +71,15 @@ export function AdminPayeeDetail({ slug }: { slug: string }) {
             .then(({ business, accounts }) => {
                 if (active) setState({ phase: 'ready', business, accounts });
             })
-            .catch(() => {
-                if (active) setState({ phase: 'error' });
+            .catch((err) => {
+                if (!active) return;
+                setState({
+                    phase:
+                        extractApiErrorCode(err) ===
+                        RESPONSE_CODE.SYSTEM_PAYEE_NOT_FOUND
+                            ? 'not-found'
+                            : 'error',
+                });
             });
         return () => {
             active = false;
@@ -84,10 +95,16 @@ export function AdminPayeeDetail({ slug }: { slug: string }) {
             </UiPageContainer>
         );
     }
-    if (state.phase === 'error') {
+    if (state.phase === 'not-found' || state.phase === 'error') {
         return (
             <UiPageContainer narrow className="justify-center">
-                <UiSectionCard title="Отримувача не знайдено">
+                <UiSectionCard
+                    title={
+                        state.phase === 'not-found'
+                            ? 'Отримувача не знайдено'
+                            : 'Не вдалося завантажити отримувача. Оновіть сторінку'
+                    }
+                >
                     <div className="mt-4">
                         <UiButton
                             as="link"
@@ -176,13 +193,34 @@ export function AdminPayeeDetail({ slug }: { slug: string }) {
         );
     };
 
+    // Помилки мутації і наступного `reload()` розділені, як у handleAddAccount
+    // вище: спільний catch на збої перечитування показував би error-toast і
+    // старий стан перемикача, хоча сервер видимість УЖЕ перемкнув, — адмін
+    // вважав би запис прихованим, коли той живий у публічному каталозі.
+    // Success-toast ставить крапку саме про мутацію.
     const handleToggleVisibility = async (visible: boolean) => {
         setMutationBusy(true);
         try {
-            await adminSetPayeeCatalogVisibility(slug, visible);
-            await reload();
-        } catch (err) {
-            toast.error(getApiMessage(extractApiErrorCode(err), 'businesses'));
+            try {
+                await adminSetPayeeCatalogVisibility(slug, visible);
+            } catch (err) {
+                toast.error(
+                    getApiMessage(extractApiErrorCode(err), 'businesses')
+                );
+                return;
+            }
+            toast.success(
+                visible
+                    ? 'Отримувача показано в каталозі'
+                    : 'Отримувача приховано з каталогу'
+            );
+            try {
+                await reload();
+            } catch (err) {
+                toast.error(
+                    getApiMessage(extractApiErrorCode(err), 'businesses')
+                );
+            }
         } finally {
             setMutationBusy(false);
         }
@@ -194,14 +232,30 @@ export function AdminPayeeDetail({ slug }: { slug: string }) {
     ) => {
         setMutationBusy(true);
         try {
-            await adminSetPayeeAccountCatalogVisibility(
-                slug,
-                accountSlug,
+            try {
+                await adminSetPayeeAccountCatalogVisibility(
+                    slug,
+                    accountSlug,
+                    visible
+                );
+            } catch (err) {
+                toast.error(
+                    getApiMessage(extractApiErrorCode(err), 'accounts')
+                );
+                return;
+            }
+            toast.success(
                 visible
+                    ? 'Реквізити показано в каталозі'
+                    : 'Реквізити приховано з каталогу'
             );
-            await reload();
-        } catch (err) {
-            toast.error(getApiMessage(extractApiErrorCode(err), 'accounts'));
+            try {
+                await reload();
+            } catch (err) {
+                toast.error(
+                    getApiMessage(extractApiErrorCode(err), 'accounts')
+                );
+            }
         } finally {
             setMutationBusy(false);
         }
@@ -452,10 +506,20 @@ function AddAccountForm({
             setIban('');
             setName('');
         } catch (err) {
-            // Назва вже перевірена вище, тож усе, що сервер ще може відхилити у
-            // цьому запиті, стосується IBAN (дубль у межах отримувача,
-            // невідомий банк-код).
-            setIbanError(getApiMessage(extractApiErrorCode(err), 'accounts'));
+            // Під поле IBAN кладемо лише помилки, що справді про IBAN (дубль у
+            // межах отримувача, невалідне значення повз клієнтську перевірку).
+            // Решта (429, 500, зниклий отримувач) — toast: field-error під
+            // справним IBAN сигналізував би, що проблема у номері рахунку.
+            const code = extractApiErrorCode(err);
+            const message = getApiMessage(code, 'accounts');
+            if (
+                code === RESPONSE_CODE.ACCOUNT_IBAN_DUPLICATE ||
+                code === RESPONSE_CODE.VALIDATION_ERROR
+            ) {
+                setIbanError(message);
+            } else {
+                toast.error(message);
+            }
         } finally {
             setBusy(false);
         }

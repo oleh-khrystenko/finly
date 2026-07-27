@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { Account, Business } from '@finly/types';
+import { RESPONSE_CODE, type Account, type Business } from '@finly/types';
 
-import { adminGetPayee } from '@/shared/api';
+import { adminGetPayee, extractApiErrorCode } from '@/shared/api';
 import UiButton from '@/shared/ui/UiButton';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
@@ -11,8 +11,11 @@ import UiSpinner from '@/shared/ui/UiSpinner';
 
 import { AdminPayeeAccountForm } from './AdminPayeeAccountForm';
 
+// `not-found` і `error` розділені: тимчасовий збій (мережа, 429, 500) не можна
+// показувати як ствердне «запису не існує».
 type LoadState =
     | { phase: 'loading' }
+    | { phase: 'not-found' }
     | { phase: 'error' }
     | { phase: 'ready'; payee: Business; account: Account };
 
@@ -47,11 +50,18 @@ export function AdminPayeeAccountEdit({
                 setState(
                     account
                         ? { phase: 'ready', payee: business, account }
-                        : { phase: 'error' }
+                        : { phase: 'not-found' }
                 );
             })
-            .catch(() => {
-                if (active) setState({ phase: 'error' });
+            .catch((err) => {
+                if (!active) return;
+                setState({
+                    phase:
+                        extractApiErrorCode(err) ===
+                        RESPONSE_CODE.SYSTEM_PAYEE_NOT_FOUND
+                            ? 'not-found'
+                            : 'error',
+                });
             });
         return () => {
             active = false;
@@ -67,10 +77,16 @@ export function AdminPayeeAccountEdit({
             </UiPageContainer>
         );
     }
-    if (state.phase === 'error') {
+    if (state.phase === 'not-found' || state.phase === 'error') {
         return (
             <UiPageContainer narrow className="justify-center">
-                <UiSectionCard title="Реквізити не знайдено">
+                <UiSectionCard
+                    title={
+                        state.phase === 'not-found'
+                            ? 'Реквізити не знайдено'
+                            : 'Не вдалося завантажити реквізити. Оновіть сторінку'
+                    }
+                >
                     <div className="mt-4">
                         <UiButton
                             as="link"

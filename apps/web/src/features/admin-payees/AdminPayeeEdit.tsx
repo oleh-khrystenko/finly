@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { Business } from '@finly/types';
+import { RESPONSE_CODE, type Business } from '@finly/types';
 
-import { adminGetPayee } from '@/shared/api';
+import { adminGetPayee, extractApiErrorCode } from '@/shared/api';
 import UiButton from '@/shared/ui/UiButton';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
@@ -11,8 +11,11 @@ import UiSpinner from '@/shared/ui/UiSpinner';
 
 import { AdminPayeeForm } from './AdminPayeeForm';
 
+// `not-found` і `error` розділені: тимчасовий збій (мережа, 429, 500) не можна
+// показувати як ствердне «запису не існує».
 type LoadState =
     | { phase: 'loading' }
+    | { phase: 'not-found' }
     | { phase: 'error' }
     | { phase: 'ready'; business: Business };
 
@@ -31,8 +34,15 @@ export function AdminPayeeEdit({ slug }: { slug: string }) {
             .then(({ business }) => {
                 if (active) setState({ phase: 'ready', business });
             })
-            .catch(() => {
-                if (active) setState({ phase: 'error' });
+            .catch((err) => {
+                if (!active) return;
+                setState({
+                    phase:
+                        extractApiErrorCode(err) ===
+                        RESPONSE_CODE.SYSTEM_PAYEE_NOT_FOUND
+                            ? 'not-found'
+                            : 'error',
+                });
             });
         return () => {
             active = false;
@@ -48,10 +58,16 @@ export function AdminPayeeEdit({ slug }: { slug: string }) {
             </UiPageContainer>
         );
     }
-    if (state.phase === 'error') {
+    if (state.phase === 'not-found' || state.phase === 'error') {
         return (
             <UiPageContainer narrow className="justify-center">
-                <UiSectionCard title="Отримувача не знайдено">
+                <UiSectionCard
+                    title={
+                        state.phase === 'not-found'
+                            ? 'Отримувача не знайдено'
+                            : 'Не вдалося завантажити отримувача. Оновіть сторінку'
+                    }
+                >
                     <div className="mt-4">
                         <UiButton
                             as="link"

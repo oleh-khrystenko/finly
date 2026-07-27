@@ -134,6 +134,15 @@ export interface UpdateBusinessOptions {
      * власного бізнесу, а системний запис живе поза slug-монетизацією.
      */
     consumeSlugReservation?: boolean;
+    /**
+     * Обмежити update системними отримувачами: `isSystem: true` додається у
+     * write-фільтр (і у pre-check-lookup-и). Закриває check-then-act розрив
+     * адмін-flow: guard-перевірка `isSystem` і сам запис — окремі запити, зшиті
+     * за slug; без фільтра у вікні між ними slug міг би перейти до
+     * користувацького бізнесу (delete системного запису + rename), і адмінський
+     * PATCH ліг би на чужий документ.
+     */
+    requireSystem?: boolean;
 }
 
 @Injectable()
@@ -567,8 +576,10 @@ export class BusinessesService {
      * бізнес-полів і slug-rename (з історією й 308-редіректами); slug-edit поза
      * Brand-гейтингом (`isBranded: true` — системний запис поза монетизацією).
      * Категорія каталогу — окреме адмін-поле, іде довіреним override у той самий
-     * атомарний запис. Викликати ЛИШЕ після `getSystemPayeeBySlugOrThrow` (гарантія
-     * `isSystem`): `update` лукапить за `slugLower` без `isSystem`-фільтра.
+     * атомарний запис. `requireSystem: true` вшиває `isSystem`-гарантію у самі
+     * фільтри `update` (guard-перевірка контролера і запис — окремі запити, зшиті
+     * за slug; без фільтра вікно між ними дозволило б PATCH на користувацький
+     * бізнес, що встиг зайняти slug).
      *
      * `consumeSlugReservation: false` — перейменування системного запису НЕ чіпає
      * slug-бронь адміна: вона належить його власному бізнесу, а не цій операції.
@@ -582,6 +593,7 @@ export class BusinessesService {
         return this.update(slug, businessFields, true, adminUserId, true, {
             adminCatalogCategory: catalogCategory,
             consumeSlugReservation: false,
+            requireSystem: true,
         });
     }
 
@@ -1138,8 +1150,18 @@ export class BusinessesService {
         markSlugCustomized = true,
         options: UpdateBusinessOptions = {}
     ): Promise<BusinessDocument> {
-        const { adminCatalogCategory, consumeSlugReservation = true } = options;
+        const {
+            adminCatalogCategory,
+            consumeSlugReservation = true,
+            requireSystem = false,
+        } = options;
         const slugLower = slug.toLowerCase();
+        // Базова умова всіх lookup-ів/write-ів методу. `requireSystem` тримає
+        // guard-інваріант `isSystem` атомарно у самому фільтрі (не лише у
+        // попередній перевірці контролера).
+        const scope: FilterQuery<BusinessDocument> = requireSystem
+            ? { slugLower, isSystem: true }
+            : { slugLower };
 
         // Sprint 14 — vanity-slug edit. Detection by lowercase різниця
         // (case-only change — `business.slug` оновлюється, але `slugLower`
@@ -1182,7 +1204,7 @@ export class BusinessesService {
             // `ownerId` + `managers` — для дубль-перевірки taxId нижче
             // (scope власності), читаються тим самим single round-trip-ом.
             const existing = await this.businessModel
-                .findOne({ slugLower }, { type: 1, ownerId: 1, managers: 1 })
+                .findOne(scope, { type: 1, ownerId: 1, managers: 1 })
                 .lean<{
                     _id: Types.ObjectId;
                     type: CreateBusinessRequest['type'];
@@ -1279,7 +1301,7 @@ export class BusinessesService {
         const hasCoupledFields =
             dto.isVatPayer !== undefined || dto.taxationSystem !== undefined;
 
-        const filter: FilterQuery<BusinessDocument> = { slugLower };
+        const filter: FilterQuery<BusinessDocument> = { ...scope };
         if (hasCoupledFields) {
             const nextVat =
                 dto.isVatPayer !== undefined ? dto.isVatPayer : '$isVatPayer';
@@ -1351,7 +1373,7 @@ export class BusinessesService {
         // одним додатковим `exists()`-запитом — тільки на error-path,
         // happy-path лишається 1-roundtrip.
         if (hasCoupledFields) {
-            const exists = await this.businessModel.exists({ slugLower });
+            const exists = await this.businessModel.exists(scope);
             if (exists) {
                 throw new BadRequestException({
                     code: RESPONSE_CODE.INVALID_VAT_FOR_TAXATION_SYSTEM,

@@ -45,11 +45,11 @@ export default function proxy(request: NextRequest) {
     }
 
     if (isPublicHostReq) {
-        // Branch A0 — public host + голий корінь `/` → пояснювальна сторінка
-        // (`app/host-pay/page.tsx`, обгорнута host-pay layout-ом).
-        // Голий pay-host — це випадковий/обрізаний візит: платник загубив повне
-        // посилання `pay.finly.com.ua/{businessSlug}`. Rewrite на host-pay index
-        // дає брендований пояснювач замість 404-dead-end.
+        // Branch A0 — public host + голий корінь `/` → публічний каталог
+        // перевірених отримувачів (`app/host-pay/page.tsx`, обгорнута host-pay
+        // layout-ом) — перший індексований контент pay-хоста (Sprint 29).
+        // Порожній каталог (у т.ч. недоступний API) рендерить noindex-пояснювач
+        // для випадкового/обрізаного візиту замість 404-dead-end.
         if (pathname === '/') {
             return NextResponse.rewrite(new URL('/host-pay', request.url));
         }
@@ -93,8 +93,10 @@ export default function proxy(request: NextRequest) {
         // (`/{biz}/{acc}/{inv}` — Branch A3). 2-сегментний path тепер означає
         // per-account вивіску.
         //
-        // Reserved-check тільки на business-slug — account-slug system-generated
-        // 8-char tail (`A-Za-z0-9`), не торкає reserved-list.
+        // Reserved-check тільки на business-slug: лише перший сегмент конкурує
+        // з роутами апки за корінь path-простору. Account-slug (editable vanity
+        // зі Sprint 15) живе у власному namespace `(businessId, slugLower)` і з
+        // reserved-списком не перетинається.
         const accountSlugMatch = /^\/([^/]+)\/([^/]+)$/.exec(pathname);
         if (accountSlugMatch) {
             const businessSlug = accountSlugMatch[1]!;
@@ -114,8 +116,9 @@ export default function proxy(request: NextRequest) {
         // Branch A3 — public host + 3-сегментна path
         // (`/{businessSlug}/{accountSlug}/{invoiceSlug}`) (Sprint 9 §SP-6).
         // Invoice public-URL став 3-сегментним після перенесення інвойсів під
-        // account. Reserved-check тільки на business-slug; account-slug та
-        // invoice-slug — system-generated рядки без обмеження на reserved-list.
+        // account. Reserved-check тільки на business-slug: account-slug та
+        // invoice-slug (editable vanity зі Sprint 15) живуть у власних
+        // compound-namespace і за роути апки не конкурують.
         const invoiceSlugMatch = /^\/([^/]+)\/([^/]+)\/([^/]+)$/.exec(pathname);
         if (invoiceSlugMatch) {
             const businessSlug = invoiceSlugMatch[1]!;

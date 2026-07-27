@@ -214,6 +214,7 @@ const ADMIN_ROUTES: ReadonlyArray<{
     },
     { method: 'delete', path: '/api/admin/payees/dps-kyiv/accounts/esv-2026' },
     { method: 'get', path: '/api/admin/publicity' },
+    { method: 'get', path: '/api/admin/publicity/approved' },
     { method: 'post', path: '/api/admin/publicity/ivanenko/approve' },
     { method: 'post', path: '/api/admin/publicity/ivanenko/reject' },
 ];
@@ -895,6 +896,23 @@ describe('Admin payees E2E (Sprint 29)', () => {
                 .expect(400);
             expect((res.body as { error: { code: string } }).error.code).toBe(
                 'PURPOSE_MARKER_UNKNOWN'
+            );
+        });
+
+        it('незакрита дужка у шаблоні відхиляється → PURPOSE_MARKER_UNBALANCED', async () => {
+            // Регресія: токен-патерн уламок `{taxId за ` не матчить, тож
+            // unknown-перевірка мовчала, шаблон зберігався, а літеральна дужка
+            // їхала у призначення податкового платежу.
+            const admin = await createUser('admin');
+            const res = await request('post', '/api/admin/payees')
+                .set('Authorization', bearerFor(admin))
+                .send({
+                    ...SYSTEM_PAYEE_PAYLOAD,
+                    paymentPurposeTemplate: 'Єдиний внесок {taxId за {period}',
+                })
+                .expect(400);
+            expect((res.body as { error: { code: string } }).error.code).toBe(
+                'PURPOSE_MARKER_UNBALANCED'
             );
         });
 

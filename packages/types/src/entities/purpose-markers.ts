@@ -66,6 +66,19 @@ export function findUnknownPurposeMarkers(template: string): string[] {
     );
 }
 
+/**
+ * Чи лишаються у шаблоні «сирі» дужки поза валідними токенами `{...}` —
+ * незакрита (`ЄСВ {taxId за {period}`), самотня закривна чи вкладена
+ * (`a{b{taxId}d}e`) дужка. `MARKER_TOKEN_PATTERN` такі уламки не матчить
+ * узагалі, тож `findUnknownPurposeMarkers` для них повертає порожньо і сам по
+ * собі шаблон з одрукованою дужкою проходив би валідацію, а літеральний
+ * `{taxId за ` їхав у призначення реального податкового платежу. Перевірка:
+ * вирізаємо всі валідні токени і дивимось, чи не лишилось жодної дужки.
+ */
+export function hasUnmatchedPurposeBraces(template: string): boolean {
+    return /[{}]/.test(template.replace(MARKER_TOKEN_PATTERN, ''));
+}
+
 /** Унікальні відомі маркери шаблону (без повторів), для рендеру полів форми. */
 export function uniquePurposeMarkers(template: string): PurposeMarker[] {
     return [...new Set(findKnownPurposeMarkers(template))];

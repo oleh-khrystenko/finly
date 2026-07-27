@@ -39,13 +39,14 @@ export async function generateMetadata(): Promise<Metadata> {
     // без другого запиту.
     const catalog = await loadCatalogSafe();
     if (catalog.sections.length === 0) {
+        // Без canonical: noindex + rel=canonical — суперечливі сигнали для
+        // пошуковика («не індексуй» проти «ось канонічна адреса»), Google
+        // радить їх не поєднувати. Canonical зʼявляється лише в індексованій
+        // гілці нижче.
         return {
-            ...buildMetadata({
-                title: 'Платіжні сторінки Finly',
-                description:
-                    'Хост платіжних сторінок Finly: відкрийте повне посилання, яке вам надіслали.',
-                canonicalUrl: CANONICAL_URL,
-            }),
+            title: 'Платіжні сторінки Finly',
+            description:
+                'Хост платіжних сторінок Finly: відкрийте повне посилання, яке вам надіслали.',
             robots: { index: false, follow: true },
         };
     }

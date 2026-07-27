@@ -126,6 +126,13 @@ export const RESPONSE_CODE = {
      * літеральний `{word}` — зіпсований платіж.
      */
     PURPOSE_MARKER_UNKNOWN: 'PURPOSE_MARKER_UNKNOWN',
+    /**
+     * У шаблоні системного отримувача незакрита або вкладена фігурна дужка
+     * (`ЄСВ {taxId за {period}`). Токен-патерн такий уламок не матчить, тож
+     * unknown-перевірка його не бачить; без окремого коду одрукована дужка
+     * їхала б літерально у призначення податкового платежу.
+     */
+    PURPOSE_MARKER_UNBALANCED: 'PURPOSE_MARKER_UNBALANCED',
 
     // --- guides error (Sprint 28) ---
     GUIDE_NOT_FOUND: 'GUIDE_NOT_FOUND',
@@ -563,6 +570,7 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.PERSONALIZATION_TOO_LONG]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.PURPOSE_MARKERS_NOT_ALLOWED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.PURPOSE_MARKER_UNKNOWN]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.PURPOSE_MARKER_UNBALANCED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.GUIDE_NOT_FOUND]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.GUIDE_SLUG_LOCKED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.GUIDE_PUBLISHED_DELETE_FORBIDDEN]: RESPONSE_TYPE.ERROR,
