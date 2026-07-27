@@ -52,11 +52,14 @@ export function AdminPayeeDetail({ slug }: { slug: string }) {
         (s) => s.open
     );
     const [state, setState] = useState<LoadState>({ phase: 'loading' });
-    // Лок на in-flight мутації видимості. Без нього два швидкі перемикання дають
-    // дві пари PATCH+GET, чиї відповіді можуть прийти не в тому порядку, і
-    // пізніший `reload()` затирає UI знімком, зробленим до другого PATCH.
-    // Дзеркалить кабінетні `PublicitySection` / `AccountCatalogSection`.
-    const [visibilityBusy, setVisibilityBusy] = useState(false);
+    // Лок на БУДЬ-ЯКУ in-flight пару «мутація + reload()»: перемикачі
+    // видимості, додавання і видалення реквізитів. Без нього дві швидкі дії
+    // дають дві пари запит+GET, чиї відповіді можуть прийти не в тому порядку,
+    // і пізніший `reload()` затирає UI знімком, зробленим до другої мутації.
+    // Тому на час польоту блокуються ВСІ точки входу (тогли, «Додати»,
+    // «Видалити»), не лише однотипні. Дзеркалить кабінетні `PublicitySection` /
+    // `AccountCatalogSection`.
+    const [mutationBusy, setMutationBusy] = useState(false);
 
     useEffect(() => {
         let active = true;
@@ -114,25 +117,51 @@ export function AdminPayeeDetail({ slug }: { slug: string }) {
      * створених реквізитах, і адмін тиснув би «Додати» вдруге.
      */
     const handleAddAccount = async (iban: string, name: string) => {
-        await adminCreatePayeeAccount(slug, {
-            iban,
-            ...(name.trim() ? { name: name.trim() } : {}),
-        });
-        toast.success('Реквізити додано');
+        // Помилка створення летить далі у форму (try/finally, без catch) — лок
+        // при цьому знімається, а форма кладе повідомлення під своє поле.
+        setMutationBusy(true);
         try {
-            await reload();
-        } catch (err) {
-            toast.error(getApiMessage(extractApiErrorCode(err), 'accounts'));
+            await adminCreatePayeeAccount(slug, {
+                iban,
+                ...(name.trim() ? { name: name.trim() } : {}),
+            });
+            toast.success('Реквізити додано');
+            try {
+                await reload();
+            } catch (err) {
+                toast.error(
+                    getApiMessage(extractApiErrorCode(err), 'accounts')
+                );
+            }
+        } finally {
+            setMutationBusy(false);
         }
     };
 
     const deleteAccount = async (accountSlug: string) => {
+        setMutationBusy(true);
         try {
-            await adminDeletePayeeAccount(slug, accountSlug);
-            await reload();
+            try {
+                await adminDeletePayeeAccount(slug, accountSlug);
+            } catch (err) {
+                toast.error(
+                    getApiMessage(extractApiErrorCode(err), 'accounts')
+                );
+                return;
+            }
+            // Успіх — одразу, як у handleAddAccount вище: збій наступного
+            // перечитування інакше показувався б як провал видалення, і адмін
+            // тиснув би «Видалити» вдруге на вже неіснуючих реквізитах.
             toast.success('Реквізити видалено');
-        } catch (err) {
-            toast.error(getApiMessage(extractApiErrorCode(err), 'accounts'));
+            try {
+                await reload();
+            } catch (err) {
+                toast.error(
+                    getApiMessage(extractApiErrorCode(err), 'accounts')
+                );
+            }
+        } finally {
+            setMutationBusy(false);
         }
     };
 
@@ -148,14 +177,14 @@ export function AdminPayeeDetail({ slug }: { slug: string }) {
     };
 
     const handleToggleVisibility = async (visible: boolean) => {
-        setVisibilityBusy(true);
+        setMutationBusy(true);
         try {
             await adminSetPayeeCatalogVisibility(slug, visible);
             await reload();
         } catch (err) {
             toast.error(getApiMessage(extractApiErrorCode(err), 'businesses'));
         } finally {
-            setVisibilityBusy(false);
+            setMutationBusy(false);
         }
     };
 
@@ -163,7 +192,7 @@ export function AdminPayeeDetail({ slug }: { slug: string }) {
         accountSlug: string,
         visible: boolean
     ) => {
-        setVisibilityBusy(true);
+        setMutationBusy(true);
         try {
             await adminSetPayeeAccountCatalogVisibility(
                 slug,
@@ -174,17 +203,20 @@ export function AdminPayeeDetail({ slug }: { slug: string }) {
         } catch (err) {
             toast.error(getApiMessage(extractApiErrorCode(err), 'accounts'));
         } finally {
-            setVisibilityBusy(false);
+            setMutationBusy(false);
         }
     };
 
     const deletePayee = async () => {
+        setMutationBusy(true);
         try {
             await adminDeletePayee(slug);
             toast.success('Отримувача видалено');
             router.push('/admin/payees');
         } catch (err) {
             toast.error(getApiMessage(extractApiErrorCode(err), 'businesses'));
+        } finally {
+            setMutationBusy(false);
         }
     };
 
@@ -249,7 +281,7 @@ export function AdminPayeeDetail({ slug }: { slug: string }) {
                         id="payee-catalog-toggle"
                         className="shrink-0"
                         checked={business.catalogVisible}
-                        disabled={visibilityBusy}
+                        disabled={mutationBusy}
                         onChange={(next) => void handleToggleVisibility(next)}
                     />
                 </label>
@@ -268,7 +300,7 @@ export function AdminPayeeDetail({ slug }: { slug: string }) {
                                 payeeSlug={business.slug}
                                 account={account}
                                 onDelete={() => requestDeleteAccount(account)}
-                                toggleDisabled={visibilityBusy}
+                                actionsDisabled={mutationBusy}
                                 onToggleVisibility={(visible) =>
                                     void handleToggleAccountVisibility(
                                         account.slug,
@@ -280,7 +312,10 @@ export function AdminPayeeDetail({ slug }: { slug: string }) {
                     </ul>
                 )}
                 <div className="border-border mt-5 border-t pt-5">
-                    <AddAccountForm onAdd={handleAddAccount} />
+                    <AddAccountForm
+                        onAdd={handleAddAccount}
+                        disabled={mutationBusy}
+                    />
                 </div>
             </UiSectionCard>
 
@@ -294,6 +329,7 @@ export function AdminPayeeDetail({ slug }: { slug: string }) {
                         type="button"
                         variant="destructive-outline"
                         size="md"
+                        disabled={mutationBusy}
                         IconLeft={<Trash2 className="size-4" />}
                         onClick={requestDeletePayee}
                     >
@@ -309,13 +345,14 @@ function AccountRow({
     payeeSlug,
     account,
     onDelete,
-    toggleDisabled,
+    actionsDisabled,
     onToggleVisibility,
 }: {
     payeeSlug: string;
     account: AccountWithCounts;
     onDelete: () => void;
-    toggleDisabled: boolean;
+    /** Спільний лок сторінки: під час будь-якої мутації дії рядка заблоковані. */
+    actionsDisabled: boolean;
     onToggleVisibility: (visible: boolean) => void;
 }) {
     const bankLabel =
@@ -343,7 +380,7 @@ function AccountRow({
                 <UiSwitch
                     id={`account-catalog-toggle-${account.id}`}
                     checked={account.catalogVisible}
-                    disabled={toggleDisabled}
+                    disabled={actionsDisabled}
                     onChange={onToggleVisibility}
                 />
             </label>
@@ -361,6 +398,7 @@ function AccountRow({
                     type="button"
                     variant="destructive-outline"
                     size="sm"
+                    disabled={actionsDisabled}
                     IconLeft={<Trash2 className="size-4" />}
                     onClick={onDelete}
                 >
@@ -373,8 +411,11 @@ function AccountRow({
 
 function AddAccountForm({
     onAdd,
+    disabled,
 }: {
     onAdd: (iban: string, name: string) => Promise<void>;
+    /** Спільний лок сторінки: поки летить інша мутація, сабміт заблоковано. */
+    disabled: boolean;
 }) {
     const [iban, setIban] = useState('');
     const [name, setName] = useState('');
@@ -441,6 +482,7 @@ function AddAccountForm({
                 variant="outline"
                 size="md"
                 loading={busy}
+                disabled={disabled}
                 IconLeft={<Plus className="size-4" />}
                 onClick={() => void submit()}
             >
