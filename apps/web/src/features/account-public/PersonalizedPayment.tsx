@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { Check, Copy } from 'lucide-react';
 import {
     BANK_LABEL,
+    PERSONALIZATION_FULL_NAME_MAX,
     individualTaxIdZod,
     personalizationFullNameZod,
     personalizationPeriodZod,
@@ -139,9 +140,12 @@ export default function PersonalizedPayment({
     // QR (окрема img) працює, тож показуємо його як фолбек. `rejected` це відмова
     // сервера на самих значеннях (задовге призначення тощо) — тоді QR-ендпоінт
     // відповість тим самим 4xx, і рендер картинки дав би биту картинку без
-    // пояснення. Розрізняємо за статусом: 4xx = дані, решта = зв'язок.
+    // пояснення. `throttled` (429) — вичерпаний ліміт бакета `personalized-qr`
+    // (30/хв/IP, спільний з QR-картинками): дані платника коректні, тож радити
+    // «виправити» їх не можна — лише зачекати. Розрізняємо за статусом:
+    // 429 = ліміт, інші 4xx = дані, решта = зв'язок.
     const [linksState, setLinksState] = useState<
-        'loading' | 'ready' | 'error' | 'rejected'
+        'loading' | 'ready' | 'error' | 'rejected' | 'throttled'
     >('loading');
     const [copied, setCopied] = useState(false);
 
@@ -196,11 +200,17 @@ export default function PersonalizedPayment({
             .catch((err: unknown) => {
                 if (cancelled) return;
                 setNbuLinks(null);
-                const rejectedByServer =
+                if (err instanceof PublicApiError && err.status === 429) {
+                    setLinksState('throttled');
+                } else if (
                     err instanceof PublicApiError &&
                     err.status >= 400 &&
-                    err.status < 500;
-                setLinksState(rejectedByServer ? 'rejected' : 'error');
+                    err.status < 500
+                ) {
+                    setLinksState('rejected');
+                } else {
+                    setLinksState('error');
+                }
             });
         return () => {
             cancelled = true;
@@ -267,7 +277,7 @@ export default function PersonalizedPayment({
                     <UiInput
                         label="РНОКПП (податковий номер)"
                         inputMode="numeric"
-                        maxLength={10}
+                        maxLength={TAX_ID_LENGTH}
                         value={taxId}
                         onChange={(e) =>
                             setTaxId(e.target.value.replace(/\D/g, ''))
@@ -278,12 +288,12 @@ export default function PersonalizedPayment({
                 {has('fullName') && (
                     <UiInput
                         label="Прізвище, ім’я, по батькові"
-                        maxLength={80}
+                        maxLength={PERSONALIZATION_FULL_NAME_MAX}
                         value={fullName}
                         onChange={(e) => setFullName(e.target.value)}
                         error={
                             trimmedFullName.length > 0 && !fullNameValid
-                                ? 'Ім’я містить недопустимі символи або задовге (до 80)'
+                                ? `Ім’я містить недопустимі символи або задовге (до ${PERSONALIZATION_FULL_NAME_MAX})`
                                 : undefined
                         }
                     />
@@ -311,13 +321,25 @@ export default function PersonalizedPayment({
                             qrPrimary={qrLinks.primary}
                             qrLegacy={qrLinks.legacy}
                         />
+                    ) : linksState === 'throttled' ? (
+                        // Ліміт запитів на IP: QR-ендпоінт відповість тим самим
+                        // 429, тож картинку не показуємо. Дані коректні, тому
+                        // без червоного і без поради їх правити.
+                        <p className="text-muted-foreground text-center text-sm">
+                            Забагато запитів з вашої мережі. Зачекайте хвилину
+                            та оновіть сторінку.
+                        </p>
                     ) : linksState === 'rejected' ? (
                         // Сервер відхилив самі значення, тож QR-ендпоінт віддасть
                         // ту саму помилку: картинку не показуємо, пояснюємо причину.
+                        // Порада про коротше ПІБ доречна лише коли поле ПІБ є на
+                        // формі: у шаблоні без маркера fullName платник не має що
+                        // скорочувати, і порада вела б у глухий кут.
                         <p className="text-destructive text-center text-sm">
-                            Не вдалося скласти платіж із цими даними. Найчастіша
-                            причина: разом з назвою отримувача і призначенням
-                            вийшло задовго. Спробуйте коротше ПІБ.
+                            Не вдалося скласти платіж із цими даними.
+                            {has('fullName')
+                                ? ' Найчастіша причина: разом з назвою отримувача і призначенням вийшло задовго. Спробуйте коротше ПІБ.'
+                                : ' Перевірте, чи правильно заповнені поля вище.'}
                         </p>
                     ) : linksState === 'error' ? (
                         // Кнопки банків залежать від fetch, QR-картинка ні, тож

@@ -24,13 +24,25 @@ const personalizationTextValue = (max: number) =>
         });
 
 /**
+ * Ліміти довжини значень персоналізації. Іменовані експорти, бо ті самі числа
+ * потрібні UI (maxLength інпута, текст помилки): голий літерал у формі мовчки
+ * розійшовся б зі схемою при зміні ліміту.
+ */
+export const PERSONALIZATION_FULL_NAME_MAX = 80;
+export const PERSONALIZATION_PERIOD_MAX = 64;
+
+/**
  * Поле-схеми окремо, щоб публічна сторінка (клієнт) валідувала кожне поле тими
  * самими правилами, що й сервер (NBU-charset + ліміт довжини), а не лише на
  * непорожність. Інакше невалідний ПІБ проходив би клієнтський гейт і давав биту
  * QR-картинку без зрозумілої причини.
  */
-export const personalizationFullNameZod = personalizationTextValue(80);
-export const personalizationPeriodZod = personalizationTextValue(64);
+export const personalizationFullNameZod = personalizationTextValue(
+    PERSONALIZATION_FULL_NAME_MAX
+);
+export const personalizationPeriodZod = personalizationTextValue(
+    PERSONALIZATION_PERIOD_MAX
+);
 
 export const PersonalizationParamsSchema = z.object({
     taxId: individualTaxIdZod.optional(),

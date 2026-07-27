@@ -9,11 +9,26 @@ jest.mock('next/navigation', () => ({
     useSearchParams: () => mockSearchParams,
 }));
 
-jest.mock('@/shared/api', () => ({
-    getPersonalizedNbuLinks: (...args: unknown[]) =>
-        mockGetPersonalizedNbuLinks(...args),
-}));
+jest.mock('@/shared/api', () => {
+    // Мінімальне дзеркало реального класу: компонент розрізняє помилки через
+    // `instanceof PublicApiError` + `status`, тож клас мусить жити у моці.
+    class PublicApiError extends Error {
+        constructor(
+            public readonly status: number,
+            public readonly statusText: string
+        ) {
+            super(`Public API request failed: ${status} ${statusText}`);
+            this.name = 'PublicApiError';
+        }
+    }
+    return {
+        PublicApiError,
+        getPersonalizedNbuLinks: (...args: unknown[]) =>
+            mockGetPersonalizedNbuLinks(...args),
+    };
+});
 
+import { PublicApiError } from '@/shared/api';
 import PersonalizedPayment from './PersonalizedPayment';
 
 const baseProps = {
@@ -208,6 +223,37 @@ describe('PersonalizedPayment (Sprint 29 — податкова персонал
                 'esv',
                 { taxId: VALID_TAX_ID }
             );
+        });
+    });
+
+    describe('Класифікація помилок сервера', () => {
+        it('429 (ліміт запитів) не читається як відмова на даних', async () => {
+            // Бакет personalized-qr — 30/хв/IP, спільний для посилань і QR:
+            // офіс за одним IP вичерпує його з коректним РНОКПП. Порада
+            // «спробуйте коротше ПІБ» тут змушувала б правити валідні дані.
+            mockGetPersonalizedNbuLinks.mockRejectedValue(
+                new PublicApiError(429, 'Too Many Requests')
+            );
+            renderWith(['taxId'], `taxId=${VALID_TAX_ID}`);
+            await flushDebounce();
+
+            expect(screen.getByText(/Забагато запитів/)).toBeInTheDocument();
+            expect(screen.queryByText(/із цими даними/)).toBeNull();
+            // QR-ендпоінт відповів би тим самим 429 — картинки бути не мусить.
+            expect(document.querySelector('img')).toBeNull();
+        });
+
+        it('інший 4xx лишається відмовою на самих значеннях', async () => {
+            mockGetPersonalizedNbuLinks.mockRejectedValue(
+                new PublicApiError(400, 'Bad Request')
+            );
+            renderWith(['taxId'], `taxId=${VALID_TAX_ID}`);
+            await flushDebounce();
+
+            expect(
+                screen.getByText(/Не вдалося скласти платіж із цими даними/)
+            ).toBeInTheDocument();
+            expect(screen.queryByText(/Забагато запитів/)).toBeNull();
         });
     });
 });
