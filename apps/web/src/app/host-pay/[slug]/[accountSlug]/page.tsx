@@ -15,14 +15,16 @@ import { buildMetadata } from '@/shared/seo/metadata';
  * Sprint 9 §SP-4 — публічна per-account вивіска
  * `pay.finly.com.ua/{businessSlug}/{accountSlug}`.
  *
- * **Internal route `/host-pay/[slug]/[accountSlug]/`** під middleware-rewrite-
- * ом (Branch A2, `apps/web/src/middleware.ts`). Direct-access на cabinet host
- * блокується middleware Branch C → 404. Defense-in-depth: page-handler сам
- * перевіряє host через `headers()`.
+ * **Internal route `/host-pay/[slug]/[accountSlug]/`** під proxy-rewrite-ом
+ * (Branch A2, `apps/web/src/proxy.ts` — Next 16 rename of `middleware.ts`).
+ * Direct-access на cabinet host блокується proxy Branch C → 404.
+ * Defense-in-depth: page-handler сам перевіряє host через `headers()`.
  *
- * **Canonical-redirect лише для business-slug** (Sprint 3 рішення E1):
- * business-slug case-insensitive lookup → 308 на canonical-case. Account-slug
- * case-sensitive (Sprint 9 §SP-10) — exact-match-or-404, без redirect.
+ * **Canonical-redirect на обох сегментах** (Sprint 15): business-slug
+ * case-insensitive, account-slug — редаговуваний vanity з history-fallback на
+ * backend; будь-який mismatch зі збереженого посилання дає один
+ * `permanentRedirect()` на повний canonical URL (query персоналізації
+ * переноситься, Sprint 29).
  *
  * **`dynamic = 'force-dynamic'`** — account-vanity-view зазвичай стабільна,
  * але правки name/preset мають бути видимі клієнту негайно. Без ISR-кешу
