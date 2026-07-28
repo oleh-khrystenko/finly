@@ -926,11 +926,29 @@ export class BusinessesService {
 
         const payeesByCategory = new Map<CatalogCategory, CatalogPayee[]>();
         for (const business of businesses) {
+            const payeeAccounts =
+                accountsByBusiness.get(business._id.toString()) ?? [];
+            // Отримувач без жодних допущених реквізитів у каталог не потрапляє,
+            // навіть з увімкненим власним прапорцем. Прапорці рівнів незалежні,
+            // тож без цієї умови картка лишалась би у вітрині у двох штатних
+            // станах: щойно створений отримувач (реквізитів ще нема) і сценарій
+            // «держава змінила рахунок» (старі реквізити приховані, нові ще не
+            // увімкнені). У системного отримувача приховані реквізити зникають
+            // і з публічної сторінки (`isPublicAccountListed`), тож картка вела
+            // б платника на сторінку без жодного способу заплатити.
+            //
+            // Гейт саме на читанні, а не авто-скиданням `catalogVisible`:
+            // прапорець — намір адміна/власника, і система не має його
+            // перезаписувати. Так запис зникає з каталогу і повертається у нього
+            // сам, щойно зʼявляться видимі реквізити, без жодної ручної дії.
+            if (payeeAccounts.length === 0) {
+                continue;
+            }
             const payee: CatalogPayee = {
                 type: business.type,
                 name: business.name,
                 slug: business.slug,
-                accounts: accountsByBusiness.get(business._id.toString()) ?? [],
+                accounts: payeeAccounts,
             };
             // Фолбек на дефолтну секцію обовʼязковий: документ без
             // `catalogCategory` (створений до Sprint 29 і схвалений без явної

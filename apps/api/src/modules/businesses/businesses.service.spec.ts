@@ -761,6 +761,80 @@ describe('BusinessesService', () => {
             const result = await service.getPublicCatalog();
             expect(result.sections).toEqual([]);
         });
+
+        // Прапорці рівнів незалежні: увімкнений отримувач без жодних допущених
+        // реквізитів дав би картку, що веде на сторінку без способу заплатити
+        // (у системного приховані реквізити зникають і зі сторінки). Два штатні
+        // стани: щойно створений запис і «держава змінила рахунок» (старі
+        // приховані, нові ще не увімкнені).
+        it('отримувач без видимих реквізитів у каталог не потрапляє', async () => {
+            const withAccount = new Types.ObjectId();
+            const withoutAccount = new Types.ObjectId();
+            businessModel.find.mockReturnValue(
+                leanChain([
+                    {
+                        _id: withAccount,
+                        type: 'organization',
+                        name: 'ДПС Львів',
+                        slug: 'dps-lviv',
+                        catalogCategory: 'state',
+                        isSystem: true,
+                    },
+                    {
+                        _id: withoutAccount,
+                        type: 'organization',
+                        name: 'ДПС Київ',
+                        slug: 'dps-kyiv',
+                        catalogCategory: 'state',
+                        isSystem: true,
+                    },
+                ])
+            );
+            // Вибірка рахунків уже звужена `catalogVisible: true`, тож
+            // «приховані всі» і «реквізитів ще немає» приходять сюди однаково —
+            // без жодного рядка для цього отримувача.
+            accountModel.find.mockReturnValue(
+                leanChain([
+                    {
+                        businessId: withAccount,
+                        slug: 'esv',
+                        name: 'ЄСВ',
+                        bankCode: null,
+                        iban: 'UA000000000000000000000006001',
+                        slugCustomized: false,
+                    },
+                ])
+            );
+
+            const result = await service.getPublicCatalog();
+
+            expect(result.sections).toHaveLength(1);
+            expect(result.sections[0].payees).toHaveLength(1);
+            expect(result.sections[0].payees[0].slug).toBe('dps-lviv');
+        });
+
+        // Той самий гейт на користувацькому записі: схвалений отримувач з
+        // красивим slug, але без увімкнених реквізитів (дефолт після схвалення —
+        // все приховане) не дає картки-пустушки.
+        it('схвалений користувацький отримувач без видимих реквізитів теж відсіюється', async () => {
+            businessModel.find.mockReturnValue(
+                leanChain([
+                    {
+                        _id: new Types.ObjectId(),
+                        type: 'fop',
+                        name: 'Іван Енко',
+                        slug: 'ivanenko',
+                        catalogCategory: 'business',
+                        isSystem: false,
+                    },
+                ])
+            );
+            accountModel.find.mockReturnValue(leanChain([]));
+
+            const result = await service.getPublicCatalog();
+
+            expect(result.sections).toEqual([]);
+        });
     });
 
     describe('getBySlug', () => {

@@ -566,6 +566,87 @@ describe('Admin payees E2E (Sprint 29)', () => {
             expect(await readAccounts()).not.toContain(accountSlug);
         });
 
+        it('картка каталогу тримається на видимих реквізитах, не лише на прапорці отримувача', async () => {
+            // Прапорці рівнів незалежні, тож увімкнений отримувач без жодних
+            // видимих реквізитів дав би у вітрині картку, що веде на сторінку
+            // без способу заплатити (приховані реквізити системного зникають і
+            // зі сторінки). Два штатні стани: щойно створений запис і «держава
+            // змінила рахунок» (старі приховані, нові ще не увімкнені).
+            const admin = await createUser('admin');
+            const slug = await createSystemPayee(admin, {
+                catalogVisible: true,
+            });
+
+            const catalogSlugs = async (): Promise<string[]> => {
+                const res = await request(
+                    'get',
+                    '/api/businesses/public/catalog'
+                );
+                // Статус звіряємо разом з тілом: голий `.expect(200)` на падінні
+                // друкує лише «expected 200, got 4xx» без причини, і причину
+                // довелось би відтворювати локально.
+                expect({ status: res.status, body: res.body }).toMatchObject({
+                    status: 200,
+                });
+                return (
+                    res.body as {
+                        data: {
+                            sections: Array<{
+                                payees: Array<{ slug: string }>;
+                            }>;
+                        };
+                    }
+                ).data.sections.flatMap((s) => s.payees.map((p) => p.slug));
+            };
+
+            const setAccountVisibility = async (
+                accountSlug: string,
+                visible: boolean
+            ): Promise<void> => {
+                const res = await request(
+                    'patch',
+                    `/api/admin/payees/${slug}/accounts/${accountSlug}/catalog-visibility`
+                )
+                    .set('Authorization', bearerFor(admin))
+                    .send({ visible });
+                expect({ status: res.status, body: res.body }).toMatchObject({
+                    status: 200,
+                });
+            };
+
+            // Отримувач увімкнений, але реквізитів ще немає.
+            expect(await catalogSlugs()).not.toContain(slug);
+
+            const accountRes = await request(
+                'post',
+                `/api/admin/payees/${slug}/accounts`
+            )
+                .set('Authorization', bearerFor(admin))
+                .send({ iban: SYSTEM_IBAN });
+            expect({
+                status: accountRes.status,
+                body: accountRes.body,
+            }).toMatchObject({ status: 201 });
+            const accountSlug = (accountRes.body as { data: { slug: string } })
+                .data.slug;
+
+            // Реквізити є, але приховані за дефолтом — картки все ще немає.
+            expect(await catalogSlugs()).not.toContain(slug);
+
+            await setAccountVisibility(accountSlug, true);
+            expect(await catalogSlugs()).toContain(slug);
+
+            // Приховали останні видимі реквізити — картка зникає сама, хоч
+            // прапорець отримувача лишається увімкненим (намір не перезаписуємо).
+            await setAccountVisibility(accountSlug, false);
+            expect(await catalogSlugs()).not.toContain(slug);
+
+            const stillVisible = await businessModel
+                .findOne({ slugLower: slug.toLowerCase() })
+                .exec();
+            expect(stillVisible!.catalogVisible).toBe(true);
+        }, 30_000);
+
         it('у звичайного отримувача список реквізитів повний попри прапорець каталогу', async () => {
             // Дзеркальна гарантія: прапорець керує лише каталогом, тож фільтр не
             // сміє спорожнити публічні сторінки наявним користувачам.
