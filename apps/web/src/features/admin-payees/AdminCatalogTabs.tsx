@@ -11,7 +11,7 @@ import { usePublicityCountStore } from './publicityCountStore';
  * Таб-навігація адмін-каталогу. Свідомо route-based (два посилання), а не
  * local-state таби: кожен таб — окремий URL, тож deep-link, перезавантаження і
  * кнопка «назад» тримаються, а підсвітка пункту sidebar не губиться на
- * під-сторінках CRUD (`/admin/payees/[slug]` лишає активним таб «Отримувачі»).
+ * під-сторінках CRUD (`/admin/business/[slug]` лишає активним таб «Отримувачі»).
  */
 const QUEUE_HREF = '/admin/publicity';
 
@@ -32,7 +32,7 @@ export function AdminCatalogTabs() {
 
     const showCount = count !== null && count > 0;
     const items: UiTabNavItem[] = [
-        { value: 'payees', label: 'Отримувачі', href: '/admin/payees' },
+        { value: 'payees', label: 'Отримувачі', href: '/admin/business' },
         {
             value: 'publicity',
             label: 'Запити',

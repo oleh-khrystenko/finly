@@ -39,8 +39,8 @@ import { collectFieldErrors, type FieldErrors } from './fieldErrors';
 import { PurposeTemplateField } from './PurposeTemplateField';
 
 /**
- * Sprint 29 — форма системного отримувача: створення (`/admin/payees/new`) і
- * редагування (`/admin/payees/[slug]/edit`, коли передано `existing`). Тип
+ * Sprint 29 — форма системного отримувача: створення (`/admin/business/new`) і
+ * редагування (`/admin/business/[slug]/edit`, коли передано `existing`). Тип
  * незмінний після створення, тож у режимі редагування показується read-only, а
  * slug редагується (поза Brand-гейтингом). Видимість у каталозі редагується
  * окремо на сторінці отримувача, тому перемикач «показувати одразу» лише при
@@ -123,7 +123,7 @@ export function AdminPayeeForm({ existing }: { existing?: Business }) {
         try {
             const updated = await adminUpdatePayee(existing!.slug, parsed.data);
             toast.success('Отримувача оновлено');
-            router.push(`/admin/payees/${updated.slug}`);
+            router.push(`/admin/business/${updated.slug}`);
         } catch (err) {
             toast.error(getApiMessage(extractApiErrorCode(err), 'businesses'));
             setSubmitting(false);
@@ -150,7 +150,7 @@ export function AdminPayeeForm({ existing }: { existing?: Business }) {
         try {
             const created = await adminCreatePayee(parsed.data);
             toast.success('Отримувача створено');
-            router.push(`/admin/payees/${created.slug}`);
+            router.push(`/admin/business/${created.slug}`);
         } catch (err) {
             toast.error(getApiMessage(extractApiErrorCode(err), 'businesses'));
             setSubmitting(false);
@@ -163,7 +163,7 @@ export function AdminPayeeForm({ existing }: { existing?: Business }) {
         <UiPageContainer narrow className="space-y-6">
             <UiBreadcrumb
                 items={[
-                    { label: 'Системні отримувачі', href: '/admin/payees' },
+                    { label: 'Системні отримувачі', href: '/admin/business' },
                     { label: isEdit ? 'Редагування' : 'Створення' },
                 ]}
             />
@@ -315,8 +315,8 @@ export function AdminPayeeForm({ existing }: { existing?: Business }) {
                     as="link"
                     href={
                         isEdit
-                            ? `/admin/payees/${existing.slug}`
-                            : '/admin/payees'
+                            ? `/admin/business/${existing.slug}`
+                            : '/admin/business'
                     }
                     variant="text"
                     size="md"

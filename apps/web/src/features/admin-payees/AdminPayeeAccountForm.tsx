@@ -33,7 +33,7 @@ interface Props {
 
 /**
  * Sprint 29 — редагування реквізитів системного отримувача
- * (`/admin/payees/[slug]/accounts/[accountSlug]/edit`).
+ * (`/admin/business/[slug]/account/[accountSlug]/edit`).
  *
  * Три поля, кожне з власною причиною існувати:
  *  - **назва** — підпис рядка у каталозі («ЄСВ», «Військовий збір»);
@@ -59,7 +59,7 @@ export function AdminPayeeAccountForm({ payee, account }: Props) {
     const [errors, setErrors] = useState<FieldErrors>({});
     const [submitting, setSubmitting] = useState(false);
 
-    const detailHref = `/admin/payees/${payee.slug}`;
+    const detailHref = `/admin/business/${payee.slug}`;
     const bankLabel =
         account.bankCode !== null ? BANK_LABEL[account.bankCode] : null;
     const trimmedPurpose = purpose.trim();
@@ -101,7 +101,7 @@ export function AdminPayeeAccountForm({ payee, account }: Props) {
         <UiPageContainer narrow className="space-y-6">
             <UiBreadcrumb
                 items={[
-                    { label: 'Системні отримувачі', href: '/admin/payees' },
+                    { label: 'Системні отримувачі', href: '/admin/business' },
                     {
                         label: formatPayeeName(payee.type, payee.name),
                         href: detailHref,

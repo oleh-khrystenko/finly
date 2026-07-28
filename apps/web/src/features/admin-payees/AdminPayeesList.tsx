@@ -98,7 +98,7 @@ export function AdminPayeesList() {
                 </div>
                 <UiButton
                     as="link"
-                    href="/admin/payees/new"
+                    href="/admin/business/new"
                     variant="filled"
                     size="md"
                     IconLeft={<Plus className="size-4" />}
@@ -175,7 +175,7 @@ function PayeeRow({ payee }: { payee: Business }) {
     return (
         <UiLink
             as="link"
-            href={`/admin/payees/${payee.slug}`}
+            href={`/admin/business/${payee.slug}`}
             variant="unstyled"
             className="group border-border bg-card hover:border-primary/40 block rounded-xl border p-4 transition-colors"
         >

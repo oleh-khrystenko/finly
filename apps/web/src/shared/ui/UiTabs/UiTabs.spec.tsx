@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 
 // `next/navigation` потрібен лише nav-режиму; у panel-режимі хук не викликається,
 // але імпорт модуля стягує App Router runtime, який jsdom не піднімає.
-jest.mock('next/navigation', () => ({ usePathname: () => '/admin/payees' }));
+jest.mock('next/navigation', () => ({ usePathname: () => '/admin/business' }));
 
 import UiTabs, { uiTabPanelProps } from './UiTabs';
 

@@ -62,7 +62,7 @@ export function AdminPayeeDetail({ slug }: { slug: string }) {
                 phase={state.phase}
                 notFoundTitle="Отримувача не знайдено"
                 errorTitle="Не вдалося завантажити отримувача. Оновіть сторінку"
-                backHref="/admin/payees"
+                backHref="/admin/business"
                 backLabel="До списку"
             />
         );
@@ -210,7 +210,7 @@ export function AdminPayeeDetail({ slug }: { slug: string }) {
         try {
             await adminDeletePayee(slug);
             toast.success('Отримувача видалено');
-            router.push('/admin/payees');
+            router.push('/admin/business');
         } catch (err) {
             toast.error(getApiMessage(extractApiErrorCode(err), 'businesses'));
         } finally {
@@ -233,7 +233,7 @@ export function AdminPayeeDetail({ slug }: { slug: string }) {
         <UiPageContainer narrow className="space-y-6">
             <UiBreadcrumb
                 items={[
-                    { label: 'Системні отримувачі', href: '/admin/payees' },
+                    { label: 'Системні отримувачі', href: '/admin/business' },
                     { label: 'Отримувач' },
                 ]}
             />
@@ -250,7 +250,7 @@ export function AdminPayeeDetail({ slug }: { slug: string }) {
                 <div className="mt-3">
                     <UiButton
                         as="link"
-                        href={`/admin/payees/${business.slug}/edit`}
+                        href={`/admin/business/${business.slug}/edit`}
                         variant="outline"
                         size="sm"
                         IconLeft={<Pencil className="size-4" />}
@@ -397,7 +397,7 @@ function AccountRow({
             <div className="flex shrink-0 items-center gap-2">
                 <UiButton
                     as="link"
-                    href={`/admin/payees/${payeeSlug}/accounts/${account.slug}/edit`}
+                    href={`/admin/business/${payeeSlug}/account/${account.slug}/edit`}
                     variant="outline"
                     size="sm"
                     IconLeft={<Pencil className="size-4" />}

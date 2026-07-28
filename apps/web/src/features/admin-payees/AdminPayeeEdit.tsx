@@ -19,7 +19,7 @@ export function AdminPayeeEdit({ slug }: { slug: string }) {
                 phase={state.phase}
                 notFoundTitle="Отримувача не знайдено"
                 errorTitle="Не вдалося завантажити отримувача. Оновіть сторінку"
-                backHref="/admin/payees"
+                backHref="/admin/business"
                 backLabel="До списку"
             />
         );

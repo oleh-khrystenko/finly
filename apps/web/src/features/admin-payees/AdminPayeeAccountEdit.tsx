@@ -36,7 +36,7 @@ export function AdminPayeeAccountEdit({
                 phase={state.phase === 'ready' ? 'not-found' : state.phase}
                 notFoundTitle="Реквізити не знайдено"
                 errorTitle="Не вдалося завантажити реквізити. Оновіть сторінку"
-                backHref={`/admin/payees/${slug}`}
+                backHref={`/admin/business/${slug}`}
                 backLabel="До отримувача"
             />
         );

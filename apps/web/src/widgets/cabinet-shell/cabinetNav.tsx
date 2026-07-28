@@ -86,7 +86,7 @@ export const CABINET_ADMIN_NAV: CabinetNavItem[] = [
         key: 'admin-catalog',
         label: 'Каталог',
         icon: <Landmark />,
-        href: '/admin/payees',
+        href: '/admin/business',
         matchPrefixes: ['/admin/publicity'],
     },
 ];
