@@ -14,6 +14,7 @@ import {
 } from '@finly/types';
 
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
+import { THROTTLERS } from '../src/common/http/throttle-policy';
 import { QrModule } from '../src/modules/qr/qr.module';
 
 // ─── Mock ENV — fail-fast strict у `config/env.ts` крашить при відсутності
@@ -67,12 +68,12 @@ async function createTestApp(): Promise<INestApplication<App>> {
     const moduleFixture: TestingModule = await Test.createTestingModule({
         imports: [
             ConfigModule.forRoot({ isGlobal: true }),
+            // Бакети — з того самого реєстру, що й прод (`THROTTLERS`), а не
+            // копією-літералом: раніше тут жили три бакети з власними числами, і
+            // зміна ліміту `qr-preview` у реєстрі (Sprint 29: 10 → 30) розійшлася
+            // з тестом. Декоратор контролера читає реєстр, тож тест мусить теж.
             ThrottlerModule.forRoot({
-                throttlers: [
-                    { name: 'default', ttl: 60_000, limit: 60 },
-                    { name: 'public-payment', ttl: 60_000, limit: 600 },
-                    { name: 'qr-preview', ttl: 60_000, limit: 10 },
-                ],
+                throttlers: THROTTLERS.map((t) => ({ ...t })),
             }),
             QrModule,
         ],
@@ -238,7 +239,14 @@ describe('QR Preview E2E (POST /api/qr/preview)', () => {
 
 // ─── Throttle (окремий app з чистим storage) ───
 
-describe('QR Preview E2E — throttle bucket "qr-preview" (10/min/IP)', () => {
+/**
+ * Поріг беремо з реєстру, а не числом у назві тесту: інакше кожна зміна ліміту
+ * лишає тест із застарілим очікуванням (саме так він і зламався у Sprint 29,
+ * коли `qr-preview` виріс з 10 до 30).
+ */
+const QR_PREVIEW_LIMIT = THROTTLERS.find((t) => t.name === 'qr-preview')!.limit;
+
+describe('QR Preview E2E — throttle bucket "qr-preview"', () => {
     let app: INestApplication<App>;
 
     beforeAll(async () => {
@@ -249,18 +257,27 @@ describe('QR Preview E2E — throttle bucket "qr-preview" (10/min/IP)', () => {
         await app.close();
     });
 
-    it('11-й запит за 60s повертає 429 (10 проходять)', async () => {
+    it('запит понад ліміт бакета за 60s повертає 429 (у межах ліміту проходить)', async () => {
         // Послідовно (не Promise.all): ThrottlerStorage incr-ить лічильник
         // синхронно на запит; race на parallel-fire може дати флакі-stately
-        // (всі 11 спрацюють одночасно з різним post-incr-state).
+        // (всі запити спрацюють одночасно з різним post-incr-state).
         //
-        // Default-bucket (60/min) skip-нутий через @SkipThrottle на
-        // controller-рівні, тож реальний поріг — рівно 10.
-        for (let i = 0; i < 10; i++) {
+        // Решта бакетів skip-нута через `skipThrottlersExcept('qr-preview')` на
+        // controller-рівні, тож реальний поріг — рівно ліміт цього бакета.
+        await supertest(app.getHttpServer())
+            .post('/api/qr/preview')
+            .send(VALID_INPUT)
+            .expect(200);
+
+        // Залишок бюджету витрачаємо навмисно невалідними запитами: guard стоїть
+        // ДО валідаційного pipe, тож лічильник інкрементує і на 400. Так кейс не
+        // платить лімітом sharp-рендерів — на 30/min він був найважчим у наборі і
+        // під паралельним прогоном з'їдав CPU у сусідніх тестів того ж файлу.
+        for (let i = 1; i < QR_PREVIEW_LIMIT; i++) {
             await supertest(app.getHttpServer())
                 .post('/api/qr/preview')
-                .send(VALID_INPUT)
-                .expect(200);
+                .send({})
+                .expect(400);
         }
 
         await supertest(app.getHttpServer())
