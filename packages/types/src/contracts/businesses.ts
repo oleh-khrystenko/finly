@@ -485,7 +485,8 @@ export type BusinessWithCounts = Business & {
  *     `accounts.length === 0 → empty-state`; `=== 1 → 307-redirect на
  *     {accounts[0].slug}`; `>= 2 → render list-of-cards`.
  *
- * **Visible-поля:** `type`, `name`, `slug`, `seoIndexEnabled`, `accounts`.
+ * **Visible-поля:** `type`, `name`, `slug`, `seoIndexEnabled`, `isSystem`,
+ * `accounts`.
  * Реквізити (IBAN, ІПН) **не** віддаються JSON-ом напряму — leak-сурфейс
  * лишається через NBU payload-link на per-account-view (той самий vector як
  * QR PNG; payload містить реквізити у Base64URL).
@@ -505,6 +506,13 @@ export const CatalogPayeeSchema = z.object({
     type: businessTypeSchema,
     name: businessNameSchema,
     slug: businessSlugSchema,
+    /**
+     * Системний (заведений адміном) отримувач — картка каталогу малює бейдж
+     * «Перевірений отримувач». Схвалені користувацькі отримувачі бейджа не
+     * мають: інакше знак довіри до державних реквізитів розмився б до «будь-хто
+     * з каталогу».
+     */
+    isSystem: z.boolean(),
     accounts: z.array(PublicAccountListItemSchema),
 });
 
@@ -528,6 +536,12 @@ export const PublicBusinessSchema = z.object({
     name: businessNameSchema,
     slug: businessSlugSchema,
     seoIndexEnabled: z.boolean(),
+    /**
+     * Sprint 29 — системний отримувач (дзеркало поля у `PublicAccountViewSchema`).
+     * Знак довіри на кореневій вивісці: платник бачить його ще до вибору
+     * реквізитів.
+     */
+    isSystem: z.boolean().default(false),
     accounts: z.array(PublicAccountListItemSchema),
     /**
      * Sprint 21 — кастомний бренд отримувача (свідомо публічний). Присутні лише

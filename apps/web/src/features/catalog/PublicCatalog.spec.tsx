@@ -12,6 +12,7 @@ const CATALOG: PublicCatalogView = {
                     type: 'organization',
                     name: 'Головне управління ДПС',
                     slug: 'dps-lviv',
+                    isSystem: true,
                     accounts: [
                         {
                             slug: 'esv',
@@ -30,6 +31,7 @@ const CATALOG: PublicCatalogView = {
                     type: 'organization',
                     name: 'Фонд',
                     slug: 'fond',
+                    isSystem: false,
                     accounts: [],
                 },
             ],
@@ -56,5 +58,11 @@ describe('PublicCatalog (Sprint 29)', () => {
         render(<PublicCatalog catalog={CATALOG} />);
         expect(screen.getByText('ЄСВ')).toBeInTheDocument();
         expect(screen.getByText('Переглянути реквізити')).toBeInTheDocument();
+    });
+
+    it('бейдж довіри лише на системних записах', () => {
+        render(<PublicCatalog catalog={CATALOG} />);
+        // Один системний (ДПС) і один схвалений користувацький (Фонд).
+        expect(screen.getAllByText('Перевірений отримувач')).toHaveLength(1);
     });
 });

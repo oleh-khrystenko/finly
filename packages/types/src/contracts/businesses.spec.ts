@@ -491,7 +491,7 @@ describe('PublicBusinessSchema (Sprint 9 — list-view замість single-acc
         expect(result.success).toBe(true);
     });
 
-    it('виносить рівно 5 ключів у parsed-output (whitelist інваріант)', () => {
+    it('виносить рівно 6 ключів у parsed-output (whitelist інваріант)', () => {
         // Гарантія, що у public JSON клієнт ніколи не побачить реквізити /
         // ownership / timestamps напряму. accounts-array — це той самий
         // leak-vector, що окремий PublicAccountListItemSchema whitelist
@@ -509,6 +509,7 @@ describe('PublicBusinessSchema (Sprint 9 — list-view замість single-acc
         if (result.success) {
             expect(Object.keys(result.data).sort()).toEqual([
                 'accounts',
+                'isSystem',
                 'name',
                 'seoIndexEnabled',
                 'slug',

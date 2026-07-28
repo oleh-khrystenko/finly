@@ -17,8 +17,9 @@ export function useUserMenu(icons: {
     profile: ReactNode;
     billing: ReactNode;
     logout: ReactNode;
-    /** Sprint 28 — пункт адмін-розділу гайдів, лише для ролі admin. */
-    admin?: ReactNode;
+    /** Пункти адмін-розділів (гайди/каталог), лише для ролі admin. */
+    adminGuides?: ReactNode;
+    adminCatalog?: ReactNode;
 }) {
     const router = useRouter();
     const pathname = usePathname();
@@ -50,13 +51,25 @@ export function useUserMenu(icons: {
             icon: icons.billing,
             route: '/billing',
         },
-        ...(isAdmin && icons.admin
+        ...(isAdmin && icons.adminGuides
             ? [
                   {
                       value: 'admin-guides',
                       label: 'Гайди',
-                      icon: icons.admin,
+                      icon: icons.adminGuides,
                       route: '/admin/guides',
+                      badge: 'Адмін',
+                  },
+              ]
+            : []),
+        ...(isAdmin && icons.adminCatalog
+            ? [
+                  {
+                      value: 'admin-catalog',
+                      label: 'Каталог',
+                      icon: icons.adminCatalog,
+                      route: '/admin/business',
+                      badge: 'Адмін',
                   },
               ]
             : []),

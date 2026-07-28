@@ -111,6 +111,7 @@ export class PublicAccountsController {
                 name: business.name,
                 slug: business.slug,
                 seoIndexEnabled: resolvePublicIndexEnabled(business, account),
+                isSystem: business.isSystem,
                 ...buildPublicBrandView(business),
             },
             nbuLinks,

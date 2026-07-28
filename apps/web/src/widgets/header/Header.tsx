@@ -8,6 +8,7 @@ import {
     Menu,
     Briefcase,
     BookOpen,
+    Landmark,
 } from 'lucide-react';
 import ChangeTheme from '@/features/change-theme';
 import { Logo } from '@/entities/brand';
@@ -59,7 +60,8 @@ const Header = () => {
         businesses: <Briefcase />,
         profile: <User />,
         billing: <CreditCard />,
-        admin: <BookOpen />,
+        adminGuides: <BookOpen />,
+        adminCatalog: <Landmark />,
         logout: <LogOut />,
     });
 

@@ -47,6 +47,7 @@ Ui-компоненти інкапсулюють:
 | `UiTabs`             | Таб-смуга: перемикання контенту в межах сторінки або навігація по розділах (ручна верстка `<nav>`/`<ul>` з підкресленням)   | `as="panel"` (дефолт; Headless UI TabGroup, controlled `value`/`onChange`, обов'язковий `panelId` + `uiTabPanelProps(panelId, activeLabel)` на контейнері контенту) / `as="nav"` (next/link + `aria-current`, активність за pathname); sizes sm/md; generic `<TValue extends string>`; опційні `icon` і `count` (`countTone: neutral \| primary`) |
 | `UiWorkspaceColumns` | Двоколонковий робочий простір деталок кабінету (ручна верстка `grid xl:grid-cols-[…_25rem]`)                                 | -- ; `main` (основний стовп) + `aside` (допоміжний, 25rem на xl+); нижче xl — один стос main → aside                                            |
 | `UiCardGrid`         | Auto-fill сітка карток робочих списків (ручна верстка `grid grid-cols-[repeat(auto-fill,…)]`)                                | -- ; трек `min(18rem,100%)` — картка ніколи не ширша за контейнер (320px-екрани); `className` для відступів контексту                          |
+| `UiVerifiedBadge`    | Знак довіри «Перевірений отримувач» для системних записів (ручний `<span>` з іконкою і pill-фоном)                            | -- ; sizes sm/md; `className` для відступів контексту                                                                                          |
 
 ## Rules
 

@@ -1136,6 +1136,7 @@ describe('Businesses E2E', () => {
             };
             expect(Object.keys(body.data).sort()).toEqual([
                 'accounts',
+                'isSystem',
                 'name',
                 'seoIndexEnabled',
                 'slug',

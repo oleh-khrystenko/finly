@@ -74,6 +74,7 @@ function makeView(
             name: 'Іваненко',
             slug: 'IvanEnko',
             seoIndexEnabled: false,
+            isSystem: false,
         },
         nbuLinks: {
             primary: 'https://qr.bank.gov.ua/abc',
@@ -239,6 +240,7 @@ describe('generateMetadata', () => {
                     name: 'Іваненко',
                     slug: 'IvanEnko',
                     seoIndexEnabled: true,
+                    isSystem: false,
                 },
             })
         );
@@ -274,6 +276,7 @@ describe('generateMetadata', () => {
                     name: 'Іваненко',
                     slug: 'IvanEnko',
                     seoIndexEnabled: true,
+                    isSystem: false,
                 },
             })
         );
@@ -312,6 +315,7 @@ describe('generateMetadata', () => {
                     name: 'Іваненко',
                     slug: 'IvanEnko',
                     seoIndexEnabled: true,
+                    isSystem: false,
                 },
             })
         );

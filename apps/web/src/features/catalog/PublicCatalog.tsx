@@ -6,6 +6,7 @@ import {
     type PublicCatalogView,
 } from '@finly/types';
 import UiLink from '@/shared/ui/UiLink';
+import UiVerifiedBadge from '@/shared/ui/UiVerifiedBadge';
 import { formatPayeeName } from '@/entities/business';
 
 interface Props {
@@ -65,9 +66,12 @@ function PayeeCard({ payee }: { payee: CatalogPayee }) {
             className="group border-border bg-card hover:border-primary/40 hover:bg-muted/40 flex items-center gap-4 rounded-xl border p-4 transition-colors"
         >
             <div className="min-w-0 flex-1">
-                <p className="text-foreground truncate text-base font-semibold">
-                    {payeeName}
-                </p>
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <p className="text-foreground truncate text-base font-semibold">
+                        {payeeName}
+                    </p>
+                    {payee.isSystem && <UiVerifiedBadge size="sm" />}
+                </div>
                 <p className="text-muted-foreground mt-0.5 truncate text-sm">
                     {meta}
                 </p>

@@ -15,6 +15,7 @@ const baseProps = {
         name: 'Іваненко',
         slug: 'IvanEnko',
         seoIndexEnabled: false,
+        isSystem: false,
     },
     nbuLinks: {
         primary: 'https://qr.bank.gov.ua/abc',
@@ -175,6 +176,27 @@ describe('PublicAccountView (Sprint 9 §SP-4 + §SP-9)', () => {
             expect(logo.getAttribute('src')).toContain('brand-logos');
             // Текстовий заголовок «Отримувач» лишається поряд (не замість).
             expect(screen.getByText('Отримувач')).toBeInTheDocument();
+        });
+    });
+
+    describe('Sprint 29 — знак довіри системного отримувача', () => {
+        it('звичайний отримувач: бейджа немає', () => {
+            render(<PublicAccountView {...baseProps} />);
+            expect(
+                screen.queryByText('Перевірений отримувач')
+            ).not.toBeInTheDocument();
+        });
+
+        it('системний отримувач: бейдж поряд із назвою', () => {
+            render(
+                <PublicAccountView
+                    {...baseProps}
+                    business={{ ...baseProps.business, isSystem: true }}
+                />
+            );
+            expect(
+                screen.getByText('Перевірений отримувач')
+            ).toBeInTheDocument();
         });
     });
 });

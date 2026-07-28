@@ -224,6 +224,13 @@ export const PublicAccountViewSchema = z.object({
         name: businessNameSchema,
         slug: businessSlugSchema,
         seoIndexEnabled: z.boolean(),
+        /**
+         * Sprint 29 — системний (заведений адміном) отримувач. Публічний знак
+         * довіри: сторінка малює бейдж «Перевірений отримувач», щоб податкові
+         * реквізити візуально відрізнялись від сторінки будь-якого користувача.
+         * Не leak-поле: приналежність до каталогу і так публічна.
+         */
+        isSystem: z.boolean().default(false),
         // Sprint 21 — кастомний бренд (присутні лише за активного бренду; інакше
         // Finly). `.optional()` тримає whitelist-форму без brand.
         logo: z.string().url().optional(),

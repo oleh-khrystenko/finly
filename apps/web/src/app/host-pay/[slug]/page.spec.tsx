@@ -74,6 +74,7 @@ function makeView(
         name: 'Іваненко',
         slug: 'IvanEnko',
         seoIndexEnabled: false,
+        isSystem: false,
         accounts: [],
         ...overrides,
     };

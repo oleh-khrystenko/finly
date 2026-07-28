@@ -22,6 +22,7 @@ import UiPayeeCard from '@/shared/ui/UiPayeeCard';
 import UiPaymentOptions from '@/shared/ui/UiPaymentOptions';
 import UiQrImage from '@/shared/ui/UiQrImage';
 import UiSelect from '@/shared/ui/UiSelect';
+import UiVerifiedBadge from '@/shared/ui/UiVerifiedBadge';
 import { formatPayeeName } from '@/entities/business';
 
 /** Довжина РНОКПП — форма ріже нецифри, тож недобір цифр і провал контрольної
@@ -59,6 +60,8 @@ interface Props {
     business: {
         type: BusinessType;
         name: string;
+        /** Системний отримувач — під назвою рендериться знак довіри. */
+        isSystem: boolean;
         logo?: string;
         brandDisplayName?: string | null;
     };
@@ -284,6 +287,11 @@ export default function PersonalizedPayment({
                     <h1 className="text-foreground text-2xl font-bold tracking-tight break-words md:text-3xl">
                         {payeeName}
                     </h1>
+                    {business.isSystem && (
+                        <div className="flex justify-center pt-1">
+                            <UiVerifiedBadge />
+                        </div>
+                    )}
                 </div>
             </header>
 

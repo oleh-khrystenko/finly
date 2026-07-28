@@ -7,6 +7,7 @@ import {
 import UiBankLogo from '@/shared/ui/UiBankLogo';
 import UiBrandLogo from '@/shared/ui/UiBrandLogo';
 import UiLink from '@/shared/ui/UiLink';
+import UiVerifiedBadge from '@/shared/ui/UiVerifiedBadge';
 import { formatPayeeName } from '@/entities/business';
 
 interface Props {
@@ -20,6 +21,12 @@ interface Props {
     /** Sprint 21 — кастомний бренд (присутній лише за активного бренду). */
     logo?: string;
     brandDisplayName?: string | null;
+    /**
+     * Системний отримувач (заведений адміном) — під назвою рендериться знак
+     * довіри, і в empty-state теж: платник має розуміти, чия це сторінка, ще до
+     * появи реквізитів.
+     */
+    isSystem: boolean;
     /**
      * Sprint 9 §SP-4: server-side already відрізнив 0/1/2+ → цей view рендериться
      * тільки для `accounts.length === 0` (empty-state) або `>= 2` (list-of-cards).
@@ -61,6 +68,7 @@ export default function PublicBusinessView({
     slug,
     logo,
     brandDisplayName,
+    isSystem,
     accounts,
 }: Props) {
     const payeeName = formatPayeeName(type, name);
@@ -71,6 +79,7 @@ export default function PublicBusinessView({
                 payeeName={payeeName}
                 logo={logo}
                 brandDisplayName={brandDisplayName}
+                isSystem={isSystem}
             />
         );
     }
@@ -90,6 +99,11 @@ export default function PublicBusinessView({
                     <h1 className="text-foreground text-2xl font-bold tracking-tight break-words md:text-3xl">
                         {payeeName}
                     </h1>
+                    {isSystem && (
+                        <div className="flex justify-center pt-1">
+                            <UiVerifiedBadge />
+                        </div>
+                    )}
                     <p className="text-muted-foreground pt-1 text-sm">
                         Оберіть реквізити для оплати
                     </p>
@@ -193,10 +207,12 @@ function EmptyState({
     payeeName,
     logo,
     brandDisplayName,
+    isSystem,
 }: {
     payeeName: string;
     logo?: string;
     brandDisplayName?: string | null;
+    isSystem: boolean;
 }) {
     return (
         <div className="mx-auto max-w-xl px-4 py-16 text-center">
@@ -213,6 +229,11 @@ function EmptyState({
             <h1 className="text-foreground mt-1 text-2xl font-bold tracking-tight break-words md:text-3xl">
                 {payeeName}
             </h1>
+            {isSystem && (
+                <div className="mt-2 flex justify-center">
+                    <UiVerifiedBadge />
+                </div>
+            )}
             <p className="text-muted-foreground mt-4 text-sm">
                 Власник ще не налаштував реквізити для прийому платежів.
             </p>

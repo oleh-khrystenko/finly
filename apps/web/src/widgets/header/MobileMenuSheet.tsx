@@ -9,6 +9,7 @@ import {
     LogIn,
     Briefcase,
     BookOpen,
+    Landmark,
 } from 'lucide-react';
 import ChangeTheme, {
     THEME_ICONS,
@@ -63,7 +64,8 @@ export default function MobileMenuSheet() {
         businesses: <Briefcase />,
         profile: <User />,
         billing: <CreditCard />,
-        admin: <BookOpen />,
+        adminGuides: <BookOpen />,
+        adminCatalog: <Landmark />,
         logout: <LogOut />,
     });
 

@@ -34,6 +34,7 @@ describe('loadPublicAccountView', () => {
             name: 'Іваненко',
             slug: 'IvanEnko',
             seoIndexEnabled: false,
+            isSystem: false,
         },
         nbuLinks: {
             primary: 'https://qr.bank.gov.ua/abc',

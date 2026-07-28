@@ -230,6 +230,7 @@ export class PublicBusinessesController {
             name: business.name,
             slug: business.slug,
             seoIndexEnabled: resolvePublicIndexEnabled(business),
+            isSystem: business.isSystem,
             ...buildPublicBrandView(business),
             accounts: accounts.map((a) => ({
                 slug: a.slug,

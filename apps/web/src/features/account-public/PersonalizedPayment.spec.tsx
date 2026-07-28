@@ -44,6 +44,7 @@ const baseProps = {
     business: {
         type: 'organization' as const,
         name: 'ДПС у м. Києві',
+        isSystem: true,
     },
 };
 

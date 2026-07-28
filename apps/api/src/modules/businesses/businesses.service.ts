@@ -873,7 +873,10 @@ export class BusinessesService {
                     // у Sprint 29 — у документах, створених раніше, його фізично
                     // немає. Тип чесно це відображає; фолбек — на групуванні.
                     catalogCategory?: CatalogCategory;
-                    isSystem: boolean;
+                    // Та сама причина, що у `catalogCategory`: поле зʼявилось у
+                    // Sprint 29, а `.lean()` не добудовує дефолти. Схвалений
+                    // раніше створений отримувач фізично не має його у документі.
+                    isSystem?: boolean;
                 }>
             >()
             .exec();
@@ -948,6 +951,7 @@ export class BusinessesService {
                 type: business.type,
                 name: business.name,
                 slug: business.slug,
+                isSystem: business.isSystem === true,
                 accounts: payeeAccounts,
             };
             // Фолбек на дефолтну секцію обовʼязковий: документ без

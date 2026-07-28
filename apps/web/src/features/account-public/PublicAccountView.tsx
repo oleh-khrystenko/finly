@@ -4,6 +4,7 @@ import { BANK_LABEL, type BankCode, type BusinessType } from '@finly/types';
 import UiBrandLogo from '@/shared/ui/UiBrandLogo';
 import UiPaymentOptions from '@/shared/ui/UiPaymentOptions';
 import UiPayeeCard from '@/shared/ui/UiPayeeCard';
+import UiVerifiedBadge from '@/shared/ui/UiVerifiedBadge';
 import { qrBrandVersion } from '@/shared/lib';
 import { formatPayeeName } from '@/entities/business';
 
@@ -21,6 +22,8 @@ interface Props {
         name: string;
         slug: string;
         seoIndexEnabled: boolean;
+        /** Системний отримувач — під назвою рендериться знак довіри. */
+        isSystem: boolean;
         logo?: string;
         brandDisplayName?: string | null;
     };
@@ -88,6 +91,11 @@ export default function PublicAccountView({
                     <h1 className="text-foreground text-2xl font-bold tracking-tight break-words md:text-3xl">
                         {payeeName}
                     </h1>
+                    {business.isSystem && (
+                        <div className="flex justify-center pt-1">
+                            <UiVerifiedBadge />
+                        </div>
+                    )}
                 </div>
             </header>
 
