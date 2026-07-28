@@ -58,22 +58,56 @@ export function AdminPublicityQueue() {
     // Схвалені переїхали у вкладку «Отримувачі», тож тут лишилась тільки черга.
     // Довжину черги пишемо у спільний стор — бейдж на табі оновлюється одразу
     // після схвалення/відхилення без окремого запиту.
-    const load = useCallback(() => {
-        adminListPublicityQueue()
-            .then((loadedQueue) => {
-                if (!mountedRef.current) return;
-                setQueue(loadedQueue);
-                setCount(loadedQueue.length);
-                setState({ phase: 'ready' });
-            })
-            .catch(() => {
-                if (mountedRef.current) setState({ phase: 'error' });
-            });
+    const load = useCallback(async () => {
+        try {
+            const loadedQueue = await adminListPublicityQueue();
+            if (!mountedRef.current) return;
+            setQueue(loadedQueue);
+            setCount(loadedQueue.length);
+            setState({ phase: 'ready' });
+        } catch {
+            if (mountedRef.current) setState({ phase: 'error' });
+        }
     }, [setCount]);
 
     useEffect(() => {
-        load();
+        void load();
     }, [load]);
+
+    // Slug заявки, чия пара «мутація + перечитування» зараз у польоті. Блокує
+    // дії на ВСІХ картках, не лише на своїй: інакше дві швидкі дії дають дві
+    // пари запит+GET, чиї відповіді можуть прийти не в тому порядку, і пізніший
+    // load() затирає чергу знімком, зробленим до другої мутації — щойно
+    // схвалена заявка знову рендериться як «на розгляді», а повторний клік дає
+    // помилку. Дзеркалить лок `AdminPayeeDetail`.
+    const [pendingSlug, setPendingSlug] = useState<string | null>(null);
+
+    const runMutation = useCallback(
+        async (slug: string, mutate: () => Promise<void>) => {
+            setPendingSlug(slug);
+            try {
+                await mutate();
+            } finally {
+                if (mountedRef.current) setPendingSlug(null);
+            }
+        },
+        []
+    );
+
+    const approve = (slug: string, category: CatalogCategory) =>
+        void runMutation(slug, async () => {
+            try {
+                await adminApprovePublicity(slug, { category });
+            } catch (err) {
+                toast.error(
+                    getApiMessage(extractApiErrorCode(err), 'businesses')
+                );
+                // Стан на сервері не змінився — перечитувати нічого.
+                return;
+            }
+            toast.success('Запит схвалено');
+            await load();
+        });
 
     return (
         <UiPageContainer>
@@ -120,7 +154,11 @@ export function AdminPublicityQueue() {
                             <QueueCard
                                 key={payee.id}
                                 payee={payee}
-                                onApproved={load}
+                                loading={pendingSlug === payee.slug}
+                                actionsDisabled={pendingSlug !== null}
+                                onApprove={(category) =>
+                                    approve(payee.slug, category)
+                                }
                                 onReject={() =>
                                     openReject({
                                         slug: payee.slug,
@@ -129,7 +167,12 @@ export function AdminPublicityQueue() {
                                             payee.name
                                         ),
                                         mode: 'pending',
-                                        onRejected: load,
+                                        // Перечитування після відхилення теж під
+                                        // локом: діалог модальний, тож поки він
+                                        // відкритий, кліків під ним немає, але
+                                        // сам GET летить уже після його закриття.
+                                        onRejected: () =>
+                                            void runMutation(payee.slug, load),
                                     })
                                 }
                             />
@@ -143,30 +186,23 @@ export function AdminPublicityQueue() {
 
 function QueueCard({
     payee,
-    onApproved,
+    loading,
+    actionsDisabled,
+    onApprove,
     onReject,
 }: {
     payee: Business;
-    onApproved: () => void;
+    /** Саме ця картка в польоті — спінер лишається на натиснутій кнопці. */
+    loading: boolean;
+    /** Будь-яка мутація сторінки в польоті: дії решти карток заблоковані. */
+    actionsDisabled: boolean;
+    onApprove: (category: CatalogCategory) => void;
     onReject: () => void;
 }) {
     const [category, setCategory] = useState<CatalogCategory>(
         payee.catalogCategory
     );
-    const [approving, setApproving] = useState(false);
     const publicUrl = `${ENV.NEXT_PUBLIC_PAY_PUBLIC_URL.replace(/\/$/, '')}/${payee.slug}`;
-
-    const handleApprove = async () => {
-        setApproving(true);
-        try {
-            await adminApprovePublicity(payee.slug, { category });
-            toast.success('Запит схвалено');
-            onApproved();
-        } catch (err) {
-            toast.error(getApiMessage(extractApiErrorCode(err), 'businesses'));
-            setApproving(false);
-        }
-    };
 
     return (
         <div className="border-border bg-card space-y-4 rounded-xl border p-4">
@@ -223,7 +259,7 @@ function QueueCard({
                         variant="destructive-outline"
                         size="md"
                         onClick={onReject}
-                        disabled={approving}
+                        disabled={actionsDisabled}
                     >
                         Відхилити
                     </UiButton>
@@ -231,8 +267,9 @@ function QueueCard({
                         type="button"
                         variant="filled"
                         size="md"
-                        loading={approving}
-                        onClick={() => void handleApprove()}
+                        loading={loading}
+                        disabled={actionsDisabled}
+                        onClick={() => onApprove(category)}
                     >
                         Схвалити
                     </UiButton>

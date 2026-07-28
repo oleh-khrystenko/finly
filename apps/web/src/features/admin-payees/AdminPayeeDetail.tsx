@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
@@ -12,14 +12,12 @@ import {
     deriveAccountLabel,
     ibanZod,
     type AccountWithCounts,
-    type Business,
 } from '@finly/types';
 
 import {
     adminCreatePayeeAccount,
     adminDeletePayee,
     adminDeletePayeeAccount,
-    adminGetPayee,
     adminSetPayeeAccountCatalogVisibility,
     adminSetPayeeCatalogVisibility,
     extractApiErrorCode,
@@ -32,20 +30,13 @@ import UiInput from '@/shared/ui/UiInput';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
 import UiPageHeading from '@/shared/ui/UiPageHeading';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
-import UiSpinner from '@/shared/ui/UiSpinner';
 import UiSwitch from '@/shared/ui/UiSwitch';
 
+import { AdminLoadFallback } from './AdminLoadFallback';
 import { mapFieldMessage } from './fieldErrors';
+import { useAdminPayee } from './useAdminPayee';
 import { useDeleteAdminPayeeAccountConfirmStore } from './deleteAdminPayeeAccountConfirmStore';
 import { useDeleteAdminPayeeConfirmStore } from './deleteAdminPayeeConfirmStore';
-
-// `not-found` і `error` розділені: тимчасовий збій (мережа, 429, 500) не можна
-// показувати як ствердне «запису не існує» — це підштовхує адміна створити дубль.
-type LoadState =
-    | { phase: 'loading' }
-    | { phase: 'not-found' }
-    | { phase: 'error' }
-    | { phase: 'ready'; business: Business; accounts: AccountWithCounts[] };
 
 export function AdminPayeeDetail({ slug }: { slug: string }) {
     const router = useRouter();
@@ -55,7 +46,7 @@ export function AdminPayeeDetail({ slug }: { slug: string }) {
     const openDeleteAccountConfirm = useDeleteAdminPayeeAccountConfirmStore(
         (s) => s.open
     );
-    const [state, setState] = useState<LoadState>({ phase: 'loading' });
+    const { state, reload } = useAdminPayee(slug);
     // Лок на БУДЬ-ЯКУ in-flight пару «мутація + reload()»: перемикачі
     // видимості, додавання і видалення реквізитів. Без нього дві швидкі дії
     // дають дві пари запит+GET, чиї відповіді можуть прийти не в тому порядку,
@@ -65,67 +56,20 @@ export function AdminPayeeDetail({ slug }: { slug: string }) {
     // `AccountCatalogSection`.
     const [mutationBusy, setMutationBusy] = useState(false);
 
-    useEffect(() => {
-        let active = true;
-        adminGetPayee(slug)
-            .then(({ business, accounts }) => {
-                if (active) setState({ phase: 'ready', business, accounts });
-            })
-            .catch((err) => {
-                if (!active) return;
-                setState({
-                    phase:
-                        extractApiErrorCode(err) ===
-                        RESPONSE_CODE.SYSTEM_PAYEE_NOT_FOUND
-                            ? 'not-found'
-                            : 'error',
-                });
-            });
-        return () => {
-            active = false;
-        };
-    }, [slug]);
-
-    if (state.phase === 'loading') {
+    if (state.phase !== 'ready') {
         return (
-            <UiPageContainer narrow>
-                <div className="flex flex-1 items-center justify-center">
-                    <UiSpinner size="md" />
-                </div>
-            </UiPageContainer>
-        );
-    }
-    if (state.phase === 'not-found' || state.phase === 'error') {
-        return (
-            <UiPageContainer narrow className="justify-center">
-                <UiSectionCard
-                    title={
-                        state.phase === 'not-found'
-                            ? 'Отримувача не знайдено'
-                            : 'Не вдалося завантажити отримувача. Оновіть сторінку'
-                    }
-                >
-                    <div className="mt-4">
-                        <UiButton
-                            as="link"
-                            href="/admin/payees"
-                            variant="filled"
-                            size="md"
-                        >
-                            До списку
-                        </UiButton>
-                    </div>
-                </UiSectionCard>
-            </UiPageContainer>
+            <AdminLoadFallback
+                phase={state.phase}
+                notFoundTitle="Отримувача не знайдено"
+                errorTitle="Не вдалося завантажити отримувача. Оновіть сторінку"
+                backHref="/admin/payees"
+                backLabel="До списку"
+            />
         );
     }
 
     const { business, accounts } = state;
-
-    const reload = async () => {
-        const fresh = await adminGetPayee(slug);
-        setState({ phase: 'ready', ...fresh });
-    };
+    const hasVisibleAccount = accounts.some((a) => a.catalogVisible);
 
     /**
      * Форма кладе будь-який throw звідси під своє поле і не чистить введене.
@@ -339,6 +283,18 @@ export function AdminPayeeDetail({ slug }: { slug: string }) {
                         onChange={(next) => void handleToggleVisibility(next)}
                     />
                 </label>
+                {business.catalogVisible && !hasVisibleAccount && (
+                    // Каталог не бере отримувача без жодних видимих реквізитів
+                    // (`getPublicCatalog`), бо картка вела б на сторінку без
+                    // способу заплатити. Стан штатний (щойно створений запис;
+                    // старі реквізити приховані, нові ще не увімкнені), тож
+                    // кажемо про нього прямо, а не лишаємо перемикач обіцяти
+                    // присутність у вітрині.
+                    <p className="border-border bg-muted/40 text-muted-foreground mt-3 rounded-lg border p-3 text-sm">
+                        Поки що в каталозі не зʼявиться: не увімкнено жодних
+                        реквізитів. Увімкніть потрібні нижче.
+                    </p>
+                )}
             </UiSectionCard>
 
             <UiSectionCard title="Реквізити">

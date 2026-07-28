@@ -112,7 +112,8 @@ export default function PublicitySection({
                             </span>
                             <span className="text-muted-foreground text-sm">
                                 Видимістю окремих реквізитів керуйте на сторінці
-                                кожного рахунку.
+                                кожного рахунку. Поки не увімкнено жодних, у
+                                каталозі отримувач не зʼявиться.
                             </span>
                         </label>
                     ) : (

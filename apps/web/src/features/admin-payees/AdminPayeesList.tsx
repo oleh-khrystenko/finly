@@ -44,22 +44,43 @@ export function AdminPayeesList() {
         };
     }, []);
 
-    const load = useCallback(() => {
-        Promise.all([adminListPayees(), adminListApprovedPublicity()])
-            .then(([system, approvedList]) => {
-                if (!mountedRef.current) return;
-                setSystemPayees(system);
-                setApproved(approvedList);
-                setState({ phase: 'ready' });
-            })
-            .catch(() => {
-                if (mountedRef.current) setState({ phase: 'error' });
-            });
+    const load = useCallback(async () => {
+        try {
+            const [system, approvedList] = await Promise.all([
+                adminListPayees(),
+                adminListApprovedPublicity(),
+            ]);
+            if (!mountedRef.current) return;
+            setSystemPayees(system);
+            setApproved(approvedList);
+            setState({ phase: 'ready' });
+        } catch {
+            if (mountedRef.current) setState({ phase: 'error' });
+        }
     }, []);
 
     useEffect(() => {
-        load();
+        void load();
     }, [load]);
+
+    // Slug запису, чиє перечитування після зняття з каталогу зараз у польоті.
+    // Блокує дії на ВСІХ рядках: інакше два швидкі зняття дають два GET, чиї
+    // відповіді можуть прийти не в тому порядку, і пізніший затирає список
+    // знімком, зробленим до другої дії — щойно знятий запис знову рендериться
+    // як схвалений. Дзеркалить лок `AdminPayeeDetail`.
+    const [pendingSlug, setPendingSlug] = useState<string | null>(null);
+
+    const runMutation = useCallback(
+        async (slug: string, mutate: () => Promise<void>) => {
+            setPendingSlug(slug);
+            try {
+                await mutate();
+            } finally {
+                if (mountedRef.current) setPendingSlug(null);
+            }
+        },
+        []
+    );
 
     const total = systemPayees.length + approved.length;
 
@@ -124,6 +145,7 @@ export function AdminPayeesList() {
                             <ApprovedRow
                                 key={payee.id}
                                 payee={payee}
+                                actionsDisabled={pendingSlug !== null}
                                 onRevoke={() =>
                                     openReject({
                                         slug: payee.slug,
@@ -132,7 +154,12 @@ export function AdminPayeesList() {
                                             payee.name
                                         ),
                                         mode: 'approved',
-                                        onRejected: load,
+                                        // Перечитування під локом: діалог
+                                        // модальний, тож поки він відкритий,
+                                        // кліків під ним немає, але сам GET
+                                        // летить уже після його закриття.
+                                        onRejected: () =>
+                                            void runMutation(payee.slug, load),
                                     })
                                 }
                             />
@@ -180,9 +207,12 @@ function PayeeRow({ payee }: { payee: Business }) {
  */
 function ApprovedRow({
     payee,
+    actionsDisabled,
     onRevoke,
 }: {
     payee: Business;
+    /** Спільний лок сторінки: поки летить інша дія, зняття заблоковане. */
+    actionsDisabled: boolean;
     onRevoke: () => void;
 }) {
     const publicUrl = `${ENV.NEXT_PUBLIC_PAY_PUBLIC_URL.replace(/\/$/, '')}/${payee.slug}`;
@@ -225,6 +255,7 @@ function ApprovedRow({
                     type="button"
                     variant="destructive-outline"
                     size="sm"
+                    disabled={actionsDisabled}
                     onClick={onRevoke}
                 >
                     Прибрати з каталогу
