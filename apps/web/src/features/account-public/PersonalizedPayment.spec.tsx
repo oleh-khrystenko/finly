@@ -58,6 +58,8 @@ const renderWith = (markers: PurposeMarker[], query = '') => {
 
 /** Валідний РНОКПП (контрольна сума сходиться). */
 const VALID_TAX_ID = '3182710695';
+/** Інший валідний РНОКПП — «наступний клієнт» у тестах заміни значень. */
+const OTHER_VALID_TAX_ID = '3182710608';
 
 beforeEach(() => {
     jest.useFakeTimers();
@@ -142,6 +144,31 @@ describe('PersonalizedPayment (Sprint 29 — податкова персонал
 
             await flushDebounce();
             expect(screen.queryByText('Готуємо QR-код...')).toBeNull();
+            expect(qrImage()).not.toBeNull();
+        });
+
+        it('заміна валідного РНОКПП іншим валідним ОДРАЗУ ховає старий QR, кнопку копіювання і чистить адресу', async () => {
+            // Вікно debounce не має показувати платіж на чужі дані: бухгалтер
+            // вставив номер наступного клієнта і одразу тисне «Скопіювати» —
+            // без негайного скидання посилання понесло б РНОКПП попереднього.
+            renderWith(['taxId'], `taxId=${VALID_TAX_ID}`);
+            await flushDebounce();
+            expect(qrImage()).not.toBeNull();
+            expect(window.location.search).toContain(VALID_TAX_ID);
+
+            fireEvent.change(screen.getByLabelText(/РНОКПП/), {
+                target: { value: OTHER_VALID_TAX_ID },
+            });
+            // Ще ДО паузи набору: блок оплати схований, адреса без старого номера.
+            expect(qrImage()).toBeNull();
+            expect(
+                screen.queryByText('Скопіювати персональне посилання')
+            ).toBeNull();
+            expect(window.location.search).toBe('');
+            expect(screen.getByText('Готуємо QR-код...')).toBeInTheDocument();
+
+            await flushDebounce();
+            expect(window.location.search).toContain(OTHER_VALID_TAX_ID);
             expect(qrImage()).not.toBeNull();
         });
 

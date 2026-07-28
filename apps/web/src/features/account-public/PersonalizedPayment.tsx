@@ -38,6 +38,16 @@ const TAX_ID_LENGTH = 10;
  */
 const APPLY_DEBOUNCE_MS = 500;
 
+/** Порівняння значень підстановок за вмістом: набір ключів задають маркери
+ * шаблону, тож досить перевірити ключі одного боку плюс однакову кількість. */
+function sameValues(a: Record<string, string>, b: Record<string, string>) {
+    const keys = Object.keys(a);
+    return (
+        keys.length === Object.keys(b).length &&
+        keys.every((key) => a[key] === b[key])
+    );
+}
+
 interface Props {
     businessSlug: string;
     account: {
@@ -175,6 +185,15 @@ export default function PersonalizedPayment({
             setAppliedValues(null);
             return;
         }
+        // Валідне → інше валідне (бухгалтер вставив РНОКПП наступного клієнта
+        // поверх попереднього): застосовані значення скидаємо ОДРАЗУ, не
+        // чекаючи паузи набору. Інакше пів секунди рендерився б старий QR і
+        // активна кнопка копіювання — посилання, скопійоване у це вікно,
+        // понесло б дані попередньої людини. Дзеркалить захист гілки
+        // `!allValid` вище: там той самий ризик закритий для невалідного стану.
+        setAppliedValues((prev) =>
+            prev !== null && !sameValues(prev, values) ? null : prev
+        );
         const handle = setTimeout(
             () => setAppliedValues(values),
             APPLY_DEBOUNCE_MS

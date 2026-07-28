@@ -252,7 +252,7 @@ describe('generateMetadata', () => {
         expect(meta.robots).toEqual({ index: true, follow: true });
     });
 
-    it('seoIndexEnabled=false → noindex', async () => {
+    it('seoIndexEnabled=false → noindex і БЕЗ canonical (суперечливі сигнали)', async () => {
         mockLoadPublicAccountView.mockResolvedValue(makeView());
 
         const meta = await generateMetadata({
@@ -262,6 +262,32 @@ describe('generateMetadata', () => {
             }),
         });
         expect(meta.robots).toEqual({ index: false, follow: false });
+        expect(meta.alternates).toBeUndefined();
+        expect(meta.openGraph?.url).toBeUndefined();
+    });
+
+    it('Sprint 29 — персональний query → noindex без canonical навіть при seoIndexEnabled', async () => {
+        mockLoadPublicAccountView.mockResolvedValue(
+            makeView({
+                business: {
+                    type: 'fop',
+                    name: 'Іваненко',
+                    slug: 'IvanEnko',
+                    seoIndexEnabled: true,
+                },
+            })
+        );
+
+        const meta = await generateMetadata({
+            params: Promise.resolve({
+                slug: 'IvanEnko',
+                accountSlug: 'aBc12345',
+            }),
+            searchParams: Promise.resolve({ taxId: '3182710695' }),
+        });
+        expect(meta.robots).toEqual({ index: false, follow: false });
+        expect(meta.alternates).toBeUndefined();
+        expect(meta.openGraph?.url).toBeUndefined();
     });
 
     it('title містить bank-label + ibanMask на non-null bankCode', async () => {
@@ -278,8 +304,17 @@ describe('generateMetadata', () => {
         );
     });
 
-    it('adds canonical and social metadata on pay host', async () => {
-        mockLoadPublicAccountView.mockResolvedValue(makeView());
+    it('adds canonical and social metadata on pay host (індексована гілка)', async () => {
+        mockLoadPublicAccountView.mockResolvedValue(
+            makeView({
+                business: {
+                    type: 'fop',
+                    name: 'Іваненко',
+                    slug: 'IvanEnko',
+                    seoIndexEnabled: true,
+                },
+            })
+        );
 
         const meta = await generateMetadata({
             params: Promise.resolve({

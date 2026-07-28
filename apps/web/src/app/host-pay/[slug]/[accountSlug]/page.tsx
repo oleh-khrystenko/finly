@@ -97,16 +97,19 @@ export async function generateMetadata({
     const isPersonalized = PURPOSE_MARKERS.some(
         (marker) => query[marker] !== undefined
     );
+    const indexed = view.business.seoIndexEnabled && !isPersonalized;
     return {
         ...buildMetadata({
             title,
             description,
-            canonicalUrl,
+            // Canonical лише в індексованій гілці: noindex + rel=canonical —
+            // суперечливі сигнали, noindex міг би склеїтись на голу адресу
+            // (те саме правило, що на корені pay-хоста).
+            canonicalUrl: indexed ? canonicalUrl : null,
         }),
-        robots:
-            view.business.seoIndexEnabled && !isPersonalized
-                ? { index: true, follow: true }
-                : { index: false, follow: false },
+        robots: indexed
+            ? { index: true, follow: true }
+            : { index: false, follow: false },
     };
 }
 

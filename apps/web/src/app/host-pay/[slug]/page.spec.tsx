@@ -265,6 +265,10 @@ describe('generateMetadata — SEO robots (§E3)', () => {
             params: Promise.resolve({ slug: 'IvanEnko' }),
         });
         expect(meta.robots).toEqual({ index: false, follow: false });
+        // noindex + rel=canonical — суперечливі сигнали: у noindex-гілці
+        // canonical (і og:url) не віддається.
+        expect(meta.alternates).toBeUndefined();
+        expect(meta.openGraph?.url).toBeUndefined();
     });
 
     it('Sprint 7 §SP-5 — title type-aware (на відміну від h1)', async () => {
@@ -275,8 +279,10 @@ describe('generateMetadata — SEO robots (§E3)', () => {
         expect(meta.title).toBe('Оплата на ФОП Іваненко | Finly');
     });
 
-    it('adds canonical and social metadata on pay host', async () => {
-        mockLoadPublicView.mockResolvedValue(makeView());
+    it('adds canonical and social metadata on pay host (індексована гілка)', async () => {
+        mockLoadPublicView.mockResolvedValue(
+            makeView({ seoIndexEnabled: true })
+        );
         const meta = await generateMetadata({
             params: Promise.resolve({ slug: 'IvanEnko' }),
         });

@@ -79,7 +79,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         ...buildMetadata({
             title,
             description,
-            canonicalUrl,
+            // Canonical лише в індексованій гілці: noindex + rel=canonical —
+            // суперечливі сигнали (те саме правило, що на корені pay-хоста).
+            canonicalUrl: view.seoIndexEnabled ? canonicalUrl : null,
         }),
         // Sprint 3 рішення E3 — `noindex` за замовчуванням, ФОП opt-in
         // через toggle `seoIndexEnabled` у кабінеті.

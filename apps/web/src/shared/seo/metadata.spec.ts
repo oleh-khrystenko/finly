@@ -30,7 +30,7 @@ describe('fetchMetadata', () => {
         expect(meta.robots).toEqual({ index: false, follow: false });
     });
 
-    it('preserves canonical and openGraph regardless of noindex', () => {
+    it('drops canonical and og:url when noindex=true (суперечливі сигнали)', () => {
         const meta = fetchMetadata({
             page: 'terms',
             href: 'terms',
@@ -38,7 +38,10 @@ describe('fetchMetadata', () => {
             noindex: true,
         });
         expect(meta.title).toBe('Terms');
-        expect(meta.alternates?.canonical).toContain('/terms');
+        expect(meta.alternates).toBeUndefined();
+        expect(meta.openGraph?.url).toBeUndefined();
+        // Решта social-метаданих лишається: превʼю посилання не залежить від
+        // індексації.
         expect(meta.openGraph?.title).toBe('Terms');
     });
 
