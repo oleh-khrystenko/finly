@@ -125,11 +125,11 @@ export class PublicAccountsController {
      * query-параметрами (щоб посилання було шерабельним). Без запису в БД.
      */
     @SkipOnboarding()
-    @Throttle({ 'personalized-qr': { limit: 30, ttl: 60_000 } })
+    @Throttle({ 'personalized-qr': { limit: 600, ttl: 60_000 } })
     // Скіп УСІХ інших бакетів, включно з класовим `public-payment`: guard
-    // проганяє кожен named-бакет на кожному роуті, тож нижчий `qr-preview`
-    // (10/min) тіньовив би 30 до ефективних 10 і давав би хибний 429 на
-    // нормальному наборі форми.
+    // проганяє кожен named-бакет на кожному роуті, тож вужчий сусід
+    // (`qr-preview` 30/min) тіньовив би оголошені 600 до ефективних 30 і давав
+    // би хибний 429 на нормальному наборі форми.
     @SkipThrottle(skipThrottlersExcept('personalized-qr'))
     @Get(':accountSlug/personalized-links')
     @Header('Cache-Control', PERSONALIZED_CACHE_CONTROL)
@@ -227,16 +227,17 @@ export class PublicAccountsController {
     /**
      * Sprint 29 — персоналізований (податковий) QR: підставляє значення
      * (РНОКПП/період/ПІБ) з query у шаблон-маркери перед рендером. Значення
-     * шерабельні через адресу. Без запису в БД. Окремий НИЖЧИЙ rate-limit
-     * (`personalized-qr` 30/min), бо анонімний sharp-рендер з унікальними query
-     * фактично не кешується — див. коментар бакета у `app.module`.
+     * шерабельні через адресу. Без запису в БД. Власний бакет
+     * (`personalized-qr` 600/min, як `public-payment`), бо анонімний sharp-рендер
+     * з унікальними query фактично не кешується і не має ділити лічильник з
+     * платіжними сторінками — див. коментар бакета у `throttle-policy.ts`.
      */
     @SkipOnboarding()
-    @Throttle({ 'personalized-qr': { limit: 30, ttl: 60_000 } })
+    @Throttle({ 'personalized-qr': { limit: 600, ttl: 60_000 } })
     // Скіп УСІХ інших бакетів, включно з класовим `public-payment`: guard
-    // проганяє кожен named-бакет на кожному роуті, тож нижчий `qr-preview`
-    // (10/min) тіньовив би 30 до ефективних 10 і давав би хибний 429 на
-    // нормальному наборі форми.
+    // проганяє кожен named-бакет на кожному роуті, тож вужчий сусід
+    // (`qr-preview` 30/min) тіньовив би оголошені 600 до ефективних 30 і давав
+    // би хибний 429 на нормальному наборі форми.
     @SkipThrottle(skipThrottlersExcept('personalized-qr'))
     @Get(':accountSlug/qr/personalized.png')
     @Header('Content-Type', 'image/png')

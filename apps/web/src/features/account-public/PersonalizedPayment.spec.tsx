@@ -3,10 +3,12 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { BankCode, PurposeMarker } from '@finly/types';
 
 const mockGetPersonalizedNbuLinks = jest.fn();
-let mockSearchParams = new URLSearchParams();
 
 jest.mock('next/navigation', () => ({
-    useSearchParams: () => mockSearchParams,
+    // Дзеркалить рантайм Next: `useSearchParams` читає ЖИВУ адресу, а сторінка
+    // сама переписує її через `history.replaceState`. Статичний знімок ховав би
+    // регресії, де стан форми залежить від адреси, яку вона щойно почистила.
+    useSearchParams: () => new URLSearchParams(window.location.search),
 }));
 
 jest.mock('@/shared/api', () => {
@@ -46,7 +48,11 @@ const baseProps = {
 };
 
 const renderWith = (markers: PurposeMarker[], query = '') => {
-    mockSearchParams = new URLSearchParams(query);
+    window.history.replaceState(
+        null,
+        '',
+        `/dps-kyiv/esv${query ? `?${query}` : ''}`
+    );
     return render(<PersonalizedPayment {...baseProps} markers={markers} />);
 };
 
@@ -99,7 +105,7 @@ describe('PersonalizedPayment (Sprint 29 — податкова персонал
             const input = screen.getByLabelText(/Прізвище/);
 
             // 13 символів набору: без debounce це були б десятки запитів і
-            // стільки ж перемальовок QR (бакет personalized-qr — 30/хв).
+            // стільки ж перемальовок важкого QR-рендеру на один ввід.
             const name = 'Іваненко Іван';
             for (let i = 1; i <= name.length; i += 1) {
                 fireEvent.change(input, {
@@ -160,7 +166,7 @@ describe('PersonalizedPayment (Sprint 29 — податкова персонал
             renderWith(['period'], 'period=2 квартал 2019');
 
             expect(screen.getByText('2 квартал 2019')).toBeInTheDocument();
-            expect(screen.queryByText('Select an option')).toBeNull();
+            expect(screen.queryByText('Оберіть період')).toBeNull();
 
             await flushDebounce();
             expect(mockGetPersonalizedNbuLinks).toHaveBeenCalledWith(
@@ -178,7 +184,7 @@ describe('PersonalizedPayment (Sprint 29 — податкова персонал
             renderWith(['period'], 'period=2 квартал 2019 ⚡');
 
             expect(screen.queryByText(/⚡/)).toBeNull();
-            expect(screen.queryByText('Select an option')).toBeNull();
+            expect(screen.queryByText('Оберіть період')).toBeNull();
 
             const now = new Date();
             const expected = `${Math.floor(now.getMonth() / 3) + 1} квартал ${now.getFullYear()}`;
@@ -189,6 +195,35 @@ describe('PersonalizedPayment (Sprint 29 — податкова персонал
                 'dps-kyiv',
                 'esv',
                 { period: expected }
+            );
+        });
+
+        it('переживає тимчасово невалідне сусіднє поле: період лишається видимим і саме він іде в QR', async () => {
+            // Форма стає невалідною (платник стер цифру РНОКПП), сторінка чистить
+            // адресу. Значення періоду поза списком кварталів мусить лишитись у
+            // полі: інакше воно стає невидимим, а в QR іде далі, тобто платник
+            // сплачує за період, якого не бачить.
+            renderWith(
+                ['taxId', 'period'],
+                `taxId=${VALID_TAX_ID}&period=2 квартал 2019`
+            );
+            await flushDebounce();
+            expect(screen.getByText('2 квартал 2019')).toBeInTheDocument();
+
+            const input = screen.getByLabelText(/РНОКПП/);
+            fireEvent.change(input, { target: { value: '318271069' } });
+            await flushDebounce();
+            expect(window.location.search).toBe('');
+            expect(screen.getByText('2 квартал 2019')).toBeInTheDocument();
+            expect(screen.queryByText('Оберіть період')).toBeNull();
+
+            fireEvent.change(input, { target: { value: VALID_TAX_ID } });
+            await flushDebounce();
+            expect(screen.getByText('2 квартал 2019')).toBeInTheDocument();
+            expect(mockGetPersonalizedNbuLinks).toHaveBeenLastCalledWith(
+                'dps-kyiv',
+                'esv',
+                { taxId: VALID_TAX_ID, period: '2 квартал 2019' }
             );
         });
     });
@@ -228,9 +263,10 @@ describe('PersonalizedPayment (Sprint 29 — податкова персонал
 
     describe('Класифікація помилок сервера', () => {
         it('429 (ліміт запитів) не читається як відмова на даних', async () => {
-            // Бакет personalized-qr — 30/хв/IP, спільний для посилань і QR:
-            // офіс за одним IP вичерпує його з коректним РНОКПП. Порада
-            // «спробуйте коротше ПІБ» тут змушувала б правити валідні дані.
+            // Бакет personalized-qr спільний для посилань і QR, а лічильник
+            // спільний на всіх відвідувачів (запити доходять до API через
+            // web-контейнер), тож 429 можна отримати з цілком коректним РНОКПП.
+            // Порада «спробуйте коротше ПІБ» тут змушувала б правити валідні дані.
             mockGetPersonalizedNbuLinks.mockRejectedValue(
                 new PublicApiError(429, 'Too Many Requests')
             );

@@ -31,8 +31,10 @@ const TAX_ID_LENGTH = 10;
 /**
  * Пауза набору, після якої введені значення застосовуються (адреса сторінки,
  * QR-картинка, банк-посилання). Без неї кожен символ ПІБ давав би два запити
- * (посилання + новий `src` картинки) і швидко вичерпував серверний бакет
- * `personalized-qr` (30/хв). Прецеденти: `UiSlugEditor`, `BrandLogoUploadDialog`.
+ * (посилання + новий `src` картинки): зайвий трафік на важкий рендер і зайве
+ * споживання спільного бакета `personalized-qr` (лічильник спільний на всіх
+ * відвідувачів, бо запити доходять до API через web-контейнер). Прецеденти:
+ * `UiSlugEditor`, `BrandLogoUploadDialog`.
  */
 const APPLY_DEBOUNCE_MS = 500;
 
@@ -78,27 +80,37 @@ export default function PersonalizedPayment({
     const [fullName, setFullName] = useState(
         () => searchParams.get('fullName') ?? ''
     );
+    // Список кварталів будуємо ОДИН раз за монтування, а не на кожну зміну
+    // адреси: сторінка сама переписує адресу (`history.replaceState` нижче), тож
+    // прив'язка до неї означала б перебудову списку посеред роботи форми.
+    const basePeriodOptions = useMemo(() => buildPeriodOptions(), []);
     // Значення періоду з пересланого посилання може бути поза побудованим
-    // списком (адмін завів інший рік чи власне формулювання). Тоді додаємо його
-    // окремою опцією і робимо дефолтом: інакше `UiSelect` показав би плейсхолдер,
-    // а в QR пішов би невидимий користувачу період — прямий ризик сплати не за
-    // той період. Невалідне значення (charset/довжина) ігноруємо повністю, щоб
-    // у полі не осів варіант, який сервер усе одно відхилить.
-    const periodOptions = useMemo(() => {
-        const built = buildPeriodOptions();
+    // списком (адмін завів інший рік чи власне формулювання). Невалідне
+    // (charset/довжина) ігноруємо повністю, щоб у полі не осів варіант, який
+    // сервер усе одно відхилить.
+    const [period, setPeriod] = useState(() => {
         const fromUrl = searchParams.get('period')?.trim();
-        if (!fromUrl || !personalizationPeriodZod.safeParse(fromUrl).success) {
-            return built;
-        }
-        if (built.options.some((o) => o.value === fromUrl)) {
-            return { options: built.options, defaultValue: fromUrl };
-        }
-        return {
-            options: [{ label: fromUrl, value: fromUrl }, ...built.options],
-            defaultValue: fromUrl,
-        };
-    }, [searchParams]);
-    const [period, setPeriod] = useState(() => periodOptions.defaultValue);
+        return fromUrl && personalizationPeriodZod.safeParse(fromUrl).success
+            ? fromUrl
+            : basePeriodOptions.defaultValue;
+    });
+    // Опції рахуються від ПОТОЧНОГО вибору, а не від адреси. Значення поза
+    // списком (переслане посилання) додається окремою опцією і лишається у ній
+    // назавжди — навіть після того, як форма тимчасово стала невалідною через
+    // сусіднє поле і сторінка почистила адресу. Прив'язка до адреси викидала б
+    // зі списку саме те значення, що лишилось обраним: `UiSelect` показував би
+    // плейсхолдер, а в QR і далі йшов невидимий користувачу період, тобто прямий
+    // ризик сплати не за той період.
+    const periodOptions = useMemo(
+        () =>
+            basePeriodOptions.options.some((o) => o.value === period)
+                ? basePeriodOptions.options
+                : [
+                      { label: period, value: period },
+                      ...basePeriodOptions.options,
+                  ],
+        [basePeriodOptions, period]
+    );
 
     // Валідація і підстановка йдуть по ОДНОМУ значенню (обрізаному): інакше
     // переслане посилання з пробілом (`?taxId=%201234567890`) провалювало б
@@ -141,7 +153,7 @@ export default function PersonalizedPayment({
     // сервера на самих значеннях (задовге призначення тощо) — тоді QR-ендпоінт
     // відповість тим самим 4xx, і рендер картинки дав би биту картинку без
     // пояснення. `throttled` (429) — вичерпаний ліміт бакета `personalized-qr`
-    // (30/хв/IP, спільний з QR-картинками): дані платника коректні, тож радити
+    // (600/хв, спільний з QR-картинками): дані платника коректні, тож радити
     // «виправити» їх не можна — лише зачекати. Розрізняємо за статусом:
     // 429 = ліміт, інші 4xx = дані, решта = зв'язок.
     const [linksState, setLinksState] = useState<
@@ -301,7 +313,10 @@ export default function PersonalizedPayment({
                 {has('period') && (
                     <UiSelect
                         label="Період"
-                        options={periodOptions.options}
+                        // Власний підпис замість англійського дефолту `UiSelect`:
+                        // сторінка публічна і україномовна.
+                        placeholder="Оберіть період"
+                        options={periodOptions}
                         value={period}
                         onChange={setPeriod}
                         error={
