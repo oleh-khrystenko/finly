@@ -22,8 +22,13 @@ import {
 
 import { CurrentBusinessBranded } from '../../common/decorators/current-business-branded.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { UserRateLimit } from '../../common/decorators/user-rate-limit.decorator';
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
-import { skipThrottlersExcept } from '../../common/http/throttle-policy';
+import { UserRateLimitGuard } from '../../common/guards/user-rate-limit.guard';
+import {
+    skipThrottlersExcept,
+    USER_RATE_LIMITS,
+} from '../../common/http/throttle-policy';
 import {
     BusinessAccessGuard,
     CurrentBusiness,
@@ -122,10 +127,11 @@ export class AccountsController {
 
     /**
      * Sprint 20 — live-доступність бажаного імені рахунку до оплати. Усі рівні,
-     * окремий rate-limit.
+     * окремий rate-limit — per-user (див. `businesses.controller`).
      */
     @Get(':accountSlug/slug-availability')
-    @UseGuards(AccountAccessGuard)
+    @UserRateLimit(USER_RATE_LIMITS.slugAvailability)
+    @UseGuards(UserRateLimitGuard, AccountAccessGuard)
     async checkSlugAvailability(
         @CurrentUser() user: UserDocument,
         @CurrentAccount() account: AccountDocument,

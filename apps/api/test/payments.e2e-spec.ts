@@ -23,6 +23,7 @@ import { createReplSetMongo } from '../src/test-utils/mongo';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 import { REDIS_CLIENT } from '../src/common/modules/redis.module';
 import { RedisCounterService } from '../src/common/services/redis-counter.service';
+import { createCounterStub } from './redis-counter-stub';
 import { RedisLockService } from '../src/common/services/redis-lock.service';
 import { AuthModule } from '../src/modules/auth/auth.module';
 import { BusinessesModule } from '../src/modules/businesses/businesses.module';
@@ -117,10 +118,10 @@ jest.mock('../src/config/env', () => ({
         { provide: REDIS_CLIENT, useFactory: () => createRedisMock() },
         {
             provide: RedisCounterService,
-            useValue: {
-                incrementFixed: jest.fn(async () => 1),
-                incrementSliding: jest.fn(async () => 1),
-            },
+            // Імена методів мусять збігатися з реальним сервісом:
+            // `UserRateLimitGuard` викликає саме `incrementFixedWindow`, і
+            // stub з іншою назвою падав би TypeError замість роботи ліміту.
+            useValue: createCounterStub(),
         },
         {
             provide: RedisLockService,

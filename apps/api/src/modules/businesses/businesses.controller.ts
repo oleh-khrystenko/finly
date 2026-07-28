@@ -26,8 +26,13 @@ import {
 
 import { CurrentBusinessBranded } from '../../common/decorators/current-business-branded.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { UserRateLimit } from '../../common/decorators/user-rate-limit.decorator';
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
-import { skipThrottlersExcept } from '../../common/http/throttle-policy';
+import { UserRateLimitGuard } from '../../common/guards/user-rate-limit.guard';
+import {
+    skipThrottlersExcept,
+    USER_RATE_LIMITS,
+} from '../../common/http/throttle-policy';
 import {
     Account,
     type AccountDocument,
@@ -185,9 +190,15 @@ export class BusinessesController {
      * Sprint 20 — live-перевірка доступності бажаного slug до будь-якої оплати
      * (гачок конверсії). Доступно всім рівням; окремий rate-limit проти
      * перебору. Без запису. Формат валідує `BusinessSlugCandidateSchema`.
+     *
+     * Ліміт per-user (не per-IP): кабінет ходить через rewrite web-контейнера,
+     * тож IP-бакет тут був би спільним лічильником на весь продукт. Guard стоїть
+     * перед `BusinessAccessGuard` — відмова коштує одного Redis-INCR без
+     * DB-lookup-у.
      */
     @Get(':slug/slug-availability')
-    @UseGuards(BusinessAccessGuard)
+    @UserRateLimit(USER_RATE_LIMITS.slugAvailability)
+    @UseGuards(UserRateLimitGuard, BusinessAccessGuard)
     async checkSlugAvailability(
         @CurrentUser() user: UserDocument,
         @CurrentBusiness() business: BusinessDocument,

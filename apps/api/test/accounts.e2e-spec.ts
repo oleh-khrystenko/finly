@@ -15,6 +15,7 @@ import { createReplSetMongo } from '../src/test-utils/mongo';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 import { REDIS_CLIENT } from '../src/common/modules/redis.module';
 import { RedisCounterService } from '../src/common/services/redis-counter.service';
+import { createCounterStub } from './redis-counter-stub';
 import { RedisLockService } from '../src/common/services/redis-lock.service';
 // Import order matters: AuthModule ↔ UsersModule ↔ StorageModule —
 // pre-existing JS-cycle (`CLAUDE.md` Known Complexities). AuthModule першим:
@@ -107,10 +108,10 @@ jest.mock('../src/config/env', () => ({
         },
         {
             provide: RedisCounterService,
-            useValue: {
-                incrementFixed: jest.fn(async () => 1),
-                incrementSliding: jest.fn(async () => 1),
-            },
+            // Імена методів мусять збігатися з реальним сервісом:
+            // `UserRateLimitGuard` викликає саме `incrementFixedWindow`, і
+            // stub з іншою назвою падав би TypeError замість роботи ліміту.
+            useValue: createCounterStub(),
         },
         {
             provide: RedisLockService,

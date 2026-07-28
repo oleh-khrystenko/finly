@@ -64,6 +64,16 @@ interface JwtPayload {
 const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60; // 7 days
 const ROTATION_GRACE_PERIOD = 10; // 10 seconds for concurrent tab requests
 
+/**
+ * Лічильник невдалих перевірок пароля вже автентифікованого користувача
+ * (`verifyPassword`). Ключ **per-user**, а не per-IP, як у логіні: кабінетні
+ * запити доходять до API через rewrite web-контейнера (`NEXT_PUBLIC_API_URL=/api`
+ * → `API_INTERNAL_URL`), тож усі користувачі приходять з однієї адреси і
+ * IP-лічильник був би спільним на весь продукт. На логіні per-IP лишається
+ * доречним: там ще немає userId, а пара `(ip, email)` — єдиний доступний scope.
+ */
+const PASSWORD_ATTEMPTS_KEY_PREFIX = 'password_attempts:';
+
 @Injectable()
 export class AuthService {
     private readonly logger = new Logger(AuthService.name);
@@ -522,6 +532,10 @@ export class AuthService {
         currentPassword: string,
         newPassword: string
     ): Promise<TokenPair> {
+        // Той самий локаут, що у `verifyPassword`: тут теж перевіряється поточний
+        // пароль, тож без нього зміна пароля лишалася б обхідним шляхом для
+        // необмеженого підбору (і для необмеженого `bcrypt.compare`).
+        await this.assertPasswordAttemptsAllowed(userId);
         const user = await this.usersService.findById(userId);
         if (!user || !user.passwordHash) {
             throw new BadRequestException('No password set');
@@ -530,6 +544,7 @@ export class AuthService {
             currentPassword,
             user.passwordHash
         );
+        await this.recordPasswordAttempt(userId, isValid);
         if (!isValid) {
             throw new UnauthorizedException('Invalid current password');
         }
@@ -568,13 +583,80 @@ export class AuthService {
         const hash = await bcrypt.hash(newPassword, 10);
         await this.usersService.setPasswordHash(user._id.toString(), hash);
 
+        // Скидання пароля знімає локаут невдалих спроб: людина довела володіння
+        // поштою і задала новий пароль, тож тримати її під блоком старих спроб
+        // немає підстав — вона б лишилась замкненою на цілий TTL вікна.
+        await this.redis.del(
+            `${PASSWORD_ATTEMPTS_KEY_PREFIX}${user._id.toString()}`
+        );
+
         await this.revokeAllUserTokens(user._id.toString());
     }
 
+    /**
+     * Перевірка пароля вже автентифікованого користувача: підтвердження
+     * видалення акаунта (`POST /users/account/delete/confirm`), зміна пароля,
+     * `POST /auth/password/verify`.
+     *
+     * **Власний локаут, а не покладання на HTTP-throttler.** Кабінетні
+     * контролери свідомо йдуть повз throttler (`skipThrottlersExcept()` —
+     * per-IP лічильник на кабінеті спільний для всіх користувачів, див.
+     * `throttle-policy.ts`), тож єдиний захист цієї поверхні живе тут. Без нього
+     * підбір пароля до захопленої сесії не мав би жодного гальма, а кожна спроба
+     * ще й коштувала б повного `bcrypt.compare` — потік таких запитів займає
+     * воркери libuv-пулу і гальмує весь процес.
+     *
+     * **Перевірка ДО `bcrypt.compare`.** Інакше запити понад ліміт усе одно
+     * платили б хешуванням, і CPU-складова атаки лишалася б. Так максимальна
+     * кількість хешувань за вікно дорівнює першому порогу локауту.
+     *
+     * Пороги і TTL спільні з логіном (`AUTH_LOCKOUT_THRESHOLDS`,
+     * `AUTH_LOGIN_ATTEMPTS_TTL_MIN`): це той самий підбір пароля, лише на іншій
+     * поверхні, тож окремої тарифікації він не потребує.
+     */
     async verifyPassword(userId: string, password: string): Promise<boolean> {
+        await this.assertPasswordAttemptsAllowed(userId);
+
         const user = await this.usersService.findById(userId);
+        // Немає пароля — немає що підбирати (акаунт лише через Google/magic-link),
+        // тож спроба не рахується: інакше чужий запит замикав би користувача,
+        // який пароля взагалі не має.
         if (!user || !user.passwordHash) return false;
-        return bcrypt.compare(password, user.passwordHash);
+
+        const isValid = await bcrypt.compare(password, user.passwordHash);
+        await this.recordPasswordAttempt(userId, isValid);
+        return isValid;
+    }
+
+    /** Кидає 429, якщо на цьому користувачі діє локаут невдалих спроб пароля. */
+    private async assertPasswordAttemptsAllowed(userId: string): Promise<void> {
+        const lockout = await this.resolveActiveLockout(
+            `${PASSWORD_ATTEMPTS_KEY_PREFIX}${userId}`
+        );
+        if (lockout) {
+            throw new TooManyRequestsException(
+                `Too many password attempts. Try again in ${lockout.blockMin} minutes`
+            );
+        }
+    }
+
+    /**
+     * Успіх скидає лічильник, промах нарощує його зі sliding-вікном (безперервна
+     * атака тримає локаут живим — та сама семантика, що на логіні).
+     */
+    private async recordPasswordAttempt(
+        userId: string,
+        isValid: boolean
+    ): Promise<void> {
+        const key = `${PASSWORD_ATTEMPTS_KEY_PREFIX}${userId}`;
+        if (isValid) {
+            await this.redis.del(key);
+            return;
+        }
+        await this.redisCounter.incrementSlidingWindow(
+            key,
+            ENV.AUTH_LOGIN_ATTEMPTS_TTL_MIN * 60
+        );
     }
 
     private async checkEmailRateLimit(ip: string): Promise<void> {
@@ -593,23 +675,41 @@ export class AuthService {
     }
 
     private async checkBruteForce(ip: string, email: string): Promise<void> {
-        const key = `login_attempts:${ip}:${email}`;
+        const lockout = await this.resolveActiveLockout(
+            `login_attempts:${ip}:${email}`
+        );
+        if (lockout) {
+            throw new TooManyRequestsException(
+                `Too many login attempts. Try again in ${lockout.blockMin} minutes`
+            );
+        }
+    }
+
+    /**
+     * Чи діє зараз локаут на лічильнику невдалих спроб — спільний резолв для
+     * логіну (`login_attempts:*`) і перевірки пароля в кабінеті
+     * (`password_attempts:*`). Один набір порогів
+     * (`AUTH_LOCKOUT_THRESHOLDS`) на обидві поверхні: дві копії цієї арифметики
+     * розійшлися б на першій же зміні конфігурації.
+     *
+     * Повертає найвищий перевищений поріг (у ньому — на скільки хвилин блок),
+     * або `null`, якщо лічильник порожній чи ще під порогом. Саме повідомлення
+     * складає викликач: воно різне для входу і для підтвердження паролем.
+     */
+    private async resolveActiveLockout(
+        key: string
+    ): Promise<{ attempts: number; blockMin: number } | null> {
         const attemptsStr = await this.redis.get(key);
-        if (!attemptsStr) return;
+        if (!attemptsStr) return null;
 
         const attempts = parseInt(attemptsStr, 10);
         const thresholds = parseLockoutThresholds(ENV.AUTH_LOCKOUT_THRESHOLDS);
 
         // Find the highest threshold that has been exceeded
-        const activeThreshold = [...thresholds]
-            .reverse()
-            .find((t) => attempts >= t.attempts);
-
-        if (activeThreshold) {
-            throw new TooManyRequestsException(
-                `Too many login attempts. Try again in ${activeThreshold.blockMin} minutes`
-            );
-        }
+        return (
+            [...thresholds].reverse().find((t) => attempts >= t.attempts) ??
+            null
+        );
     }
 
     private async incrementLoginAttempts(
