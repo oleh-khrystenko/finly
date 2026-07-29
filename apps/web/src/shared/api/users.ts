@@ -20,3 +20,12 @@ export async function clearPendingPostLoginTarget(): Promise<void> {
 export async function releaseSlugReservation(): Promise<void> {
     await apiClient.delete('/users/me/slug-reservation');
 }
+
+/**
+ * Sprint 30 — «не пропонувати заповнити податкові дані». Викликається з
+ * податкової сторінки після явної відмови; сервер стемпить дату один раз, тож
+ * повторний виклик з іншої вкладки нічого не псує.
+ */
+export async function dismissTaxProfilePrompt(): Promise<void> {
+    await apiClient.post('/users/me/tax-profile-prompt/dismiss');
+}

@@ -11,6 +11,7 @@ import {
     BillingProfile,
     BillingProfileDocument,
 } from '../payments/schemas/billing-profile.schema';
+import { PayersService } from '../payers/payers.service';
 import { User, UserDocument } from './schemas/user.schema';
 
 const DELIVERY_WINDOW_START = 8; // 8:00 AM local time
@@ -25,7 +26,8 @@ export class CleanupService {
         @InjectModel(BillingProfile.name)
         private readonly profileModel: Model<BillingProfileDocument>,
         private readonly authService: AuthService,
-        private readonly emailService: EmailService
+        private readonly emailService: EmailService,
+        private readonly payersService: PayersService
     ) {}
 
     @Cron(CronExpression.EVERY_6_HOURS)
@@ -119,6 +121,12 @@ export class CleanupService {
                 // ре-ретайрить (no-op) і видалить користувача.
                 await this.retireBillingProfile(userId);
                 await this.authService.revokeAllUserTokens(userId);
+                // Sprint 30 — список платників містить персональні дані третіх
+                // осіб; він мусить зникнути разом з акаунтом. Порядок «до
+                // видалення користувача» crash-safe навпаки не був би: без
+                // документа користувача не лишилось би нічого, що вказує на
+                // осиротілі записи.
+                await this.payersService.deleteAllForUser(user._id);
                 await this.userModel.findByIdAndDelete(userId).exec();
                 deleted++;
             } catch (error) {

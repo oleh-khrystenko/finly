@@ -21,6 +21,7 @@ import { OrphanCleanupModule } from './modules/orphan-cleanup/orphan-cleanup.mod
 import { UsersModule } from './modules/users/users.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { StorageModule } from './modules/storage/storage.module';
+import { PayersModule } from './modules/payers/payers.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { QrModule } from './modules/qr/qr.module';
 import { AiModule } from './modules/ai/ai.module';
@@ -56,6 +57,7 @@ import { GuidesModule } from './modules/guides/guides.module';
         AiModule,
         GuidesModule,
         AdminPayeesModule,
+        PayersModule,
     ],
     controllers: [AppController],
     providers: [

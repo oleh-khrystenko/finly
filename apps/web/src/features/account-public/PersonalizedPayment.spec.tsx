@@ -3,6 +3,8 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { BankCode, PurposeMarker } from '@finly/types';
 
 const mockGetPersonalizedNbuLinks = jest.fn();
+const mockListPayers = jest.fn();
+const mockCreatePayer = jest.fn();
 
 jest.mock('next/navigation', () => ({
     // Дзеркалить рантайм Next: `useSearchParams` читає ЖИВУ адресу, а сторінка
@@ -27,10 +29,17 @@ jest.mock('@/shared/api', () => {
         PublicApiError,
         getPersonalizedNbuLinks: (...args: unknown[]) =>
             mockGetPersonalizedNbuLinks(...args),
+        listPayers: (...args: unknown[]) => mockListPayers(...args),
+        createPayer: (...args: unknown[]) => mockCreatePayer(...args),
+        dismissTaxProfilePrompt: jest.fn().mockResolvedValue(undefined),
+        extractApiErrorCode: () => 'INTERNAL_ERROR',
+        getApiMessage: () => 'Сталася помилка. Спробуйте пізніше',
     };
 });
 
 import { PublicApiError } from '@/shared/api';
+import { useAuthStore } from '@/entities/user';
+import { usePayersStore } from '@/entities/payer';
 import PersonalizedPayment from './PersonalizedPayment';
 
 const baseProps = {
@@ -65,6 +74,11 @@ const OTHER_VALID_TAX_ID = '3182710608';
 beforeEach(() => {
     jest.useFakeTimers();
     mockGetPersonalizedNbuLinks.mockReset();
+    mockListPayers.mockReset();
+    mockListPayers.mockResolvedValue([]);
+    mockCreatePayer.mockReset();
+    useAuthStore.getState().clearUser();
+    usePayersStore.getState().clear();
     mockGetPersonalizedNbuLinks.mockResolvedValue({
         primary: 'https://qr.bank.gov.ua/abc',
         legacy: 'https://bank.gov.ua/qr/abc',
@@ -318,6 +332,188 @@ describe('PersonalizedPayment (Sprint 29 — податкова персонал
                 screen.getByText(/Не вдалося скласти платіж із цими даними/)
             ).toBeInTheDocument();
             expect(screen.queryByText(/Забагато запитів/)).toBeNull();
+        });
+    });
+    // ─── Sprint 30 — спільна сесія: сторінка знає, хто її відкрив ───
+
+    describe('Залогінений платник', () => {
+        const signIn = (
+            overrides: Partial<{
+                middleName: string;
+                taxId: string;
+                taxProfilePromptDismissedAt: Date | null;
+            }> = {}
+        ) => {
+            act(() => {
+                useAuthStore.getState().setUser({
+                    id: '507f1f77bcf86cd799439011',
+                    email: 'buh@test.dev',
+                    role: 'user',
+                    worksAsBookkeeper: true,
+                    hasPassword: true,
+                    profile: {
+                        firstName: 'Олена',
+                        lastName: 'Ковальчук',
+                        middleName: overrides.middleName ?? 'Петрівна',
+                        taxId:
+                            overrides.taxId === undefined
+                                ? VALID_TAX_ID
+                                : overrides.taxId,
+                    },
+                    taxProfilePromptDismissedAt:
+                        overrides.taxProfilePromptDismissedAt ?? null,
+                });
+            });
+        };
+
+        it('підставляє власні дані з профілю, не пишучи їх в адресу', async () => {
+            signIn();
+            renderWith(['taxId', 'fullName']);
+            await flushDebounce();
+
+            expect(screen.getByLabelText(/РНОКПП/)).toHaveValue(VALID_TAX_ID);
+            expect(screen.getByLabelText(/Прізвище/)).toHaveValue(
+                'Ковальчук Олена Петрівна'
+            );
+            // Персональні значення в адресі означали б РНОКПП і ПІБ в історії
+            // браузера і в кожному «просто скопійованому» посиланні.
+            expect(window.location.search).toBe('');
+            expect(mockGetPersonalizedNbuLinks).toHaveBeenLastCalledWith(
+                'dps-kyiv',
+                'esv',
+                { taxId: VALID_TAX_ID, fullName: 'Ковальчук Олена Петрівна' }
+            );
+        });
+
+        it('вибір клієнта зі списку підставляє його дані і не змішує з попередніми', async () => {
+            mockListPayers.mockResolvedValue([
+                {
+                    id: 'payer-1',
+                    fullName: 'Петренко Іван Іванович',
+                    taxId: OTHER_VALID_TAX_ID,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                },
+            ]);
+            signIn();
+            renderWith(['taxId', 'fullName']);
+            await flushDebounce();
+
+            fireEvent.click(screen.getByRole('button', { name: /Ковальчук/ }));
+            fireEvent.click(
+                screen.getByRole('option', { name: /Петренко Іван Іванович/ })
+            );
+            await flushDebounce();
+
+            expect(screen.getByLabelText(/РНОКПП/)).toHaveValue(
+                OTHER_VALID_TAX_ID
+            );
+            expect(mockGetPersonalizedNbuLinks).toHaveBeenLastCalledWith(
+                'dps-kyiv',
+                'esv',
+                {
+                    taxId: OTHER_VALID_TAX_ID,
+                    fullName: 'Петренко Іван Іванович',
+                }
+            );
+            expect(window.location.search).toBe('');
+        });
+
+        it('повернення на «Я» з незаповненим РНОКПП стирає номер попереднього клієнта', async () => {
+            mockListPayers.mockResolvedValue([
+                {
+                    id: 'payer-1',
+                    fullName: 'Петренко Іван Іванович',
+                    taxId: OTHER_VALID_TAX_ID,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                },
+            ]);
+            // Профіль без РНОКПП — найгірший випадок: якби порожнє значення
+            // просто не підставлялось, у полі лишився б номер клієнта під
+            // власним ПІБ, і платіж пішов би з чужим податковим номером.
+            signIn({ taxId: '' });
+            renderWith(['taxId', 'fullName']);
+            await flushDebounce();
+
+            fireEvent.click(
+                screen.getByRole('button', { name: /Оберіть платника|Я —|Я$/ })
+            );
+            fireEvent.click(
+                screen.getByRole('option', { name: /Петренко Іван Іванович/ })
+            );
+            await flushDebounce();
+            expect(screen.getByLabelText(/РНОКПП/)).toHaveValue(
+                OTHER_VALID_TAX_ID
+            );
+
+            fireEvent.click(
+                screen.getByRole('button', { name: /Петренко Іван Іванович/ })
+            );
+            fireEvent.click(screen.getByRole('option', { name: /^Я —/ }));
+            await flushDebounce();
+
+            expect(screen.getByLabelText(/РНОКПП/)).toHaveValue('');
+            expect(screen.getByLabelText(/Прізвище/)).toHaveValue(
+                'Ковальчук Олена Петрівна'
+            );
+        });
+
+        it('пропонує зберегти введеного вручну платника і зберігає лише за явною дією', async () => {
+            mockCreatePayer.mockResolvedValue({
+                id: 'payer-2',
+                fullName: 'Петренко Іван Іванович',
+                taxId: OTHER_VALID_TAX_ID,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            });
+            signIn();
+            renderWith(['taxId', 'fullName']);
+            await flushDebounce();
+
+            fireEvent.change(screen.getByLabelText(/РНОКПП/), {
+                target: { value: OTHER_VALID_TAX_ID },
+            });
+            fireEvent.change(screen.getByLabelText(/Прізвище/), {
+                target: { value: 'Петренко Іван Іванович' },
+            });
+            await flushDebounce();
+
+            const saveButton = screen.getByRole('button', {
+                name: 'Зберегти платника',
+            });
+            // Досі нічого не збережено: автозбереження чужих персональних даних
+            // немає за рішенням спринту.
+            expect(mockCreatePayer).not.toHaveBeenCalled();
+
+            await act(async () => {
+                fireEvent.click(saveButton);
+            });
+
+            expect(mockCreatePayer).toHaveBeenCalledWith({
+                fullName: 'Петренко Іван Іванович',
+                taxId: OTHER_VALID_TAX_ID,
+            });
+            expect(
+                screen.queryByRole('button', { name: 'Зберегти платника' })
+            ).toBeNull();
+        });
+
+        it('разова пропозиція заповнити податкові дані зникає після відмови', async () => {
+            signIn({ taxId: '' });
+            renderWith(['taxId']);
+            await flushDebounce();
+
+            expect(
+                screen.getByText(/Заповніть свої податкові дані/)
+            ).toBeInTheDocument();
+
+            fireEvent.click(
+                screen.getByRole('button', { name: 'Не пропонувати' })
+            );
+            expect(
+                screen.queryByText(/Заповніть свої податкові дані/)
+            ).toBeNull();
         });
     });
 });

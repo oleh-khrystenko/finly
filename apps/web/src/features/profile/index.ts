@@ -1,4 +1,5 @@
 export { default as ProfileForm } from './ProfileForm';
+export { default as TaxDataForm } from './TaxDataForm';
 export { default as SecuritySection } from './SecuritySection';
 export { default as DangerZone } from './DangerZone';
 export { default as DeleteAccountDialog } from './DeleteAccountDialog';

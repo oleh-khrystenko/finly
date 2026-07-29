@@ -71,6 +71,9 @@ const DeleteAdminPayeeConfirmDialog = dynamic(
 const DeleteAdminPayeeAccountConfirmDialog = dynamic(
     () => import('@/features/admin-payees/DeleteAdminPayeeAccountConfirmDialog')
 );
+const PayerDeleteConfirmDialog = dynamic(
+    () => import('@/features/payers/PayerDeleteConfirmDialog')
+);
 
 export function Overlays() {
     return (
@@ -98,6 +101,7 @@ export function Overlays() {
             <RejectPublicityDialog />
             <DeleteAdminPayeeConfirmDialog />
             <DeleteAdminPayeeAccountConfirmDialog />
+            <PayerDeleteConfirmDialog />
         </>
     );
 }

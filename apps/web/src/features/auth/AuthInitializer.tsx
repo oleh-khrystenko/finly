@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { CURRENT_TERMS_VERSION, validateSameOriginPath } from '@finly/types';
 
 import { clearPendingPostLoginTarget, getMe, refreshToken } from '@/shared/api';
+import { isPublicHost } from '@/shared/config/publicHosts';
 import { useAuthStore } from '@/entities/user';
 import { useTermsReacceptDialogStore } from './termsReacceptDialogStore';
 
@@ -54,6 +55,13 @@ const AuthInitializer = () => {
                 // спрацює на stale stamp.
                 const target = user.pendingPostLoginTarget;
                 if (!target) return;
+
+                // Sprint 30 — стемп ставить claim-flow, і веде він завжди у
+                // кабінет. Зі спільною сесією цей же ініціалізатор працює і на
+                // публічному pay-хості, де кабінетного шляху не існує: перехід
+                // там дав би 404 замість сторінки оплати, а одноразовий стемп
+                // згорів би. Лишаємо його чекати заходу в кабінет.
+                if (isPublicHost(window.location.host)) return;
 
                 if (!validateSameOriginPath(target)) {
                     // Defense-in-depth: backend-side validation на write вже

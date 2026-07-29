@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { RESERVED_SLUGS } from '@finly/types';
+import { isAllowedReturnTarget, RESERVED_SLUGS } from '@finly/types';
 import { isPublicHost } from '@/shared/config/publicHosts';
+import { RETURN_ORIGINS } from '@/shared/lib/redirect';
 
 // Sprint 3 §3.5 — `/dashboard` видалена (E2: → `/business`); `/pay`
 // видалений як рудимент (E4: піддомен `pay.finly.com.ua` — окрема історія
@@ -182,6 +183,28 @@ export default function proxy(request: NextRequest) {
     );
 
     if (isAuthPath && hasRefreshCookie && !isAccountDeleted) {
+        // Sprint 30 — вхід з публічної сторінки несе адресу повернення у
+        // `?redirect=`. Якщо сесія вже є (людина увійшла в іншій вкладці, поки
+        // ця чекала), відправляти її в кабінет означало б загубити сторінку
+        // оплати, з якої вона пішла. Whitelist той самий, що на бекенді: свої
+        // шляхи і рівно два наші origin-и.
+        const returnTo = request.nextUrl.searchParams.get('redirect');
+        if (returnTo && isAllowedReturnTarget(returnTo, RETURN_ORIGINS)) {
+            // Ціль на ІНШОМУ нашому хості — рішення не тут. Тут відомо лише те,
+            // що cookie з таким іменем існує, а не те, що сесія жива і що її
+            // видно хосту призначення. Обидва припущення хибні для cookie
+            // старого зразка (до Sprint 30 вона host-only на кабінеті): такий
+            // редірект повертав би людину на публічну сторінку, де вона й далі
+            // анонім, а форму входу вона не побачила б жодного разу — цикл без
+            // виходу, бо на кабінеті нічого не завантажується і стару cookie
+            // нікому погасити. Тому пропускаємо на сторінку входу: там клієнт
+            // спершу підтверджує сесію (а невдале підтвердження гасить cookie
+            // обох зразків) і лише тоді повертає людину на pay-хост.
+            if (returnTo.startsWith('/')) {
+                return NextResponse.redirect(new URL(returnTo, request.url));
+            }
+            return NextResponse.next();
+        }
         return NextResponse.redirect(new URL('/business', request.url));
     }
 

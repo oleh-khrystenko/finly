@@ -29,8 +29,8 @@ import {
 import { useAuthStore } from '@/entities/user';
 import { getFullName } from '@finly/types';
 import { useHeaderNavStore } from '@/entities/navigation';
+import { useUserMenu } from '@/features/user-menu';
 import { useMobileMenuSheetStore } from './mobileMenuSheetStore';
-import { useUserMenu } from './useUserMenu';
 
 const menuItemBase =
     '-mx-2 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors';

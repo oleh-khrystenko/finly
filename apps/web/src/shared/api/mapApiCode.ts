@@ -67,6 +67,13 @@ const ERRORS: Record<string, MessageDict> = {
         invalid_credit_pack:
             'Цей пакет кредитів або його ціна змінилися. Оновіть сторінку і спробуйте знову.',
     },
+    payers: {
+        payer_not_found: 'Платника не знайдено. Оновіть сторінку',
+        payer_tax_id_duplicate:
+            'Платник з таким РНОКПП вже є у списку. Відредагуйте наявний запис',
+        payer_limit_reached:
+            'Список платників заповнений. Видаліть непотрібні записи, щоб додати нового',
+    },
     generic: {
         validation_error: 'Перевірте введені дані',
         // Sprint 28 — код reusable admin-guard-у; у generic, бо не прив'язаний

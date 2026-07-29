@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import UiButton from '@/shared/ui/UiButton';
 import UiFullPageLoader from '@/shared/ui/UiFullPageLoader';
 import { refreshToken, getMe, restoreAccount, acceptTerms } from '@/shared/api';
-import { consumeRedirect } from '@/shared/lib';
+import { consumeRedirect, navigateToReturnTarget } from '@/shared/lib/redirect';
 import { useAuthStore } from '@/entities/user';
 
 export default function CallbackPage() {
@@ -34,7 +34,11 @@ export default function CallbackPage() {
                 // (sign-in page checkbox was checked before redirect)
                 await acceptTerms().catch(() => {});
 
-                router.replace(consumeRedirect('/business'));
+                navigateToReturnTarget(
+                    router,
+                    consumeRedirect('/business'),
+                    'replace'
+                );
             } catch {
                 // getMe failed → user is soft-deleted (JwtActiveGuard blocks)
                 if (isAccountDeleted) {
@@ -59,7 +63,11 @@ export default function CallbackPage() {
             toast.success('Акаунт відновлено!');
             const user = await getMe();
             useAuthStore.getState().setUser(user);
-            router.replace(consumeRedirect('/business'));
+            navigateToReturnTarget(
+                router,
+                consumeRedirect('/business'),
+                'replace'
+            );
         } catch {
             setSubmitting(false);
             router.replace('/auth/signin');

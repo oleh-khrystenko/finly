@@ -4,7 +4,9 @@ export {
     FIELD_LABEL_STYLES,
     type FieldLabelSize,
 } from './outlinedFieldStyles';
-export { isValidRedirect, saveRedirect, consumeRedirect } from './redirect';
+// `./redirect` свідомо НЕ реекспортується: він читає fail-fast конфігурацію
+// середовища, а цей barrel тягне кожен UI-примітив. Імпорт — прямим шляхом
+// `@/shared/lib/redirect` (обґрунтування — у шапці самого модуля).
 export { getTimezone } from './timezone';
 export { mapValidationCode } from './mapValidationCode';
 export { getZodFieldError } from './getZodFieldError';

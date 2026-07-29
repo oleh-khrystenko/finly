@@ -5,4 +5,5 @@ export * from './invoice';
 export * from './account';
 export * from './guide';
 export * from './purpose-markers';
+export * from './payer';
 export * from './catalog-visibility';

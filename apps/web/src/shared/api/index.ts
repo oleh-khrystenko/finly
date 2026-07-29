@@ -88,7 +88,12 @@ export {
     getPublicInvoiceView,
 } from './invoices';
 export type { PaginatedInvoices } from './invoices';
-export { clearPendingPostLoginTarget, releaseSlugReservation } from './users';
+export {
+    clearPendingPostLoginTarget,
+    releaseSlugReservation,
+    dismissTaxProfilePrompt,
+} from './users';
+export { listPayers, createPayer, updatePayer, deletePayer } from './payers';
 export {
     adminListGuides,
     adminGetGuide,

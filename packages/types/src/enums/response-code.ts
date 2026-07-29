@@ -12,6 +12,25 @@ export const RESPONSE_CODE = {
     // --- users success ---
     TERMS_ACCEPTED: 'TERMS_ACCEPTED',
 
+    // --- payers error (Sprint 30) ---
+    /**
+     * Платника з таким ідентифікатором немає у списку користувача. Чужий запис
+     * і неіснуючий зливаються в один 404: інакше відповідь підтверджувала б
+     * існування чужих персональних даних.
+     */
+    PAYER_NOT_FOUND: 'PAYER_NOT_FOUND',
+    /**
+     * У списку вже є платник з таким РНОКПП. Інваріант унікальності в межах
+     * одного користувача: повторне збереження того самого клієнта (бухгалтер
+     * платить за нього щокварталу) не має створювати дубль.
+     */
+    PAYER_TAX_ID_DUPLICATE: 'PAYER_TAX_ID_DUPLICATE',
+    /**
+     * Досягнуто межу кількості платників на користувача. Окремий код замість
+     * мовчазної відмови: інтерфейс пояснює межу і пропонує прибрати зайве.
+     */
+    PAYER_LIMIT_REACHED: 'PAYER_LIMIT_REACHED',
+
     // --- payments error ---
     ALREADY_SUBSCRIBED: 'ALREADY_SUBSCRIBED',
     NO_BILLING_ACCOUNT: 'NO_BILLING_ACCOUNT',
@@ -493,6 +512,9 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.TERMS_ACCEPTED]: RESPONSE_TYPE.SUCCESS,
     [RESPONSE_CODE.ACCOUNT_DELETED]: RESPONSE_TYPE.SUCCESS,
     [RESPONSE_CODE.ACCOUNT_RESTORED]: RESPONSE_TYPE.SUCCESS,
+    [RESPONSE_CODE.PAYER_NOT_FOUND]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.PAYER_TAX_ID_DUPLICATE]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.PAYER_LIMIT_REACHED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.ALREADY_SUBSCRIBED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.NO_BILLING_ACCOUNT]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.PAYMENT_TYPE_DISABLED]: RESPONSE_TYPE.ERROR,

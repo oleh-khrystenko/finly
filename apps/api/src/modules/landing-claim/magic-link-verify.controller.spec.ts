@@ -281,9 +281,10 @@ describe('MagicLinkVerifyController', () => {
                 res as any
             );
 
-            expect(res.clearCookie).toHaveBeenCalledWith('bid_refresh', {
-                path: '/',
-            });
+            expect(res.clearCookie).toHaveBeenCalledWith(
+                'bid_refresh',
+                expect.objectContaining({ path: '/' })
+            );
             expect(res.cookie).not.toHaveBeenCalled();
             expect(mockUsersService.stampAcceptedTerms).not.toHaveBeenCalled();
             expect(

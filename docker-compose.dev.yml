@@ -27,8 +27,9 @@ services:
             - REDIS_URL=redis://redis:6379
             - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
             - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
-            - WEB_URL=http://localhost:${WEB_PORT}
+            - WEB_URL=http://finly.local:${WEB_PORT}
             - PAY_PUBLIC_URL=http://pay.finly.local:${WEB_PORT}
+            - AUTH_COOKIE_DOMAIN=${AUTH_COOKIE_DOMAIN}
             - REVALIDATE_SECRET=${REVALIDATE_SECRET}
             - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
             - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
@@ -112,7 +113,11 @@ services:
             - PORT=${WEB_PORT}
             - API_INTERNAL_URL=http://api:${API_PORT}
             - NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL}
-            - NEXT_PUBLIC_API_URL=http://localhost:${API_PORT}/api
+            # Sprint 30 — API йде через rewrite web-контейнера (`/api`), а не
+            # прямою адресою: інакше запити з pay-хоста були б міждоменними, і
+            # спільна сесія в dev вимагала б CORS-дозволу на публічну зону.
+            # Прод працює саме так; dev мусить збігатися.
+            - NEXT_PUBLIC_API_URL=/api
             - NEXT_PUBLIC_BILLING_DEMO_MODE=${NEXT_PUBLIC_BILLING_DEMO_MODE}
             - NEXT_PUBLIC_PAY_PUBLIC_URL=http://pay.finly.local:${WEB_PORT}
             - NEXT_PUBLIC_STORAGE_HOSTNAME=${NEXT_PUBLIC_STORAGE_HOSTNAME}

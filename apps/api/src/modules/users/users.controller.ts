@@ -26,6 +26,7 @@ import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { skipThrottlersExcept } from '../../common/http/throttle-policy';
 import { AuthService } from '../auth/auth.service';
+import { clearRefreshCookie } from '../auth/refresh-cookie.config';
 import {
     SlugReservationService,
     toSlugReservationView,
@@ -123,6 +124,23 @@ export class UsersController {
         };
     }
 
+    /**
+     * Sprint 30 — «не пропонувати заповнювати податкові дані». Викликається з
+     * податкової сторінки (у т.ч. з pay-хоста — та сама сесія, той самий
+     * origin). `@SkipOnboarding`, бо пропозиція показується і людині з
+     * незаповненим профілем ФОПа: це різні сутності.
+     */
+    @Post('me/tax-profile-prompt/dismiss')
+    @UseGuards(JwtActiveGuard)
+    @SkipOnboarding()
+    @HttpCode(HttpStatus.OK)
+    async dismissTaxProfilePrompt(
+        @CurrentUser() user: UserDocument
+    ): Promise<{ data: { dismissed: true } }> {
+        await this.usersService.dismissTaxProfilePrompt(user._id.toString());
+        return { data: { dismissed: true } };
+    }
+
     @Post('account/delete')
     @UseGuards(JwtActiveGuard)
     @SkipOnboarding()
@@ -165,7 +183,7 @@ export class UsersController {
         await this.authService.revokeAllUserTokens(user._id.toString());
         await this.authService.sendDeletionConfirmationEmail(user.email);
 
-        res.clearCookie('bid_refresh', { path: '/' });
+        clearRefreshCookie(res);
 
         return {
             data: {

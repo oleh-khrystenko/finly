@@ -37,5 +37,8 @@ export function mapUserToProfileResponse(
         accountDeletionRequestedAt: user.accountDeletionRequestedAt ?? null,
         termsVersion: user.termsVersion ?? null,
         pendingPostLoginTarget: user.pendingPostLoginTarget,
+        // Sprint 30 — `??`-fallback для документів, створених до спринту:
+        // Mongoose default працює лише на insert.
+        taxProfilePromptDismissedAt: user.taxProfilePromptDismissedAt ?? null,
     };
 }

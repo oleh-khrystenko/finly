@@ -1,7 +1,12 @@
 import { z } from 'zod';
 
 import { CURRENT_TERMS_VERSION } from '../constants/terms';
-import { firstNameSchema, lastNameSchema } from '../validation/common';
+import {
+    firstNameSchema,
+    lastNameSchema,
+    middleNameSchema,
+} from '../validation/common';
+import { individualTaxIdZod } from '../validation/tax-id';
 
 /**
  * `lastName` приходить як non-empty string, якщо передається. Empty literal
@@ -27,6 +32,14 @@ export const UpdateProfileSchema = z.object({
      * non-null value через DTO відсікається тут як anti-injection-rule.
      */
     pendingPostLoginTarget: z.literal(null).optional(),
+    /**
+     * Sprint 30 — власні дані для податкових платежів. На відміну від прізвища,
+     * обидва поля очищувані: людина заповнила їх під разовий платіж і має право
+     * прибрати РНОКПП з нашої бази. Порожній рядок — саме ця дія (сервіс робить
+     * `$unset`), а не збереження порожнього значення.
+     */
+    middleName: z.union([middleNameSchema, z.literal('')]).optional(),
+    taxId: z.union([individualTaxIdZod, z.literal('')]).optional(),
 });
 
 export const AcceptTermsSchema = z.object({

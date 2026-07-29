@@ -1,3 +1,10 @@
+jest.mock('@/shared/config', () => ({
+    ENV: {
+        NEXT_PUBLIC_BASE_URL: 'http://finly.local:3000',
+        NEXT_PUBLIC_PAY_PUBLIC_URL: 'http://pay.finly.local:3000',
+    },
+}));
+
 // Mock next/server before importing proxy
 const mockRedirect = jest.fn((url: URL, status?: number) => ({
     type: 'redirect' as const,
@@ -53,6 +60,7 @@ function createMockRequest(
         nextUrl: {
             pathname,
             search,
+            searchParams: new URLSearchParams(search),
         },
         url,
         headers: {
@@ -195,6 +203,47 @@ describe('proxy', () => {
             const response = proxy(req);
 
             expect(response.status).toBe(200);
+        });
+
+        // Sprint 30 — вхід з публічної сторінки несе адресу повернення. Саму
+        // ціль на іншому хості проміжний шар не резолвить: наявність cookie ще
+        // не означає живої сесії, яку видно тому хосту (cookie старого зразка —
+        // host-only на кабінеті). Пропускаємо на сторінку входу, вона повертає
+        // людину вже після підтвердження сесії.
+        it('пропускає на сторінку входу, коли ?redirect веде на pay-хост', () => {
+            const req = createMockRequest('/auth/signin', {
+                cookies: { bid_refresh: 'some-token' },
+                search: '?redirect=http%3A%2F%2Fpay.finly.local%3A3000%2Fdps%2Fesv',
+            });
+            const response = proxy(req);
+
+            expect(response.status).toBe(200);
+            expect(mockRedirect).not.toHaveBeenCalled();
+        });
+
+        it('повертає на свій шлях, якщо сесія вже є, а у входу є ?redirect', () => {
+            const req = createMockRequest('/auth/signin', {
+                cookies: { bid_refresh: 'some-token' },
+                search: '?redirect=%2Fbilling',
+            });
+            const response = proxy(req);
+
+            expect(response.status).toBe(307);
+            const url: URL = mockRedirect.mock.calls[0][0];
+            expect(url.pathname).toBe('/billing');
+            expect(url.host).toBe('localhost:3000');
+        });
+
+        it('ігнорує чужий домен у ?redirect і веде в кабінет', () => {
+            const req = createMockRequest('/auth/signin', {
+                cookies: { bid_refresh: 'some-token' },
+                search: '?redirect=https%3A%2F%2Fevil.example%2Fphish',
+            });
+            const response = proxy(req);
+
+            const url: URL = mockRedirect.mock.calls[0][0];
+            expect(url.pathname).toBe('/business');
+            expect(url.host).toBe('localhost:3000');
         });
     });
 

@@ -78,6 +78,7 @@ describe('UsersController', () => {
                     accountDeletionRequestedAt: null,
                     termsVersion: null,
                     activeSlugReservation: null,
+                    taxProfilePromptDismissedAt: null,
                 },
             });
         });
@@ -240,9 +241,10 @@ describe('UsersController', () => {
             expect(
                 mockAuthService.sendDeletionConfirmationEmail
             ).toHaveBeenCalledWith('test@gmail.com');
-            expect(res.clearCookie).toHaveBeenCalledWith('bid_refresh', {
-                path: '/',
-            });
+            expect(res.clearCookie).toHaveBeenCalledWith(
+                'bid_refresh',
+                expect.objectContaining({ path: '/' })
+            );
             expect(result).toEqual({
                 data: {
                     code: RESPONSE_CODE.ACCOUNT_DELETED,

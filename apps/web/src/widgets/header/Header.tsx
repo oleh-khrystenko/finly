@@ -14,13 +14,10 @@ import ChangeTheme from '@/features/change-theme';
 import { Logo } from '@/entities/brand';
 import UiButton from '@/shared/ui/UiButton';
 import UiHeaderShell from '@/shared/ui/UiHeaderShell';
-import UiDropdownMenu from '@/shared/ui/UiDropdownMenu';
-import { UiAvatar } from '@/shared/ui/UiAvatar';
 import { useAuthStore } from '@/entities/user';
-import { getFullName } from '@finly/types';
 import { useHeaderNavStore } from '@/entities/navigation';
+import { useUserMenu, UserMenuDropdown } from '@/features/user-menu';
 import { useMobileMenuSheetStore } from './mobileMenuSheetStore';
-import { useUserMenu } from './useUserMenu';
 import { useActiveSection } from './useActiveSection';
 
 function useScrolled(threshold: number) {
@@ -146,57 +143,11 @@ const Header = () => {
                     {isLoading ? (
                         <div className="bg-secondary h-8 w-20 animate-pulse rounded-lg" />
                     ) : isAuthenticated && user ? (
-                        <UiDropdownMenu
+                        <UserMenuDropdown
+                            user={user}
+                            initials={initials}
                             items={visibleItems}
                             onSelect={(value) => handleSelect(value)}
-                            size="sm"
-                            header={
-                                <div className="flex items-center gap-2.5">
-                                    <UiAvatar
-                                        size="sm"
-                                        src={user.profile.avatar}
-                                        alt={
-                                            getFullName(
-                                                user.profile.firstName,
-                                                user.profile.lastName
-                                            ) ?? ''
-                                        }
-                                        fallback={initials}
-                                    />
-                                    <div className="flex flex-col">
-                                        <span className="text-foreground text-sm font-medium">
-                                            {getFullName(
-                                                user.profile.firstName,
-                                                user.profile.lastName
-                                            )}
-                                        </span>
-                                        <span className="text-muted-foreground text-xs">
-                                            {user.email}
-                                        </span>
-                                    </div>
-                                </div>
-                            }
-                            trigger={
-                                <UiButton
-                                    variant="icon"
-                                    size="sm"
-                                    aria-label="Меню користувача"
-                                    className="rounded-full transition-opacity hover:opacity-80"
-                                >
-                                    <UiAvatar
-                                        size="sm"
-                                        src={user.profile.avatar}
-                                        alt={
-                                            getFullName(
-                                                user.profile.firstName,
-                                                user.profile.lastName
-                                            ) ?? ''
-                                        }
-                                        fallback={initials}
-                                        priority
-                                    />
-                                </UiButton>
-                            }
                         />
                     ) : (
                         <UiButton

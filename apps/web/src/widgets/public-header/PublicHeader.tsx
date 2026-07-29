@@ -3,19 +3,20 @@ import ChangeTheme from '@/features/change-theme';
 import UiButton from '@/shared/ui/UiButton';
 import UiHeaderShell from '@/shared/ui/UiHeaderShell';
 import { ENV } from '@/shared/config/env';
+import PublicHeaderAuth from './PublicHeaderAuth';
 
 /**
  * Бренд-бар для публічного payment-host-а (`pay.finly.com.ua`).
  *
- * **Навмисно НЕ кабінетний `widgets/header`.** Той auth-aware (user-меню,
- * аватар, логаут, "Увійти", landing-nav). На pay-host відвідувач — анонімний
- * платник (cookie `bid_refresh` сюди не доходить, немає `Domain=`); auth-меню
- * для нього беззмістовне, а "Увійти" штовхає не туди. Тут лише бренд-якір
- * (довіра "це Finly") + перемикач теми. Жодної навігації, що відволікає від
- * оплати.
+ * **Навмисно НЕ кабінетний `widgets/header`.** Той тягне landing-навігацію,
+ * scroll-анімацію і мобільне меню кабінету — на сторінці оплати це зайве
+ * відволікання. Тут лише бренд-якір (довіра «це Finly»), перемикач теми і, зі
+ * Sprint 30, auth-острівець: сесія стала спільною для обох хостів, тож
+ * залогінений бачить своє меню, а анонім — кнопку входу.
  *
- * Server Component — без auth-стану й scroll-анімації. `ChangeTheme` —
- * самодостатній client-острівець під капотом.
+ * Server Component — без auth-стану й scroll-анімації. `ChangeTheme` і
+ * `PublicHeaderAuth` — самодостатні client-острівці: серверний рендер
+ * публічної сторінки лишається однаковим для всіх і кешованим.
  *
  * Лого веде на marketing-origin (`NEXT_PUBLIC_BASE_URL`) у новій вкладці: на
  * pay-host `/` — це business-root без slug-а (404), тому "додому" для бренду —
@@ -41,7 +42,10 @@ export function PublicHeader() {
                 >
                     <Logo />
                 </UiButton>
-                <ChangeTheme />
+                <div className="flex items-center gap-2">
+                    <ChangeTheme />
+                    <PublicHeaderAuth />
+                </div>
             </UiHeaderShell>
         </div>
     );

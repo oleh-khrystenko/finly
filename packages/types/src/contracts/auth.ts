@@ -49,7 +49,14 @@ export const SendMagicLinkSchema = z
     .object({
         email: z.string().email(),
         purpose: MagicLinkPurposeSchema.optional(),
-        redirectTo: z.string().startsWith('/').max(2048).optional(),
+        /**
+         * Sprint 30 — приймає і свій шлях (`/business/foo`), і абсолютну адресу
+         * публічного pay-хоста: анонім тисне «Увійти» на податковій сторінці і
+         * має повернутись рівно на неї. Whitelist origin-ів перевіряє API
+         * (`assertAllowedReturnTarget`), бо перелік хостів живе у конфігурації
+         * середовища, а не у спільному пакеті. Тут — лише межа довжини.
+         */
+        redirectTo: z.string().min(1).max(2048).optional(),
         landingDraft: LandingDraftSchema.optional(),
         claimIdempotencyKey: z
             .string()

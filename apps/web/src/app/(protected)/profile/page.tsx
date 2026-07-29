@@ -7,9 +7,15 @@ import UiFullPageLoader from '@/shared/ui/UiFullPageLoader';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
 import UiPageHeading from '@/shared/ui/UiPageHeading';
 import UiWorkspaceColumns from '@/shared/ui/UiWorkspaceColumns';
-import { isValidRedirect } from '@/shared/lib';
+import { isValidRedirect } from '@/shared/lib/redirect';
 import { useAuthStore } from '@/entities/user';
-import { ProfileForm, SecuritySection, DangerZone } from '@/features/profile';
+import {
+    ProfileForm,
+    TaxDataForm,
+    SecuritySection,
+    DangerZone,
+} from '@/features/profile';
+import { PayersSection } from '@/features/payers';
 import type { ProfileMode } from '@/features/profile';
 
 function ProfileContent() {
@@ -64,11 +70,24 @@ function ProfileContent() {
 
             <UiWorkspaceColumns
                 main={
-                    <ProfileForm
-                        user={user}
-                        editable={mode === null}
-                        onSaved={handleProfileSaved}
-                    />
+                    <>
+                        <ProfileForm
+                            user={user}
+                            editable={mode === null}
+                            onSaved={handleProfileSaved}
+                        />
+                        {/* Sprint 30 — власні податкові дані і список
+                            платників: джерела підстановки на публічних
+                            податкових сторінках. У режимі підтвердження
+                            особи (`mode`) не показуємо: там фокус на одній
+                            дії. */}
+                        {mode === null && (
+                            <>
+                                <TaxDataForm user={user} />
+                                <PayersSection />
+                            </>
+                        )}
+                    </>
                 }
                 aside={
                     <>

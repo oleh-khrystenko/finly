@@ -71,6 +71,18 @@ export const ENV = {
     PAY_PUBLIC_URL: getEnvVar('PAY_PUBLIC_URL'),
 
     /**
+     * Sprint 30 — батьківський домен сесійної cookie (`finly.com.ua` prod,
+     * `finly.local` dev). Кабінет і pay-хост живуть під ним, тож браузер шле
+     * `bid_refresh` на обидва: один вхід, один вихід. Значення БЕЗ схеми, порту
+     * і провідної крапки — це саме домен, не origin.
+     *
+     * Обов'язкова змінна без дефолту: мовчазний fallback (host-only cookie)
+     * означав би тихо зламану спільну сесію в проді — pay-хост просто не бачив
+     * би користувача, і жодна помилка про це не сказала б.
+     */
+    AUTH_COOKIE_DOMAIN: getEnvVar('AUTH_COOKIE_DOMAIN'),
+
+    /**
      * Sprint 28 — спільний секрет для internal on-demand revalidation web-у.
      * Після адмін-публікації гайда API б'є `WEB_URL/internal/revalidate-guides`
      * з цим bearer-ом, а web-роут звіряє його перед `revalidateTag`. Мусить
@@ -219,6 +231,56 @@ if (
             'must both be ≥ 1.'
     );
 }
+
+// Sprint 30 — спільна сесія двох хостів тримається на одному інваріанті: кожен
+// хост, що ставить або читає сесійну cookie, мусить лежати під її доменом. Якщо
+// це не так (класика: dev-кабінет лишився на `localhost`, а домен cookie вже
+// `finly.local`), браузер мовчки відкидає `Set-Cookie` — вхід ніби проходить,
+// але сесії немає ні на одному хості, і жодної помилки в логах. Тому
+// перевіряємо на старті.
+//
+// Google-callback тут нарівні з хостами застосунку і саме тому, що він єдиний з
+// них СТАВИТЬ cookie напряму з браузера: решта викликів API йдуть через rewrite
+// web-контейнера, тобто з origin-у, вже перевіреного нижче. Callback поза
+// доменом cookie давав би тихо зламаний вхід через Google при цілком робочому
+// вході паролем — найдорожчий різновид збою, бо жодна помилка про нього не
+// скаже.
+export function validateAuthCookieDomain(
+    cookieDomain: string,
+    origins: Record<string, string>
+): void {
+    if (cookieDomain.startsWith('.') || cookieDomain.includes('/')) {
+        throw new Error(
+            `❌ AUTH_COOKIE_DOMAIN must be a bare domain without scheme, port or leading dot (got "${cookieDomain}").`
+        );
+    }
+    for (const [name, origin] of Object.entries(origins)) {
+        let hostname: string;
+        try {
+            hostname = new URL(origin).hostname;
+        } catch {
+            throw new Error(
+                `❌ ${name} must be an absolute URL (got "${origin}").`
+            );
+        }
+        if (
+            hostname !== cookieDomain &&
+            !hostname.endsWith(`.${cookieDomain}`)
+        ) {
+            throw new Error(
+                `❌ ${name} host "${hostname}" is not under AUTH_COOKIE_DOMAIN ` +
+                    `"${cookieDomain}". The browser would silently drop the session cookie, ` +
+                    'leaving both hosts logged out.'
+            );
+        }
+    }
+}
+
+validateAuthCookieDomain(ENV.AUTH_COOKIE_DOMAIN, {
+    WEB_URL: ENV.WEB_URL,
+    PAY_PUBLIC_URL: ENV.PAY_PUBLIC_URL,
+    GOOGLE_CALLBACK_URL: ENV.GOOGLE_CALLBACK_URL,
+});
 
 // Sprint 10 §10.1 — dedup-overwrite-flow (sendMagicLink SP-8) припускає, що
 // magic-record-у живий поки існує dedup-key. Інваріант: TTL magic-record-у

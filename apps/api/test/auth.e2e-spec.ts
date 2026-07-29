@@ -368,9 +368,16 @@ describe('Auth E2E', () => {
         };
     }
 
+    /**
+     * Sprint 30 — відповідь входу несе ДВІ cookie з іменем `bid_refresh`:
+     * порожню (гасить cookie старого зразка, без домену) і справжню сесійну
+     * (з доменом). Браузер розрізняє їх за атрибутом `Domain`; тут беремо ту,
+     * що має значення — саме вона і є сесією.
+     */
     function extractRefreshCookie(cookies: string[]): string {
-        const refreshCookie = cookies?.find((c: string) =>
-            c.startsWith('bid_refresh=')
+        const refreshCookie = cookies?.find(
+            (c: string) =>
+                c.startsWith('bid_refresh=') && !c.startsWith('bid_refresh=;')
         );
         if (!refreshCookie) throw new Error('No bid_refresh cookie found');
         return refreshCookie.split(';')[0].replace('bid_refresh=', '');

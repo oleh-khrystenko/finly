@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Check, Copy } from 'lucide-react';
 import {
     BANK_LABEL,
     PERSONALIZATION_FULL_NAME_MAX,
+    PURPOSE_MARKERS,
     individualTaxIdZod,
     personalizationFullNameZod,
     personalizationPeriodZod,
@@ -13,7 +14,14 @@ import {
     type BusinessType,
     type PurposeMarker,
 } from '@finly/types';
-import { getPersonalizedNbuLinks, PublicApiError } from '@/shared/api';
+import { toast } from 'sonner';
+import {
+    createPayer,
+    extractApiErrorCode,
+    getApiMessage,
+    getPersonalizedNbuLinks,
+    PublicApiError,
+} from '@/shared/api';
 import { kyivYearMonth } from '@/shared/lib';
 import UiButton from '@/shared/ui/UiButton';
 import UiBrandLogo from '@/shared/ui/UiBrandLogo';
@@ -24,6 +32,15 @@ import UiQrImage from '@/shared/ui/UiQrImage';
 import UiSelect from '@/shared/ui/UiSelect';
 import UiVerifiedBadge from '@/shared/ui/UiVerifiedBadge';
 import { formatPayeeName } from '@/entities/business';
+import { usePayersStore } from '@/entities/payer';
+import { useAuthStore } from '@/entities/user';
+import PayerSelector, {
+    MANUAL_SELECTION,
+    SELF_SELECTION,
+    selfPayerValues,
+    type PayerValues,
+} from './PayerSelector';
+import TaxProfilePrompt from './TaxProfilePrompt';
 
 /** Довжина РНОКПП — форма ріже нецифри, тож недобір цифр і провал контрольної
  * суми — два різні user-facing стани. */
@@ -89,10 +106,29 @@ export default function PersonalizedPayment({
 
     const has = (m: PurposeMarker) => markers.includes(m);
 
+    // Sprint 30 — сесія спільна для кабінету і pay-хоста, тож сторінка знає, хто
+    // її відкрив. Уся персоналізація суто клієнтська: серверний рендер лишається
+    // однаковим для всіх, інакше кешувальний шар віддав би дані однієї людини
+    // наступному відвідувачу.
+    const user = useAuthStore((s) => s.user);
+    const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+    const payers = usePayersStore((s) => s.payers);
+    const loadPayers = usePayersStore((s) => s.load);
+    const upsertPayer = usePayersStore((s) => s.upsert);
+
     const [taxId, setTaxId] = useState(() => searchParams.get('taxId') ?? '');
     const [fullName, setFullName] = useState(
         () => searchParams.get('fullName') ?? ''
     );
+    // Чи прийшла людина за персональним посиланням (переслав бухгалтер). Такі
+    // значення сильніші за будь-яку підстановку з профілю: посилання відкривали
+    // саме заради них.
+    const cameWithValues = useRef(
+        PURPOSE_MARKERS.some((marker) => searchParams.get(marker) !== null)
+    ).current;
+    // Хто платить: `me`, ідентифікатор платника зі списку або ручний ввід.
+    // Ручний — чесний дефолт: поки нічого не підставлено, ним і є будь-який ввід.
+    const [selection, setSelection] = useState<string>(MANUAL_SELECTION);
     // Список кварталів будуємо ОДИН раз за монтування, а не на кожну зміну
     // адреси: сторінка сама переписує адресу (`history.replaceState` нижче), тож
     // прив'язка до неї означала б перебудову списку посеред роботи форми.
@@ -124,6 +160,67 @@ export default function PersonalizedPayment({
                   ],
         [basePeriodOptions, period]
     );
+
+    // Підстановка значень обраного платника. Поля лишаються звичайними полями:
+    // будь-яке підставлене значення редагується прямо тут перед оплатою.
+    //
+    // Обраний платник заміщає поля ЦІЛКОМ, включно з порожніми частинами: у
+    // профілі може не бути РНОКПП, і якби порожнє значення просто не
+    // записувалось, після вибору «Я» в полі лишився б номер попередньо обраного
+    // клієнта під власним ПІБ. Підпис вибору казав би «Я», а платіж пішов би з
+    // чужим податковим номером — рівно те змішування даних, якого не має бути.
+    const applyPayerValues = useCallback(
+        (next: string, values: PayerValues | null) => {
+            setSelection(next);
+            // Ручний ввід нічого не заміщає: людина вводить дані сама.
+            if (!values) return;
+            setTaxId(values.taxId);
+            setFullName(values.fullName);
+        },
+        []
+    );
+
+    // Чи людина вже вводила щось у поля платника руками. Ref, а не стан: це
+    // сторожовий прапорець для одноразової автопідстановки, рендеру він не
+    // потрібен, а через ref його видно ефекту без перезапуску на кожен символ.
+    const manuallyEdited = useRef(false);
+
+    // Ручний ввід поверх підставленого означає, що значення більше не належать
+    // обраному запису — підпис вибору мусить це показувати, інакше поруч із
+    // чужими даними висіло б ім'я клієнта, за якого людина вже не платить.
+    const markManualEdit = useCallback(() => {
+        manuallyEdited.current = true;
+        setSelection((current) =>
+            current === MANUAL_SELECTION ? current : MANUAL_SELECTION
+        );
+    }, []);
+
+    useEffect(() => {
+        if (!isAuthenticated) return;
+        void loadPayers().catch(() => {
+            toast.error('Не вдалося завантажити список платників');
+        });
+    }, [isAuthenticated, loadPayers]);
+
+    // Автопідстановка власних даних — рівно один раз за візит і лише коли
+    // сторінку відкрили без персональних значень у посиланні.
+    //
+    // Сесія підтягується асинхронно (refresh + профіль), а поля активні з
+    // першого кадру: людина цілком може почати набирати РНОКПП клієнта ДО того,
+    // як система її впізнає. Підстановка поверх набраного мовчки замінила б
+    // чужі дані власними — рівно те змішування, після якого податковий платіж
+    // іде за не того платника. Тому будь-який ручний ввід (`manuallyEdited`)
+    // скасовує автопідстановку назавжди; хто хоче свої дані — обирає «Я» у
+    // списку явно.
+    const selfApplied = useRef(false);
+    useEffect(() => {
+        if (selfApplied.current || !isAuthenticated || !user) return;
+        selfApplied.current = true;
+        if (cameWithValues || manuallyEdited.current) return;
+        const own = selfPayerValues(user);
+        if (!own.taxId && !own.fullName) return;
+        applyPayerValues(SELF_SELECTION, own);
+    }, [isAuthenticated, user, cameWithValues, applyPayerValues]);
 
     // Валідація і підстановка йдуть по ОДНОМУ значенню (обрізаному): інакше
     // переслане посилання з пробілом (`?taxId=%201234567890`) провалювало б
@@ -204,6 +301,37 @@ export default function PersonalizedPayment({
         return () => clearTimeout(handle);
     }, [allValid, values]);
 
+    // Sprint 30 — для залогіненого персональні значення в адресу не пишемо:
+    // інакше РНОКПП і ПІБ (свої або клієнтські) осідали б в історії браузера і
+    // в кожному скопійованому «просто посиланні». Дані підставляться самі при
+    // наступному заході, а персональне посилання будується на явну дію — кнопку
+    // копіювання нижче. Для аноніма поведінка не змінюється: адреса і є
+    // шерабельним посиланням.
+    const writesValuesToUrl = !isAuthenticated;
+
+    // Персональні значення могли потрапити в адресу двома шляхами: сторінку
+    // відкрили за пересланим посиланням або їх встиг записати анонімний режим,
+    // поки підтягувалась сесія. Обидва прибираємо, щойно людину впізнано: далі
+    // адреса не оновлюється, і застаріле значення в рядку понесло б дані
+    // попереднього платника у скопійованому вручну посиланні.
+    useEffect(() => {
+        if (writesValuesToUrl) return;
+        const params = new URLSearchParams(window.location.search);
+        const hadMarkers = PURPOSE_MARKERS.filter((marker) =>
+            params.has(marker)
+        );
+        if (hadMarkers.length === 0) return;
+        for (const marker of hadMarkers) params.delete(marker);
+        const rest = params.toString();
+        window.history.replaceState(
+            null,
+            '',
+            rest
+                ? `${window.location.pathname}?${rest}`
+                : window.location.pathname
+        );
+    }, [writesValuesToUrl, appliedValues]);
+
     // Синхронізуємо URL із застосованими даними (шерабельне посилання) і тягнемо
     // персоналізовані банк-посилання.
     useEffect(() => {
@@ -214,15 +342,19 @@ export default function PersonalizedPayment({
             // правки чужого номера з опискою в рядку адреси лишався б попередній
             // (валідний) номер, і скопійоване руками посилання відкрилося б у
             // отримувача з готовим QR на чужі дані.
-            window.history.replaceState(null, '', window.location.pathname);
+            if (writesValuesToUrl) {
+                window.history.replaceState(null, '', window.location.pathname);
+            }
             return;
         }
-        const search = new URLSearchParams(appliedValues).toString();
-        window.history.replaceState(
-            null,
-            '',
-            `${window.location.pathname}?${search}`
-        );
+        if (writesValuesToUrl) {
+            const search = new URLSearchParams(appliedValues).toString();
+            window.history.replaceState(
+                null,
+                '',
+                `${window.location.pathname}?${search}`
+            );
+        }
         let cancelled = false;
         setLinksState('loading');
         getPersonalizedNbuLinks(businessSlug, account.slug, appliedValues)
@@ -249,7 +381,7 @@ export default function PersonalizedPayment({
         return () => {
             cancelled = true;
         };
-    }, [appliedValues, businessSlug, account.slug]);
+    }, [appliedValues, businessSlug, account.slug, writesValuesToUrl]);
 
     // Обидва QR-хости НБУ, як на звичайній вивісці: `legacy` це запасний код під
     // банки, що не читають формат основного хоста. Без нього податкова сторінка
@@ -263,12 +395,59 @@ export default function PersonalizedPayment({
     }, [appliedValues, businessSlug, account.slug]);
 
     const handleCopy = async () => {
+        // Для аноніма персональні значення вже в адресі; для залогіненого
+        // посилання складається саме тут — це і є та «явна дія», заради якої
+        // адреса лишається чистою.
+        const link =
+            writesValuesToUrl || !appliedValues
+                ? window.location.href
+                : `${window.location.origin}${window.location.pathname}?${new URLSearchParams(
+                      appliedValues
+                  ).toString()}`;
         try {
-            await navigator.clipboard.writeText(window.location.href);
+            await navigator.clipboard.writeText(link);
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         } catch {
             // Буфер недоступний — тихо ігноруємо, посилання видно в адресному рядку.
+        }
+    };
+
+    /**
+     * Чи пропонувати зберегти введені дані у список платників. Умови навмисно
+     * вузькі: пропозиція має сенс лише коли шаблон збирає і ПІБ, і РНОКПП
+     * (запис платника — це саме ця пара), дані валідні, і такого РНОКПП ще
+     * немає ні у списку, ні у власному профілі. Автозбереження немає: система
+     * не заводить записи з чужими персональними даними без рішення людини.
+     */
+    const canOfferSave =
+        isAuthenticated &&
+        user !== null &&
+        has('taxId') &&
+        has('fullName') &&
+        taxIdValid &&
+        fullNameValid &&
+        trimmedTaxId.length > 0 &&
+        trimmedFullName.length > 0 &&
+        trimmedTaxId !== user?.profile.taxId &&
+        !payers.some((payer) => payer.taxId === trimmedTaxId);
+
+    const [savingPayer, setSavingPayer] = useState(false);
+
+    const handleSavePayer = async () => {
+        setSavingPayer(true);
+        try {
+            const payer = await createPayer({
+                fullName: trimmedFullName,
+                taxId: trimmedTaxId,
+            });
+            upsertPayer(payer);
+            setSelection(payer.id);
+            toast.success('Платника додано до списку');
+        } catch (err) {
+            toast.error(getApiMessage(extractApiErrorCode(err), 'payers'));
+        } finally {
+            setSavingPayer(false);
         }
     };
 
@@ -301,16 +480,38 @@ export default function PersonalizedPayment({
                 accountName={account.name}
             />
 
+            {/* Пропозиція заповнити профіль має сенс лише там, де сторінка
+                справді збирає ПІБ або РНОКПП. На шаблоні без цих маркерів
+                (наприклад, самий період) вона обіцяла б автозаповнення полів,
+                яких на сторінці немає. */}
+            {isAuthenticated && (has('taxId') || has('fullName')) && (
+                <TaxProfilePrompt />
+            )}
+
             <div className="border-border bg-card space-y-4 rounded-xl border p-5">
                 <div>
                     <h2 className="text-foreground text-lg font-semibold">
-                        Ваші дані для платежу
+                        {isAuthenticated
+                            ? 'Дані платника'
+                            : 'Ваші дані для платежу'}
                     </h2>
                     <p className="text-muted-foreground mt-1 text-sm">
-                        Заповніть поля, щоб отримати QR-код зі своїми даними у
-                        призначенні платежу.
+                        {isAuthenticated
+                            ? 'Оберіть, за кого платите. Підставлені значення можна виправити перед оплатою.'
+                            : 'Заповніть поля, щоб отримати QR-код зі своїми даними у призначенні платежу.'}
                     </p>
                 </div>
+
+                {isAuthenticated &&
+                    user &&
+                    (has('taxId') || has('fullName')) && (
+                        <PayerSelector
+                            user={user}
+                            payers={payers}
+                            value={selection}
+                            onChange={applyPayerValues}
+                        />
+                    )}
 
                 {has('taxId') && (
                     <UiInput
@@ -318,9 +519,10 @@ export default function PersonalizedPayment({
                         inputMode="numeric"
                         maxLength={TAX_ID_LENGTH}
                         value={taxId}
-                        onChange={(e) =>
-                            setTaxId(e.target.value.replace(/\D/g, ''))
-                        }
+                        onChange={(e) => {
+                            markManualEdit();
+                            setTaxId(e.target.value.replace(/\D/g, ''));
+                        }}
                         error={taxIdError(trimmedTaxId, taxIdValid)}
                     />
                 )}
@@ -329,7 +531,10 @@ export default function PersonalizedPayment({
                         label="Прізвище, ім’я, по батькові"
                         maxLength={PERSONALIZATION_FULL_NAME_MAX}
                         value={fullName}
-                        onChange={(e) => setFullName(e.target.value)}
+                        onChange={(e) => {
+                            markManualEdit();
+                            setFullName(e.target.value);
+                        }}
                         error={
                             trimmedFullName.length > 0 && !fullNameValid
                                 ? `Ім’я містить недопустимі символи або задовге (до ${PERSONALIZATION_FULL_NAME_MAX})`
@@ -350,6 +555,24 @@ export default function PersonalizedPayment({
                             periodValid ? undefined : 'Оберіть період зі списку'
                         }
                     />
+                )}
+
+                {canOfferSave && (
+                    <div className="border-border flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed p-3">
+                        <p className="text-muted-foreground text-sm">
+                            Зберегти цього платника, щоб наступного разу обрати
+                            його зі списку?
+                        </p>
+                        <UiButton
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            loading={savingPayer}
+                            onClick={() => void handleSavePayer()}
+                        >
+                            Зберегти платника
+                        </UiButton>
+                    </div>
                 )}
             </div>
 

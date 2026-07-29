@@ -23,6 +23,18 @@ class UserProfileData {
 
     @Prop()
     avatar?: string;
+
+    /**
+     * Sprint 30 — власні дані для податкових платежів (по батькові + РНОКПП).
+     * Опційні: онбординг їх не вимагає, потрібні лише тому, хто платить податки
+     * через публічні сторінки каталогу. Читаються завжди разом з профілем
+     * (`getMe`), тож окремий index не потрібен.
+     */
+    @Prop()
+    middleName?: string;
+
+    @Prop()
+    taxId?: string;
 }
 
 @Schema({ _id: false })
@@ -113,6 +125,15 @@ export class User {
         }),
     })
     profileCompletionReminders!: ProfileCompletionReminders;
+
+    /**
+     * Sprint 30 — коли користувач відхилив разову пропозицію заповнити власні
+     * податкові дані (показується при першому заході на податкову сторінку).
+     * Non-null означає «більше не пропонувати»; заповнення даних робить
+     * пропозицію нерелевантною саме по собі, тому стемп ставить лише відмова.
+     */
+    @Prop({ type: Date, default: null })
+    taxProfilePromptDismissedAt!: Date | null;
 
     @Prop()
     lastLoginAt?: Date;
