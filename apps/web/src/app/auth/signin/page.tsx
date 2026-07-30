@@ -525,24 +525,23 @@ function SigninContent() {
             onSubmit={passwordForm.handleSubmit(onPasswordSubmit)}
             className="space-y-4"
         >
-            <div className="relative">
-                <UiInput
-                    type="email"
-                    value={email}
-                    readOnly
-                    IconLeft={<Mail />}
-                    size="lg"
-                    className="pr-20"
-                />
-                <UiButton
-                    variant="text"
-                    size="sm"
-                    onClick={goBackToEmail}
-                    className="text-primary absolute top-1/2 right-3 -translate-y-1/2 text-sm font-medium hover:underline"
-                >
-                    Змінити
-                </UiButton>
-            </div>
+            <UiInput
+                type="email"
+                value={email}
+                readOnly
+                IconLeft={<Mail />}
+                size="lg"
+                IconRight={
+                    <UiButton
+                        variant="text"
+                        size="sm"
+                        onClick={goBackToEmail}
+                        className="text-primary text-sm font-medium hover:underline"
+                    >
+                        Змінити
+                    </UiButton>
+                }
+            />
 
             <UiPasswordInput
                 {...passwordForm.register('password', {
