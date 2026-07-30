@@ -10,7 +10,15 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import sharp from 'sharp';
+// TS-style CJS import замість `import sharp from 'sharp'`. `apps/api/tsconfig.json`
+// НЕ має `esModuleInterop` (лише `allowSyntheticDefaultImports`, а він впливає
+// тільки на перевірку типів), тож default-import компілюється у `sharp_1.default`
+// — властивість, якої у callable CJS-модуля немає. Наслідок був однаковий у dev
+// і в production: `(0, sharp_1.default) is not a function` при кожному реальному
+// виклику. Решта sharp-споживачів API (`qr-logo.compositor`, `qr-brand-mark.baker`,
+// `brand.service`) уже використовує цю форму — вона канонічна для callable CJS.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+import sharp = require('sharp');
 import { AVATAR, AVATAR_FILE_KEY_REGEX, RESPONSE_CODE } from '@finly/types';
 
 import { StorageService } from '../storage/storage.service';

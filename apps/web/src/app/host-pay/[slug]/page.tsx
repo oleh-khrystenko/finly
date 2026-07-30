@@ -31,7 +31,7 @@ import { buildMetadata } from '@/shared/seo/metadata';
  * `Cache-Control: no-store` що middleware Branch A1 ставить.
  *
  * **Defense-in-depth host-check** через `headers()` — middleware має
- * направляти сюди тільки запити з `pay.finly.com.ua`/`pay.finly.local:3000`.
+ * направляти сюди тільки запити з `pay.finly.com.ua`/`localhost:3001`.
  * Якщо middleware зломається (hot-reload race / config drift) — page відмовиться
  * рендерити на cabinet host через стандартний 404.
  *

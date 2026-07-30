@@ -62,8 +62,9 @@ export const ENV = {
      */
     WEB_URL: getEnvVar('WEB_URL'),
     /**
-     * Public payment-page origin (`pay.finly.com.ua` prod, `pay.finly.local:3000`
-     * dev — налаштовується через `/etc/hosts`, див. Sprint 3 §3.9). Sprint 3
+     * Public payment-page origin (`pay.finly.com.ua` prod, `localhost:3001`
+     * dev — другий port-mapping того самого web-контейнера, `PAY_PORT`;
+     * записів у `/etc/hosts` не потрібно, див. Sprint 3 §3.9). Sprint 3
      * рішення A1: cabinet і public живуть на різних host-ах для cookie/auth
      * ізоляції. QR-картинка `/businesses/public/:slug/qr/business.png` кодує
      * URL клієнта (не ФОП-а) → це **public host**, не WEB_URL.
@@ -72,7 +73,7 @@ export const ENV = {
 
     /**
      * Sprint 30 — батьківський домен сесійної cookie (`finly.com.ua` prod,
-     * `finly.local` dev). Кабінет і pay-хост живуть під ним, тож браузер шле
+     * `localhost` dev). Кабінет і pay-хост живуть під ним, тож браузер шле
      * `bid_refresh` на обидва: один вхід, один вихід. Значення БЕЗ схеми, порту
      * і провідної крапки — це саме домен, не origin.
      *

@@ -3,6 +3,13 @@
 process.env.NODE_ENV ??= 'test';
 process.env.PORT ??= '4000';
 process.env.TRUST_PROXY_HOPS ??= '0';
+// Хости тут СВІДОМО прод-подібні (два різні хости під спільним батьківським
+// доменом), а не dev-ові `localhost:3000` / `localhost:3001`. Dev розділяє
+// кабінет і pay-зону портом — випадок, у якому cookie-домен ні на що не
+// впливає, бо порт у scope cookie не входить. Тести ж мусять покривати саме
+// той випадок, що працює у проді: cookie на батьківському домені, видна
+// сусідньому ПІДДОМЕНУ. Заміна на localhost знищила б це покриття, лишивши
+// перевірки формально зеленими.
 process.env.WEB_URL ??= 'http://finly.local:3000';
 process.env.REVALIDATE_SECRET ??= 'test-revalidate-secret';
 process.env.PAY_PUBLIC_URL ??= 'http://pay.finly.local:3000';

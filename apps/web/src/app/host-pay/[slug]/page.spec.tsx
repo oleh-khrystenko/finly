@@ -24,6 +24,10 @@ jest.mock('@/shared/config/env', () => ({
     ENV: {
         NEXT_PUBLIC_PAY_PUBLIC_URL: 'https://pay.finly.com.ua',
     },
+    // Whitelist публічної зони (`publicHosts.ts`) походить від цього значення,
+    // тож мок `./env` мусить його віддавати — інакше host-check нижче відхилив
+    // би власний pay-хост і кожен рендер обертався б на 404.
+    PAY_PUBLIC_HOST: 'pay.finly.com.ua',
 }));
 
 const mockHeaders = jest.fn();

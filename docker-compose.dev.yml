@@ -6,6 +6,11 @@ services:
             - '6379:6379'
         volumes:
             - redis_data_dev:/data
+        healthcheck:
+            test: ['CMD', 'redis-cli', 'ping']
+            interval: 5s
+            timeout: 3s
+            retries: 5
 
     api:
         image: node:20-alpine
@@ -27,8 +32,19 @@ services:
             - REDIS_URL=redis://redis:6379
             - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
             - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
-            - WEB_URL=http://finly.local:${WEB_PORT}
-            - PAY_PUBLIC_URL=http://pay.finly.local:${WEB_PORT}
+            # Sprint 30 — dev-хости: той самий `localhost`, різні порти
+            # (кабінет WEB_PORT, pay-зона PAY_PORT). Вигаданий домен на кшталт
+            # `finly.local` тут не годиться — Google OAuth не приймає
+            # redirect-адресу на неіснуючому TLD. Cookie-scope портами не
+            # розділяється, тож спільна сесія працює як у проді.
+            #
+            # `:?` (mandatory variable) — не косметика: без нього compose
+            # підставив би порожній рядок, `PAY_PUBLIC_URL` став би
+            # `http://localhost:` (валідна адреса на 80-му порту!), fail-fast
+            # на старті API пропустив би це, а pay-зона тихо не працювала б —
+            # QR-коди і copy-link вели б у нікуди.
+            - WEB_URL=http://localhost:${WEB_PORT}
+            - PAY_PUBLIC_URL=http://localhost:${PAY_PORT:?PAY_PORT is required - dev pay-zone port, see .env.example}
             - AUTH_COOKIE_DOMAIN=${AUTH_COOKIE_DOMAIN}
             - REVALIDATE_SECRET=${REVALIDATE_SECRET}
             - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
@@ -91,8 +107,21 @@ services:
             - ./:/app
             - pnpm-store:/pnpm-store
             - /app/node_modules
+        # `start_period` покриває холодний старт (pnpm install + build types +
+        # nest bootstrap) — невдалі проби в цьому вікні не рахуються як фейл.
+        healthcheck:
+            test:
+                [
+                    'CMD-SHELL',
+                    'wget -q --spider http://127.0.0.1:${API_PORT}/api/health',
+                ]
+            interval: 5s
+            timeout: 3s
+            retries: 12
+            start_period: 300s
         depends_on:
-            - redis
+            redis:
+                condition: service_healthy
 
     web:
         image: node:20-alpine
@@ -119,19 +148,31 @@ services:
             # Прод працює саме так; dev мусить збігатися.
             - NEXT_PUBLIC_API_URL=/api
             - NEXT_PUBLIC_BILLING_DEMO_MODE=${NEXT_PUBLIC_BILLING_DEMO_MODE}
-            - NEXT_PUBLIC_PAY_PUBLIC_URL=http://pay.finly.local:${WEB_PORT}
+            - NEXT_PUBLIC_PAY_PUBLIC_URL=http://localhost:${PAY_PORT:?PAY_PORT is required - dev pay-zone port, see .env.example}
             - NEXT_PUBLIC_STORAGE_HOSTNAME=${NEXT_PUBLIC_STORAGE_HOSTNAME}
             - REVALIDATE_SECRET=${REVALIDATE_SECRET}
             - WATCHPACK_POLLING=true
             - CHOKIDAR_USEPOLLING=true
         ports:
             - '${WEB_PORT}:${WEB_PORT}'
+            # Той самий контейнер під другим портом — публічна pay-зона.
+            # Next.js бачить `Host: localhost:${PAY_PORT}`, і `proxy.ts`
+            # розпізнає його як public host: whitelist
+            # (`apps/web/src/shared/config/publicHosts.ts`) походить від
+            # `NEXT_PUBLIC_PAY_PUBLIC_URL`, тобто від цього ж PAY_PORT — саме
+            # тому порт не потрібно дублювати у коді.
+            - '${PAY_PORT:?PAY_PORT is required - dev pay-zone port, see .env.example}:${WEB_PORT}'
         volumes:
             - ./:/app
             - pnpm-store:/pnpm-store
             - /app/node_modules
+        # Next.js dev піднімається за секунди, api — за хвилини (install + build
+        # types + nest watch). Без `service_healthy` браузер встигає викликати
+        # `/api/auth/refresh`, rewrite летить у мертвий контейнер (ECONNREFUSED)
+        # і користувача викидає на логін.
         depends_on:
-            - api
+            api:
+                condition: service_healthy
 
 volumes:
     redis_data_dev:

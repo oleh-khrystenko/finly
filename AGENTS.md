@@ -177,7 +177,7 @@ Editable slugs — case-preserved display values із lowercase lookup fields. R
 
 ### Public Payment Host
 
-`apps/web/src/proxy.ts` rewrite-ить `pay.finly.com.ua` / `pay.finly.local:3000` у internal `app/host-pay/*` routes і блокує cabinet routes на public host. Server Components fetch-ать API через `API_INTERNAL_URL`; public data loaders живуть у `apps/web/src/features/*-public/load*.ts`.
+`apps/web/src/proxy.ts` rewrite-ить публічний host (prod — `pay.finly.com.ua`; dev — `localhost:3001`, той самий контейнер під другим port-mapping) у internal `app/host-pay/*` routes і блокує cabinet routes на public host. Whitelist `PUBLIC_HOSTS` не зашитий у код — походить від `NEXT_PUBLIC_PAY_PUBLIC_URL`. Server Components fetch-ать API через `API_INTERNAL_URL`; public data loaders живуть у `apps/web/src/features/*-public/load*.ts`.
 
 ### Public APIs
 
@@ -427,7 +427,7 @@ Full index: [docs/conventions/README.md](docs/conventions/README.md)
 - Cabinet `/ai/chat`, chat history і AI reservation endpoints видалені; current AI API — тільки public stateless `POST /api/ai/help/chat`. `ExecutionTransaction` лишився credit ledger, але controller не expose-ить spend/history routes.
 - Public host routing має чотири branches: bare `/`, `/{business}`, `/{business}/{account}`, `/{business}/{account}/{invoice}`. Business з одним account redirect-ить через 307, не 308, бо цей state може змінитись.
 - `API_INTERNAL_URL` не входить у web fail-fast loader, але public Server Component rendering падає без нього.
-- Public/cabinet auth isolation залежить від `PUBLIC_HOSTS`, `PAY_PUBLIC_URL`, `NEXT_PUBLIC_PAY_PUBLIC_URL` і local `/etc/hosts` для `pay.finly.local`.
+- Public/cabinet auth isolation залежить від `PAY_PUBLIC_URL` (api) і `NEXT_PUBLIC_PAY_PUBLIC_URL` (web); `PUBLIC_HOSTS` — похідне від другого. Записів у `/etc/hosts` не потрібно: у dev pay-зона — це той самий `localhost` під `PAY_PORT` (3001), бо Google OAuth не приймає redirect-адресу на вигаданому TLD.
 - Web proxy auth decisions дивляться на cookie presence (`bid_refresh`, `bid_account_deleted`), а не на token validation; stale cookies чистяться client/server auth flows.
 - Mongo transactions require replica set. Standalone local Mongo ламає cascade/create transaction flows, навіть якщо simple reads працюють.
 - WayForPay webhook handling залежить від Nest `rawBody` і `POST /api/payments/webhook/wayforpay`; Stripe portal/customer code у current runtime немає.

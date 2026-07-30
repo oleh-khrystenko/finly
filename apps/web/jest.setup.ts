@@ -10,9 +10,18 @@ import '@testing-library/jest-dom';
 // Свідомо НЕ покриваємо цим усе підряд: `shared/lib/redirect` (єдиний модуль
 // нижнього шару, що читає конфігурацію) навмисно поза barrel-ом `shared/lib`,
 // інакше env став би обов'язковим для кожного UI-примітиву.
-process.env.NEXT_PUBLIC_BASE_URL ??= 'http://finly.local:3000';
+//
+// Хости тут СВІДОМО прод-подібні (кабінет і pay на різних піддоменах), як і в
+// `apps/api/src/test-setup.ts`. Dev розділяє їх портом — випадок, у якому
+// піддомен ні на що не впливає; тести ж мусять покривати те, що працює у проді.
+// Whitelist публічної зони (`shared/config/publicHosts.ts`) походить саме від
+// `NEXT_PUBLIC_PAY_PUBLIC_URL`, тож з dev-значеннями `pay.finly.com.ua` перестав
+// би вважатися публічним і host-isolation-перевірки лишились би формально
+// зеленими. Сам dev-варіант (той самий host, різні порти) покритий у
+// `shared/config/publicHosts.spec.ts`.
+process.env.NEXT_PUBLIC_BASE_URL ??= 'https://finly.com.ua';
 process.env.NEXT_PUBLIC_API_URL ??= '/api';
-process.env.NEXT_PUBLIC_PAY_PUBLIC_URL ??= 'http://pay.finly.local:3000';
+process.env.NEXT_PUBLIC_PAY_PUBLIC_URL ??= 'https://pay.finly.com.ua';
 process.env.NEXT_PUBLIC_STORAGE_HOSTNAME ??= 'media.test.local';
 process.env.NEXT_PUBLIC_BILLING_DEMO_MODE ??= 'false';
 
