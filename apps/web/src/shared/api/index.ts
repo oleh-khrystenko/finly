@@ -91,7 +91,6 @@ export type { PaginatedInvoices } from './invoices';
 export {
     clearPendingPostLoginTarget,
     releaseSlugReservation,
-    dismissTaxProfilePrompt,
 } from './users';
 export {
     listPayers,

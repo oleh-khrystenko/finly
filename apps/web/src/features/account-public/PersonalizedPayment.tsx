@@ -36,13 +36,11 @@ import { usePayerSourcesStore, usePayersStore } from '@/entities/payer';
 import { useAuthStore } from '@/entities/user';
 import PayerSelector, {
     MANUAL_SELECTION,
-    SELF_SELECTION,
+    autoPayerOption,
     buildPayerOptions,
     payerOptionKey,
-    selfPayerValues,
     type PayerValues,
 } from './PayerSelector';
-import TaxProfilePrompt from './TaxProfilePrompt';
 
 /** Довжина РНОКПП — форма ріже нецифри, тож недобір цифр і провал контрольної
  * суми — два різні user-facing стани. */
@@ -123,6 +121,7 @@ export default function PersonalizedPayment({
     // копію тих самих даних у списку платників.
     const payerSources = usePayerSourcesStore((s) => s.sources);
     const loadPayerSources = usePayerSourcesStore((s) => s.load);
+    const payerSourcesSettled = usePayerSourcesStore((s) => s.isSettled);
 
     const [taxId, setTaxId] = useState(() => searchParams.get('taxId') ?? '');
     const [fullName, setFullName] = useState(
@@ -234,17 +233,35 @@ export default function PersonalizedPayment({
     // як система її впізнає. Підстановка поверх набраного мовчки замінила б
     // чужі дані власними — рівно те змішування, після якого податковий платіж
     // іде за не того платника. Тому будь-який ручний ввід (`manuallyEdited`)
-    // скасовує автопідстановку назавжди; хто хоче свої дані — обирає «Я» у
+    // скасовує автопідстановку назавжди; хто хоче свої дані — обирає себе у
     // списку явно.
+    //
+    // Чекаємо на завершену спробу читання отримувачів: підстановка до їх
+    // приходу дала б профільний фолбек (самий ПІБ) там, де за мить зʼявився б
+    // власний ФОП з готовим номером.
     const selfApplied = useRef(false);
     useEffect(() => {
-        if (selfApplied.current || !isAuthenticated || !user) return;
+        if (
+            selfApplied.current ||
+            !isAuthenticated ||
+            !user ||
+            !payerSourcesSettled
+        ) {
+            return;
+        }
         selfApplied.current = true;
         if (cameWithValues || manuallyEdited.current) return;
-        const own = selfPayerValues(user);
-        if (!own.taxId && !own.fullName) return;
-        applyPayerValues(SELF_SELECTION, own);
-    }, [isAuthenticated, user, cameWithValues, applyPayerValues]);
+        const auto = autoPayerOption(payerOptions);
+        if (!auto?.values) return;
+        applyPayerValues(auto.key, auto.values);
+    }, [
+        isAuthenticated,
+        user,
+        payerSourcesSettled,
+        payerOptions,
+        cameWithValues,
+        applyPayerValues,
+    ]);
 
     // Валідація і підстановка йдуть по ОДНОМУ значенню (обрізаному): інакше
     // переслане посилання з пробілом (`?taxId=%201234567890`) провалювало б
@@ -441,12 +458,12 @@ export default function PersonalizedPayment({
      * Чи пропонувати зберегти введені дані у список платників. Умови навмисно
      * вузькі: пропозиція має сенс лише коли шаблон збирає і ПІБ, і РНОКПП
      * (запис платника — це саме ця пара), дані валідні, і такого РНОКПП ще
-     * немає ні у списку, ні у власному профілі, ні серед власних отримувачів.
-     * Останнє критично: пропонувати «зберегти» того, кого система вже знає з
-     * отримувачів, означало б розводити другу копію тих самих даних, яка
-     * розійдеться з першою після найближчого редагування отримувача.
-     * Автозбереження немає: система не заводить записи з чужими персональними
-     * даними без рішення людини.
+     * немає ні у збереженому списку, ні серед отримувачів. Останнє критично:
+     * пропонувати «зберегти» того, кого система вже знає з отримувачів,
+     * означало б розводити другу копію тих самих даних, яка розійдеться з
+     * першою після найближчого редагування отримувача. Автозбереження немає:
+     * система не заводить записи з чужими персональними даними без рішення
+     * людини.
      */
     const canOfferSave =
         isAuthenticated &&
@@ -457,7 +474,6 @@ export default function PersonalizedPayment({
         fullNameValid &&
         trimmedTaxId.length > 0 &&
         trimmedFullName.length > 0 &&
-        trimmedTaxId !== user?.profile.taxId &&
         !payers.some((payer) => payer.taxId === trimmedTaxId) &&
         !payerSources.some((source) => source.taxId === trimmedTaxId);
 
@@ -508,12 +524,6 @@ export default function PersonalizedPayment({
                 ibanMask={account.ibanMask}
                 accountName={account.name}
             />
-
-            {/* Пропозиція заповнити профіль має сенс лише там, де сторінка
-                справді збирає ПІБ або РНОКПП. На шаблоні без цих маркерів
-                (наприклад, самий період) вона обіцяла б автозаповнення полів,
-                яких на сторінці немає. */}
-            {isAuthenticated && collectsPayerData && <TaxProfilePrompt />}
 
             <div className="border-border bg-card space-y-4 rounded-xl border p-5">
                 <div>

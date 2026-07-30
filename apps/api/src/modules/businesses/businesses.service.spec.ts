@@ -569,7 +569,7 @@ describe('BusinessesService', () => {
             expect(or[1].managers?.toString()).toBe(userId.toString());
         });
 
-        it('читає лише три поля проєкцією', async () => {
+        it('читає проєкцією лише потрібні поля', async () => {
             businessModel.find.mockReturnValue(mockExec([]));
             await service.listPayerSources(userId.toString());
 
@@ -577,6 +577,7 @@ describe('BusinessesService', () => {
                 type: 1,
                 name: 1,
                 taxId: 1,
+                ownerId: 1,
             });
         });
 
@@ -589,6 +590,7 @@ describe('BusinessesService', () => {
                         type: 'fop',
                         name: 'Петренко Іван Іванович',
                         taxId: '3182710695',
+                        ownerId: userId,
                     },
                 ])
             );
@@ -601,8 +603,28 @@ describe('BusinessesService', () => {
                     type: 'fop',
                     name: 'Петренко Іван Іванович',
                     taxId: '3182710695',
+                    isOwn: true,
                 },
             ]);
+        });
+
+        it('клієнтський запис бухгалтера не позначається як власний', async () => {
+            // Ownerless-бізнес під керуванням: дані клієнта, не мої. Помилка тут
+            // підписала б чужий РНОКПП як «Я» на сторінці оплати.
+            businessModel.find.mockReturnValue(
+                mockExec([
+                    {
+                        _id: new Types.ObjectId(),
+                        type: 'fop',
+                        name: 'Петренко Іван Іванович',
+                        taxId: '3182710695',
+                        ownerId: null,
+                    },
+                ])
+            );
+
+            const [source] = await service.listPayerSources(userId.toString());
+            expect(source.isOwn).toBe(false);
         });
     });
 

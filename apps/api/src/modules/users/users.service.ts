@@ -128,14 +128,12 @@ export class UsersService {
             avatar?: string;
             worksAsBookkeeper?: boolean;
             middleName?: string;
-            taxId?: string;
         }
     ): Promise<UserDocument | null> {
         const update: Record<string, unknown> = {};
-        // Sprint 30 — податкові поля очищувані: порожній рядок з форми означає
-        // «прибрати», а не «зберегти порожнє значення». Без `$unset` у профілі
-        // осідав би порожній рядок, і підстановка на податковій сторінці
-        // вважала б поле заповненим.
+        // По батькові очищуване: порожній рядок з форми означає «прибрати», а не
+        // «зберегти порожнє значення». Без `$unset` у профілі осідав би порожній
+        // рядок, і підстановка на податковій сторінці вважала б поле заповненим.
         const unset: Record<string, 1> = {};
         if (data.firstName !== undefined)
             update['profile.firstName'] = data.firstName;
@@ -145,10 +143,6 @@ export class UsersService {
         if (data.middleName !== undefined) {
             if (data.middleName === '') unset['profile.middleName'] = 1;
             else update['profile.middleName'] = data.middleName;
-        }
-        if (data.taxId !== undefined) {
-            if (data.taxId === '') unset['profile.taxId'] = 1;
-            else update['profile.taxId'] = data.taxId;
         }
         // Sprint 3 §3.4 — bookkeeper toggle (рішення E5). Поле живе на
         // корені user-документа (не у `profile`), бо це capability акаунту,
@@ -165,18 +159,6 @@ export class UsersService {
                 ...(Object.keys(unset).length > 0 && { $unset: unset }),
             },
             { new: true }
-        );
-    }
-
-    /**
-     * Sprint 30 — користувач відхилив разову пропозицію заповнити власні
-     * податкові дані. Idempotent: фільтр по null не дає перезаписати дату
-     * першої відмови повторним кліком з іншої вкладки.
-     */
-    async dismissTaxProfilePrompt(userId: string): Promise<void> {
-        await this.userModel.updateOne(
-            { _id: userId, taxProfilePromptDismissedAt: null },
-            { $set: { taxProfilePromptDismissedAt: new Date() } }
         );
     }
 

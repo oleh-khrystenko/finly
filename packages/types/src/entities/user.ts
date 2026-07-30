@@ -15,13 +15,16 @@ export const UserProfileDataSchema = z.object({
     lastName: z.string().optional(),
     avatar: z.string().url().optional(),
     /**
-     * Sprint 30 — власні дані для податкових платежів. Опційні: онбординг їх не
-     * вимагає, потрібні лише тому, хто платить податки через сторінки каталогу.
-     * Живуть у профілі, бо це дані самого користувача; дані клієнтів — окремим
-     * списком платників (`PayerSchema`).
+     * По батькові — частина ПІБ, опційна: онбординг її не вимагає, потрібна
+     * лише тому, хто платить податки через сторінки каталогу (ПІБ у призначенні
+     * платежу).
+     *
+     * Власного РНОКПП у профілі свідомо немає: податковий номер людини вже
+     * живе на її отримувачі-фізособі (`Business.taxId` для типів з РНОКПП), і
+     * друга копія в профілі розходилась би з першою після найближчого
+     * редагування отримувача. Дані клієнтів — окремим списком (`PayerSchema`).
      */
     middleName: z.string().optional(),
-    taxId: z.string().optional(),
 });
 
 export const UserProfileCompletionRemindersSchema = z.object({
@@ -71,13 +74,6 @@ export const UserSchema = z.object({
      * зворотний відлік і добиває намір після оплати.
      */
     activeSlugReservation: SlugReservationViewSchema.nullable().optional(),
-    /**
-     * Sprint 30 — коли користувач відхилив разову пропозицію заповнити власні
-     * податкові дані. Non-null означає «більше не пропонувати»: без стемпа
-     * пропозиція переслідувала б людину при кожному заході на податкову
-     * сторінку.
-     */
-    taxProfilePromptDismissedAt: z.coerce.date().nullable().optional(),
 });
 
 export const UserProfileSchema = UserSchema.pick({
@@ -92,7 +88,6 @@ export const UserProfileSchema = UserSchema.pick({
     termsVersion: true,
     pendingPostLoginTarget: true,
     activeSlugReservation: true,
-    taxProfilePromptDismissedAt: true,
 });
 
 export type User = z.infer<typeof UserSchema>;

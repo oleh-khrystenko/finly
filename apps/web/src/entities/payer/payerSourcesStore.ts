@@ -9,6 +9,12 @@ interface PayerSourcesState {
     isLoading: boolean;
     /** Джерела вже завантажували у цій сесії сторінки (навіть якщо порожньо). */
     isLoaded: boolean;
+    /**
+     * Спроба завантаження завершена — успішно чи ні. Автопідстановка на
+     * податковій сторінці чекає саме на це: інакше обірваний запит змусив би її
+     * чекати вічно, і людина не отримала б навіть ПІБ з профілю.
+     */
+    isSettled: boolean;
     /** Завантажити один раз; повторний виклик — no-op. */
     load: () => Promise<void>;
     /** Скинути стан на виході з акаунта. */
@@ -26,6 +32,7 @@ export const usePayerSourcesStore = create<PayerSourcesState>((set, get) => ({
     sources: [],
     isLoading: false,
     isLoaded: false,
+    isSettled: false,
     load: async () => {
         if (get().isLoaded || get().isLoading) return;
         set({ isLoading: true });
@@ -33,10 +40,16 @@ export const usePayerSourcesStore = create<PayerSourcesState>((set, get) => ({
             const sources = await listPayerSources();
             set({ sources, isLoaded: true });
         } finally {
-            set({ isLoading: false });
+            set({ isLoading: false, isSettled: true });
         }
     },
-    clear: () => set({ sources: [], isLoaded: false, isLoading: false }),
+    clear: () =>
+        set({
+            sources: [],
+            isLoaded: false,
+            isLoading: false,
+            isSettled: false,
+        }),
 }));
 
 // Сесія зникла — прибираємо завантажені дані (серед клієнтських отримувачів

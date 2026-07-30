@@ -29,13 +29,15 @@ export interface PayerOption {
     label: string;
     /** `null` — ручний ввід: опція нічого не заміщає у полях. */
     values: PayerValues | null;
+    /** Опція описує самого користувача, а не його клієнта. */
+    isSelf: boolean;
 }
 
 /**
- * Власні дані користувача як значення підстановки. Порожня частина (профіль без
- * по батькові чи без РНОКПП) повертається порожнім рядком — і саме порожнім
- * заміщає поле на сторінці: інакше після вибору «Я» там лишилось би значення
- * попередньо обраного клієнта. Решту людина дописує руками просто на сторінці.
+ * Власні дані користувача з профілю. Податкового номера тут немає і бути не
+ * може: він живе на отримувачі-фізособі, а профіль знає лише ПІБ. Порожній
+ * номер заміщає поле саме порожнім — інакше після вибору «Я» у ньому лишився б
+ * номер попередньо обраного клієнта під власним ПІБ.
  */
 export function selfPayerValues(user: UserProfile): PayerValues {
     return {
@@ -44,20 +46,43 @@ export function selfPayerValues(user: UserProfile): PayerValues {
             user.profile.firstName,
             user.profile.middleName
         ),
-        taxId: user.profile.taxId ?? '',
+        taxId: '',
+    };
+}
+
+function sourceOption(source: PayerSource): PayerOption {
+    const displayName = formatPayeeName(source.type, source.name);
+    return {
+        key: sourceOptionKey(source.id),
+        // Власний отримувач і є «я», тому підпис це проговорює: інакше бухгалтер
+        // з десятком клієнтів шукав би себе серед однорідних рядків.
+        label: source.isOwn
+            ? `Я — ${displayName} — ${source.taxId}`
+            : `${displayName} — ${source.taxId}`,
+        // У призначення платежу їде «сира» назва без юр-форми: банк читає це
+        // поле як ПІБ платника, а не як назву отримувача.
+        values: { fullName: source.name, taxId: source.taxId },
+        isSelf: source.isOwn,
     };
 }
 
 /**
- * Опції вибору з усіх джерел, які система вже знає: сам користувач, збережений
- * список платників і його ж отримувачі-фізособи (у ФОПа `taxId` — це РНОКПП
- * тієї самої людини, і він уже введений при створенні отримувача).
+ * Опції вибору з усіх джерел, які система вже знає: власні отримувачі-фізособи,
+ * збережений список платників і клієнтські отримувачі бухгалтера. У ФОПа
+ * `taxId` — це РНОКПП тієї самої людини, і він уже введений при створенні
+ * отримувача, тож окремої копії номера у профілі не існує.
  *
- * **Дедуплікація за податковим номером.** Той самий РНОКПП може прийти і з
- * профілю, і зі списку, і з отримувача; у списку він мусить бути один раз.
- * Пріоритет — за явністю запису: профіль і збережений платник перемагають
- * отримувача, бо їх людина заводила саме як платника, тоді як назва отримувача
- * може бути чим завгодно («Магазин Ромашка» замість ПІБ).
+ * **Профільна опція «Я» — фолбек, а не дубль.** Вона зʼявляється тільки коли
+ * власних отримувачів немає: тоді підставляється хоча б ПІБ, а номер людина
+ * вписує руками. Щойн зʼявляється власний отримувач, роль «я» переходить до
+ * нього разом з номером.
+ *
+ * **Дедуплікація за податковим номером.** Той самий РНОКПП може прийти і зі
+ * збереженого списку, і з отримувача; у переліку він мусить бути один раз.
+ * Пріоритет за явністю запису: власний отримувач, далі збережений платник,
+ * далі клієнтський отримувач — назвою отримувача може бути що завгодно
+ * («Крамниця біля дому» замість ПІБ), а збережений платник заводився саме як
+ * платник.
  *
  * Чиста функція, а не логіка всередині рендеру: порядок і склад опцій — те
  * єдине, що відрізняє правильний платіж від платежу за чужого клієнта, тож це
@@ -72,35 +97,68 @@ export function buildPayerOptions({
     payers: PayerView[];
     sources: PayerSource[];
 }): PayerOption[] {
-    const self = selfPayerValues(user);
-    const claimedTaxIds = new Set(
-        [self.taxId, ...payers.map((payer) => payer.taxId)].filter(
-            (taxId) => taxId.length > 0
-        )
-    );
+    const own = sources.filter((source) => source.isOwn);
+    const claimedTaxIds = new Set(own.map((source) => source.taxId));
 
-    return [
-        {
-            key: SELF_SELECTION,
-            label: self.fullName ? `Я — ${self.fullName}` : 'Я',
-            values: self,
-        },
-        ...payers.map((payer) => ({
+    const savedPayers: PayerOption[] = [];
+    for (const payer of payers) {
+        if (claimedTaxIds.has(payer.taxId)) continue;
+        claimedTaxIds.add(payer.taxId);
+        savedPayers.push({
             key: payerOptionKey(payer.id),
             label: `${payer.fullName} — ${payer.taxId}`,
             values: { fullName: payer.fullName, taxId: payer.taxId },
-        })),
-        ...sources
-            .filter((source) => !claimedTaxIds.has(source.taxId))
-            .map((source) => ({
-                key: sourceOptionKey(source.id),
-                label: `${formatPayeeName(source.type, source.name)} — ${source.taxId}`,
-                // У призначення платежу їде «сира» назва без юр-форми: банк
-                // читає це поле як ПІБ платника, а не як назву отримувача.
-                values: { fullName: source.name, taxId: source.taxId },
-            })),
-        { key: MANUAL_SELECTION, label: 'Ввести вручну', values: null },
+            isSelf: false,
+        });
+    }
+
+    const clients: PayerOption[] = [];
+    for (const source of sources) {
+        if (source.isOwn || claimedTaxIds.has(source.taxId)) continue;
+        claimedTaxIds.add(source.taxId);
+        clients.push(sourceOption(source));
+    }
+
+    const self = selfPayerValues(user);
+    const profileFallback: PayerOption[] =
+        own.length > 0 || !self.fullName
+            ? []
+            : [
+                  {
+                      key: SELF_SELECTION,
+                      label: `Я — ${self.fullName}`,
+                      values: self,
+                      isSelf: true,
+                  },
+              ];
+
+    return [
+        ...own.map(sourceOption),
+        ...profileFallback,
+        ...savedPayers,
+        ...clients,
+        {
+            key: MANUAL_SELECTION,
+            label: 'Ввести вручну',
+            values: null,
+            isSelf: false,
+        },
     ];
+}
+
+/**
+ * Опція для автопідстановки при відкритті сторінки — або однозначна, або її
+ * немає. Однозначна це рівно один запис про саму людину: власний отримувач, а
+ * за його відсутності профільний фолбек з ПІБ.
+ *
+ * Кілька власних отримувачів (фізособа плюс ФОП) — не привід вгадувати: у
+ * призначення пішов би номер, якого людина не обирала, а помилка тут коштує
+ * незарахованого податкового платежу. Тоді нічого не підставляємо, і вибір
+ * лишається явним.
+ */
+export function autoPayerOption(options: PayerOption[]): PayerOption | null {
+    const selves = options.filter((option) => option.isSelf);
+    return selves.length === 1 ? selves[0]! : null;
 }
 
 interface Props {
@@ -110,10 +168,10 @@ interface Props {
 }
 
 /**
- * Sprint 30 — вибір, за кого платимо: я, збережений платник, власний отримувач
- * або ручний ввід. Вибір завжди явний, а підставлені значення лишаються
- * редагованими: помилка тут коштує незарахованого податкового платежу, тож
- * останнє слово за людиною, а не за системою.
+ * Вибір, за кого платимо: я, збережений платник, клієнт-отримувач або ручний
+ * ввід. Вибір завжди явний, а підставлені значення лишаються редагованими:
+ * помилка тут коштує незарахованого податкового платежу, тож останнє слово за
+ * людиною, а не за системою.
  */
 export default function PayerSelector({ options, value, onChange }: Props) {
     return (

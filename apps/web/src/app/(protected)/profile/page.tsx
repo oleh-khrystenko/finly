@@ -9,12 +9,7 @@ import UiPageHeading from '@/shared/ui/UiPageHeading';
 import UiWorkspaceColumns from '@/shared/ui/UiWorkspaceColumns';
 import { isValidRedirect } from '@/shared/lib/redirect';
 import { useAuthStore } from '@/entities/user';
-import {
-    ProfileForm,
-    TaxDataForm,
-    SecuritySection,
-    DangerZone,
-} from '@/features/profile';
+import { ProfileForm, SecuritySection, DangerZone } from '@/features/profile';
 import { PayersSection } from '@/features/payers';
 import type { ProfileMode } from '@/features/profile';
 
@@ -76,17 +71,10 @@ function ProfileContent() {
                             editable={mode === null}
                             onSaved={handleProfileSaved}
                         />
-                        {/* Sprint 30 — власні податкові дані і список
-                            платників: джерела підстановки на публічних
-                            податкових сторінках. У режимі підтвердження
-                            особи (`mode`) не показуємо: там фокус на одній
-                            дії. */}
-                        {mode === null && (
-                            <>
-                                <TaxDataForm user={user} />
-                                <PayersSection />
-                            </>
-                        )}
+                        {/* Список платників — джерело підстановки на публічних
+                            податкових сторінках. У режимі підтвердження особи
+                            (`mode`) не показуємо: там фокус на одній дії. */}
+                        {mode === null && <PayersSection />}
                     </>
                 }
                 aside={

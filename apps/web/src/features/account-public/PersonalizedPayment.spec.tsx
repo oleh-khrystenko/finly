@@ -33,7 +33,6 @@ jest.mock('@/shared/api', () => {
         listPayers: (...args: unknown[]) => mockListPayers(...args),
         listPayerSources: (...args: unknown[]) => mockListPayerSources(...args),
         createPayer: (...args: unknown[]) => mockCreatePayer(...args),
-        dismissTaxProfilePrompt: jest.fn().mockResolvedValue(undefined),
         extractApiErrorCode: () => 'INTERNAL_ERROR',
         getApiMessage: () => 'Сталася помилка. Спробуйте пізніше',
     };
@@ -342,13 +341,7 @@ describe('PersonalizedPayment (Sprint 29 — податкова персонал
     // ─── Sprint 30 — спільна сесія: сторінка знає, хто її відкрив ───
 
     describe('Залогінений платник', () => {
-        const signIn = (
-            overrides: Partial<{
-                middleName: string;
-                taxId: string;
-                taxProfilePromptDismissedAt: Date | null;
-            }> = {}
-        ) => {
+        const signIn = (middleName = 'Петрівна') => {
             act(() => {
                 useAuthStore.getState().setUser({
                     id: '507f1f77bcf86cd799439011',
@@ -359,21 +352,35 @@ describe('PersonalizedPayment (Sprint 29 — податкова персонал
                     profile: {
                         firstName: 'Олена',
                         lastName: 'Ковальчук',
-                        middleName: overrides.middleName ?? 'Петрівна',
-                        taxId:
-                            overrides.taxId === undefined
-                                ? VALID_TAX_ID
-                                : overrides.taxId,
+                        middleName,
                     },
-                    taxProfilePromptDismissedAt:
-                        overrides.taxProfilePromptDismissedAt ?? null,
                 });
             });
         };
 
-        it('підставляє власні дані з профілю, не пишучи їх в адресу', async () => {
+        /** Отримувач-фізособа як джерело даних платника. */
+        const payerSource = (
+            id: string,
+            name: string,
+            taxId: string,
+            isOwn: boolean
+        ) => ({ id, type: 'fop' as const, name, taxId, isOwn });
+
+        it('підставляє дані власного отримувача, не пишучи їх в адресу', async () => {
+            mockListPayerSources.mockResolvedValue([
+                payerSource(
+                    'own-1',
+                    'Ковальчук Олена Петрівна',
+                    VALID_TAX_ID,
+                    true
+                ),
+            ]);
             signIn();
             renderWith(['taxId', 'fullName']);
+            // Два прогони таймерів: перший доводить читання отримувачів (після
+            // нього спрацьовує підстановка), другий — паузу набору вже над
+            // підставленими значеннями.
+            await flushDebounce();
             await flushDebounce();
 
             expect(screen.getByLabelText(/РНОКПП/)).toHaveValue(VALID_TAX_ID);
@@ -388,6 +395,37 @@ describe('PersonalizedPayment (Sprint 29 — податкова персонал
                 'esv',
                 { taxId: VALID_TAX_ID, fullName: 'Ковальчук Олена Петрівна' }
             );
+        });
+
+        it('без власних отримувачів підставляє ПІБ з профілю, а номер лишає порожнім', async () => {
+            signIn();
+            renderWith(['taxId', 'fullName']);
+            await flushDebounce();
+
+            expect(screen.getByLabelText(/Прізвище/)).toHaveValue(
+                'Ковальчук Олена Петрівна'
+            );
+            expect(screen.getByLabelText(/РНОКПП/)).toHaveValue('');
+        });
+
+        it('кілька власних отримувачів — нічого не підставляє автоматично', async () => {
+            // Фізособа плюс ФОП: вгадати означало б покласти у призначення
+            // номер, якого людина не обирала.
+            mockListPayerSources.mockResolvedValue([
+                payerSource('own-1', 'Ковальчук Олена', VALID_TAX_ID, true),
+                payerSource(
+                    'own-2',
+                    'Ковальчук О. П.',
+                    OTHER_VALID_TAX_ID,
+                    true
+                ),
+            ]);
+            signIn();
+            renderWith(['taxId', 'fullName']);
+            await flushDebounce();
+
+            expect(screen.getByLabelText(/РНОКПП/)).toHaveValue('');
+            expect(screen.getByLabelText(/Прізвище/)).toHaveValue('');
         });
 
         it('вибір клієнта зі списку підставляє його дані і не змішує з попередніми', async () => {
@@ -434,10 +472,10 @@ describe('PersonalizedPayment (Sprint 29 — податкова персонал
                     updatedAt: new Date(),
                 },
             ]);
-            // Профіль без РНОКПП — найгірший випадок: якби порожнє значення
+            // Профільний фолбек не має номера взагалі: якби порожнє значення
             // просто не підставлялось, у полі лишився б номер клієнта під
             // власним ПІБ, і платіж пішов би з чужим податковим номером.
-            signIn({ taxId: '' });
+            signIn();
             renderWith(['taxId', 'fullName']);
             await flushDebounce();
 
@@ -509,12 +547,12 @@ describe('PersonalizedPayment (Sprint 29 — податкова персонал
         // самих даних.
         it('отримувач-ФОП доступний як платник без збереження у списку', async () => {
             mockListPayerSources.mockResolvedValue([
-                {
-                    id: 'business-1',
-                    type: 'fop',
-                    name: 'Петренко Іван Іванович',
-                    taxId: OTHER_VALID_TAX_ID,
-                },
+                payerSource(
+                    'client-1',
+                    'Петренко Іван Іванович',
+                    OTHER_VALID_TAX_ID,
+                    false
+                ),
             ]);
             signIn();
             renderWith(['taxId', 'fullName']);
@@ -549,43 +587,28 @@ describe('PersonalizedPayment (Sprint 29 — податкова персонал
             ).toBeNull();
         });
 
-        it('власний ФОП не задвоює опцію «Я»', async () => {
+        it('власний отримувач заміняє профільний запис, а не дублює його', async () => {
             mockListPayerSources.mockResolvedValue([
-                {
-                    id: 'business-1',
-                    type: 'fop',
-                    name: 'Ковальчук Олена Петрівна',
-                    taxId: VALID_TAX_ID,
-                },
+                payerSource(
+                    'own-1',
+                    'Ковальчук Олена Петрівна',
+                    VALID_TAX_ID,
+                    true
+                ),
             ]);
             signIn();
             renderWith(['taxId', 'fullName']);
             await flushDebounce();
 
             fireEvent.click(screen.getByRole('button', { name: /Ковальчук/ }));
-            expect(
-                screen.queryByRole('option', { name: /^ФОП Ковальчук/ })
-            ).toBeNull();
-            expect(
-                screen.getByRole('option', { name: /^Я — Ковальчук/ })
-            ).toBeInTheDocument();
-        });
-
-        it('разова пропозиція заповнити податкові дані зникає після відмови', async () => {
-            signIn({ taxId: '' });
-            renderWith(['taxId']);
-            await flushDebounce();
-
-            expect(
-                screen.getByText(/Заповніть свої податкові дані/)
-            ).toBeInTheDocument();
-
-            fireEvent.click(
-                screen.getByRole('button', { name: 'Не пропонувати' })
+            const selfOptions = screen.getAllByRole('option', {
+                name: /Ковальчук/,
+            });
+            expect(selfOptions).toHaveLength(1);
+            // Роль «я» несе отримувач — разом з податковим номером.
+            expect(selfOptions[0]).toHaveTextContent(
+                `Я — ФОП Ковальчук Олена Петрівна — ${VALID_TAX_ID}`
             );
-            expect(
-                screen.queryByText(/Заповніть свої податкові дані/)
-            ).toBeNull();
         });
     });
 });

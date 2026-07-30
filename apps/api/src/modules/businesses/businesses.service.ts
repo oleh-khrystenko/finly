@@ -1025,7 +1025,7 @@ export class BusinessesService {
                         { managers: userObjectId },
                     ],
                 },
-                { type: 1, name: 1, taxId: 1 }
+                { type: 1, name: 1, taxId: 1, ownerId: 1 }
             )
             .sort({ createdAt: -1 })
             .exec();
@@ -1035,6 +1035,10 @@ export class BusinessesService {
             type: business.type,
             name: business.name,
             taxId: business.taxId,
+            // Власний отримувач описує саму людину, клієнтський (ownerless +
+            // менеджер) — її клієнта. Розрізнення робиться тут, бо тільки тут
+            // відомо, хто питає.
+            isOwn: business.ownerId?.equals(userObjectId) ?? false,
         }));
     }
 

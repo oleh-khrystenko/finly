@@ -124,23 +124,6 @@ export class UsersController {
         };
     }
 
-    /**
-     * Sprint 30 — «не пропонувати заповнювати податкові дані». Викликається з
-     * податкової сторінки (у т.ч. з pay-хоста — та сама сесія, той самий
-     * origin). `@SkipOnboarding`, бо пропозиція показується і людині з
-     * незаповненим профілем ФОПа: це різні сутності.
-     */
-    @Post('me/tax-profile-prompt/dismiss')
-    @UseGuards(JwtActiveGuard)
-    @SkipOnboarding()
-    @HttpCode(HttpStatus.OK)
-    async dismissTaxProfilePrompt(
-        @CurrentUser() user: UserDocument
-    ): Promise<{ data: { dismissed: true } }> {
-        await this.usersService.dismissTaxProfilePrompt(user._id.toString());
-        return { data: { dismissed: true } };
-    }
-
     @Post('account/delete')
     @UseGuards(JwtActiveGuard)
     @SkipOnboarding()

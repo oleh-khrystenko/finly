@@ -78,7 +78,6 @@ describe('UsersController', () => {
                     accountDeletionRequestedAt: null,
                     termsVersion: null,
                     activeSlugReservation: null,
-                    taxProfilePromptDismissedAt: null,
                 },
             });
         });

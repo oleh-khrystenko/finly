@@ -1379,6 +1379,9 @@ describe('Businesses E2E', () => {
                     type: 'fop',
                     name: VALID_CREATE_PAYLOAD.name,
                     taxId: VALID_TAX_ID,
+                    // Створений у режимі власника — це сам користувач, і саме
+                    // цей запис несе на сторінці оплати роль «я».
+                    isOwn: true,
                 }),
             ]);
 

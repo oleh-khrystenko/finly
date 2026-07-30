@@ -45,12 +45,19 @@ export type PayerView = z.infer<typeof PayerViewSchema>;
  * `name` — «сира» назва без юр-форми: у призначення платежу має їхати ПІБ, а
  * префікс «ФОП» додається лише на відображення (`formatPayeeName`), тому `type`
  * віддається окремим полем.
+ *
+ * `isOwn` розділяє «це я» і «це мій клієнт»: власні отримувачі (`ownerId` —
+ * сам користувач) описують саме ту людину, що зайшла, а клієнтські записи
+ * бухгалтера (`ownerId: null` + `managers ∋ я`) — чужих людей. Без цього поля
+ * список платників був би плоским переліком, у якому власні дані нічим не
+ * відрізняються від десятка клієнтських.
  */
 export const PayerSourceSchema = z.object({
     id: objectIdSchema,
     type: businessTypeSchema,
     name: z.string(),
     taxId: individualTaxIdZod,
+    isOwn: z.boolean(),
 });
 
 export type PayerSource = z.infer<typeof PayerSourceSchema>;
