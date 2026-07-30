@@ -19,6 +19,7 @@ import {
     CATALOG_CATEGORIES,
     DEFAULT_CATALOG_CATEGORY,
     DEFAULT_PUBLICITY_STATUS,
+    INDIVIDUAL_TAX_ID_TYPES,
     RESPONSE_CODE,
     SLUG_AVAILABILITY_STATUS,
     VAT_ALLOWED_TAXATION_SYSTEMS,
@@ -32,6 +33,7 @@ import {
     type CatalogPayee,
     type CreateBusinessRequest,
     type CreateSystemPayeeRequest,
+    type PayerSource,
     type PublicCatalogView,
     type SlugAvailabilityStatus,
     type UpdateBusinessRequest,
@@ -990,6 +992,50 @@ export class BusinessesService {
             ? { ownerId: null, managers: userObjectId, isSystem: { $ne: true } }
             : { ownerId: userObjectId, isSystem: { $ne: true } };
         return this.businessModel.find(filter).sort({ createdAt: -1 }).exec();
+    }
+
+    /**
+     * Sprint 30 — отримувачі користувача як джерела даних платника для
+     * податкової сторінки. Лише фізособи і ФОПи: у ТОВ `taxId` — це ЄДРПОУ, не
+     * податковий номер людини (`INDIVIDUAL_TAX_ID_TYPES`).
+     *
+     * **Режим бухгалтера тут навмисно не розділяє вибірку**, на відміну від
+     * `getOwnedAndManaged`. Там перемикач вирішує, який список отримувачів
+     * людина зараз веде; тут питання інше — за кого вона може заплатити, і
+     * відповідь не залежить від положення тумблера в кабінеті. Розділення
+     * ховало б від бухгалтера половину його ж клієнтів (або власний ФОП) без
+     * жодної причини, зрозумілої з платіжної сторінки.
+     *
+     * Системні отримувачі виключені тим самим явним фільтром, що й у
+     * кабінетних вибірках: платити «за податкову» не можна за визначенням.
+     *
+     * Проєкція мінімальна: сторінка живе на публічному хості, і віддавати туди
+     * повні документи отримувачів (бренд, реквізити, стан публічності) заради
+     * трьох полів означало б без потреби розширювати поверхню.
+     */
+    async listPayerSources(userId: string): Promise<PayerSource[]> {
+        const userObjectId = new Types.ObjectId(userId);
+        const businesses = await this.businessModel
+            .find(
+                {
+                    type: { $in: INDIVIDUAL_TAX_ID_TYPES },
+                    isSystem: { $ne: true },
+                    $or: [
+                        { ownerId: userObjectId },
+                        { managers: userObjectId },
+                    ],
+                },
+                { type: 1, name: 1, taxId: 1 }
+            )
+            .sort({ createdAt: -1 })
+            .exec();
+
+        return businesses.map((business) => ({
+            id: business._id.toString(),
+            type: business.type,
+            name: business.name,
+            taxId: business.taxId,
+        }));
     }
 
     /**

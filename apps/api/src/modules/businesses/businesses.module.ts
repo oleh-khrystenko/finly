@@ -26,6 +26,7 @@ import { BrandService } from './brand.service';
 import { BusinessAccessGuard } from './business-access.guard';
 import { BusinessesController } from './businesses.controller';
 import { BusinessesService } from './businesses.service';
+import { PayerSourcesController } from './payer-sources.controller';
 import { PublicBusinessesController } from './public-businesses.controller';
 import {
     BusinessSlugHistory,
@@ -89,6 +90,7 @@ import { SlugGeneratorService } from './slug-generator.service';
     controllers: [
         BusinessesController,
         BrandController,
+        PayerSourcesController,
         PublicBusinessesController,
     ],
     providers: [

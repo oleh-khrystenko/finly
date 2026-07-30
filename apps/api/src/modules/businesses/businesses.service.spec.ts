@@ -530,6 +530,82 @@ describe('BusinessesService', () => {
         });
     });
 
+    // Sprint 30 — отримувачі як джерело даних платника на податковій сторінці.
+    describe('listPayerSources', () => {
+        const mockExec = (returnValue: unknown) => ({
+            sort: jest.fn().mockReturnValue({
+                exec: jest.fn().mockResolvedValue(returnValue),
+            }),
+        });
+
+        const capturedFilter = () =>
+            businessModel.find.mock.calls[0]![0] as {
+                type: { $in: string[] };
+                isSystem: unknown;
+                $or: { ownerId?: Types.ObjectId; managers?: Types.ObjectId }[];
+            };
+
+        it('бере лише типи з РНОКПП і виключає системних', async () => {
+            businessModel.find.mockReturnValue(mockExec([]));
+            await service.listPayerSources(userId.toString());
+
+            const filter = capturedFilter();
+            // ТОВ і неприбуткові тримають ЄДРПОУ — не податковий номер людини.
+            expect(filter.type.$in).toEqual(
+                expect.arrayContaining(['individual', 'fop'])
+            );
+            expect(filter.type.$in).not.toContain('tov');
+            expect(filter.type.$in).not.toContain('organization');
+            expect(filter.isSystem).toEqual({ $ne: true });
+        });
+
+        it('віддає і власні, і клієнтські записи незалежно від режиму бухгалтера', async () => {
+            businessModel.find.mockReturnValue(mockExec([]));
+            await service.listPayerSources(userId.toString());
+
+            const or = capturedFilter().$or;
+            expect(or).toHaveLength(2);
+            expect(or[0].ownerId?.toString()).toBe(userId.toString());
+            expect(or[1].managers?.toString()).toBe(userId.toString());
+        });
+
+        it('читає лише три поля проєкцією', async () => {
+            businessModel.find.mockReturnValue(mockExec([]));
+            await service.listPayerSources(userId.toString());
+
+            expect(businessModel.find.mock.calls[0]![1]).toEqual({
+                type: 1,
+                name: 1,
+                taxId: 1,
+            });
+        });
+
+        it('віддає назву без юр-форми — у призначення платежу їде ПІБ', async () => {
+            const id = new Types.ObjectId();
+            businessModel.find.mockReturnValue(
+                mockExec([
+                    {
+                        _id: id,
+                        type: 'fop',
+                        name: 'Петренко Іван Іванович',
+                        taxId: '3182710695',
+                    },
+                ])
+            );
+
+            await expect(
+                service.listPayerSources(userId.toString())
+            ).resolves.toEqual([
+                {
+                    id: id.toString(),
+                    type: 'fop',
+                    name: 'Петренко Іван Іванович',
+                    taxId: '3182710695',
+                },
+            ]);
+        });
+    });
+
     // Sprint 29 — системні отримувачі (податкова, фонди).
     describe('createSystemPayee', () => {
         it('створює нічий системний запис із заданим catalogVisible', async () => {

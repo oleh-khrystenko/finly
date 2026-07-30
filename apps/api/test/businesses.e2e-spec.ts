@@ -1352,4 +1352,69 @@ describe('Businesses E2E', () => {
             await probe(second.user, second.slug, 'name-0').expect(200);
         });
     });
+
+    /**
+     * Sprint 30 — отримувачі як джерело даних платника на податковій сторінці.
+     * Ендпоінт віддає персональні дані (РНОКПП клієнтів бухгалтера), тому
+     * межа власності перевіряється на живій БД, а не лише формою фільтра.
+     */
+    describe('GET /payer-sources', () => {
+        const sources = (body: unknown) =>
+            (body as { data: { name: string; taxId: string }[] }).data;
+
+        it('віддає власного ФОПа і не бачить чужого', async () => {
+            const owner = await createUser();
+            await supertest(app.getHttpServer())
+                .post('/api/businesses/me')
+                .set('Authorization', bearerFor(owner))
+                .send(VALID_CREATE_PAYLOAD)
+                .expect(201);
+
+            const own = await supertest(app.getHttpServer())
+                .get('/api/payer-sources')
+                .set('Authorization', bearerFor(owner))
+                .expect(200);
+            expect(sources(own.body)).toEqual([
+                expect.objectContaining({
+                    type: 'fop',
+                    name: VALID_CREATE_PAYLOAD.name,
+                    taxId: VALID_TAX_ID,
+                }),
+            ]);
+
+            const stranger = await createUser();
+            const foreign = await supertest(app.getHttpServer())
+                .get('/api/payer-sources')
+                .set('Authorization', bearerFor(stranger))
+                .expect(200);
+            expect(sources(foreign.body)).toHaveLength(0);
+        });
+
+        it('ТОВ не потрапляє у джерела — ЄДРПОУ не є податковим номером людини', async () => {
+            const user = await createUser();
+            await supertest(app.getHttpServer())
+                .post('/api/businesses/me')
+                .set('Authorization', bearerFor(user))
+                .send({
+                    ...VALID_CREATE_PAYLOAD,
+                    type: 'tov',
+                    name: 'Ромашка',
+                    taxId: '12345678',
+                    taxationSystem: 'general',
+                })
+                .expect(201);
+
+            const res = await supertest(app.getHttpServer())
+                .get('/api/payer-sources')
+                .set('Authorization', bearerFor(user))
+                .expect(200);
+            expect(sources(res.body)).toHaveLength(0);
+        });
+
+        it('без токена — 401', async () => {
+            await supertest(app.getHttpServer())
+                .get('/api/payer-sources')
+                .expect(401);
+        });
+    });
 });

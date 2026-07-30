@@ -93,6 +93,43 @@ describe('ProfileForm — lastName is required', () => {
             expect(mockUpdateProfile).toHaveBeenCalledWith({
                 firstName: 'Петро',
                 lastName: 'Іваненко',
+                middleName: '',
+            });
+        });
+    });
+});
+
+describe('ProfileForm — по батькові як частина ПІБ', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    it('поле живе в особистих даних і не обов’язкове', () => {
+        render(<ProfileForm user={baseUser} editable={true} onboardingMode />);
+
+        const label = screen.getByText(/По батькові/i);
+        expect(label.closest('label')?.textContent).not.toContain('*');
+    });
+
+    it('зберігає введене по батькові разом з рештою ПІБ', async () => {
+        mockUpdateProfile.mockResolvedValue(undefined);
+        mockGetMe.mockResolvedValue(baseUser);
+
+        render(<ProfileForm user={baseUser} editable={true} onboardingMode />);
+
+        fireEvent.change(screen.getByPlaceholderText(/Ваше по батькові/i), {
+            target: { value: 'Іванович' },
+        });
+
+        fireEvent.click(
+            await screen.findByRole('button', { name: /Зберегти/i })
+        );
+
+        await waitFor(() => {
+            expect(mockUpdateProfile).toHaveBeenCalledWith({
+                firstName: 'Іван',
+                lastName: 'Іваненко',
+                middleName: 'Іванович',
             });
         });
     });

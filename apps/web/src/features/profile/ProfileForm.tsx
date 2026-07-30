@@ -4,7 +4,11 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import { z } from 'zod';
-import { firstNameSchema, lastNameSchema } from '@finly/types';
+import {
+    firstNameSchema,
+    lastNameSchema,
+    middleNameSchema,
+} from '@finly/types';
 import type { UserProfile } from '@finly/types';
 import UiButton from '@/shared/ui/UiButton';
 import UiInput from '@/shared/ui/UiInput';
@@ -16,9 +20,20 @@ import { useAuthStore } from '@/entities/user';
 import AvatarEditButton from './AvatarEditButton';
 import { useAvatarUploadDialogStore } from './avatarUploadDialogStore';
 
+/**
+ * По батькові — частина ПІБ, тому живе тут, поруч з іменем і прізвищем, а не в
+ * податковій секції: те, що воно потрібне для призначення податкового платежу,
+ * не робить його податковим полем (прізвище потрібне так само).
+ *
+ * На відміну від прізвища, поле опційне і очищуване: порожній рядок — це
+ * «прибрати значення», і саме так його трактує сервер. Тому валідатор
+ * застосовується лише до непорожнього вводу, інакше профіль без по батькові
+ * світився б помилкою.
+ */
 const ProfileFormSchema = z.object({
     firstName: firstNameSchema,
     lastName: lastNameSchema,
+    middleName: z.union([middleNameSchema, z.literal('')]),
 });
 
 type ProfileFormValues = z.input<typeof ProfileFormSchema>;
@@ -50,6 +65,7 @@ const ProfileForm = ({
         defaultValues: {
             firstName: user.profile.firstName ?? '',
             lastName: user.profile.lastName ?? '',
+            middleName: user.profile.middleName ?? '',
         },
     });
 
@@ -58,14 +74,16 @@ const ProfileForm = ({
     const onSubmit = async (data: ProfileFormValues) => {
         const firstName = data.firstName.trim();
         const lastName = data.lastName.trim();
+        const middleName = data.middleName.trim();
 
         try {
-            await updateProfile({ firstName, lastName });
+            await updateProfile({ firstName, lastName, middleName });
             const me = await getMe();
             setUser(me);
             form.reset({
                 firstName: me.profile.firstName ?? '',
                 lastName: me.profile.lastName ?? '',
+                middleName: me.profile.middleName ?? '',
             });
             toast.success('Профіль оновлено');
             onSaved?.();
@@ -129,6 +147,20 @@ const ProfileForm = ({
                         type="text"
                         placeholder="Ваше прізвище"
                         error={getZodFieldError(errors.lastName)}
+                        disabled={!editable}
+                        size="lg"
+                    />
+                </div>
+
+                <div>
+                    <label className="text-muted-foreground mb-1.5 block text-sm">
+                        По батькові
+                    </label>
+                    <UiInput
+                        {...form.register('middleName')}
+                        type="text"
+                        placeholder="Ваше по батькові"
+                        error={getZodFieldError(errors.middleName)}
                         disabled={!editable}
                         size="lg"
                     />

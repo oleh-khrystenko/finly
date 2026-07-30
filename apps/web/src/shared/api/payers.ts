@@ -1,4 +1,9 @@
-import type { CreatePayerDto, PayerView, UpdatePayerDto } from '@finly/types';
+import type {
+    CreatePayerDto,
+    PayerSource,
+    PayerView,
+    UpdatePayerDto,
+} from '@finly/types';
 
 import { apiClient } from './client';
 
@@ -31,4 +36,17 @@ export async function updatePayer(
 
 export async function deletePayer(id: string): Promise<void> {
     await apiClient.delete(`/payers/${encodeURIComponent(id)}`);
+}
+
+/**
+ * Отримувачі-фізособи користувача як джерела підстановки. Окремий шлях, а не
+ * `/businesses/me`: кабінетний список ділиться за режимом бухгалтера і тягне
+ * повні документи, а платіжній сторінці потрібні всі доступні людині записи і
+ * рівно три поля.
+ */
+export async function listPayerSources(): Promise<PayerSource[]> {
+    const { data } = await apiClient.get<{ data: PayerSource[] }>(
+        '/payer-sources'
+    );
+    return data.data;
 }

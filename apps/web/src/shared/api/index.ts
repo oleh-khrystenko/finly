@@ -93,7 +93,13 @@ export {
     releaseSlugReservation,
     dismissTaxProfilePrompt,
 } from './users';
-export { listPayers, createPayer, updatePayer, deletePayer } from './payers';
+export {
+    listPayers,
+    createPayer,
+    updatePayer,
+    deletePayer,
+    listPayerSources,
+} from './payers';
 export {
     adminListGuides,
     adminGetGuide,

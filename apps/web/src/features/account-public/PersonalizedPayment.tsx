@@ -32,11 +32,13 @@ import UiQrImage from '@/shared/ui/UiQrImage';
 import UiSelect from '@/shared/ui/UiSelect';
 import UiVerifiedBadge from '@/shared/ui/UiVerifiedBadge';
 import { formatPayeeName } from '@/entities/business';
-import { usePayersStore } from '@/entities/payer';
+import { usePayerSourcesStore, usePayersStore } from '@/entities/payer';
 import { useAuthStore } from '@/entities/user';
 import PayerSelector, {
     MANUAL_SELECTION,
     SELF_SELECTION,
+    buildPayerOptions,
+    payerOptionKey,
     selfPayerValues,
     type PayerValues,
 } from './PayerSelector';
@@ -115,6 +117,12 @@ export default function PersonalizedPayment({
     const payers = usePayersStore((s) => s.payers);
     const loadPayers = usePayersStore((s) => s.load);
     const upsertPayer = usePayersStore((s) => s.upsert);
+    // Отримувачі-фізособи користувача: у ФОПа `taxId` — це РНОКПП тієї самої
+    // людини, за яку платять податки, і він уже введений при створенні
+    // отримувача. Читаємо їх як джерело підстановки замість того, щоб вимагати
+    // копію тих самих даних у списку платників.
+    const payerSources = usePayerSourcesStore((s) => s.sources);
+    const loadPayerSources = usePayerSourcesStore((s) => s.load);
 
     const [taxId, setTaxId] = useState(() => searchParams.get('taxId') ?? '');
     const [fullName, setFullName] = useState(
@@ -195,12 +203,28 @@ export default function PersonalizedPayment({
         );
     }, []);
 
+    // Чи збирає ця сторінка дані платника взагалі: у шаблоні без ПІБ і РНОКПП
+    // (наприклад, самий період) вибирати нема з чого.
+    const collectsPayerData = has('taxId') || has('fullName');
+
+    // Обидва джерела вибору тягнемо разом і скаржимось один раз: для людини це
+    // один список «за кого можу заплатити», і два тости про той самий обрив
+    // мережі нічого не додають. Сторінка без полів платника не тягне нічого:
+    // персональні дані не мають ходити мережею там, де їх нікуди підставити.
     useEffect(() => {
-        if (!isAuthenticated) return;
-        void loadPayers().catch(() => {
+        if (!isAuthenticated || !collectsPayerData) return;
+        void Promise.all([loadPayers(), loadPayerSources()]).catch(() => {
             toast.error('Не вдалося завантажити список платників');
         });
-    }, [isAuthenticated, loadPayers]);
+    }, [isAuthenticated, collectsPayerData, loadPayers, loadPayerSources]);
+
+    const payerOptions = useMemo(
+        () =>
+            user
+                ? buildPayerOptions({ user, payers, sources: payerSources })
+                : [],
+        [user, payers, payerSources]
+    );
 
     // Автопідстановка власних даних — рівно один раз за візит і лише коли
     // сторінку відкрили без персональних значень у посиланні.
@@ -417,8 +441,12 @@ export default function PersonalizedPayment({
      * Чи пропонувати зберегти введені дані у список платників. Умови навмисно
      * вузькі: пропозиція має сенс лише коли шаблон збирає і ПІБ, і РНОКПП
      * (запис платника — це саме ця пара), дані валідні, і такого РНОКПП ще
-     * немає ні у списку, ні у власному профілі. Автозбереження немає: система
-     * не заводить записи з чужими персональними даними без рішення людини.
+     * немає ні у списку, ні у власному профілі, ні серед власних отримувачів.
+     * Останнє критично: пропонувати «зберегти» того, кого система вже знає з
+     * отримувачів, означало б розводити другу копію тих самих даних, яка
+     * розійдеться з першою після найближчого редагування отримувача.
+     * Автозбереження немає: система не заводить записи з чужими персональними
+     * даними без рішення людини.
      */
     const canOfferSave =
         isAuthenticated &&
@@ -430,7 +458,8 @@ export default function PersonalizedPayment({
         trimmedTaxId.length > 0 &&
         trimmedFullName.length > 0 &&
         trimmedTaxId !== user?.profile.taxId &&
-        !payers.some((payer) => payer.taxId === trimmedTaxId);
+        !payers.some((payer) => payer.taxId === trimmedTaxId) &&
+        !payerSources.some((source) => source.taxId === trimmedTaxId);
 
     const [savingPayer, setSavingPayer] = useState(false);
 
@@ -442,7 +471,7 @@ export default function PersonalizedPayment({
                 taxId: trimmedTaxId,
             });
             upsertPayer(payer);
-            setSelection(payer.id);
+            setSelection(payerOptionKey(payer.id));
             toast.success('Платника додано до списку');
         } catch (err) {
             toast.error(getApiMessage(extractApiErrorCode(err), 'payers'));
@@ -484,9 +513,7 @@ export default function PersonalizedPayment({
                 справді збирає ПІБ або РНОКПП. На шаблоні без цих маркерів
                 (наприклад, самий період) вона обіцяла б автозаповнення полів,
                 яких на сторінці немає. */}
-            {isAuthenticated && (has('taxId') || has('fullName')) && (
-                <TaxProfilePrompt />
-            )}
+            {isAuthenticated && collectsPayerData && <TaxProfilePrompt />}
 
             <div className="border-border bg-card space-y-4 rounded-xl border p-5">
                 <div>
@@ -502,16 +529,13 @@ export default function PersonalizedPayment({
                     </p>
                 </div>
 
-                {isAuthenticated &&
-                    user &&
-                    (has('taxId') || has('fullName')) && (
-                        <PayerSelector
-                            user={user}
-                            payers={payers}
-                            value={selection}
-                            onChange={applyPayerValues}
-                        />
-                    )}
+                {isAuthenticated && user && collectsPayerData && (
+                    <PayerSelector
+                        options={payerOptions}
+                        value={selection}
+                        onChange={applyPayerValues}
+                    />
+                )}
 
                 {has('taxId') && (
                     <UiInput

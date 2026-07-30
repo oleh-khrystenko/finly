@@ -4,6 +4,7 @@ import type { BankCode, PurposeMarker } from '@finly/types';
 
 const mockGetPersonalizedNbuLinks = jest.fn();
 const mockListPayers = jest.fn();
+const mockListPayerSources = jest.fn();
 const mockCreatePayer = jest.fn();
 
 jest.mock('next/navigation', () => ({
@@ -30,6 +31,7 @@ jest.mock('@/shared/api', () => {
         getPersonalizedNbuLinks: (...args: unknown[]) =>
             mockGetPersonalizedNbuLinks(...args),
         listPayers: (...args: unknown[]) => mockListPayers(...args),
+        listPayerSources: (...args: unknown[]) => mockListPayerSources(...args),
         createPayer: (...args: unknown[]) => mockCreatePayer(...args),
         dismissTaxProfilePrompt: jest.fn().mockResolvedValue(undefined),
         extractApiErrorCode: () => 'INTERNAL_ERROR',
@@ -39,7 +41,7 @@ jest.mock('@/shared/api', () => {
 
 import { PublicApiError } from '@/shared/api';
 import { useAuthStore } from '@/entities/user';
-import { usePayersStore } from '@/entities/payer';
+import { usePayerSourcesStore, usePayersStore } from '@/entities/payer';
 import PersonalizedPayment from './PersonalizedPayment';
 
 const baseProps = {
@@ -76,9 +78,12 @@ beforeEach(() => {
     mockGetPersonalizedNbuLinks.mockReset();
     mockListPayers.mockReset();
     mockListPayers.mockResolvedValue([]);
+    mockListPayerSources.mockReset();
+    mockListPayerSources.mockResolvedValue([]);
     mockCreatePayer.mockReset();
     useAuthStore.getState().clearUser();
     usePayersStore.getState().clear();
+    usePayerSourcesStore.getState().clear();
     mockGetPersonalizedNbuLinks.mockResolvedValue({
         primary: 'https://qr.bank.gov.ua/abc',
         legacy: 'https://bank.gov.ua/qr/abc',
@@ -497,6 +502,73 @@ describe('PersonalizedPayment (Sprint 29 — податкова персонал
             expect(
                 screen.queryByRole('button', { name: 'Зберегти платника' })
             ).toBeNull();
+        });
+
+        // Отримувач-ФОП уже містить РНОКПП тієї самої людини: змушувати
+        // переносити його руками у список платників означало б дві копії тих
+        // самих даних.
+        it('отримувач-ФОП доступний як платник без збереження у списку', async () => {
+            mockListPayerSources.mockResolvedValue([
+                {
+                    id: 'business-1',
+                    type: 'fop',
+                    name: 'Петренко Іван Іванович',
+                    taxId: OTHER_VALID_TAX_ID,
+                },
+            ]);
+            signIn();
+            renderWith(['taxId', 'fullName']);
+            await flushDebounce();
+
+            fireEvent.click(screen.getByRole('button', { name: /Ковальчук/ }));
+            // Юр-форма видима у підписі, але в поля йде чисте ПІБ: банк читає
+            // це поле як ім'я платника, а не як назву отримувача.
+            fireEvent.click(
+                screen.getByRole('option', {
+                    name: /ФОП Петренко Іван Іванович/,
+                })
+            );
+            await flushDebounce();
+
+            expect(screen.getByLabelText(/Прізвище/)).toHaveValue(
+                'Петренко Іван Іванович'
+            );
+            expect(mockGetPersonalizedNbuLinks).toHaveBeenLastCalledWith(
+                'dps-kyiv',
+                'esv',
+                {
+                    taxId: OTHER_VALID_TAX_ID,
+                    fullName: 'Петренко Іван Іванович',
+                }
+            );
+            // Дані вже відомі системі — пропонувати «зберегти платника» означало
+            // б розводити другу копію, яка розійдеться після редагування
+            // отримувача.
+            expect(
+                screen.queryByRole('button', { name: 'Зберегти платника' })
+            ).toBeNull();
+        });
+
+        it('власний ФОП не задвоює опцію «Я»', async () => {
+            mockListPayerSources.mockResolvedValue([
+                {
+                    id: 'business-1',
+                    type: 'fop',
+                    name: 'Ковальчук Олена Петрівна',
+                    taxId: VALID_TAX_ID,
+                },
+            ]);
+            signIn();
+            renderWith(['taxId', 'fullName']);
+            await flushDebounce();
+
+            fireEvent.click(screen.getByRole('button', { name: /Ковальчук/ }));
+            expect(
+                screen.queryByRole('option', { name: /^ФОП Ковальчук/ })
+            ).toBeNull();
+            expect(
+                screen.getByRole('option', { name: /^Я — Ковальчук/ })
+            ).toBeInTheDocument();
         });
 
         it('разова пропозиція заповнити податкові дані зникає після відмови', async () => {
