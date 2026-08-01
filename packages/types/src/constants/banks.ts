@@ -56,7 +56,9 @@ export const BANK_LABEL: Record<BankCode, string> = {
  *    парсить той самий base64 payload, що й через universal link.
  *  - **Android** — `intent://`-URL з примусовим `package=` (той самий payload,
  *    scheme=https). Кожен банк декларує app-link на хост `bank.gov.ua`, тож
- *    package-targeting відкриває саме його; не встановлений → Play Store.
+ *    package-targeting відкриває саме його застосунок; не встановлений → Play
+ *    Store. Банки з несправною платіжною формою перелічені окремо в
+ *    `ANDROID_HIDDEN_BANKS`.
  *
  * iOS-схему тримаємо **лише** для банків, підтверджених на реальному пристрої
  * (privat/mono/abank — `docs/sprints/05-per-bank/bank-status.md`). Решта —
@@ -64,10 +66,8 @@ export const BANK_LABEL: Record<BankCode, string> = {
  * (pumb/sense перевірено — не реагують; інші — не підтверджено). Це впливає
  * лише на **тап**: банк з `null`-схемою відкривається через загальний НБУ-link
  * (fallback у `buildBankAppLink`), а не власним додатком. Які банки взагалі
- * показувати на iOS — окреме рішення (`IOS_HIDDEN_BANKS`), не похідне від
- * наявності схеми. На Android банк відкривається завжди: `intent://package=`
- * б'є в verified app-link НБУ (`bank.gov.ua/.well-known/assetlinks.json`
- * делегує ці пакети).
+ * показувати на кожній платформі — окреме рішення (`IOS_HIDDEN_BANKS` /
+ * `ANDROID_HIDDEN_BANKS`), не похідне від наявності схеми чи package.
  *
  * **Крихкість**: iOS-схеми приватні й недокументовані — банк може їх змінити,
  * і кнопка тихо перестане відкривати додаток. Тому UI завжди лишає загальний
@@ -117,6 +117,14 @@ export const IOS_HIDDEN_BANKS: readonly BankCode[] = [
     'sense',
     'raiffeisen',
 ];
+
+/**
+ * Банки, які НЕ показуємо у сітці оплати на Android (`UiBankAppGrid`).
+ *
+ * ПУМБ приховано: сам застосунок відкривається через Android intent, але форма
+ * платежу не відкривається і відповідно не заповнюється.
+ */
+export const ANDROID_HIDDEN_BANKS: readonly BankCode[] = ['pumb'];
 
 /** Мобільна платформа, для якої будуємо per-bank deep-link. */
 export type BankAppPlatform = 'ios' | 'android';
