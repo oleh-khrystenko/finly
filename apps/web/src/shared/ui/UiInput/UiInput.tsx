@@ -106,7 +106,7 @@ const UiInput = forwardRef<HTMLInputElement, UiInputProps>((props, ref) => {
                     required={required}
                     aria-invalid={error ? true : inputProps['aria-invalid']}
                     aria-describedby={describedBy}
-                    className="placeholder:text-muted-foreground w-full bg-transparent outline-none disabled:cursor-not-allowed"
+                    className="placeholder:text-muted-foreground/50 w-full bg-transparent outline-none disabled:cursor-not-allowed"
                 />
                 {IconRight && <span className={iconClass}>{IconRight}</span>}
             </div>

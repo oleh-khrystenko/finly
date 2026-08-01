@@ -91,7 +91,7 @@ const UiSelect = forwardRef<HTMLButtonElement, UiSelectProps>((props, ref) => {
                     <span
                         className={composeClasses(
                             'truncate',
-                            !selected && 'text-muted-foreground'
+                            !selected && 'text-muted-foreground/50'
                         )}
                     >
                         {selected?.label || placeholder}
