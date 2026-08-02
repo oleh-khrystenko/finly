@@ -166,6 +166,10 @@ services:
             - ./:/app
             - pnpm-store:/pnpm-store
             - /app/node_modules
+            # Turbopack постійно переписує `.next/dev` під час HMR. Тримаємо
+            # згенеровані файли в Linux-volume, а не на повільному bind-mount
+            # macOS → Linux, щоб перебудова не залишала недоступні chunks.
+            - web_next_dev:/app/apps/web/.next
         # Next.js dev піднімається за секунди, api — за хвилини (install + build
         # types + nest watch). Без `service_healthy` браузер встигає викликати
         # `/api/auth/refresh`, rewrite летить у мертвий контейнер (ECONNREFUSED)
@@ -177,3 +181,4 @@ services:
 volumes:
     redis_data_dev:
     pnpm-store:
+    web_next_dev:

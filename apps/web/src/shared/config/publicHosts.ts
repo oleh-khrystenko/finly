@@ -20,8 +20,8 @@ import { PAY_PUBLIC_HOST } from './env';
  * на публічному TLD або на `localhost`, тож вигаданий dev-домен на кшталт
  * `finly.local` зробив би вхід через Google локально неможливим. Для сесії
  * порт нешкідливий: cookie-scope портами не розділяється (RFC 6265 §8.5),
- * тому cookie з `Domain=localhost` видно обом портам — спільна сесія працює
- * так само, як у проді між `finly.com.ua` і `pay.finly.com.ua`.
+ * тому host-only cookie для `localhost` видно обом портам — спільна сесія
+ * працює так само, як у проді між `finly.com.ua` і `pay.finly.com.ua`.
  *
  * Prod — DNS-record на той самий backend + nginx-route, що проксує обидва
  * домени на один Next.js container.
