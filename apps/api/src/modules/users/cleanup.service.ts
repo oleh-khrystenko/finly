@@ -4,7 +4,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { Model, Types } from 'mongoose';
 import { SUBSCRIPTION_STATUS } from '@finly/types';
 
-import { ENV } from '../../config/env';
+import { ACCOUNT_DELETION_GRACE_DAYS } from '../../config/cleanup.config';
 import { AuthService } from '../auth/auth.service';
 import { EmailService } from '../email/email.service';
 import {
@@ -37,7 +37,7 @@ export class CleanupService {
     }
 
     private async sendDeletionReminders(): Promise<void> {
-        const graceDays = ENV.ACCOUNT_DELETION_GRACE_DAYS;
+        const graceDays = ACCOUNT_DELETION_GRACE_DAYS;
 
         if (graceDays < 2) return;
 
@@ -96,7 +96,7 @@ export class CleanupService {
 
     private async hardDeleteExpiredAccounts(): Promise<void> {
         const cutoff = new Date(
-            Date.now() - ENV.ACCOUNT_DELETION_GRACE_DAYS * 86_400_000
+            Date.now() - ACCOUNT_DELETION_GRACE_DAYS * 86_400_000
         );
 
         const expiredUsers = await this.userModel

@@ -65,9 +65,9 @@ export const pendingBrandSlotSchema = brandSlotSchema.extend({
     /**
      * Походження pending-слота, від якого залежить поріг cron-чистки:
      *   - `false` — free-завантаження без оплати (короткий поріг
-     *     `BRAND_PENDING_CLEANUP_DAYS`): не оплатив за вікно — прибираємо.
+     *     `BRAND_CLEANUP.pendingDays`): не оплатив за вікно — прибираємо.
      *   - `true` — знятий з `active` при згасанні тарифу (довгий поріг
-     *     `BRAND_DEMOTED_CLEANUP_DAYS`): платник міг передумати ненадовго, даємо
+     *     `BRAND_CLEANUP.demotedDays`): платник міг передумати ненадовго, даємо
      *     більше часу повернутись; повторна підписка промотує назад без
      *     перезавантаження.
      */

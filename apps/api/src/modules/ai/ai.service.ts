@@ -7,7 +7,7 @@ import {
     type HelpChatHistoryMessage,
 } from '@finly/types';
 
-import { ENV } from '../../config/env';
+import { HELP_CHAT } from '../../config/help-chat.config';
 import {
     AI_PROVIDER,
     type AiChatMessage,
@@ -70,7 +70,7 @@ export class AiService {
         return this.aiProvider.streamChat(
             messages,
             HELP_SYSTEM_PROMPT,
-            ENV.HELP_CHAT_MAX_TOKENS,
+            HELP_CHAT.maxTokens,
             signal
         );
     }

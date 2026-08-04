@@ -20,7 +20,6 @@ import '@testing-library/jest-dom';
 // зеленими. Сам dev-варіант (той самий host, різні порти) покритий у
 // `shared/config/publicHosts.spec.ts`.
 process.env.NEXT_PUBLIC_BASE_URL ??= 'https://finly.com.ua';
-process.env.NEXT_PUBLIC_API_URL ??= '/api';
 process.env.NEXT_PUBLIC_PAY_PUBLIC_URL ??= 'https://pay.finly.com.ua';
 process.env.NEXT_PUBLIC_STORAGE_HOSTNAME ??= 'media.test.local';
 process.env.NEXT_PUBLIC_BILLING_DEMO_MODE ??= 'false';

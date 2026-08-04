@@ -54,6 +54,7 @@ import {
     PaymentRecord,
     PaymentRecordDocument,
 } from '../src/modules/payments/schemas/payment-record.schema';
+import { BILLING_GRID } from '../src/config/billing.config';
 
 jest.mock('../src/config/env', () => ({
     ENV: {
@@ -72,44 +73,12 @@ jest.mock('../src/config/env', () => ({
         RESEND_FROM_EMAIL: 'Finly <test@test.com>',
         MONOBANK_TOKEN: 'test-monobank-token',
         BILLING_DEMO_MODE: false,
-        BILLING_DUNNING_MAX_ATTEMPTS: 4,
-        BILLING_DUNNING_RETRY_INTERVAL_HOURS: 48,
-        BILLING_BRAND_ENABLED: true,
-        BILLING_DOCUMENTS_ENABLED: false,
-        BILLING_GRID: {
-            currency: 'UAH',
-            brand: { pricePerBusiness: 4900 },
-            documents: {
-                tiers: [
-                    { size: 1, priceAmount: 29900, monthlyCredits: 1000 },
-                    { size: 5, priceAmount: 149500, monthlyCredits: 5000 },
-                ],
-                storageGbPerBusiness: 5,
-                storageRentCreditsPerGb: 10,
-                creditPacks: [{ credits: 500, priceAmount: 15000 }],
-                lowBalanceThreshold: 200,
-                criticalBalanceThreshold: 100,
-            },
-        },
-        AUTH_LOCKOUT_THRESHOLDS: '5:1,10:5,20:15',
-        AUTH_LOGIN_ATTEMPTS_TTL_MIN: 15,
-        AUTH_MAGIC_LINK_TTL_MIN: 15,
-        AUTH_MAGIC_LINK_RATE_LIMIT: 3,
-        AUTH_MAGIC_LINK_RATE_WINDOW_MIN: 15,
-        AUTH_MAGIC_LINK_DEDUP_SEC: 60,
-        ACCOUNT_DELETION_GRACE_DAYS: 30,
-        AUTH_PASSWORD_MIN_LENGTH: 8,
         R2_ACCOUNT_ID: 'test-account',
         R2_ACCESS_KEY_ID: 'test-key-id',
         R2_SECRET_ACCESS_KEY: 'test-secret',
         R2_BUCKET_NAME: 'test-bucket',
         R2_PUBLIC_URL: 'https://media.test.local',
     },
-    parseLockoutThresholds: (raw: string) =>
-        raw.split(',').map((entry: string) => {
-            const [attempts, blockMin] = entry.split(':').map(Number);
-            return { attempts, blockMin };
-        }),
 }));
 
 @Global()
@@ -369,9 +338,13 @@ describe('Payments E2E (Sprint 27 — два всесвіти)', () => {
             }
         ).data;
         expect(data.brand.enabled).toBe(true);
-        expect(data.brand.pricePerBusiness).toBe(4900);
+        expect(data.brand.pricePerBusiness).toBe(
+            BILLING_GRID.brand.pricePerBusiness
+        );
         expect(data.documents.enabled).toBe(false);
-        expect(data.documents.tiers).toHaveLength(2);
+        expect(data.documents.tiers).toHaveLength(
+            BILLING_GRID.documents.tiers.length
+        );
     });
 
     // ─── First purchase → activation via webhook ───
@@ -664,7 +637,7 @@ describe('Payments E2E (Sprint 27 — два всесвіти)', () => {
                     };
                 }
             ).data.documents.creditPacks
-        ).toEqual([{ credits: 500, priceAmount: 15000 }]);
+        ).toEqual(BILLING_GRID.documents.creditPacks);
     });
 
     it('POST /credits/buy зі старою ціною (сітка змінилась) → 400 INVALID_CREDIT_PACK, без списання', async () => {

@@ -54,14 +54,6 @@ jest.mock('../src/config/env', () => ({
         RESEND_FROM_EMAIL: 'Finly <test@test.com>',
         STRIPE_SECRET_KEY: 'sk_test',
         STRIPE_WEBHOOK_SECRET: 'whsec_test',
-        AUTH_LOCKOUT_THRESHOLDS: '5:1,10:5,20:15',
-        AUTH_LOGIN_ATTEMPTS_TTL_MIN: 15,
-        AUTH_MAGIC_LINK_TTL_MIN: 15,
-        AUTH_MAGIC_LINK_RATE_LIMIT: 3,
-        AUTH_MAGIC_LINK_RATE_WINDOW_MIN: 15,
-        AUTH_MAGIC_LINK_DEDUP_SEC: 60,
-        ACCOUNT_DELETION_GRACE_DAYS: 30,
-        AUTH_PASSWORD_MIN_LENGTH: 8,
         // AuthModule → StorageModule → CloudflareR2Service: env-залежність
         // на R2 keys. Тести QR/upload-flow не запускаємо, але S3Client
         // створюється у constructor-і — fake values уникає fail-fast crash.
@@ -70,29 +62,7 @@ jest.mock('../src/config/env', () => ({
         R2_SECRET_ACCESS_KEY: 'test-secret',
         R2_BUCKET_NAME: 'test-bucket',
         R2_PUBLIC_URL: 'https://media.test.local',
-        BILLING_BRAND_ENABLED: true,
-        BILLING_DOCUMENTS_ENABLED: false,
-        BILLING_GRID: {
-            currency: 'UAH',
-            brand: { pricePerBusiness: 4900 },
-            documents: {
-                tiers: [
-                    { size: 1, priceAmount: 29900, monthlyCredits: 1000 },
-                    { size: 5, priceAmount: 149500, monthlyCredits: 5000 },
-                ],
-                storageGbPerBusiness: 5,
-                storageRentCreditsPerGb: 10,
-                creditPacks: [{ credits: 500, priceAmount: 15000 }],
-                lowBalanceThreshold: 200,
-                criticalBalanceThreshold: 100,
-            },
-        },
     },
-    parseLockoutThresholds: (raw: string) =>
-        raw.split(',').map((entry: string) => {
-            const [attempts, blockMin] = entry.split(':').map(Number);
-            return { attempts, blockMin };
-        }),
 }));
 
 // ─── Mocks ───

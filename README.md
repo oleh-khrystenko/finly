@@ -125,22 +125,16 @@ PAYMENTS_ONE_OFF_ENABLED=true
 BILLING_DEMO_MODE=true
 
 ANTHROPIC_API_KEY=sk-ant-your-anthropic-api-key
-HELP_CHAT_MAX_TOKENS=800
-HELP_CHAT_IP_LIMIT=20
-HELP_CHAT_DAILY_BUDGET=1000
 
 # Web
 API_INTERNAL_URL=http://localhost:4000
 NEXT_PUBLIC_BASE_URL=http://localhost:3000
-NEXT_PUBLIC_API_URL=/api
 NEXT_PUBLIC_PAY_PUBLIC_URL=http://localhost:3001
-NEXT_PUBLIC_PAYMENTS_SUBSCRIPTION_ENABLED=true
-NEXT_PUBLIC_PAYMENTS_ONE_OFF_ENABLED=true
 NEXT_PUBLIC_BILLING_DEMO_MODE=true
 NEXT_PUBLIC_STORAGE_HOSTNAME=media.finly.com.ua
 ```
 
-Повний список змінних: [apps/api/src/config/env.ts](apps/api/src/config/env.ts), [apps/web/src/shared/config/env.ts](apps/web/src/shared/config/env.ts).
+Повний список змінних: [apps/api/src/config/env.ts](apps/api/src/config/env.ts), [apps/web/src/shared/config/env.ts](apps/web/src/shared/config/env.ts). У `.env` живе лише конфігурація середовища (секрети, адреси, підключення); продуктові налаштування — тарифна сітка, ліміти авторизації, пороги чисток, ліміти help-асистента — у коді: `apps/api/src/config/{billing,auth,cleanup,help-chat}.config.ts`.
 
 ### 2. Public pay-зона в dev — другий порт, не окремий домен
 

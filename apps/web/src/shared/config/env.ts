@@ -20,10 +20,6 @@ export const ENV = {
         process.env.NEXT_PUBLIC_BASE_URL,
         'NEXT_PUBLIC_BASE_URL'
     ),
-    NEXT_PUBLIC_API_URL: assertEnv(
-        process.env.NEXT_PUBLIC_API_URL,
-        'NEXT_PUBLIC_API_URL'
-    ),
     // Sprint 3 §3.9 — public payment-page origin (`pay.finly.com.ua` prod
     // / `localhost:3001` dev). Cabinet UI використовує цей host для
     // copy-link і `<a href={...}>` "Відкрити в новій вкладці"; QR-картинка

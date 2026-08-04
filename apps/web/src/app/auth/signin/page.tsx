@@ -21,7 +21,7 @@ import UiInput from '@/shared/ui/UiInput';
 import UiPasswordInput from '@/shared/ui/UiPasswordInput';
 import UiSpinner from '@/shared/ui/UiSpinner';
 import { GoogleIcon } from '@/shared/icons';
-import { ENV } from '@/shared/config';
+import { API_BASE_URL } from '@/shared/config';
 import {
     checkEmail,
     loginWithPassword,
@@ -256,7 +256,7 @@ function SigninContent() {
             );
             return;
         }
-        window.location.href = `${ENV.NEXT_PUBLIC_API_URL}/auth/google`;
+        window.location.href = `${API_BASE_URL}/auth/google`;
     };
 
     const onEmailSubmit = async (data: EmailFormValues) => {

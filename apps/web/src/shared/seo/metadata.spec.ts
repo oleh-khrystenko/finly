@@ -1,6 +1,6 @@
 jest.mock('@/shared/config', () => ({
+    API_BASE_URL: '/api',
     ENV: {
-        NEXT_PUBLIC_API_URL: 'http://localhost:4000/api',
         NEXT_PUBLIC_BASE_URL: 'http://localhost:3000',
         NEXT_PUBLIC_PAY_PUBLIC_URL: 'http://pay.localhost:3000',
     },

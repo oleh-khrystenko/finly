@@ -8,10 +8,8 @@ import { BillingProfile } from '../payments/schemas/billing-profile.schema';
 import { CleanupService } from './cleanup.service';
 import { User } from './schemas/user.schema';
 
-jest.mock('../../config/env', () => ({
-    ENV: {
-        ACCOUNT_DELETION_GRACE_DAYS: 2,
-    },
+jest.mock('../../config/cleanup.config', () => ({
+    ACCOUNT_DELETION_GRACE_DAYS: 2,
 }));
 
 const mockModel = {

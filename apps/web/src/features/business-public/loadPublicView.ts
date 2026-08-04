@@ -19,7 +19,7 @@ import { PublicBusinessSchema, type PublicBusinessView } from '@finly/types';
  * **Zod-parse на boundary** — API JSON містить `accounts` array;
  * `PublicBusinessSchema` strip-ить leak-кандидати і валідує shape.
  *
- * **Чому `API_INTERNAL_URL`, не `NEXT_PUBLIC_API_URL`** — server-side у
+ * **Чому `API_INTERNAL_URL`, не браузерний `API_BASE_URL`** — server-side у
  * docker-compose рендер на `http://api:4000` (internal network); public
  * `/api` — це Next.js rewrites для client-side. Server Component викликає
  * API напряму без proxy hop-у.
