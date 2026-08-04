@@ -107,6 +107,18 @@ describe('proxy', () => {
             expect(url.pathname).toBe('/auth/signin');
         });
 
+        it('redirects /catalog to signin when no cookie', () => {
+            // Кабінетна вітрина каталогу — кабінетна сторінка: без цього
+            // запису анонім побачив би оболонку кабінету і лише потім
+            // клієнтський редірект.
+            const req = createMockRequest('/catalog');
+            const response = proxy(req);
+
+            expect(response.status).toBe(307);
+            const url: URL = mockRedirect.mock.calls[0][0];
+            expect(url.pathname).toBe('/auth/signin');
+        });
+
         it('redirects /business/{slug} (nested) to signin when no cookie', () => {
             const req = createMockRequest('/business/IvanEnko');
             const response = proxy(req);
