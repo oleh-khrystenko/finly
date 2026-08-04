@@ -48,6 +48,7 @@ Ui-компоненти інкапсулюють:
 | `UiWorkspaceColumns` | Двоколонковий робочий простір деталок кабінету (ручна верстка `grid xl:grid-cols-[…_25rem]`)                                 | -- ; `main` (основний стовп) + `aside` (допоміжний, 25rem на xl+); нижче xl — один стос main → aside                                            |
 | `UiCardGrid`         | Auto-fill сітка карток робочих списків (ручна верстка `grid grid-cols-[repeat(auto-fill,…)]`)                                | -- ; трек `min(18rem,100%)` — картка ніколи не ширша за контейнер (320px-екрани); `className` для відступів контексту                          |
 | `UiVerifiedBadge`    | Знак довіри «Перевірений отримувач» для системних записів (ручний `<span>` з іконкою і pill-фоном)                            | -- ; sizes sm/md; `className` для відступів контексту                                                                                          |
+| `UiCategoryBadge`    | Розділ публічного каталогу («Державні платежі» / «Благодійність» / «Бізнеси») на публічних сторінках (ручний pill-`<span>`)    | -- ; `category: CatalogCategory` (підпис з `CATALOG_CATEGORY_LABEL`); sizes sm/md; нейтральний фон, щоб не конкурувати з `UiVerifiedBadge`     |
 
 ## Rules
 

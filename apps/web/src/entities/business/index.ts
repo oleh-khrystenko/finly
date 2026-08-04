@@ -1,6 +1,7 @@
 export { formatPayeeName } from './formatPayeeName';
 export { isBusinessBranded } from './isBusinessBranded';
 export { OwnershipBadge } from './OwnershipBadge';
+export { PayeeBadges } from './PayeeBadges';
 export {
     paymentPurposeTemplateFieldConfig,
     type PaymentPurposeTemplateFieldConfig,

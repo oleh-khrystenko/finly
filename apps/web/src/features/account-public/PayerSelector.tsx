@@ -1,6 +1,11 @@
 'use client';
 
-import type { PayerSource, PayerView, UserProfile } from '@finly/types';
+import type {
+    BusinessType,
+    PayerSource,
+    PayerView,
+    UserProfile,
+} from '@finly/types';
 import { formatPayerFullName } from '@finly/types';
 import UiSelect from '@/shared/ui/UiSelect';
 import { formatPayeeName } from '@/entities/business';
@@ -31,7 +36,32 @@ export interface PayerOption {
     values: PayerValues | null;
     /** Опція описує самого користувача, а не його клієнта. */
     isSelf: boolean;
+    /** Підпис секції у випадному списку; `undefined` — секцій немає. */
+    group?: string;
 }
+
+const SELF_GROUP = 'За себе';
+const OTHERS_GROUP = 'За іншого';
+
+/**
+ * Чий запис лишається, коли кілька власних отримувачів несуть той самий
+ * РНОКПП. Фізособа і ФОП — це одна людина з одним податковим номером, тож у
+ * підстановку з них іде однакова пара ПІБ + номер; різниця лише у підписі.
+ * Виграє `individual`: запис заведено саме про людину, тоді як назвою ФОПа
+ * цілком може бути вивіска («Крамниця біля дому»), яка у призначенні
+ * податкового платежу читалась би як ім'я платника.
+ *
+ * `Record<BusinessType, …>` замість перевірки на один тип — новий тип фізособи
+ * дасть compile-error замість мовчазного випадіння у кінець. Юрособи сюди не
+ * доходять (сервер віддає лише `INDIVIDUAL_TAX_ID_TYPES`), їхнє значення тут
+ * формальне.
+ */
+const SELF_TYPE_PRIORITY: Record<BusinessType, number> = {
+    individual: 0,
+    fop: 1,
+    tov: 2,
+    organization: 2,
+};
 
 /**
  * Власні дані користувача з профілю. Податкового номера тут немає і бути не
@@ -82,7 +112,14 @@ function sourceOption(source: PayerSource): PayerOption {
  * Пріоритет за явністю запису: власний отримувач, далі збережений платник,
  * далі клієнтський отримувач — назвою отримувача може бути що завгодно
  * («Крамниця біля дому» замість ПІБ), а збережений платник заводився саме як
- * платник.
+ * платник. Власні між собою згортаються за тим самим номером
+ * (`SELF_TYPE_PRIORITY`): фізособа і ФОП однієї людини дають однакову
+ * підстановку, тож два рядки лише змушували б обирати між копіями — і заразом
+ * глушили б автопідстановку, якій потрібен один однозначний запис про себе.
+ *
+ * **Секції «За себе» / «За іншого»** з'являються лише коли є обидві: заголовок
+ * над єдиним рядком нічого не розділяє. Підписи опцій лишаються самодостатніми
+ * («Я — …»), бо у закритому списку заголовка не видно.
  *
  * Чиста функція, а не логіка всередині рендеру: порядок і склад опцій — те
  * єдине, що відрізняє правильний платіж від платежу за чужого клієнта, тож це
@@ -97,8 +134,21 @@ export function buildPayerOptions({
     payers: PayerView[];
     sources: PayerSource[];
 }): PayerOption[] {
-    const own = sources.filter((source) => source.isOwn);
-    const claimedTaxIds = new Set(own.map((source) => source.taxId));
+    // Map, а не сортування: заміна значення не змінює позицію ключа, тож
+    // згорнутий запис лишається там, де у списку стояв перший з дублів.
+    const ownByTaxId = new Map<string, PayerSource>();
+    for (const source of sources) {
+        if (!source.isOwn) continue;
+        const kept = ownByTaxId.get(source.taxId);
+        if (
+            kept &&
+            SELF_TYPE_PRIORITY[kept.type] <= SELF_TYPE_PRIORITY[source.type]
+        ) {
+            continue;
+        }
+        ownByTaxId.set(source.taxId, source);
+    }
+    const claimedTaxIds = new Set(ownByTaxId.keys());
 
     const savedPayers: PayerOption[] = [];
     for (const payer of payers) {
@@ -121,7 +171,7 @@ export function buildPayerOptions({
 
     const self = selfPayerValues(user);
     const profileFallback: PayerOption[] =
-        own.length > 0 || !self.fullName
+        ownByTaxId.size > 0 || !self.fullName
             ? []
             : [
                   {
@@ -132,11 +182,20 @@ export function buildPayerOptions({
                   },
               ];
 
-    return [
-        ...own.map(sourceOption),
+    const selfOptions = [
+        ...[...ownByTaxId.values()].map(sourceOption),
         ...profileFallback,
-        ...savedPayers,
-        ...clients,
+    ];
+    const otherOptions = [...savedPayers, ...clients];
+    const grouped = selfOptions.length > 0 && otherOptions.length > 0;
+    const withGroup = (options: PayerOption[], group: string) =>
+        grouped ? options.map((option) => ({ ...option, group })) : options;
+
+    return [
+        ...withGroup(selfOptions, SELF_GROUP),
+        ...withGroup(otherOptions, OTHERS_GROUP),
+        // Ручний ввід не належить до жодної секції: це не платник, а спосіб
+        // обійтись без списку.
         {
             key: MANUAL_SELECTION,
             label: 'Ввести вручну',
@@ -151,10 +210,11 @@ export function buildPayerOptions({
  * немає. Однозначна це рівно один запис про саму людину: власний отримувач, а
  * за його відсутності профільний фолбек з ПІБ.
  *
- * Кілька власних отримувачів (фізособа плюс ФОП) — не привід вгадувати: у
- * призначення пішов би номер, якого людина не обирала, а помилка тут коштує
- * незарахованого податкового платежу. Тоді нічого не підставляємо, і вибір
- * лишається явним.
+ * Кілька записів про себе після згортання означають кілька РІЗНИХ податкових
+ * номерів (фізособа і ФОП однієї людини вже зведені в один). Вгадувати між ними
+ * не можна: у призначення пішов би номер, якого людина не обирала, а помилка
+ * тут коштує незарахованого податкового платежу. Тоді нічого не підставляємо, і
+ * вибір лишається явним.
  */
 export function autoPayerOption(options: PayerOption[]): PayerOption | null {
     const selves = options.filter((option) => option.isSelf);
@@ -181,6 +241,7 @@ export default function PayerSelector({ options, value, onChange }: Props) {
             options={options.map((option) => ({
                 label: option.label,
                 value: option.key,
+                group: option.group,
             }))}
             value={value}
             onChange={(selection) => {

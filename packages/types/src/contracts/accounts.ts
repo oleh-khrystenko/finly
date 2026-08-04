@@ -14,6 +14,7 @@ import {
     regularPaymentPurposeTemplateSchema,
     systemPaymentPurposeTemplateSchema,
 } from '../entities/business';
+import { CATALOG_CATEGORIES } from '../enums/catalog-category';
 import { autoSlugModeSchema } from '../enums/slug-preset';
 import { PURPOSE_MARKERS } from '../entities/purpose-markers';
 import { ibanZod } from '../validation/iban';
@@ -231,6 +232,13 @@ export const PublicAccountViewSchema = z.object({
          * Не leak-поле: приналежність до каталогу і так публічна.
          */
         isSystem: z.boolean().default(false),
+        /**
+         * Категорія публічного каталогу — дзеркало поля у
+         * `PublicBusinessSchema`. Присутня лише коли отримувач у каталозі стоїть;
+         * сторінка реквізитів малює мітку поруч із назвою, бо саме сюди веде
+         * картка каталогу.
+         */
+        catalogCategory: z.enum(CATALOG_CATEGORIES).optional(),
         // Sprint 21 — кастомний бренд (присутні лише за активного бренду; інакше
         // Finly). `.optional()` тримає whitelist-форму без brand.
         logo: z.string().url().optional(),

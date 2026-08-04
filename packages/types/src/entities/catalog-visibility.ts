@@ -1,3 +1,7 @@
+import {
+    DEFAULT_CATALOG_CATEGORY,
+    type CatalogCategory,
+} from '../enums/catalog-category';
 import type { PublicityStatus } from '../enums/publicity-status';
 
 /**
@@ -29,4 +33,33 @@ export function canEnterCatalog(params: {
         return true;
     }
     return params.publicityStatus === 'approved' && params.slugCustomized;
+}
+
+/**
+ * Категорія, під якою отримувач стоїть у публічному каталозі — або `undefined`,
+ * якщо його там немає. Публічні сторінки показують цю мітку поруч з назвою:
+ * платник, що прийшов з каталогу чи за прямим посиланням, бачить, до якої
+ * вітрини належить сторінка, а не лише чию назву він читає.
+ *
+ * Допуск (`canEnterCatalog`) І намір (`catalogVisible`) — обидві умови, тобто
+ * рівно те, що робить запис видимим у каталозі. Наявність допущених реквізитів
+ * сюди свідомо не входить, хоча картку у вітрині вона теж гейтить
+ * (`getPublicCatalog`): мітка описує приналежність отримувача, а не наявність
+ * картки, і не має блимати від того, що адмін тимчасово сховав один IBAN.
+ *
+ * Фолбек на дефолтну категорію з тієї ж причини, що у каталозі: у документів,
+ * створених до Sprint 29, поля фізично немає, і без фолбека схвалений отримувач
+ * лишився б без мітки.
+ */
+export function resolvePublicCatalogCategory(params: {
+    isSystem: boolean;
+    publicityStatus: PublicityStatus;
+    slugCustomized: boolean;
+    catalogVisible: boolean;
+    catalogCategory?: CatalogCategory;
+}): CatalogCategory | undefined {
+    if (!params.catalogVisible || !canEnterCatalog(params)) {
+        return undefined;
+    }
+    return params.catalogCategory ?? DEFAULT_CATALOG_CATEGORY;
 }

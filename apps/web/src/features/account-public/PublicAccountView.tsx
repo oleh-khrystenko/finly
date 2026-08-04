@@ -1,12 +1,16 @@
 'use client';
 
-import { BANK_LABEL, type BankCode, type BusinessType } from '@finly/types';
+import {
+    BANK_LABEL,
+    type BankCode,
+    type BusinessType,
+    type CatalogCategory,
+} from '@finly/types';
 import UiBrandLogo from '@/shared/ui/UiBrandLogo';
 import UiPaymentOptions from '@/shared/ui/UiPaymentOptions';
 import UiPayeeCard from '@/shared/ui/UiPayeeCard';
-import UiVerifiedBadge from '@/shared/ui/UiVerifiedBadge';
 import { qrBrandVersion } from '@/shared/lib';
-import { formatPayeeName } from '@/entities/business';
+import { formatPayeeName, PayeeBadges } from '@/entities/business';
 
 interface Props {
     /** Account-fields (з `PublicAccountViewSchema`-whitelist). */
@@ -24,6 +28,8 @@ interface Props {
         seoIndexEnabled: boolean;
         /** Системний отримувач — під назвою рендериться знак довіри. */
         isSystem: boolean;
+        /** Розділ каталогу, якщо отримувач у ньому стоїть. */
+        catalogCategory?: CatalogCategory;
         logo?: string;
         brandDisplayName?: string | null;
     };
@@ -91,11 +97,11 @@ export default function PublicAccountView({
                     <h1 className="text-foreground text-2xl font-bold tracking-tight break-words md:text-3xl">
                         {payeeName}
                     </h1>
-                    {business.isSystem && (
-                        <div className="flex justify-center pt-1">
-                            <UiVerifiedBadge />
-                        </div>
-                    )}
+                    <PayeeBadges
+                        isSystem={business.isSystem}
+                        catalogCategory={business.catalogCategory}
+                        className="pt-1"
+                    />
                 </div>
             </header>
 

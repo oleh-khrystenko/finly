@@ -542,6 +542,13 @@ export const PublicBusinessSchema = z.object({
      * реквізитів.
      */
     isSystem: z.boolean().default(false),
+    /**
+     * Категорія публічного каталогу — присутня лише коли отримувач у ньому
+     * стоїть (`resolvePublicCatalogCategory`). Відсутність поля означає
+     * «поза каталогом», тому `.optional()`, а не `null`: whitelist-форма
+     * лишається такою ж, як була, для приватних сторінок.
+     */
+    catalogCategory: z.enum(CATALOG_CATEGORIES).optional(),
     accounts: z.array(PublicAccountListItemSchema),
     /**
      * Sprint 21 — кастомний бренд отримувача (свідомо публічний). Присутні лише

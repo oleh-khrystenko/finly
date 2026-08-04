@@ -2,13 +2,13 @@ import { ArrowRight, Landmark } from 'lucide-react';
 import {
     BANK_LABEL,
     type BusinessType,
+    type CatalogCategory,
     type PublicAccountListItem,
 } from '@finly/types';
 import UiBankLogo from '@/shared/ui/UiBankLogo';
 import UiBrandLogo from '@/shared/ui/UiBrandLogo';
 import UiLink from '@/shared/ui/UiLink';
-import UiVerifiedBadge from '@/shared/ui/UiVerifiedBadge';
-import { formatPayeeName } from '@/entities/business';
+import { formatPayeeName, PayeeBadges } from '@/entities/business';
 
 interface Props {
     /**
@@ -27,6 +27,11 @@ interface Props {
      * появи реквізитів.
      */
     isSystem: boolean;
+    /**
+     * Розділ публічного каталогу, якщо отримувач у ньому стоїть. Мітка потрібна
+     * і тут: на сторінку заходять прямим посиланням і з QR, повз каталог.
+     */
+    catalogCategory?: CatalogCategory;
     /**
      * Sprint 9 §SP-4: server-side already відрізнив 0/1/2+ → цей view рендериться
      * тільки для `accounts.length === 0` (empty-state) або `>= 2` (list-of-cards).
@@ -69,6 +74,7 @@ export default function PublicBusinessView({
     logo,
     brandDisplayName,
     isSystem,
+    catalogCategory,
     accounts,
 }: Props) {
     const payeeName = formatPayeeName(type, name);
@@ -80,6 +86,7 @@ export default function PublicBusinessView({
                 logo={logo}
                 brandDisplayName={brandDisplayName}
                 isSystem={isSystem}
+                catalogCategory={catalogCategory}
             />
         );
     }
@@ -99,11 +106,11 @@ export default function PublicBusinessView({
                     <h1 className="text-foreground text-2xl font-bold tracking-tight break-words md:text-3xl">
                         {payeeName}
                     </h1>
-                    {isSystem && (
-                        <div className="flex justify-center pt-1">
-                            <UiVerifiedBadge />
-                        </div>
-                    )}
+                    <PayeeBadges
+                        isSystem={isSystem}
+                        catalogCategory={catalogCategory}
+                        className="pt-1"
+                    />
                     <p className="text-muted-foreground pt-1 text-sm">
                         Оберіть реквізити для оплати
                     </p>
@@ -208,11 +215,13 @@ function EmptyState({
     logo,
     brandDisplayName,
     isSystem,
+    catalogCategory,
 }: {
     payeeName: string;
     logo?: string;
     brandDisplayName?: string | null;
     isSystem: boolean;
+    catalogCategory?: CatalogCategory;
 }) {
     return (
         <div className="mx-auto max-w-xl px-4 py-16 text-center">
@@ -229,11 +238,11 @@ function EmptyState({
             <h1 className="text-foreground mt-1 text-2xl font-bold tracking-tight break-words md:text-3xl">
                 {payeeName}
             </h1>
-            {isSystem && (
-                <div className="mt-2 flex justify-center">
-                    <UiVerifiedBadge />
-                </div>
-            )}
+            <PayeeBadges
+                isSystem={isSystem}
+                catalogCategory={catalogCategory}
+                className="mt-2"
+            />
             <p className="text-muted-foreground mt-4 text-sm">
                 Власник ще не налаштував реквізити для прийому платежів.
             </p>

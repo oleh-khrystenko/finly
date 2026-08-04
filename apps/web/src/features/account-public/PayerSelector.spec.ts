@@ -36,8 +36,9 @@ const source = (
     id: string,
     taxId: string,
     name: string,
-    isOwn: boolean
-): PayerSource => ({ id, type: 'fop', name, taxId, isOwn });
+    isOwn: boolean,
+    type: PayerSource['type'] = 'fop'
+): PayerSource => ({ id, type, name, taxId, isOwn });
 
 describe('buildPayerOptions', () => {
     it('власний отримувач іде першим і підписаний як «я»', () => {
@@ -109,6 +110,59 @@ describe('buildPayerOptions', () => {
         });
     });
 
+    it('фізособа і ФОП з одним РНОКПП дають один рядок — перемагає фізособа', () => {
+        // Одна людина з одним податковим номером: підстановка з обох записів
+        // однакова, тож два рядки лише змушували б обирати між копіями.
+        const options = buildPayerOptions({
+            user,
+            payers: [],
+            sources: [
+                source('own-fop', OWN_TAX_ID, 'Крамниця біля дому', true),
+                source(
+                    'own-individual',
+                    OWN_TAX_ID,
+                    'Ковальчук Олена Петрівна',
+                    true,
+                    'individual'
+                ),
+            ],
+        });
+
+        expect(options.map((o) => o.key)).toEqual([
+            'source:own-individual',
+            MANUAL_SELECTION,
+        ]);
+        expect(options[0]!.values).toEqual({
+            fullName: 'Ковальчук Олена Петрівна',
+            taxId: OWN_TAX_ID,
+        });
+        // Позиція згорнутого запису — місце першого з дублів у вихідному списку.
+        expect(options[0]!.label).toBe(
+            `Я — Ковальчук Олена Петрівна — ${OWN_TAX_ID}`
+        );
+    });
+
+    it('секції «За себе» / «За іншого» з’являються лише коли є обидві', () => {
+        const alone = buildPayerOptions({
+            user,
+            payers: [],
+            sources: [source('own-1', OWN_TAX_ID, 'Ковальчук Олена', true)],
+        });
+        expect(alone.every((o) => o.group === undefined)).toBe(true);
+
+        const both = buildPayerOptions({
+            user,
+            payers: [payer(CLIENT_TAX_ID, 'Петренко Іван Іванович')],
+            sources: [source('own-1', OWN_TAX_ID, 'Ковальчук Олена', true)],
+        });
+        expect(both.map((o) => [o.key, o.group])).toEqual([
+            ['source:own-1', 'За себе'],
+            ['payer:payer-1', 'За іншого'],
+            // Ручний ввід — не платник, секції не належить.
+            [MANUAL_SELECTION, undefined],
+        ]);
+    });
+
     it('у значення підстановки йде назва без юр-форми, а у підпис — з нею', () => {
         const [option] = buildPayerOptions({
             user,
@@ -136,8 +190,8 @@ describe('autoPayerOption', () => {
         expect(autoPayerOption(options)?.key).toBe('source:own-1');
     });
 
-    it('кілька власних отримувачів — не вгадуємо', () => {
-        // Фізособа плюс ФОП: підставити один означало б покласти у призначення
+    it('кілька власних отримувачів з різними номерами — не вгадуємо', () => {
+        // Різні РНОКПП: підставити один означало б покласти у призначення
         // номер, якого людина не обирала.
         const options = buildPayerOptions({
             user,
@@ -149,6 +203,25 @@ describe('autoPayerOption', () => {
         });
 
         expect(autoPayerOption(options)).toBeNull();
+    });
+
+    it('фізособа і ФОП однієї людини не блокують автопідстановку', () => {
+        const options = buildPayerOptions({
+            user,
+            payers: [],
+            sources: [
+                source('own-fop', OWN_TAX_ID, 'Ковальчук Олена', true),
+                source(
+                    'own-individual',
+                    OWN_TAX_ID,
+                    'Ковальчук Олена Петрівна',
+                    true,
+                    'individual'
+                ),
+            ],
+        });
+
+        expect(autoPayerOption(options)?.key).toBe('source:own-individual');
     });
 
     it('без власних записів підставляється профільний фолбек', () => {

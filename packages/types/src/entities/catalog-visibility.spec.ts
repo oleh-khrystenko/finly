@@ -1,4 +1,7 @@
-import { canEnterCatalog } from './catalog-visibility';
+import {
+    canEnterCatalog,
+    resolvePublicCatalogCategory,
+} from './catalog-visibility';
 
 describe('canEnterCatalog', () => {
     it('системний отримувач з красивим slug — допущений', () => {
@@ -59,5 +62,54 @@ describe('canEnterCatalog', () => {
                 slugCustomized: true,
             })
         ).toBe(false);
+    });
+});
+
+describe('resolvePublicCatalogCategory', () => {
+    const systemPayee = {
+        isSystem: true,
+        publicityStatus: 'none',
+        slugCustomized: false,
+        catalogVisible: true,
+        catalogCategory: 'state',
+    } as const;
+
+    it('системний видимий отримувач віддає свою категорію', () => {
+        expect(resolvePublicCatalogCategory(systemPayee)).toBe('state');
+    });
+
+    it('прихований з каталогу — без мітки, хоч і допущений', () => {
+        expect(
+            resolvePublicCatalogCategory({
+                ...systemPayee,
+                catalogVisible: false,
+            })
+        ).toBeUndefined();
+    });
+
+    it('недопущений — без мітки, хоч видимість і увімкнена', () => {
+        expect(
+            resolvePublicCatalogCategory({
+                isSystem: false,
+                publicityStatus: 'pending',
+                slugCustomized: true,
+                catalogVisible: true,
+                catalogCategory: 'business',
+            })
+        ).toBeUndefined();
+    });
+
+    it('документ без категорії (створений до Sprint 29) падає у дефолтну секцію', () => {
+        // Той самий фолбек, що у `getPublicCatalog`: інакше схвалений отримувач
+        // стояв би у каталозі під «Бізнеси», а на власній сторінці був би без
+        // мітки взагалі.
+        expect(
+            resolvePublicCatalogCategory({
+                isSystem: false,
+                publicityStatus: 'approved',
+                slugCustomized: true,
+                catalogVisible: true,
+            })
+        ).toBe('business');
     });
 });

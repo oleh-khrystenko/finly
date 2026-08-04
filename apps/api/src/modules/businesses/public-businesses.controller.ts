@@ -16,6 +16,7 @@ import {
     PublicBusinessSchema,
     PublicCatalogSchema,
     RESPONSE_CODE,
+    resolvePublicCatalogCategory,
     type PublicBusinessView,
     type PublicCatalogView,
 } from '@finly/types';
@@ -231,6 +232,7 @@ export class PublicBusinessesController {
             slug: business.slug,
             seoIndexEnabled: resolvePublicIndexEnabled(business),
             isSystem: business.isSystem,
+            catalogCategory: resolvePublicCatalogCategory(business),
             ...buildPublicBrandView(business),
             accounts: accounts.map((a) => ({
                 slug: a.slug,

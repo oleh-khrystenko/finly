@@ -199,4 +199,48 @@ describe('PublicAccountView (Sprint 9 §SP-4 + §SP-9)', () => {
             ).toBeInTheDocument();
         });
     });
+
+    describe('розділ публічного каталогу', () => {
+        it('поза каталогом: мітки немає', () => {
+            render(<PublicAccountView {...baseProps} />);
+            expect(
+                screen.queryByText('Державні платежі')
+            ).not.toBeInTheDocument();
+        });
+
+        it('державний отримувач: знак довіри і розділ стоять разом', () => {
+            // Разом вони і читаються: перевірений запис у розділі «Державні
+            // платежі» — не те саме, що перевірений запис узагалі.
+            render(
+                <PublicAccountView
+                    {...baseProps}
+                    business={{
+                        ...baseProps.business,
+                        isSystem: true,
+                        catalogCategory: 'state',
+                    }}
+                />
+            );
+            expect(
+                screen.getByText('Перевірений отримувач')
+            ).toBeInTheDocument();
+            expect(screen.getByText('Державні платежі')).toBeInTheDocument();
+        });
+
+        it('схвалений користувацький отримувач: лише розділ, без знака довіри', () => {
+            render(
+                <PublicAccountView
+                    {...baseProps}
+                    business={{
+                        ...baseProps.business,
+                        catalogCategory: 'business',
+                    }}
+                />
+            );
+            expect(screen.getByText('Бізнеси')).toBeInTheDocument();
+            expect(
+                screen.queryByText('Перевірений отримувач')
+            ).not.toBeInTheDocument();
+        });
+    });
 });

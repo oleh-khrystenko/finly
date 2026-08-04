@@ -617,6 +617,62 @@ describe('Admin payees E2E (Sprint 29)', () => {
             expect(stillVisible!.catalogVisible).toBe(true);
         }, 30_000);
 
+        it('категорія каталогу доходить до обох публічних сторінок і зникає з прихованого отримувача', async () => {
+            // Платник заходить і прямим посиланням, і з QR — повз каталог. Без
+            // мітки на самій сторінці державні реквізити нічим не заявляють свій
+            // розділ, а сторінка ще й просить РНОКПП.
+            const admin = await createUser('admin');
+            const slug = await createSystemPayee(admin, {
+                catalogVisible: true,
+            });
+            const accountRes = await request(
+                'post',
+                `/api/admin/payees/${slug}/accounts`
+            )
+                .set('Authorization', bearerFor(admin))
+                .send({ iban: SYSTEM_IBAN })
+                .expect(201);
+            const accountSlug = (accountRes.body as { data: { slug: string } })
+                .data.slug;
+
+            const businessRes = await request(
+                'get',
+                `/api/businesses/public/${slug}`
+            ).expect(200);
+            expect(
+                (businessRes.body as { data: { catalogCategory?: string } })
+                    .data.catalogCategory
+            ).toBe('state');
+
+            const accountViewRes = await request(
+                'get',
+                `/api/businesses/public/${slug}/account/${accountSlug}`
+            ).expect(200);
+            expect(
+                (
+                    accountViewRes.body as {
+                        data: { business: { catalogCategory?: string } };
+                    }
+                ).data.business.catalogCategory
+            ).toBe('state');
+
+            await request(
+                'patch',
+                `/api/admin/payees/${slug}/catalog-visibility`
+            )
+                .set('Authorization', bearerFor(admin))
+                .send({ visible: false })
+                .expect(200);
+
+            const hiddenRes = await request(
+                'get',
+                `/api/businesses/public/${slug}`
+            ).expect(200);
+            expect(hiddenRes.body as { data: object }).not.toHaveProperty(
+                'data.catalogCategory'
+            );
+        });
+
         it('у звичайного отримувача список реквізитів повний попри прапорець каталогу', async () => {
             // Дзеркальна гарантія: прапорець керує лише каталогом, тож фільтр не
             // сміє спорожнити публічні сторінки наявним користувачам.

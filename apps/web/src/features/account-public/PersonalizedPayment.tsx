@@ -12,6 +12,7 @@ import {
     personalizationPeriodZod,
     type BankCode,
     type BusinessType,
+    type CatalogCategory,
     type PurposeMarker,
 } from '@finly/types';
 import { toast } from 'sonner';
@@ -30,8 +31,7 @@ import UiPayeeCard from '@/shared/ui/UiPayeeCard';
 import UiPaymentOptions from '@/shared/ui/UiPaymentOptions';
 import UiQrImage from '@/shared/ui/UiQrImage';
 import UiSelect from '@/shared/ui/UiSelect';
-import UiVerifiedBadge from '@/shared/ui/UiVerifiedBadge';
-import { formatPayeeName } from '@/entities/business';
+import { formatPayeeName, PayeeBadges } from '@/entities/business';
 import { usePayerSourcesStore, usePayersStore } from '@/entities/payer';
 import { useAuthStore } from '@/entities/user';
 import PayerSelector, {
@@ -79,6 +79,8 @@ interface Props {
         name: string;
         /** Системний отримувач — під назвою рендериться знак довіри. */
         isSystem: boolean;
+        /** Розділ каталогу, якщо отримувач у ньому стоїть. */
+        catalogCategory?: CatalogCategory;
         logo?: string;
         brandDisplayName?: string | null;
     };
@@ -511,11 +513,11 @@ export default function PersonalizedPayment({
                     <h1 className="text-foreground text-2xl font-bold tracking-tight break-words md:text-3xl">
                         {payeeName}
                     </h1>
-                    {business.isSystem && (
-                        <div className="flex justify-center pt-1">
-                            <UiVerifiedBadge />
-                        </div>
-                    )}
+                    <PayeeBadges
+                        isSystem={business.isSystem}
+                        catalogCategory={business.catalogCategory}
+                        className="pt-1"
+                    />
                 </div>
             </header>
 

@@ -127,6 +127,7 @@ export default async function HostPayPage({ params }: Props) {
             logo={view.logo}
             brandDisplayName={view.brandDisplayName}
             isSystem={view.isSystem}
+            catalogCategory={view.catalogCategory}
             accounts={view.accounts}
         />
     );
