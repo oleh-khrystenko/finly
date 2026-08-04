@@ -7,7 +7,8 @@
         },
         "build": {
             "dependsOn": ["^build"],
-            "outputs": [".next/**", "dist/**"]
+            "outputs": [".next/**", "dist/**"],
+            "env": ["WEB_URL", "PAY_PUBLIC_URL", "R2_PUBLIC_URL", "API_INTERNAL_URL"]
         },
         "lint": { "outputs": [] },
         "test": { "cache": false }
