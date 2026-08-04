@@ -123,7 +123,7 @@ export default function EditableAccountName({ account, onSave }: Props) {
 
     return (
         <div className="flex min-w-0 items-center justify-between gap-2">
-            <h1 className="text-foreground min-w-0 text-3xl font-bold tracking-tight break-words md:text-4xl">
+            <h1 className="text-foreground min-w-0 text-2xl font-bold tracking-tight break-words">
                 {derivedLabel}
                 <span className="text-muted-foreground font-normal">
                     {headingParenthetical}

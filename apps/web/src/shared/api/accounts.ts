@@ -3,6 +3,7 @@ import type {
     Account,
     AccountWithCounts,
     CreateAccountRequest,
+    PersonalizedNbuLinks,
     PublicAccountView,
     SlugAvailabilityResponse,
     SlugReservationView,
@@ -105,6 +106,19 @@ export async function deleteAccount(
     );
 }
 
+/** Sprint 29 — тогл видимості реквізитів у каталозі (лише за допущеного рівня). */
+export async function setAccountCatalogVisibility(
+    businessSlug: string,
+    accountSlug: string,
+    visible: boolean
+): Promise<Account> {
+    const { data } = await apiClient.patch<{ data: Account }>(
+        `/businesses/me/${encodeURIComponent(businessSlug)}/accounts/${encodeURIComponent(accountSlug)}/catalog-visibility`,
+        { visible }
+    );
+    return data.data;
+}
+
 /**
  * Public per-account view — для cabinet preview-toggle (Sprint 9 §9.2 §6 QR-секція
  * mirror-ить public 1:1). Зчитує `nbuLinks` + `ibanMask` + nested `business` shape.
@@ -117,4 +131,20 @@ export async function getPublicAccountView(
         `/businesses/public/${encodeURIComponent(businessSlug)}/account/${encodeURIComponent(accountSlug)}`
     );
     return json.data;
+}
+
+/**
+ * Sprint 29 — персоналізовані NBU-посилання (universal-links) для податкової
+ * сторінки. `values` — заповнені підстановки (РНОКПП/період/ПІБ) як query.
+ */
+export async function getPersonalizedNbuLinks(
+    businessSlug: string,
+    accountSlug: string,
+    values: Record<string, string>
+): Promise<PersonalizedNbuLinks['nbuLinks']> {
+    const qs = new URLSearchParams(values).toString();
+    const json = await publicFetchJson<{ data: PersonalizedNbuLinks }>(
+        `/businesses/public/${encodeURIComponent(businessSlug)}/account/${encodeURIComponent(accountSlug)}/personalized-links?${qs}`
+    );
+    return json.data.nbuLinks;
 }

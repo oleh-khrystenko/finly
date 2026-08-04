@@ -103,6 +103,23 @@ export function kyivEndOfDayInstant(yyyymmdd: string): Date {
     return new Date(utcMs);
 }
 
+/**
+ * Поточні рік і місяць (1-12) у Europe/Kyiv.
+ *
+ * Той самий інваріант, що у `kyivEndOfDayInstant`, але для «зараз»: усе, що
+ * підставляється у платіжний документ (період податку, номер за місяцем),
+ * рахується за українським календарем, не за tz середовища. Без цього SSR у
+ * UTC-контейнері й браузер у Києві у вікні 00:00-03:00 на межі місяця дають
+ * різну відповідь: розбіжність гідратації плюс дефолт на період назад.
+ */
+export function kyivYearMonth(now: Date = new Date()): {
+    year: number;
+    month: number;
+} {
+    const parts = getKyivPartsFromUtc(now.getTime());
+    return { year: parts.y, month: parts.mo };
+}
+
 const KYIV_DATE_DISPLAY_FORMATTER = new Intl.DateTimeFormat(INTL_LOCALE, {
     timeZone: 'Europe/Kyiv',
     day: '2-digit',

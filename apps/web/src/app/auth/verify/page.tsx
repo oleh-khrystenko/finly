@@ -14,7 +14,7 @@ import {
     clearPendingPostLoginTarget,
     getApiMessage,
 } from '@/shared/api';
-import { isValidRedirect } from '@/shared/lib';
+import { isValidRedirect, navigateToReturnTarget } from '@/shared/lib/redirect';
 import { useAuthStore } from '@/entities/user';
 import { useQrLandingDraftStore } from '@/entities/qr-landing-draft';
 
@@ -113,7 +113,7 @@ function VerifyContent() {
                 });
 
                 const target = handleClaimRedirect(result, redirectTarget);
-                router.replace(target);
+                navigateToReturnTarget(router, target, 'replace');
             } catch (err) {
                 setStatus('error');
                 const code =

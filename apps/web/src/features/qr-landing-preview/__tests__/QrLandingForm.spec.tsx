@@ -4,8 +4,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 
 jest.mock('@/shared/config', () => ({
+    API_BASE_URL: '/api',
     ENV: {
-        NEXT_PUBLIC_API_URL: 'http://localhost:4000/api',
         NEXT_PUBLIC_BASE_URL: 'http://localhost:3000',
         NEXT_PUBLIC_PAY_PUBLIC_URL: 'http://localhost:3001',
     },
@@ -22,10 +22,7 @@ jest.mock('sonner', () => ({
     toast: { error: (...args: unknown[]) => mockToastError(...args) },
 }));
 
-import {
-    QrPreviewInputSchema,
-    type QrPreviewInput,
-} from '@finly/types';
+import { QrPreviewInputSchema, type QrPreviewInput } from '@finly/types';
 
 import { QrLandingForm } from '../QrLandingForm';
 import { useQrLandingDraftStore } from '@/entities/qr-landing-draft';
@@ -46,8 +43,7 @@ function FormHarness(props: { defaultValues?: Partial<QrPreviewInput> }) {
             receiverName: props.defaultValues?.receiverName ?? '',
             iban: props.defaultValues?.iban ?? '',
             taxId: props.defaultValues?.taxId ?? '',
-            purpose:
-                props.defaultValues?.purpose ?? 'Поповнення рахунку',
+            purpose: props.defaultValues?.purpose ?? 'Поповнення рахунку',
         },
     });
     return <QrLandingForm form={form} />;
@@ -165,9 +161,9 @@ describe('QrLandingForm', () => {
         expect(
             (screen.getByLabelText(/Отримувач/) as HTMLInputElement).value
         ).toBe('Збережене Імʼя');
-        expect(
-            (screen.getByLabelText(/IBAN/) as HTMLInputElement).value
-        ).toBe(VALID_IBAN);
+        expect((screen.getByLabelText(/IBAN/) as HTMLInputElement).value).toBe(
+            VALID_IBAN
+        );
         expect(
             (screen.getByLabelText(/РНОКПП/) as HTMLInputElement).value
         ).toBe(VALID_RNOKPP);

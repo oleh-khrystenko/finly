@@ -7,6 +7,7 @@ import {
     Post,
     UseGuards,
 } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import {
     RESPONSE_CODE,
     type AvatarUploadUrlResponse,
@@ -15,6 +16,7 @@ import {
 } from '@finly/types';
 
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
+import { skipThrottlersExcept } from '../../common/http/throttle-policy';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AvatarService } from './avatar.service';
 import { CommitAvatarUploadDto } from './dto/commit-avatar-upload.dto';
@@ -29,6 +31,8 @@ import { UserDocument } from './schemas/user.schema';
  */
 @Controller('storage')
 @UseGuards(JwtActiveGuard)
+// Кабінет за логіном: throttle вимкнено повністю (див. BusinessesController).
+@SkipThrottle(skipThrottlersExcept())
 export class AvatarController {
     constructor(private readonly avatarService: AvatarService) {}
 

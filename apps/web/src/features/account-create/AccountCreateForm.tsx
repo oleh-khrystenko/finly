@@ -142,7 +142,7 @@ export default function AccountCreateForm({
             className="space-y-6"
             noValidate
         >
-            <div className="border-border bg-card space-y-6 rounded-xl border p-6 md:p-8">
+            <div className="border-border bg-card space-y-6 rounded-xl border p-4 md:p-6">
                 <UiInput
                     label="IBAN"
                     labelSize="md"

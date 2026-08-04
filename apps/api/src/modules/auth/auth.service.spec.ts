@@ -20,19 +20,7 @@ jest.mock('../../config/env', () => ({
         JWT_REFRESH_SECRET: 'test-refresh-secret',
         WEB_URL: 'http://localhost:3000',
         RESEND_API_KEY: 'test-resend-key',
-        AUTH_LOCKOUT_THRESHOLDS: '5:1,10:5,20:15',
-        AUTH_LOGIN_ATTEMPTS_TTL_MIN: 15,
-        AUTH_MAGIC_LINK_TTL_MIN: 15,
-        AUTH_MAGIC_LINK_RATE_LIMIT: 3,
-        AUTH_MAGIC_LINK_RATE_WINDOW_MIN: 15,
-        AUTH_MAGIC_LINK_DEDUP_SEC: 60,
-        ACCOUNT_DELETION_GRACE_DAYS: 30,
     },
-    parseLockoutThresholds: (raw: string) =>
-        raw.split(',').map((entry: string) => {
-            const [attempts, blockMin] = entry.split(':').map(Number);
-            return { attempts, blockMin };
-        }),
 }));
 
 jest.mock('bcrypt', () => ({
@@ -1671,6 +1659,103 @@ describe('AuthService', () => {
             const result = await authService.verifyPassword(userId, 'any');
 
             expect(result).toBe(false);
+        });
+
+        /**
+         * Локаут перевірки пароля: кабінетні контролери свідомо йдуть повз
+         * HTTP-throttler, тож ця поверхня захищена лише власним лічильником.
+         */
+        describe('per-user локаут невдалих спроб', () => {
+            const attemptsKey = `password_attempts:${userId}`;
+
+            // `jest.clearAllMocks` чистить виклики, але не реалізації, тож стан
+            // лічильника задаємо явно у кожному тесті — інакше `'5'` з
+            // локаут-тесту протікав би у наступні.
+            beforeEach(() => {
+                mockRedis.get.mockResolvedValue(null);
+            });
+
+            it('нарощує лічильник на невдалій спробі', async () => {
+                jest.spyOn(usersService, 'findById').mockResolvedValue({
+                    ...mockUser,
+                    passwordHash: '$2b$10$hash',
+                } as never);
+                (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+
+                await authService.verifyPassword(userId, 'wrong');
+
+                expect(
+                    mockRedisCounter.incrementSlidingWindow
+                ).toHaveBeenCalledWith(attemptsKey, 15 * 60);
+            });
+
+            it('скидає лічильник на успішній спробі', async () => {
+                jest.spyOn(usersService, 'findById').mockResolvedValue({
+                    ...mockUser,
+                    passwordHash: '$2b$10$hash',
+                } as never);
+                (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+                await authService.verifyPassword(userId, 'correct');
+
+                expect(mockRedis.del).toHaveBeenCalledWith(attemptsKey);
+                expect(
+                    mockRedisCounter.incrementSlidingWindow
+                ).not.toHaveBeenCalled();
+            });
+
+            /**
+             * Перевірка порога ДО `bcrypt.compare` — не лише щоб відмовити, а щоб
+             * запит понад ліміт не коштував хешування: саме воно робить потік
+             * таких запитів навантаженням на процес.
+             */
+            it('після порога кидає 429 і не доходить до bcrypt', async () => {
+                mockRedis.get.mockResolvedValue('5');
+                const findById = jest
+                    .spyOn(usersService, 'findById')
+                    .mockResolvedValue({
+                        ...mockUser,
+                        passwordHash: '$2b$10$hash',
+                    } as never);
+
+                await expect(
+                    authService.verifyPassword(userId, 'wrong')
+                ).rejects.toMatchObject({
+                    status: HttpStatus.TOO_MANY_REQUESTS,
+                });
+
+                expect(mockRedis.get).toHaveBeenCalledWith(attemptsKey);
+                expect(bcrypt.compare).not.toHaveBeenCalled();
+                expect(findById).not.toHaveBeenCalled();
+            });
+
+            it('той самий локаут діє і на зміні пароля', async () => {
+                mockRedis.get.mockResolvedValue('5');
+
+                await expect(
+                    authService.changePassword(userId, 'wrong', 'newPass123')
+                ).rejects.toMatchObject({
+                    status: HttpStatus.TOO_MANY_REQUESTS,
+                });
+
+                expect(bcrypt.compare).not.toHaveBeenCalled();
+            });
+
+            it('невдала зміна пароля теж нарощує лічильник', async () => {
+                jest.spyOn(usersService, 'findById').mockResolvedValue({
+                    ...mockUser,
+                    passwordHash: '$2b$10$hash',
+                } as never);
+                (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+
+                await expect(
+                    authService.changePassword(userId, 'wrong', 'newPass123')
+                ).rejects.toBeInstanceOf(UnauthorizedException);
+
+                expect(
+                    mockRedisCounter.incrementSlidingWindow
+                ).toHaveBeenCalledWith(attemptsKey, 15 * 60);
+            });
         });
     });
 });

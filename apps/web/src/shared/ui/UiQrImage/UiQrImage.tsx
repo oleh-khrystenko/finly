@@ -19,7 +19,12 @@ const UiQrImage = ({ src, alt, className }: UiQrImageProps) => {
         // Без `aspect-square`: брендований QR (Sprint 14) має смуги — полотно
         // вище за ширину, аспект різний per-тип. Контейнер сидить на натуральну
         // висоту зображення (`h-auto`), skeleton overlay заповнює її.
-        <div className={composeClasses('relative w-full overflow-hidden', className)}>
+        <div
+            className={composeClasses(
+                'relative w-full overflow-hidden',
+                className
+            )}
+        >
             {!loaded && (
                 <div
                     className="bg-secondary absolute inset-0 animate-pulse"

@@ -56,9 +56,7 @@ export function scheduleAccountDeleteWithUndo({
     onScheduled,
     onCancelled,
 }: Args): void {
-    usePendingAccountDeletesStore
-        .getState()
-        .add(businessSlug, accountSlug);
+    usePendingAccountDeletesStore.getState().add(businessSlug, accountSlug);
 
     const timerId = setTimeout(() => {
         void deleteAccount(businessSlug, accountSlug).catch((err: unknown) => {

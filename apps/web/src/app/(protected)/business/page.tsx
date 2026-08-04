@@ -12,12 +12,14 @@ import { taxIdFieldConfig } from '@/entities/business';
 import { useBookkeeperMode } from '@/entities/user';
 import { usePendingDeletesStore } from '@/features/business-edit/pendingDeletesStore';
 import UiButton from '@/shared/ui/UiButton';
-import UiChipGroup from '@/shared/ui/UiChipGroup';
+import UiCardGrid from '@/shared/ui/UiCardGrid';
 import UiNavCard from '@/shared/ui/UiNavCard';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
 import UiPageHeading from '@/shared/ui/UiPageHeading';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
+import UiTabs, { uiTabPanelProps } from '@/shared/ui/UiTabs';
+import type { UiTabItem } from '@/shared/ui/UiTabs';
 
 /**
  * Sprint 3 §3.6 — список бізнесів.
@@ -30,23 +32,30 @@ import UiSpinner from '@/shared/ui/UiSpinner';
  * Empty/filled states з різним текстом для bookkeeper-режиму, щоб ФОП не
  * плутався, чому "його" бізнес не видно.
  *
- * Контекст «власні / клієнтські» перемикається segmented-control-ом
- * (`UiChipGroup`) над списком — `useBookkeeperMode` робить optimistic-flip
- * `worksAsBookkeeper` + PATCH. Прапор персистентний, тож вибір лишається
- * дефолтним контекстом на наступний логін.
+ * Контекст «власні / клієнтські» перемикається табами (`UiTabs`) над
+ * списком — `useBookkeeperMode` робить optimistic-flip `worksAsBookkeeper` +
+ * PATCH. Прапор персистентний, тож вибір лишається дефолтним контекстом на
+ * наступний логін.
  */
 // Роль-фреймінг замість «Власні/Клієнтські»: новачок не мусить розуміти
 // модель «отримувачів», він просто відповідає «хто я зараз». Рядок-підказка
 // під табами пояснює активний контекст звичайною мовою (і ненав'язливо
 // вчить, що «отримувач» = бізнес).
-const CONTEXT_OPTIONS = [
-    { value: 'own', label: 'Я власник' },
-    { value: 'client', label: 'Я бухгалтер' },
+type BusinessContext = 'own' | 'client';
+
+const CONTEXT_LABEL: Record<BusinessContext, string> = {
+    own: 'Я власник',
+    client: 'Я бухгалтер',
+};
+const CONTEXT_OPTIONS: UiTabItem<BusinessContext>[] = [
+    { value: 'own', label: CONTEXT_LABEL.own },
+    { value: 'client', label: CONTEXT_LABEL.client },
 ];
-const CONTEXT_HINT: Record<'own' | 'client', string> = {
+const CONTEXT_HINT: Record<BusinessContext, string> = {
     own: 'Бізнеси, якими ви володієте.',
     client: 'Бізнеси клієнтів, для яких ви ведете облік.',
 };
+const CONTEXT_PANEL_ID = 'business-context-panel';
 
 export default function BusinessListPage() {
     const { isBookkeeper, setBookkeeper } = useBookkeeperMode();
@@ -88,8 +97,8 @@ export default function BusinessListPage() {
 
     if (items === null && !error) {
         return (
-            <UiPageContainer className="py-16">
-                <div className="flex justify-center">
+            <UiPageContainer>
+                <div className="flex flex-1 items-center justify-center">
                     <UiSpinner size="md" />
                 </div>
             </UiPageContainer>
@@ -102,7 +111,7 @@ export default function BusinessListPage() {
     const isEmpty = visibleItems.length === 0;
 
     return (
-        <UiPageContainer className="space-y-6 py-10 md:py-14">
+        <UiPageContainer className="space-y-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
                 <UiPageHeading>Отримувачі</UiPageHeading>
                 {!isEmpty && (
@@ -117,28 +126,46 @@ export default function BusinessListPage() {
                 worksAsBookkeeper + PATCH; backend фільтрує за прапором, тож
                 цей же вибір персиститься як дефолтний контекст. */}
             <div className="space-y-2">
-                <UiChipGroup
+                <UiTabs
+                    aria-label="Контекст списку отримувачів"
                     size="sm"
-                    options={CONTEXT_OPTIONS}
+                    panelId={CONTEXT_PANEL_ID}
+                    items={CONTEXT_OPTIONS}
                     value={context}
                     onChange={(value) => void setBookkeeper(value === 'client')}
                 />
-                <p className="text-muted-foreground text-sm" aria-live="polite">
-                    {CONTEXT_HINT[context]}
-                </p>
-            </div>
-
-            {error && (
-                <UiSectionCard title="Не вдалося завантажити">
-                    <p className="text-muted-foreground mt-2 text-sm">
-                        {error}
+                {/* Панель табів: підказка + сам список — усе, чим керує вибір
+                    контексту. Зв'язок `aria-controls` → `role="tabpanel"`
+                    замикає `uiTabPanelProps`. */}
+                <div
+                    {...uiTabPanelProps(
+                        CONTEXT_PANEL_ID,
+                        CONTEXT_LABEL[context]
+                    )}
+                    className="space-y-6"
+                >
+                    <p
+                        className="text-muted-foreground text-sm"
+                        aria-live="polite"
+                    >
+                        {CONTEXT_HINT[context]}
                     </p>
-                </UiSectionCard>
-            )}
 
-            {isEmpty && !error && <EmptyState isBookkeeper={isBookkeeper} />}
+                    {error && (
+                        <UiSectionCard title="Не вдалося завантажити">
+                            <p className="text-muted-foreground mt-2 text-sm">
+                                {error}
+                            </p>
+                        </UiSectionCard>
+                    )}
 
-            {!isEmpty && <BusinessGrid items={visibleItems} />}
+                    {isEmpty && !error && (
+                        <EmptyState isBookkeeper={isBookkeeper} />
+                    )}
+
+                    {!isEmpty && <BusinessGrid items={visibleItems} />}
+                </div>
+            </div>
         </UiPageContainer>
     );
 }
@@ -194,11 +221,11 @@ function CreateBusinessButton({ children }: { children: ReactNode }) {
 
 function BusinessGrid({ items }: { items: BusinessWithCounts[] }) {
     return (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <UiCardGrid>
             {items.map((business) => (
                 <BusinessCard key={business.id} business={business} />
             ))}
-        </div>
+        </UiCardGrid>
     );
 }
 

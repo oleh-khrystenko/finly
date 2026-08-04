@@ -6,6 +6,7 @@ import {
     createStandaloneMongo,
     type InMemoryMongo,
 } from '../../test-utils/mongo';
+import { BRAND_CLEANUP } from '../../config/cleanup.config';
 import type { StorageService } from '../storage/storage.service';
 import { BrandCleanupService } from './brand-cleanup.service';
 import {
@@ -18,8 +19,9 @@ const MS_PER_DAY = 86_400_000;
 
 /**
  * BrandCleanupService: cron прибирає pending-логотипи старші за поріг
- * (BRAND_PENDING_CLEANUP_DAYS=7 у test-setup), не чіпає свіжі/active, видаляє
- * файли з R2. Реальний standalone Mongo, storage — мок.
+ * (`BRAND_CLEANUP`), не чіпає свіжі/active, видаляє файли з R2. Віки рахуються
+ * від самих порогів — тест лишається чинним при зміні продуктових значень.
+ * Реальний standalone Mongo, storage — мок.
  */
 describe('BrandCleanupService', () => {
     let mongo: InMemoryMongo;
@@ -85,7 +87,6 @@ describe('BrandCleanupService', () => {
         return _id;
     }
 
-    // Пороги з test-setup: free=7, demoted=90.
     function pendingAgeDays(days: number, demoted: boolean) {
         return {
             active: null,
@@ -97,8 +98,10 @@ describe('BrandCleanupService', () => {
         };
     }
 
-    it('free-pending старше за 7 днів → прибирається + видаляє файли', async () => {
-        const id = await seed(pendingAgeDays(10, false));
+    it('free-pending старше за короткий поріг → прибирається + видаляє файли', async () => {
+        const id = await seed(
+            pendingAgeDays(BRAND_CLEANUP.pendingDays + 3, false)
+        );
 
         await service.runDailyCleanup();
 
@@ -111,7 +114,7 @@ describe('BrandCleanupService', () => {
         expect(storage.safeDeleteByUrl).toHaveBeenCalledWith(SLOT.bandMarkUrl);
     });
 
-    it('free-pending у межах 7 днів → не чіпається', async () => {
+    it('free-pending у межах короткого порогу → не чіпається', async () => {
         const id = await seed(pendingAgeDays(1, false));
 
         await service.runDailyCleanup();
@@ -121,8 +124,10 @@ describe('BrandCleanupService', () => {
         expect(storage.safeDeleteByUrl).not.toHaveBeenCalled();
     });
 
-    it('демоутований pending 10 днів → НЕ чіпається (довгий поріг 90)', async () => {
-        const id = await seed(pendingAgeDays(10, true));
+    it('демоутований pending старше за короткий поріг → НЕ чіпається (діє довгий)', async () => {
+        const id = await seed(
+            pendingAgeDays(BRAND_CLEANUP.pendingDays + 3, true)
+        );
 
         await service.runDailyCleanup();
 
@@ -131,8 +136,10 @@ describe('BrandCleanupService', () => {
         expect(storage.safeDeleteByUrl).not.toHaveBeenCalled();
     });
 
-    it('демоутований pending старше за 90 днів → прибирається', async () => {
-        const id = await seed(pendingAgeDays(100, true));
+    it('демоутований pending старше за довгий поріг → прибирається', async () => {
+        const id = await seed(
+            pendingAgeDays(BRAND_CLEANUP.demotedDays + 10, true)
+        );
 
         await service.runDailyCleanup();
 

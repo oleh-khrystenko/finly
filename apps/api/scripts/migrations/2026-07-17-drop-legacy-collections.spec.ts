@@ -33,7 +33,9 @@ describe('migration 2026-07-17-drop-legacy-collections', () => {
 
     afterEach(async () => {
         const db = mongoose.connection.db!;
-        const existing = await db.listCollections({}, { nameOnly: true }).toArray();
+        const existing = await db
+            .listCollections({}, { nameOnly: true })
+            .toArray();
         for (const c of existing) {
             await db.collection(c.name).drop();
         }

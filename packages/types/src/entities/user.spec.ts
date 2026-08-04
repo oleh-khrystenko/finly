@@ -23,13 +23,12 @@ describe('UserSchema', () => {
     it('parses a user with a valid same-origin pendingPostLoginTarget', () => {
         const result = UserSchema.safeParse({
             ...VALID_USER,
-            pendingPostLoginTarget:
-                '/business/ivanenko-fop/account/abcd1234',
+            pendingPostLoginTarget: '/business/ivanenko-fop/account/abcd1234',
         });
         expect(result.success).toBe(true);
         if (result.success) {
             expect(result.data.pendingPostLoginTarget).toBe(
-                '/business/ivanenko-fop/account/abcd1234',
+                '/business/ivanenko-fop/account/abcd1234'
             );
         }
     });
@@ -42,7 +41,7 @@ describe('UserSchema', () => {
         expect(result.success).toBe(false);
         if (!result.success) {
             expect(result.error.issues[0].message).toBe(
-                'INVALID_REDIRECT_TARGET',
+                'INVALID_REDIRECT_TARGET'
             );
         }
     });
@@ -77,10 +76,10 @@ describe('UserSchema', () => {
         expect(result.success).toBe(true);
         if (result.success) {
             expect(
-                result.data.profileCompletionReminders.firstReminderSentAt,
+                result.data.profileCompletionReminders.firstReminderSentAt
             ).toEqual(new Date('2026-05-13T05:00:00.000Z'));
             expect(
-                result.data.profileCompletionReminders.finalWarningSentAt,
+                result.data.profileCompletionReminders.finalWarningSentAt
             ).toEqual(new Date('2026-05-18T05:00:00.000Z'));
         }
     });
@@ -96,10 +95,10 @@ describe('UserSchema', () => {
         expect(result.success).toBe(true);
         if (result.success) {
             expect(
-                result.data.profileCompletionReminders.firstReminderSentAt,
+                result.data.profileCompletionReminders.firstReminderSentAt
             ).toEqual(new Date('2026-05-13T05:00:00.000Z'));
             expect(
-                result.data.profileCompletionReminders.finalWarningSentAt,
+                result.data.profileCompletionReminders.finalWarningSentAt
             ).toBeNull();
         }
     });

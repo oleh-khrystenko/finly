@@ -2,6 +2,7 @@ import { formatYymmddhhmmss, type PayloadInput } from '@finly/types';
 
 import type { AccountDocument } from '../accounts/schemas/account.schema';
 import type { BusinessDocument } from '../businesses/schemas/business.schema';
+import { resolveAccountPurposeTemplate } from '../accounts/payload-mapper';
 import { effectiveInvoicePurpose } from './purpose-resolver';
 import type { InvoiceDocument } from './schemas/invoice.schema';
 
@@ -38,7 +39,7 @@ export function buildPayloadInputFromInvoice(
             snapshot?.paymentPurpose ??
             effectiveInvoicePurpose(
                 invoice.paymentPurpose,
-                business.paymentPurposeTemplate
+                resolveAccountPurposeTemplate(business, account)
             ),
         fieldLockMask: invoice.amountLocked ? 'FFFF' : 'FEFF',
         validUntil: invoice.validUntil

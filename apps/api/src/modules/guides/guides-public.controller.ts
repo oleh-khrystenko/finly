@@ -6,6 +6,7 @@ import {
     type PublicGuidesTree,
 } from '@finly/types';
 
+import { skipThrottlersExcept } from '../../common/http/throttle-policy';
 import { GuidesService } from './guides.service';
 
 /**
@@ -16,7 +17,7 @@ import { GuidesService } from './guides.service';
  */
 @Controller('guides/public')
 @Throttle({ 'public-content': { limit: 600, ttl: 60_000 } })
-@SkipThrottle({ default: true })
+@SkipThrottle(skipThrottlersExcept('public-content'))
 export class GuidesPublicController {
     constructor(private readonly guidesService: GuidesService) {}
 

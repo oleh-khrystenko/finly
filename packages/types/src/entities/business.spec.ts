@@ -259,7 +259,7 @@ describe('BusinessSchema', () => {
         it('rejects name з emoji → INVALID_NAME_CHARSET', () => {
             const result = BusinessSchema.safeParse({
                 ...VALID_BUSINESS,
-                name: '☕ Кав\'ярня',
+                name: "☕ Кав'ярня",
             });
             expect(result.success).toBe(false);
             if (!result.success) {

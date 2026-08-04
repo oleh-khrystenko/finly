@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { RESERVED_SLUGS } from '@finly/types';
+import { isAllowedReturnTarget, RESERVED_SLUGS } from '@finly/types';
 import { isPublicHost } from '@/shared/config/publicHosts';
+import { RETURN_ORIGINS } from '@/shared/lib/redirect';
 
 // Sprint 3 §3.5 — `/dashboard` видалена (E2: → `/business`); `/pay`
 // видалений як рудимент (E4: піддомен `pay.finly.com.ua` — окрема історія
 // host-aware routing-у §3.9, не protected path).
-const PROTECTED_PATHS = ['/business', '/profile', '/billing'];
+const PROTECTED_PATHS = ['/business', '/profile', '/billing', '/catalog'];
 const AUTH_PATHS = ['/auth/signin'];
 const COOKIE_NAME = 'bid_refresh';
 const DELETED_COOKIE = 'bid_account_deleted';
@@ -45,11 +46,11 @@ export default function proxy(request: NextRequest) {
     }
 
     if (isPublicHostReq) {
-        // Branch A0 — public host + голий корінь `/` → пояснювальна сторінка
-        // (`app/host-pay/page.tsx`, обгорнута host-pay layout-ом).
-        // Голий pay-host — це випадковий/обрізаний візит: платник загубив повне
-        // посилання `pay.finly.com.ua/{businessSlug}`. Rewrite на host-pay index
-        // дає брендований пояснювач замість 404-dead-end.
+        // Branch A0 — public host + голий корінь `/` → публічний каталог
+        // перевірених отримувачів (`app/host-pay/page.tsx`, обгорнута host-pay
+        // layout-ом) — перший індексований контент pay-хоста (Sprint 29).
+        // Порожній каталог (у т.ч. недоступний API) рендерить noindex-пояснювач
+        // для випадкового/обрізаного візиту замість 404-dead-end.
         if (pathname === '/') {
             return NextResponse.rewrite(new URL('/host-pay', request.url));
         }
@@ -93,8 +94,10 @@ export default function proxy(request: NextRequest) {
         // (`/{biz}/{acc}/{inv}` — Branch A3). 2-сегментний path тепер означає
         // per-account вивіску.
         //
-        // Reserved-check тільки на business-slug — account-slug system-generated
-        // 8-char tail (`A-Za-z0-9`), не торкає reserved-list.
+        // Reserved-check тільки на business-slug: лише перший сегмент конкурує
+        // з роутами апки за корінь path-простору. Account-slug (editable vanity
+        // зі Sprint 15) живе у власному namespace `(businessId, slugLower)` і з
+        // reserved-списком не перетинається.
         const accountSlugMatch = /^\/([^/]+)\/([^/]+)$/.exec(pathname);
         if (accountSlugMatch) {
             const businessSlug = accountSlugMatch[1]!;
@@ -114,8 +117,9 @@ export default function proxy(request: NextRequest) {
         // Branch A3 — public host + 3-сегментна path
         // (`/{businessSlug}/{accountSlug}/{invoiceSlug}`) (Sprint 9 §SP-6).
         // Invoice public-URL став 3-сегментним після перенесення інвойсів під
-        // account. Reserved-check тільки на business-slug; account-slug та
-        // invoice-slug — system-generated рядки без обмеження на reserved-list.
+        // account. Reserved-check тільки на business-slug: account-slug та
+        // invoice-slug (editable vanity зі Sprint 15) живуть у власних
+        // compound-namespace і за роути апки не конкурують.
         const invoiceSlugMatch = /^\/([^/]+)\/([^/]+)\/([^/]+)$/.exec(pathname);
         if (invoiceSlugMatch) {
             const businessSlug = invoiceSlugMatch[1]!;
@@ -179,6 +183,28 @@ export default function proxy(request: NextRequest) {
     );
 
     if (isAuthPath && hasRefreshCookie && !isAccountDeleted) {
+        // Sprint 30 — вхід з публічної сторінки несе адресу повернення у
+        // `?redirect=`. Якщо сесія вже є (людина увійшла в іншій вкладці, поки
+        // ця чекала), відправляти її в кабінет означало б загубити сторінку
+        // оплати, з якої вона пішла. Whitelist той самий, що на бекенді: свої
+        // шляхи і рівно два наші origin-и.
+        const returnTo = request.nextUrl.searchParams.get('redirect');
+        if (returnTo && isAllowedReturnTarget(returnTo, RETURN_ORIGINS)) {
+            // Ціль на ІНШОМУ нашому хості — рішення не тут. Тут відомо лише те,
+            // що cookie з таким іменем існує, а не те, що сесія жива і що її
+            // видно хосту призначення. Обидва припущення хибні для cookie
+            // старого зразка (до Sprint 30 вона host-only на кабінеті): такий
+            // редірект повертав би людину на публічну сторінку, де вона й далі
+            // анонім, а форму входу вона не побачила б жодного разу — цикл без
+            // виходу, бо на кабінеті нічого не завантажується і стару cookie
+            // нікому погасити. Тому пропускаємо на сторінку входу: там клієнт
+            // спершу підтверджує сесію (а невдале підтвердження гасить cookie
+            // обох зразків) і лише тоді повертає людину на pay-хост.
+            if (returnTo.startsWith('/')) {
+                return NextResponse.redirect(new URL(returnTo, request.url));
+            }
+            return NextResponse.next();
+        }
         return NextResponse.redirect(new URL('/business', request.url));
     }
 

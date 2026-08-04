@@ -11,7 +11,15 @@ const FALLBACK_DESCRIPTION =
 interface BuildMetadataProps {
     title: string;
     description: string;
-    canonicalUrl: string;
+    /**
+     * `null` — сторінка без канонічної адреси. Для noindex-варіантів
+     * (персоналізовані податкові сторінки, вимкнений `seoIndexEnabled`):
+     * noindex + rel=canonical — суперечливі сигнали («не індексуй» проти «ось
+     * канонічна адреса»), Google радить їх не поєднувати — інакше noindex може
+     * склеїтись на канонічну ціль. Разом з canonical опускається й `og:url`
+     * (теж canonical-підказка для пошуковика).
+     */
+    canonicalUrl: string | null;
     noindex?: boolean;
     ogTitle?: string;
     ogDescription?: string;
@@ -43,16 +51,18 @@ export function buildMetadata({
     return {
         title,
         description,
-        alternates: {
-            canonical: canonicalUrl,
-        },
+        ...(canonicalUrl !== null && {
+            alternates: {
+                canonical: canonicalUrl,
+            },
+        }),
         ...(noindex && {
             robots: { index: false, follow: false },
         }),
         openGraph: {
             title: socialTitle,
             description: socialDescription,
-            url: canonicalUrl,
+            ...(canonicalUrl !== null && { url: canonicalUrl }),
             siteName: 'Finly',
             locale: 'uk_UA',
             type: 'website',
@@ -100,7 +110,10 @@ export function fetchMetadata({
     return buildMetadata({
         title,
         description,
-        canonicalUrl,
+        // Те саме правило, що на pay-хості: noindex + rel=canonical —
+        // суперечливі сигнали, тож у закритій від пошуку гілці канонічна адреса
+        // (і `og:url`) не віддається.
+        canonicalUrl: noindex ? null : canonicalUrl,
         noindex,
         ogTitle: meta?.ogTitle,
         ogDescription: meta?.ogDescription,

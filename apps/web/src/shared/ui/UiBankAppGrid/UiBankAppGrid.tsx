@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from 'react';
 import { ArrowUpRight } from 'lucide-react';
 import {
+    ANDROID_HIDDEN_BANKS,
     BANK_LABEL,
     IOS_HIDDEN_BANKS,
     MVP_BANKS,
@@ -43,11 +44,11 @@ const getServerPlatform = (): ClientPlatform => 'desktop';
  * реквізитами (Sprint 5 §3.1, `docs/sprints/05-per-bank/`).
  *
  * Платформу читаємо через `useSyncExternalStore`, не під час SSR: перший
- * рендер віддає повний список (як на desktop), далі на iOS список звужується до
- * банків з підтвердженою приватною схемою. Серверна й перша клієнтська розмітка
- * лишаються ідентичними (без hydration-mismatch), а з iOS зникають кнопки, що
- * відкрили б не той банк. `buildBankAppLink` дає iOS-схему / Android-intent або
- * `null` (→ fallback на загальний НБУ-link).
+ * рендер віддає повний список (як на desktop), далі список звужується за
+ * списком прихованих банків для платформи. Серверна й перша клієнтська
+ * розмітка лишаються ідентичними (без hydration-mismatch).
+ * `buildBankAppLink` дає iOS-схему / Android-intent або `null` (→ fallback на
+ * загальний НБУ-link).
  *
  * Живе у `shared/ui`, бо споживається кількома public-payment фічами
  * (`account-public`, `invoice-public`) — feature→feature import заборонений
@@ -71,15 +72,14 @@ export default function UiBankAppGrid({
         getServerPlatform
     );
 
-    // На iOS показуємо всі банки, крім явного blacklist-у (IOS_HIDDEN_BANKS —
-    // pumb/sense/raiffeisen). Банк без приватної схеми лишається у списку, але
-    // його тап іде на загальний НБУ-link (buildBankAppLink → null → fallback).
-    // Android відкриває будь-який банк через intent://package=; desktop
-    // банк-додатків не має.
+    // Банк без приватної iOS-схеми лишається у списку, якщо його немає у
+    // списку прихованих банків для платформи: тап іде на загальний НБУ-link.
     const visibleBanks =
         platform === 'ios'
             ? banks.filter((bank) => !IOS_HIDDEN_BANKS.includes(bank))
-            : banks;
+            : platform === 'android'
+              ? banks.filter((bank) => !ANDROID_HIDDEN_BANKS.includes(bank))
+              : banks;
 
     const handleSelect = (bank: BankCode) => {
         const target =

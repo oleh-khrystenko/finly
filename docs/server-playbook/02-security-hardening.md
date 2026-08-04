@@ -38,7 +38,7 @@ sudo sshd -t                       # syntax check; must be silent
 sudo systemctl reload ssh
 ```
 
-**Critical:** keep your existing SSH session open. Open a *second* terminal and confirm you can still log in. If you can, only then close the first.
+**Critical:** keep your existing SSH session open. Open a _second_ terminal and confirm you can still log in. If you can, only then close the first.
 
 Verify directives are active:
 

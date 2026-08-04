@@ -19,6 +19,14 @@ const baseBusiness: Business = {
     deletedAt: null,
     brandedAt: null,
     brand: null,
+    isSystem: false,
+    slugCustomized: false,
+    catalogVisible: false,
+    publicityStatus: 'none',
+    publicityRequestedAt: null,
+    publicityReviewedAt: null,
+    publicityRejectionReason: null,
+    catalogCategory: 'business',
     createdAt: new Date('2026-05-01T10:00:00Z'),
     updatedAt: new Date('2026-05-01T10:00:00Z'),
 };
@@ -52,7 +60,9 @@ describe('PaymentDetailsCard (expired-badge у хедері картки)', () =
         render(
             <PaymentDetailsCard
                 invoice={baseInvoice}
-                business={baseBusiness}
+                inheritedPaymentPurposeTemplate={
+                    baseBusiness.paymentPurposeTemplate
+                }
                 onSave={jest.fn()}
             />
         );
@@ -65,7 +75,9 @@ describe('PaymentDetailsCard (expired-badge у хедері картки)', () =
         render(
             <PaymentDetailsCard
                 invoice={{ ...baseInvoice, validUntil: future }}
-                business={baseBusiness}
+                inheritedPaymentPurposeTemplate={
+                    baseBusiness.paymentPurposeTemplate
+                }
                 onSave={jest.fn()}
             />
         );
@@ -76,7 +88,9 @@ describe('PaymentDetailsCard (expired-badge у хедері картки)', () =
         render(
             <PaymentDetailsCard
                 invoice={{ ...baseInvoice, validUntil: new Date('2024-01-01') }}
-                business={baseBusiness}
+                inheritedPaymentPurposeTemplate={
+                    baseBusiness.paymentPurposeTemplate
+                }
                 onSave={jest.fn()}
             />
         );
@@ -87,7 +101,9 @@ describe('PaymentDetailsCard (expired-badge у хедері картки)', () =
         render(
             <PaymentDetailsCard
                 invoice={baseInvoice}
-                business={baseBusiness}
+                inheritedPaymentPurposeTemplate={
+                    baseBusiness.paymentPurposeTemplate
+                }
                 onSave={jest.fn()}
             />
         );

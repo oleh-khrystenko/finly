@@ -78,12 +78,9 @@ export function LandingFaq() {
                     </h2>
                 </div>
 
-                <div className="mx-auto max-w-3xl divide-y divide-border/70">
+                <div className="divide-border/70 mx-auto max-w-3xl divide-y">
                     {FAQ.map((item) => (
-                        <details
-                            key={item.question}
-                            className="group py-5"
-                        >
+                        <details key={item.question} className="group py-5">
                             <summary className="text-foreground flex cursor-pointer list-none items-center justify-between gap-4 text-lg font-medium">
                                 {item.question}
                                 <Plus

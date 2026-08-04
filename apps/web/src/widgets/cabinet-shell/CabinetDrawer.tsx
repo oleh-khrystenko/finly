@@ -8,6 +8,7 @@ import {
     UiSheetTitle,
 } from '@/shared/ui/UiSheet';
 import { CabinetNavList } from './CabinetNavList';
+import { CabinetAdminGroup } from './CabinetAdminGroup';
 import { AccountSection } from './AccountSection';
 import { useCabinetNav } from './useCabinetNav';
 import { useCabinetDrawerStore } from './cabinetDrawerStore';
@@ -18,7 +19,7 @@ import { useCabinetDrawerStore } from './cabinetDrawerStore';
  * закриває панель.
  */
 export default function CabinetDrawer() {
-    const { primary, secondary } = useCabinetNav();
+    const { primary, secondary, admin } = useCabinetNav();
     const isOpen = useCabinetDrawerStore((s) => s.isOpen);
     const close = useCabinetDrawerStore((s) => s.close);
 
@@ -36,7 +37,12 @@ export default function CabinetDrawer() {
                     className="flex flex-1 flex-col gap-6 overflow-y-auto px-5 pb-6"
                 >
                     <CabinetNavList items={primary} onNavigate={close} />
-                    <CabinetNavList items={secondary} onNavigate={close} />
+                    {/* Сервіс притиснутий донизу — дзеркало sidebar-а. */}
+                    <div className="mt-auto flex flex-col gap-2">
+                        <div className="bg-border h-px" />
+                        <CabinetNavList items={secondary} onNavigate={close} />
+                        <CabinetAdminGroup items={admin} onNavigate={close} />
+                    </div>
                 </nav>
 
                 <AccountSection onNavigate={close} />

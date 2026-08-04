@@ -3,7 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Cron } from '@nestjs/schedule';
 import { Model, Types } from 'mongoose';
 
-import { ENV } from '../../config/env';
+import { ORPHAN_CLEANUP } from '../../config/cleanup.config';
 import {
     Business,
     BusinessDocument,
@@ -161,20 +161,20 @@ export class OrphanProfileCleanupService {
         const { firstReminderSentAt, finalWarningSentAt } = candidate;
 
         if (
-            ageDays >= ENV.ORPHAN_CLEANUP_DELETION_DAYS &&
+            ageDays >= ORPHAN_CLEANUP.deletionDays &&
             finalWarningSentAt !== null
         ) {
             return 3;
         }
         if (
-            ageDays >= ENV.ORPHAN_REMINDER_FINAL_DAYS &&
+            ageDays >= ORPHAN_CLEANUP.finalReminderDays &&
             finalWarningSentAt === null &&
             firstReminderSentAt !== null
         ) {
             return 2;
         }
         if (
-            ageDays >= ENV.ORPHAN_REMINDER_FIRST_DAYS &&
+            ageDays >= ORPHAN_CLEANUP.firstReminderDays &&
             firstReminderSentAt === null
         ) {
             return 1;

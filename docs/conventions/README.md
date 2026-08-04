@@ -16,6 +16,7 @@
 | Form Validation Feedback  | [forms.md](forms.md)                           | Кнопки не блокуються за валідацією — клік дозволено, причина показується простою мовою    |
 | Design Tokens             | [design-tokens.md](design-tokens.md)           | Заборона хардкоджених кольорів/шрифтів, використання дизайн-токенів                       |
 | Overlays                  | [overlays.md](overlays.md)                     | Модалки, sheets, confirm dialogs — примітиви, Zustand store, layout mount                 |
+| Subdomain Policy          | [subdomains.md](subdomains.md)                 | Сторонні сервіси не живуть на піддоменах основного домену (спільна сесія)                 |
 | Responsive & Mobile-First | [responsive.md](responsive.md)                 | Усі сторінки адаптивні (mobile + tablet + desktop), mobile-first як залізобетонне правило |
 
 ## Як додати нове правило

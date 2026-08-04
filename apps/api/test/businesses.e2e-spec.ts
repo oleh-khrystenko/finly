@@ -14,6 +14,8 @@ import { createReplSetMongo } from '../src/test-utils/mongo';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 import { REDIS_CLIENT } from '../src/common/modules/redis.module';
 import { RedisCounterService } from '../src/common/services/redis-counter.service';
+import { createCounterStub } from './redis-counter-stub';
+import { USER_RATE_LIMITS } from '../src/common/http/throttle-policy';
 import { RedisLockService } from '../src/common/services/redis-lock.service';
 import { AuthModule } from '../src/modules/auth/auth.module';
 import { BusinessesModule } from '../src/modules/businesses/businesses.module';
@@ -38,7 +40,7 @@ import { CURRENT_TERMS_VERSION } from '@finly/types';
 jest.mock('../src/config/env', () => ({
     ENV: {
         NODE_ENV: 'test',
-        PORT: '4000',
+        API_PORT: '4000',
         WEB_URL: 'https://finly.com.ua',
         PAY_PUBLIC_URL: 'https://pay.finly.com.ua',
         MONGODB_URI: 'overridden-by-MongoMemoryReplSet',
@@ -47,19 +49,10 @@ jest.mock('../src/config/env', () => ({
         JWT_REFRESH_SECRET: 'e2e-refresh-secret-must-be-long-enough',
         GOOGLE_CLIENT_ID: 'test-id.apps.googleusercontent.com',
         GOOGLE_CLIENT_SECRET: 'GOCSPX-test',
-        GOOGLE_CALLBACK_URL: 'http://localhost:4000/api/auth/google/callback',
         RESEND_API_KEY: 're_test',
         RESEND_FROM_EMAIL: 'Finly <test@test.com>',
         STRIPE_SECRET_KEY: 'sk_test',
         STRIPE_WEBHOOK_SECRET: 'whsec_test',
-        AUTH_LOCKOUT_THRESHOLDS: '5:1,10:5,20:15',
-        AUTH_LOGIN_ATTEMPTS_TTL_MIN: 15,
-        AUTH_MAGIC_LINK_TTL_MIN: 15,
-        AUTH_MAGIC_LINK_RATE_LIMIT: 3,
-        AUTH_MAGIC_LINK_RATE_WINDOW_MIN: 15,
-        AUTH_MAGIC_LINK_DEDUP_SEC: 60,
-        ACCOUNT_DELETION_GRACE_DAYS: 30,
-        AUTH_PASSWORD_MIN_LENGTH: 8,
         // AuthModule → StorageModule → CloudflareR2Service: env-залежність
         // на R2 keys. Тести QR/upload-flow не запускаємо, але S3Client
         // створюється у constructor-і — fake values уникає fail-fast crash.
@@ -68,29 +61,7 @@ jest.mock('../src/config/env', () => ({
         R2_SECRET_ACCESS_KEY: 'test-secret',
         R2_BUCKET_NAME: 'test-bucket',
         R2_PUBLIC_URL: 'https://media.test.local',
-        BILLING_BRAND_ENABLED: true,
-        BILLING_DOCUMENTS_ENABLED: false,
-        BILLING_GRID: {
-            currency: 'UAH',
-            brand: { pricePerBusiness: 4900 },
-            documents: {
-                tiers: [
-                    { size: 1, priceAmount: 29900, monthlyCredits: 1000 },
-                    { size: 5, priceAmount: 149500, monthlyCredits: 5000 },
-                ],
-                storageGbPerBusiness: 5,
-                storageRentCreditsPerGb: 10,
-                creditPacks: [{ credits: 500, priceAmount: 15000 }],
-                lowBalanceThreshold: 200,
-                criticalBalanceThreshold: 100,
-            },
-        },
     },
-    parseLockoutThresholds: (raw: string) =>
-        raw.split(',').map((entry: string) => {
-            const [attempts, blockMin] = entry.split(':').map(Number);
-            return { attempts, blockMin };
-        }),
 }));
 
 // ─── Mocks ───
@@ -112,12 +83,10 @@ jest.mock('../src/config/env', () => ({
         },
         {
             provide: RedisCounterService,
-            // Stub: повертає інкрементовані значення з in-memory map.
-            // Жоден тест businesses-flow не упирається в rate-limit.
-            useValue: {
-                incrementFixed: jest.fn(async () => 1),
-                incrementSliding: jest.fn(async () => 1),
-            },
+            // Імена методів мусять збігатися з реальним сервісом:
+            // `UserRateLimitGuard` викликає саме `incrementFixedWindow`, і
+            // stub з іншою назвою падав би TypeError замість роботи ліміту.
+            useValue: createCounterStub(),
         },
         {
             provide: RedisLockService,
@@ -1136,6 +1105,7 @@ describe('Businesses E2E', () => {
             };
             expect(Object.keys(body.data).sort()).toEqual([
                 'accounts',
+                'isSystem',
                 'name',
                 'seoIndexEnabled',
                 'slug',
@@ -1288,6 +1258,135 @@ describe('Businesses E2E', () => {
             await supertest(app.getHttpServer())
                 .get('/api/businesses/public/missing-slug/qr/business.png')
                 .expect(404);
+        });
+    });
+
+    /**
+     * Ліміт перевірки вільного імені — єдиний захист цього оракула: кабінетні
+     * контролери свідомо йдуть повз IP-throttler (за rewrite web-контейнера він
+     * був би спільним лічильником на весь продукт), тож рахунок ведеться
+     * per-user.
+     */
+    describe('GET /businesses/me/:slug/slug-availability — per-user ліміт', () => {
+        const { limit } = USER_RATE_LIMITS.slugAvailability;
+
+        async function seedOwnBusiness(): Promise<{
+            user: UserDocument;
+            slug: string;
+        }> {
+            const user = await createUser();
+            const created = await supertest(app.getHttpServer())
+                .post('/api/businesses/me')
+                .set('Authorization', bearerFor(user))
+                .send(VALID_CREATE_PAYLOAD);
+            return {
+                user,
+                slug: (created.body as { data: { slug: string } }).data.slug,
+            };
+        }
+
+        const probe = (user: UserDocument, slug: string, candidate: string) =>
+            supertest(app.getHttpServer())
+                .get(
+                    `/api/businesses/me/${slug}/slug-availability?slug=${candidate}`
+                )
+                .set('Authorization', bearerFor(user));
+
+        it(`після ${limit} перевірок віддає 429`, async () => {
+            const { user, slug } = await seedOwnBusiness();
+
+            for (let i = 0; i < limit; i++) {
+                await probe(user, slug, `wanted-name-${i}`).expect(200);
+            }
+            const overLimit = await probe(user, slug, 'wanted-name-last');
+
+            expect(overLimit.status).toBe(429);
+            expect(
+                (overLimit.body as { error?: { code?: string } }).error?.code
+            ).toBe('RATE_LIMIT_EXCEEDED');
+        });
+
+        it('лічильник не спільний між користувачами', async () => {
+            const first = await seedOwnBusiness();
+            const second = await seedOwnBusiness();
+
+            for (let i = 0; i < limit; i++) {
+                await probe(first.user, first.slug, `name-${i}`).expect(200);
+            }
+            await probe(first.user, first.slug, 'over').expect(429);
+
+            // Вичерпаний ліміт сусіда не має гасити перевірку іншому
+            // користувачу — саме цим per-user лічильник відрізняється від
+            // спільного IP-бакета.
+            await probe(second.user, second.slug, 'name-0').expect(200);
+        });
+    });
+
+    /**
+     * Sprint 30 — отримувачі як джерело даних платника на податковій сторінці.
+     * Ендпоінт віддає персональні дані (РНОКПП клієнтів бухгалтера), тому
+     * межа власності перевіряється на живій БД, а не лише формою фільтра.
+     */
+    describe('GET /payer-sources', () => {
+        const sources = (body: unknown) =>
+            (body as { data: { name: string; taxId: string }[] }).data;
+
+        it('віддає власного ФОПа і не бачить чужого', async () => {
+            const owner = await createUser();
+            await supertest(app.getHttpServer())
+                .post('/api/businesses/me')
+                .set('Authorization', bearerFor(owner))
+                .send(VALID_CREATE_PAYLOAD)
+                .expect(201);
+
+            const own = await supertest(app.getHttpServer())
+                .get('/api/payer-sources')
+                .set('Authorization', bearerFor(owner))
+                .expect(200);
+            expect(sources(own.body)).toEqual([
+                expect.objectContaining({
+                    type: 'fop',
+                    name: VALID_CREATE_PAYLOAD.name,
+                    taxId: VALID_TAX_ID,
+                    // Створений у режимі власника — це сам користувач, і саме
+                    // цей запис несе на сторінці оплати роль «я».
+                    isOwn: true,
+                }),
+            ]);
+
+            const stranger = await createUser();
+            const foreign = await supertest(app.getHttpServer())
+                .get('/api/payer-sources')
+                .set('Authorization', bearerFor(stranger))
+                .expect(200);
+            expect(sources(foreign.body)).toHaveLength(0);
+        });
+
+        it('ТОВ не потрапляє у джерела — ЄДРПОУ не є податковим номером людини', async () => {
+            const user = await createUser();
+            await supertest(app.getHttpServer())
+                .post('/api/businesses/me')
+                .set('Authorization', bearerFor(user))
+                .send({
+                    ...VALID_CREATE_PAYLOAD,
+                    type: 'tov',
+                    name: 'Ромашка',
+                    taxId: '12345678',
+                    taxationSystem: 'general',
+                })
+                .expect(201);
+
+            const res = await supertest(app.getHttpServer())
+                .get('/api/payer-sources')
+                .set('Authorization', bearerFor(user))
+                .expect(200);
+            expect(sources(res.body)).toHaveLength(0);
+        });
+
+        it('без токена — 401', async () => {
+            await supertest(app.getHttpServer())
+                .get('/api/payer-sources')
+                .expect(401);
         });
     });
 });

@@ -10,7 +10,7 @@ import {
     Query,
     UseGuards,
 } from '@nestjs/common';
-import { SkipThrottle, Throttle } from '@nestjs/throttler';
+import { SkipThrottle } from '@nestjs/throttler';
 import { ZodValidationPipe } from 'nestjs-zod';
 import {
     AccountSlugCandidateSchema,
@@ -22,7 +22,13 @@ import {
 
 import { CurrentBusinessBranded } from '../../common/decorators/current-business-branded.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { UserRateLimit } from '../../common/decorators/user-rate-limit.decorator';
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
+import { UserRateLimitGuard } from '../../common/guards/user-rate-limit.guard';
+import {
+    skipThrottlersExcept,
+    USER_RATE_LIMITS,
+} from '../../common/http/throttle-policy';
 import {
     BusinessAccessGuard,
     CurrentBusiness,
@@ -30,6 +36,7 @@ import {
 import type { BusinessDocument } from '../businesses/schemas/business.schema';
 import { toSlugReservationView } from '../slug-reservation/slug-reservation.service';
 import type { UserDocument } from '../users/schemas/user.schema';
+import { SetCatalogVisibilityDto } from '../businesses/dto/set-catalog-visibility.dto';
 import { AccountAccessGuard, CurrentAccount } from './account-access.guard';
 import { AccountsService } from './accounts.service';
 import { CreateAccountDto } from './dto/create-account.dto';
@@ -47,6 +54,8 @@ import type { AccountDocument } from './schemas/account.schema';
  */
 @Controller('businesses/me/:slug/accounts')
 @UseGuards(JwtActiveGuard, BusinessAccessGuard)
+// Кабінет за логіном: throttle вимкнено повністю (див. BusinessesController).
+@SkipThrottle(skipThrottlersExcept())
 export class AccountsController {
     constructor(private readonly accountsService: AccountsService) {}
 
@@ -118,19 +127,11 @@ export class AccountsController {
 
     /**
      * Sprint 20 — live-доступність бажаного імені рахунку до оплати. Усі рівні,
-     * окремий rate-limit.
+     * окремий rate-limit — per-user (див. `businesses.controller`).
      */
     @Get(':accountSlug/slug-availability')
-    @UseGuards(AccountAccessGuard)
-    // Лише власний бакет `slug-availability` (30/min) — skip інших named-
-    // throttler-ів, що інакше тіньовили б ліміт (див. businesses.controller).
-    @Throttle({ 'slug-availability': { limit: 30, ttl: 60_000 } })
-    @SkipThrottle({
-        default: true,
-        'public-payment': true,
-        'qr-preview': true,
-        'help-chat': true,
-    })
+    @UserRateLimit(USER_RATE_LIMITS.slugAvailability)
+    @UseGuards(UserRateLimitGuard, AccountAccessGuard)
     async checkSlugAvailability(
         @CurrentUser() user: UserDocument,
         @CurrentAccount() account: AccountDocument,
@@ -165,6 +166,25 @@ export class AccountsController {
             user._id.toString()
         );
         return { data: toSlugReservationView(reservation) };
+    }
+
+    /**
+     * Sprint 29 — тогл видимості реквізитів у каталозі. Увімкнути можна лише
+     * коли батьківський отримувач публічний і сам рахунок має красивий slug.
+     */
+    @Patch(':accountSlug/catalog-visibility')
+    @UseGuards(AccountAccessGuard)
+    async setCatalogVisibility(
+        @CurrentBusiness() business: BusinessDocument,
+        @CurrentAccount() account: AccountDocument,
+        @Body() dto: SetCatalogVisibilityDto
+    ): Promise<{ data: AccountDocument }> {
+        const updated = await this.accountsService.setCatalogVisibility(
+            account,
+            business,
+            dto.visible
+        );
+        return { data: updated };
     }
 
     @Delete(':accountSlug')

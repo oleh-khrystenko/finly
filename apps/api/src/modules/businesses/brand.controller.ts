@@ -23,6 +23,7 @@ import {
 } from '@finly/types';
 
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
+import { skipThrottlersExcept } from '../../common/http/throttle-policy';
 import { BusinessAccessGuard, CurrentBusiness } from './business-access.guard';
 import { BrandService } from './brand.service';
 import type { BusinessDocument } from './schemas/business.schema';
@@ -35,6 +36,10 @@ import type { BusinessDocument } from './schemas/business.schema';
  */
 @Controller('businesses/me/:slug/brand')
 @UseGuards(JwtActiveGuard, BusinessAccessGuard)
+// Кабінет за логіном: throttle вимкнено (див. BusinessesController). Виняток —
+// `preview` нижче: рендер важкий (download + bake + 2 рендери), тож там свідомо
+// лишається власний `brand-preview`-ліміт проти зациклення клієнта.
+@SkipThrottle(skipThrottlersExcept())
 export class BrandController {
     constructor(private readonly brandService: BrandService) {}
 
@@ -81,22 +86,17 @@ export class BrandController {
 
     /**
      * Прев'ю обох QR із наданим логотипом без активації. Доступне всім рівням.
-     * Власний бакет `brand-preview` (20/min): кожен виклик робить download +
+     * Власний бакет `brand-preview` (60/min): кожен виклик робить download +
      * bake + два рендери — важче за звичайний роут. НЕ ділимо лічильник з
      * анонімним `qr-preview`, щоб скан з того ж IP не блокував прев'ю платного
-     * клієнта. Skip інших named-бакетів, щоб вони не тіньовили поріг
-     * (прецедент `slug-availability`).
+     * клієнта. Skip інших named-бакетів, щоб вони не тіньовили поріг.
      */
     @Post('preview')
     @HttpCode(HttpStatus.OK)
-    @Throttle({ 'brand-preview': { limit: 20, ttl: 60_000 } })
-    @SkipThrottle({
-        default: true,
-        'public-payment': true,
-        'qr-preview': true,
-        'help-chat': true,
-        'slug-availability': true,
-    })
+    // Клас скіпає всі бакети; тут повертаємо назад лише `brand-preview`, щоб
+    // важкий рендер лишався під власним лімітом (drift-proof через реєстр).
+    @Throttle({ 'brand-preview': { limit: 60, ttl: 60_000 } })
+    @SkipThrottle(skipThrottlersExcept('brand-preview'))
     async preview(
         @CurrentBusiness() business: BusinessDocument,
         @Body(new ZodValidationPipe(CommitBrandSchema)) dto: CommitBrandDto

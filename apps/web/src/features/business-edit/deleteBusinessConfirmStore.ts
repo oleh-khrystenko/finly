@@ -42,7 +42,13 @@ export const useDeleteBusinessConfirmStore = create<State>((set) => ({
     invoicesCount: 0,
     onConfirm: null,
     open: (business, accountsCount, invoicesCount, onConfirm) =>
-        set({ isOpen: true, business, accountsCount, invoicesCount, onConfirm }),
+        set({
+            isOpen: true,
+            business,
+            accountsCount,
+            invoicesCount,
+            onConfirm,
+        }),
     close: () =>
         set({
             isOpen: false,

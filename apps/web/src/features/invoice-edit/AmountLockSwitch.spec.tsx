@@ -90,9 +90,7 @@ describe('AmountLockSwitch (coupled SP-6 + status-title)', () => {
         const unhandled = jest.fn();
         process.on('unhandledRejection', unhandled);
         try {
-            render(
-                <AmountLockSwitch invoice={baseInvoice} onSave={onSave} />
-            );
+            render(<AmountLockSwitch invoice={baseInvoice} onSave={onSave} />);
             fireEvent.click(screen.getByRole('switch'));
             await waitFor(() =>
                 expect(onSave).toHaveBeenCalledWith({ amountLocked: false })

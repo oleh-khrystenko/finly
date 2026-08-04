@@ -116,8 +116,6 @@ describe('AmountSection (Sprint 4 §4.6 — money-field; lock-switch → AmountL
         // Reopen-state: значення з invoice.amount = 150000 → "1500,00".
         expect((reopened as HTMLInputElement).value).toBe('1500,00');
         // parseErr скинуто після reset — причини під полем більше немає.
-        expect(
-            screen.queryByText(/Введіть число/)
-        ).not.toBeInTheDocument();
+        expect(screen.queryByText(/Введіть число/)).not.toBeInTheDocument();
     });
 });

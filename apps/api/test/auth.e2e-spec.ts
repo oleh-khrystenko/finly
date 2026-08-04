@@ -31,7 +31,7 @@ import { CURRENT_TERMS_VERSION } from '@finly/types';
 jest.mock('../src/config/env', () => ({
     ENV: {
         NODE_ENV: 'test',
-        PORT: '4000',
+        API_PORT: '4000',
         WEB_URL: 'http://localhost:3000',
         MONGODB_URI: 'overridden-by-MongoMemoryServer',
         REDIS_URL: 'redis://mock',
@@ -39,25 +39,11 @@ jest.mock('../src/config/env', () => ({
         JWT_REFRESH_SECRET: 'e2e-test-refresh-secret-must-be-long-enough',
         GOOGLE_CLIENT_ID: 'test-id.apps.googleusercontent.com',
         GOOGLE_CLIENT_SECRET: 'GOCSPX-test-secret',
-        GOOGLE_CALLBACK_URL: 'http://localhost:4000/api/auth/google/callback',
         RESEND_API_KEY: 're_test_key',
         RESEND_FROM_EMAIL: 'Finly <test@test.com>',
         STRIPE_SECRET_KEY: 'sk_test_xxx',
         STRIPE_WEBHOOK_SECRET: 'whsec_test',
-        AUTH_LOCKOUT_THRESHOLDS: '5:1,10:5,20:15',
-        AUTH_LOGIN_ATTEMPTS_TTL_MIN: 15,
-        AUTH_MAGIC_LINK_TTL_MIN: 15,
-        AUTH_MAGIC_LINK_RATE_LIMIT: 3,
-        AUTH_MAGIC_LINK_RATE_WINDOW_MIN: 15,
-        AUTH_MAGIC_LINK_DEDUP_SEC: 60,
-        ACCOUNT_DELETION_GRACE_DAYS: 30,
-        AUTH_PASSWORD_MIN_LENGTH: 8,
     },
-    parseLockoutThresholds: (raw: string) =>
-        raw.split(',').map((entry: string) => {
-            const [attempts, blockMin] = entry.split(':').map(Number);
-            return { attempts, blockMin };
-        }),
 }));
 
 // ─── Stateful in-memory Redis mock ───
@@ -368,9 +354,16 @@ describe('Auth E2E', () => {
         };
     }
 
+    /**
+     * Sprint 30 — відповідь входу несе ДВІ cookie з іменем `bid_refresh`:
+     * порожню (гасить cookie старого зразка, без домену) і справжню сесійну
+     * (з доменом). Браузер розрізняє їх за атрибутом `Domain`; тут беремо ту,
+     * що має значення — саме вона і є сесією.
+     */
     function extractRefreshCookie(cookies: string[]): string {
-        const refreshCookie = cookies?.find((c: string) =>
-            c.startsWith('bid_refresh=')
+        const refreshCookie = cookies?.find(
+            (c: string) =>
+                c.startsWith('bid_refresh=') && !c.startsWith('bid_refresh=;')
         );
         if (!refreshCookie) throw new Error('No bid_refresh cookie found');
         return refreshCookie.split(';')[0].replace('bid_refresh=', '');

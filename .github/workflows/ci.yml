@@ -12,11 +12,12 @@ jobs:
         runs-on: ubuntu-latest
 
         env:
-            NEXT_PUBLIC_BASE_URL: http://localhost:3000
-            NEXT_PUBLIC_API_URL: http://localhost:4000/api
-            NEXT_PUBLIC_PAY_PUBLIC_URL: http://pay.finly.local:3000
-            NEXT_PUBLIC_STORAGE_HOSTNAME: media.finly.com.ua
-            NEXT_PUBLIC_BILLING_DEMO_MODE: 'false'
+            WEB_URL: http://localhost:3000
+            # Мусить відрізнятися хостом від WEB_URL (у dev — портом, у проді —
+            # піддоменом): whitelist публічної зони походить саме звідси, і
+            # `shared/config/env.ts` падає, якщо два origin-и збігаються.
+            PAY_PUBLIC_URL: http://localhost:3001
+            R2_PUBLIC_URL: https://media.finly.com.ua
 
         steps:
             - uses: actions/checkout@v4

@@ -71,7 +71,9 @@ describe('vatChoiceOptions', () => {
                 for (const opt of options) {
                     expect(opt.description).toBeDefined();
                     expect(typeof opt.description).toBe('string');
-                    expect((opt.description as string).length).toBeGreaterThan(0);
+                    expect((opt.description as string).length).toBeGreaterThan(
+                        0
+                    );
                 }
             }
         );

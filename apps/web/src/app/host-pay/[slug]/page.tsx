@@ -31,7 +31,7 @@ import { buildMetadata } from '@/shared/seo/metadata';
  * `Cache-Control: no-store` що middleware Branch A1 ставить.
  *
  * **Defense-in-depth host-check** через `headers()` — middleware має
- * направляти сюди тільки запити з `pay.finly.com.ua`/`pay.finly.local:3000`.
+ * направляти сюди тільки запити з `pay.finly.com.ua`/`localhost:3001`.
  * Якщо middleware зломається (hot-reload race / config drift) — page відмовиться
  * рендерити на cabinet host через стандартний 404.
  *
@@ -79,7 +79,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         ...buildMetadata({
             title,
             description,
-            canonicalUrl,
+            // Canonical лише в індексованій гілці: noindex + rel=canonical —
+            // суперечливі сигнали (те саме правило, що на корені pay-хоста).
+            canonicalUrl: view.seoIndexEnabled ? canonicalUrl : null,
         }),
         // Sprint 3 рішення E3 — `noindex` за замовчуванням, ФОП opt-in
         // через toggle `seoIndexEnabled` у кабінеті.
@@ -124,6 +126,8 @@ export default async function HostPayPage({ params }: Props) {
             slug={view.slug}
             logo={view.logo}
             brandDisplayName={view.brandDisplayName}
+            isSystem={view.isSystem}
+            catalogCategory={view.catalogCategory}
             accounts={view.accounts}
         />
     );

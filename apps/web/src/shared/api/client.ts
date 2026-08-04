@@ -1,6 +1,6 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
 
-import { ENV } from '@/shared/config';
+import { API_BASE_URL } from '@/shared/config';
 import { authEvents, getTimezone } from '@/shared/lib';
 
 // In-memory token storage (more secure than localStorage)
@@ -13,7 +13,7 @@ export const setAccessToken = (token: string | null): void => {
 };
 
 export const apiClient = axios.create({
-    baseURL: ENV.NEXT_PUBLIC_API_URL,
+    baseURL: API_BASE_URL,
     withCredentials: true,
 });
 
@@ -33,8 +33,8 @@ export class PublicApiError extends Error {
  * **Чому native `fetch` з `credentials: 'omit'`, а не axios з
  * `withCredentials: false`** (review fix Sprint 4):
  *
- * Prod-like setup тримає API і web на одному origin: `NEXT_PUBLIC_API_URL=
- * /api`, `next.config.ts` rewrite-ить `/api/*` → backend. Browser бачить
+ * Prod-like setup тримає API і web на одному origin: браузер б'є `/api`
+ * (`API_BASE_URL`), а `next.config.ts` rewrite-ить `/api/*` → backend. Browser бачить
  * запити як same-origin. Для XHR (axios) `withCredentials` керує тільки
  * cross-origin поведінкою:
  *   - `withCredentials: false` (default): same-origin requests **все одно
@@ -59,7 +59,7 @@ export class PublicApiError extends Error {
  *     §3.8 + Sprint 4 §4.6).
  */
 export async function publicFetchJson<T>(path: string): Promise<T> {
-    const baseURL = ENV.NEXT_PUBLIC_API_URL;
+    const baseURL = API_BASE_URL;
     const normalizedPath = path.startsWith('/') ? path : `/${path}`;
     const url = `${baseURL}${normalizedPath}`;
     const res = await fetch(url, {
@@ -91,7 +91,7 @@ export async function publicPostJson<TBody, TRes>(
     path: string,
     body: TBody
 ): Promise<TRes> {
-    const baseURL = ENV.NEXT_PUBLIC_API_URL;
+    const baseURL = API_BASE_URL;
     const normalizedPath = path.startsWith('/') ? path : `/${path}`;
     const url = `${baseURL}${normalizedPath}`;
     const res = await fetch(url, {
@@ -154,7 +154,7 @@ apiClient.interceptors.response.use(
         if (!refreshPromise) {
             refreshPromise = axios
                 .post<{ data: { accessToken: string } }>(
-                    `${ENV.NEXT_PUBLIC_API_URL}/auth/refresh`,
+                    `${API_BASE_URL}/auth/refresh`,
                     { timezone: getTimezone() },
                     { withCredentials: true }
                 )

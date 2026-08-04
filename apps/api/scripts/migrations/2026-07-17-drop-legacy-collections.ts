@@ -9,7 +9,8 @@
  * - `executiontransactions`    — старий ledger «виконань» до переходу на
  *   CREDIT-модель; схема-файл видалено.
  * - `failedrecurringremovals`  — retry-черга видалення recurring-токена
- *   WayForPay; знесена після переходу на monobank (Sprint 22).
+ *   попереднього платіжного провайдера; знесена після переходу на monobank
+ *   (Sprint 22).
  * - `orphanedprovidercustomers` — залишок Stripe-ери (orphan-клієнти провайдера).
  *
  * grep по `apps/api/src` не знаходить жодної схеми чи посилання на ці колекції —
@@ -122,7 +123,9 @@ async function cli(): Promise<void> {
 
         for (const o of result.outcomes) {
             if (!o.existed) {
-                console.log(`[migration:drop-legacy] skip   ${o.name} (не існує)`);
+                console.log(
+                    `[migration:drop-legacy] skip   ${o.name} (не існує)`
+                );
             } else if (o.dropped) {
                 console.log(
                     `[migration:drop-legacy] DROP   ${o.name} (${o.count} док.)`
@@ -140,7 +143,9 @@ async function cli(): Promise<void> {
             );
         } else {
             console.log('[migration:drop-legacy] applied', {
-                dropped: result.outcomes.filter((o) => o.dropped).map((o) => o.name),
+                dropped: result.outcomes
+                    .filter((o) => o.dropped)
+                    .map((o) => o.name),
             });
         }
     } finally {

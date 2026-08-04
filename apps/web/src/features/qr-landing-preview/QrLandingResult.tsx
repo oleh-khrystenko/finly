@@ -113,7 +113,9 @@ export function QrLandingResult({ form }: QrLandingResultProps) {
         const idempotencyKey =
             useQrLandingDraftStore.getState().claimIdempotencyKey;
         if (!idempotencyKey) {
-            toast.error('Не вдалося ініціалізувати збереження. Спробуйте ще раз');
+            toast.error(
+                'Не вдалося ініціалізувати збереження. Спробуйте ще раз'
+            );
             return;
         }
 
@@ -149,7 +151,7 @@ export function QrLandingResult({ form }: QrLandingResultProps) {
                 <p className="text-muted-foreground mb-1 text-xs">
                     Універсальне посилання
                 </p>
-                <code className="text-foreground block break-all font-mono text-sm">
+                <code className="text-foreground block font-mono text-sm break-all">
                     {truncateLink(result.link)}
                 </code>
             </div>

@@ -14,6 +14,7 @@ import { NBU_HOST_PRIMARY, type QrPreviewResponse } from '@finly/types';
 
 import { ENV } from '../../config/env';
 import { SkipOnboarding } from '../../common/decorators/skip-onboarding.decorator';
+import { skipThrottlersExcept } from '../../common/http/throttle-policy';
 import { QrPreviewDto } from './dto/qr-preview.dto';
 import { QrService } from './qr.service';
 
@@ -26,14 +27,14 @@ import { QrService } from './qr.service';
  * Sprint-8 input-shape (`{ taxId, ... }`) на `PayloadInput`-shape
  * (`{ receiverTaxId, ... }`).
  *
- * **Throttle bucket `'qr-preview'` (10/min/IP).** Окремий від `'public-payment'`
+ * **Throttle bucket `'qr-preview'` (30/min/IP).** Окремий від `'public-payment'`
  * (600/min) і `'default'` (60/min) бо це інша поверхня атаки: payload-перебір
  * тут потенційно дешевший за full payment-page-hit (нема БД-lookup-у бізнесу,
- * лише payload-build + PNG-encode). Тримаємо restrictive — навіть з NAT-
- * агрегацією 10/min вистачає легітимним користувачам (одна форма, одна
- * генерація на спробу). `@SkipThrottle({ default: true })` явно вимикає
- * default-bucket — інакше обидва throttler-и спрацюють, і реальний поріг
- * стане min(10, 60) = 10, але budget випалюватиметься з обох count-ерів.
+ * лише payload-build + PNG-encode). Ліміт помірний, але 30/min (не 10), щоб
+ * анонім за спільною IP (NAT/CDN), який активно грається з формою, не ловив
+ * хибний 429. `@SkipThrottle(skipThrottlersExcept('qr-preview'))` скіпає ВСІ
+ * інші бакети — інакше вужчий сусід (нині `help-chat` 20/min) тіньовив би 30 до
+ * min і давав хибний 429. Реєстр-базований скіп не дрейфує від нових бакетів.
  *
  * **`@SkipOnboarding()`** — глобальний `OnboardingInterceptor` пропустимо
  * явно: запит anon-only, немає `request.user` для перевірки onboarding-стану;
@@ -48,8 +49,8 @@ import { QrService } from './qr.service';
  * service-overload `{ png, link }` для одного pipeline-проходу. Поки —
  * premature optimization.
  */
-@SkipThrottle({ default: true })
-@Throttle({ 'qr-preview': { limit: 10, ttl: 60_000 } })
+@SkipThrottle(skipThrottlersExcept('qr-preview'))
+@Throttle({ 'qr-preview': { limit: 30, ttl: 60_000 } })
 @Controller('qr')
 export class QrController {
     constructor(private readonly qrService: QrService) {}
@@ -66,12 +67,12 @@ export class QrController {
      * голого pay-host (`pay.finly.com.ua/`). `withSlogan: false` — слоган живе
      * у футері тієї сторінки, дубль у QR зайвий (лого+назва лишаються).
      *
-     * **`@SkipThrottle()`** — статична картинка з фіксованим текстом, меморизована
-     * + довгий `Cache-Control`; перебір безпредметний. Override class-level
-     * `qr-preview` bucket-у (10/min), що тут був би занадто строгим (код тягнеться
-     * на кожен перегляд сторінки).
+     * **`@SkipThrottle(skipThrottlersExcept())`** — статична картинка з фіксованим
+     * текстом, меморизована + довгий `Cache-Control`; перебір безпредметний.
+     * Скіпаємо ВСІ бакети (включно з class-level `qr-preview`), бо код тягнеться
+     * на кожен перегляд сторінки — інакше ліміт бив би по звичайних відвідувачах.
      */
-    @SkipThrottle()
+    @SkipThrottle(skipThrottlersExcept())
     @SkipOnboarding()
     @Get('landing.png')
     @Header('Content-Type', 'image/png')

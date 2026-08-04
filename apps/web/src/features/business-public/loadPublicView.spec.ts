@@ -33,6 +33,7 @@ const sampleView = {
     name: 'Іваненко',
     slug: 'IvanEnko',
     seoIndexEnabled: false,
+    isSystem: false,
     accounts: [
         {
             slug: 'aBc12345',

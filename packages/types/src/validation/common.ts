@@ -32,6 +32,18 @@ export const lastNameSchema = z
     .max(50, { message: 'INVALID_LAST_NAME_TOO_LONG' })
     .regex(/^[\p{L}\s'\-]+$/u, { message: 'INVALID_LAST_NAME_FORMAT' });
 
+/**
+ * Sprint 30 — по батькові: опційне поле профілю, потрібне лише для податкових
+ * платежів (ПІБ у призначенні). Правила ті самі, що в імені й прізвищі, окремі
+ * коди — щоб форма пояснювала помилку саме про це поле.
+ */
+export const middleNameSchema = z
+    .string()
+    .trim()
+    .min(2, { message: 'INVALID_MIDDLE_NAME_TOO_SHORT' })
+    .max(50, { message: 'INVALID_MIDDLE_NAME_TOO_LONG' })
+    .regex(/^[\p{L}\s'\-]+$/u, { message: 'INVALID_MIDDLE_NAME_FORMAT' });
+
 export const emailSchema = z.string().email({ message: 'INVALID_EMAIL' });
 
 export const passwordSchema = z

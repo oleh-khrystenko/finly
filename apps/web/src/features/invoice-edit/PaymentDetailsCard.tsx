@@ -1,6 +1,6 @@
 'use client';
 
-import type { Business, Invoice, UpdateInvoiceRequest } from '@finly/types';
+import type { Invoice, UpdateInvoiceRequest } from '@finly/types';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import { getInvoiceStatus } from '@/entities/invoice';
 import AmountSection, { AmountLockSwitch } from './AmountSection';
@@ -9,7 +9,8 @@ import ValidUntilSection from './ValidUntilSection';
 
 interface Props {
     invoice: Invoice;
-    business: Business;
+    /** Resolved шаблон рівня рахунку — див. `PurposeSection`. */
+    inheritedPaymentPurposeTemplate: string;
     onSave: (patch: UpdateInvoiceRequest) => Promise<void>;
 }
 
@@ -29,7 +30,7 @@ interface Props {
  */
 export default function PaymentDetailsCard({
     invoice,
-    business,
+    inheritedPaymentPurposeTemplate,
     onSave,
 }: Props) {
     const isExpired = getInvoiceStatus(invoice.validUntil) === 'expired';
@@ -55,7 +56,9 @@ export default function PaymentDetailsCard({
                 <div className="py-6">
                     <PurposeSection
                         invoice={invoice}
-                        business={business}
+                        inheritedPaymentPurposeTemplate={
+                            inheritedPaymentPurposeTemplate
+                        }
                         onSave={onSave}
                     />
                 </div>

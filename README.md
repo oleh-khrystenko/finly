@@ -6,7 +6,7 @@
 
 ## Поточний стан
 
-Реалізовано public payment pages, QR/НБУ payloads, рахунки, інвойси, WayForPay billing, R2 avatar/brand storage, public help AI і модульну архітектуру на Next.js 16 + NestJS 11. Reports module лишається scaffold-only.
+Реалізовано public payment pages, QR/НБУ payloads, рахунки, інвойси, monobank billing, R2 avatar/brand storage, public help AI і модульну архітектуру на Next.js 16 + NestJS 11. Reports module лишається scaffold-only.
 
 ---
 
@@ -27,7 +27,7 @@ finly/
 │           ├── modules/
 │           │   ├── auth/             # Google OAuth, Magic Link, Password, JWT
 │           │   ├── users/            # CRUD, profile, soft-delete, executions ledger
-│           │   ├── payments/         # WayForPay billing + webhook idempotency
+│           │   ├── payments/         # monobank billing + webhook idempotency
 │           │   ├── ai/               # Public help chat (Anthropic SSE)
 │           │   ├── storage/          # Cloudflare R2 transport
 │           │   ├── reports/          # Scaffold-only
@@ -51,7 +51,7 @@ finly/
 | Monorepo | Turborepo + pnpm workspaces                                                   |
 | Frontend | Next.js 16 (App Router), React 19, Zustand, TailwindCSS 4, next-themes        |
 | Backend  | NestJS 11, Mongoose (MongoDB), Passport (JWT + Google OAuth), ioredis (Redis) |
-| Payments | WayForPay (subscriptions, one-off access, webhook idempotency)                |
+| Payments | monobank «Плата» (billing-clock, списання за токеном, webhook idempotency)     |
 | Shared   | Zod 4 (single source of truth), TypeScript 5.9 (strict)                       |
 | Email    | Resend                                                                        |
 | Тести    | Jest 30, Supertest, MongoMemoryServer                                         |
@@ -62,8 +62,8 @@ finly/
 
 - **Auth**: Google OAuth, Magic Link, Password login, brute force protection, token rotation з reuse detection
 - **Users**: Profile management, preferred language, account soft-delete з 30-day grace period, scheduled cleanup
-- **Payments**: WayForPay subscriptions, one-off access, two-phase webhook idempotency
-- **Public pay host**: `pay.finly.com.ua` / `pay.finly.local:3000` з host-aware routing
+- **Payments**: monobank «Плата» — власний billing-clock, списання за збереженим токеном, two-phase webhook idempotency
+- **Public pay host**: `pay.finly.com.ua` / `localhost:3001` у dev, з host-aware routing
 - **Theming**: Light / Dark / System (next-themes)
 - **UI**: Feature-Sliced Design, Headless UI, Radix, polymorphic components
 
@@ -84,12 +84,12 @@ finly/
 ```env
 # Обов'язкові
 NODE_ENV=development
-PORT=4000
 WEB_PORT=3000
 API_PORT=4000
+PAY_PORT=3001
 TRUST_PROXY_HOPS=0
 WEB_URL=http://localhost:3000
-PAY_PUBLIC_URL=http://pay.finly.local:3000
+PAY_PUBLIC_URL=http://localhost:3001
 
 # MongoDB — MUST бути replica-set (cascade-delete у Sprint 4 використовує
 # `session.withTransaction`). `docker-compose.dev.yml` Mongo не запускає —
@@ -107,50 +107,34 @@ REDIS_URL=redis://redis:6379
 # Google OAuth
 GOOGLE_CLIENT_ID=your-google-client-id
 GOOGLE_CLIENT_SECRET=your-google-client-secret
-GOOGLE_CALLBACK_URL=http://localhost:4000/api/auth/google/callback
 
 # Resend
 RESEND_API_KEY=your-resend-api-key
 RESEND_FROM_EMAIL=Finly <onboarding@resend.dev>
 
-# WayForPay
-WAYFORPAY_MERCHANT_ACCOUNT=test_merch_n1
-WAYFORPAY_MERCHANT_SECRET_KEY=flk3409refn54t54t*FNJRET
-WAYFORPAY_MERCHANT_DOMAIN=finly.com.ua
-
-PAYMENTS_SUBSCRIPTION_ENABLED=true
-PAYMENTS_ONE_OFF_ENABLED=true
-BILLING_DEMO_MODE=true
+# monobank «Плата» — X-Token з кабінету merchant
+MONOBANK_TOKEN=your-monobank-token
 
 ANTHROPIC_API_KEY=sk-ant-your-anthropic-api-key
-HELP_CHAT_MAX_TOKENS=800
-HELP_CHAT_IP_LIMIT=20
-HELP_CHAT_DAILY_BUDGET=1000
 
 # Web
 API_INTERNAL_URL=http://localhost:4000
-NEXT_PUBLIC_BASE_URL=http://localhost:3000
-NEXT_PUBLIC_API_URL=/api
-NEXT_PUBLIC_PAY_PUBLIC_URL=http://pay.finly.local:3000
-NEXT_PUBLIC_PAYMENTS_SUBSCRIPTION_ENABLED=true
-NEXT_PUBLIC_PAYMENTS_ONE_OFF_ENABLED=true
-NEXT_PUBLIC_BILLING_DEMO_MODE=true
-NEXT_PUBLIC_STORAGE_HOSTNAME=media.finly.com.ua
 ```
 
-Повний список змінних: [apps/api/src/config/env.ts](apps/api/src/config/env.ts), [apps/web/src/shared/config/env.ts](apps/web/src/shared/config/env.ts).
+Повний список змінних: [apps/api/src/config/env.ts](apps/api/src/config/env.ts), [apps/web/src/shared/config/env.ts](apps/web/src/shared/config/env.ts). У `.env` живе лише конфігурація середовища (секрети, адреси, підключення); продуктові налаштування — тарифна сітка, ліміти авторизації, пороги чисток, ліміти help-асистента — у коді: `apps/api/src/config/{billing,auth,cleanup,help-chat}.config.ts`.
 
-### 2. Додай запис у `/etc/hosts` для public-домену
+### 2. Public pay-зона в dev — другий порт, не окремий домен
 
-Public payment-page (`pay.finly.com.ua` у prod) у dev слухає `pay.finly.local:3000` — той самий Next.js container, що cabinet, але інший host-header (host-aware routing у `apps/web/src/proxy.ts`, whitelist у `apps/web/src/shared/config/publicHosts.ts`). Без локального DNS-запису браузер падає з `DNS_PROBE_FINISHED_NXDOMAIN` ще до того, як Next.js отримає запит.
+Public payment-page (`pay.finly.com.ua` у prod) у dev слухає `http://localhost:3001` — той самий Next.js container, що cabinet, лише другий port-mapping. Next бачить `Host: localhost:3001`, і host-aware routing (`apps/web/src/proxy.ts`, whitelist у `apps/web/src/shared/config/publicHosts.ts`) розпізнає його як public — далі rewrite на internal `/host-pay/{slug}`. Нічого в `/etc/hosts` додавати не треба.
 
-```bash
-echo '127.0.0.1 pay.finly.local' | sudo tee -a /etc/hosts
-```
+**Чому порт, а не вигаданий домен на кшталт `pay.finly.local`:**
 
-Після цього `http://pay.finly.local:3000/{slug}` резолвиться у localhost, proxy ідентифікує host як public і робить rewrite на internal `/host-pay/{slug}`.
+1. **Google OAuth.** Redirect-адресу можна зареєструвати або на публічному TLD по HTTPS, або на `localhost` по HTTP. Вигаданий TLD Google відхиляє (`Invalid Redirect: must end with a public top-level domain`), тобто вхід через Google локально став би непрацездатним.
+2. **Спільна сесія від цього не страждає.** Порт не входить у scope cookie (RFC 6265 §8.5), тому cookie з `Domain=localhost` видна обом портам — рівно та поведінка, що в проді між `finly.com.ua` і `pay.finly.com.ua`.
 
-> **Prod.** Запис у `/etc/hosts` не потрібен — `pay.finly.com.ua` має мати DNS-A/CNAME-record на той самий сервер, що `finly.com.ua`, і reverse-proxy (nginx/Caddy) проксує обидва host-header-и на один Next.js container.
+Ціна компромісу: локально не перевіряється саме перетин cookie між різними ХОСТАМИ (у dev їх один). Цей випадок покривають API-тести — вони навмисно тримають прод-подібні хости (див. коментар у `apps/api/src/test-setup.ts`).
+
+> **Prod.** Другого порту немає: `pay.finly.com.ua` має DNS-A/CNAME-record на той самий сервер, що `finly.com.ua`, і reverse-proxy (nginx/Caddy) проксує обидва host-header-и на один Next.js container. Домен сесійної cookie — хост `WEB_URL`, тобто `finly.com.ua`.
 
 ### 3. Запуск для розробки
 
@@ -158,10 +142,11 @@ echo '127.0.0.1 pay.finly.local' | sudo tee -a /etc/hosts
 docker compose -f docker-compose.dev.yml up --build
 ```
 
-| Сервіс   | URL / Порт                               |
-| -------- | ---------------------------------------- |
-| Frontend | http://localhost:3000                    |
-| Backend  | http://localhost:4000                    |
+| Сервіс           | URL / Порт                               |
+| ---------------- | ---------------------------------------- |
+| Frontend         | http://localhost:3000                    |
+| Public pay-зона  | http://localhost:3001                    |
+| Backend          | http://localhost:4000                    |
 | MongoDB  | external (Atlas / Docker / local mongod) |
 | Redis    | localhost:6379                           |
 

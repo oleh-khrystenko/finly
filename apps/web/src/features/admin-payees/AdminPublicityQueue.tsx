@@ -1,0 +1,280 @@
+'use client';
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
+import { AlertCircle, ExternalLink, Inbox } from 'lucide-react';
+import {
+    BUSINESS_TYPE_LABEL,
+    CATALOG_CATEGORIES,
+    CATALOG_CATEGORY_LABEL,
+    type Business,
+    type CatalogCategory,
+} from '@finly/types';
+
+import {
+    adminApprovePublicity,
+    adminListPublicityQueue,
+    extractApiErrorCode,
+    getApiMessage,
+} from '@/shared/api';
+import { formatPayeeName } from '@/entities/business';
+import { ENV } from '@/shared/config/env';
+import UiButton from '@/shared/ui/UiButton';
+import UiLink from '@/shared/ui/UiLink';
+import UiSelect from '@/shared/ui/UiSelect';
+import UiSpinner from '@/shared/ui/UiSpinner';
+import UiPageContainer from '@/shared/ui/UiPageContainer';
+import UiPageHeading from '@/shared/ui/UiPageHeading';
+import { AdminCatalogTabs } from './AdminCatalogTabs';
+import { usePublicityCountStore } from './publicityCountStore';
+import { useRejectPublicityStore } from './rejectPublicityStore';
+
+const DATE_FMT = new Intl.DateTimeFormat('uk-UA', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'Europe/Kyiv',
+});
+
+type LoadState = { phase: 'loading' } | { phase: 'error' } | { phase: 'ready' };
+
+export function AdminPublicityQueue() {
+    const [state, setState] = useState<LoadState>({ phase: 'loading' });
+    const [queue, setQueue] = useState<Business[]>([]);
+    const openReject = useRejectPublicityStore((s) => s.open);
+    const setCount = usePublicityCountStore((s) => s.setCount);
+
+    // Guard на обидва шляхи завантаження (перший рендер і ручний reload після
+    // схвалення/відхилення): відповідь, що прийшла після розмонтування, нічого
+    // не пише. Тримається у ref, бо `load` спільний і не знає, звідки викликаний.
+    const mountedRef = useRef(true);
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => {
+            mountedRef.current = false;
+        };
+    }, []);
+
+    // Схвалені переїхали у вкладку «Отримувачі», тож тут лишилась тільки черга.
+    // Довжину черги пишемо у спільний стор — бейдж на табі оновлюється одразу
+    // після схвалення/відхилення без окремого запиту.
+    const load = useCallback(async () => {
+        try {
+            const loadedQueue = await adminListPublicityQueue();
+            if (!mountedRef.current) return;
+            setQueue(loadedQueue);
+            setCount(loadedQueue.length);
+            setState({ phase: 'ready' });
+        } catch {
+            if (mountedRef.current) setState({ phase: 'error' });
+        }
+    }, [setCount]);
+
+    useEffect(() => {
+        void load();
+    }, [load]);
+
+    // Slug заявки, чия пара «мутація + перечитування» зараз у польоті. Блокує
+    // дії на ВСІХ картках, не лише на своїй: інакше дві швидкі дії дають дві
+    // пари запит+GET, чиї відповіді можуть прийти не в тому порядку, і пізніший
+    // load() затирає чергу знімком, зробленим до другої мутації — щойно
+    // схвалена заявка знову рендериться як «на розгляді», а повторний клік дає
+    // помилку. Дзеркалить лок `AdminPayeeDetail`.
+    const [pendingSlug, setPendingSlug] = useState<string | null>(null);
+
+    const runMutation = useCallback(
+        async (slug: string, mutate: () => Promise<void>) => {
+            setPendingSlug(slug);
+            try {
+                await mutate();
+            } finally {
+                if (mountedRef.current) setPendingSlug(null);
+            }
+        },
+        []
+    );
+
+    const approve = (slug: string, category: CatalogCategory) =>
+        void runMutation(slug, async () => {
+            try {
+                await adminApprovePublicity(slug, { category });
+            } catch (err) {
+                toast.error(
+                    getApiMessage(extractApiErrorCode(err), 'businesses')
+                );
+                // Стан на сервері не змінився — перечитувати нічого.
+                return;
+            }
+            toast.success('Запит схвалено');
+            await load();
+        });
+
+    return (
+        <UiPageContainer>
+            <AdminCatalogTabs />
+
+            <header>
+                <UiPageHeading>Запити на публічність</UiPageHeading>
+                <p className="text-muted-foreground mt-1 text-sm">
+                    Заявки користувачів на додавання отримувача в каталог.
+                </p>
+            </header>
+
+            <div className="mt-8">
+                {state.phase === 'loading' && (
+                    <div className="flex justify-center py-16">
+                        <UiSpinner size="lg" />
+                    </div>
+                )}
+
+                {state.phase === 'error' && (
+                    <div className="border-border bg-muted/40 text-muted-foreground flex items-center gap-3 rounded-xl border p-5 text-sm">
+                        <AlertCircle className="size-5 shrink-0" aria-hidden />
+                        Не вдалося завантажити чергу. Перезавантажте сторінку.
+                    </div>
+                )}
+
+                {state.phase === 'ready' && queue.length === 0 && (
+                    <div className="border-border bg-muted/40 mx-auto flex max-w-md flex-col items-center gap-3 rounded-xl border p-8 text-center">
+                        <span className="bg-primary/10 text-primary flex size-10 items-center justify-center rounded-lg">
+                            <Inbox className="size-5" aria-hidden />
+                        </span>
+                        <p className="text-foreground text-sm font-medium">
+                            Черга порожня
+                        </p>
+                        <p className="text-muted-foreground text-sm">
+                            Нових заявок на розгляд немає.
+                        </p>
+                    </div>
+                )}
+
+                {state.phase === 'ready' && queue.length > 0 && (
+                    <div className="space-y-3">
+                        {queue.map((payee) => (
+                            <QueueCard
+                                key={payee.id}
+                                payee={payee}
+                                loading={pendingSlug === payee.slug}
+                                actionsDisabled={pendingSlug !== null}
+                                onApprove={(category) =>
+                                    approve(payee.slug, category)
+                                }
+                                onReject={() =>
+                                    openReject({
+                                        slug: payee.slug,
+                                        payeeName: formatPayeeName(
+                                            payee.type,
+                                            payee.name
+                                        ),
+                                        mode: 'pending',
+                                        // Перечитування після відхилення теж під
+                                        // локом: діалог модальний, тож поки він
+                                        // відкритий, кліків під ним немає, але
+                                        // сам GET летить уже після його закриття.
+                                        onRejected: () =>
+                                            void runMutation(payee.slug, load),
+                                    })
+                                }
+                            />
+                        ))}
+                    </div>
+                )}
+            </div>
+        </UiPageContainer>
+    );
+}
+
+function QueueCard({
+    payee,
+    loading,
+    actionsDisabled,
+    onApprove,
+    onReject,
+}: {
+    payee: Business;
+    /** Саме ця картка в польоті — спінер лишається на натиснутій кнопці. */
+    loading: boolean;
+    /** Будь-яка мутація сторінки в польоті: дії решти карток заблоковані. */
+    actionsDisabled: boolean;
+    onApprove: (category: CatalogCategory) => void;
+    onReject: () => void;
+}) {
+    const [category, setCategory] = useState<CatalogCategory>(
+        payee.catalogCategory
+    );
+    const publicUrl = `${ENV.NEXT_PUBLIC_PAY_PUBLIC_URL.replace(/\/$/, '')}/${payee.slug}`;
+
+    return (
+        <div className="border-border bg-card space-y-4 rounded-xl border p-4">
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <p className="text-foreground truncate font-medium">
+                        {formatPayeeName(payee.type, payee.name)}
+                    </p>
+                    <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                        <span>{BUSINESS_TYPE_LABEL[payee.type]}</span>
+                        {payee.publicityRequestedAt && (
+                            <>
+                                <span aria-hidden>·</span>
+                                <span>
+                                    Подано{' '}
+                                    {DATE_FMT.format(
+                                        new Date(payee.publicityRequestedAt)
+                                    )}
+                                </span>
+                            </>
+                        )}
+                    </div>
+                </div>
+                <UiLink
+                    as="a"
+                    href={publicUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    variant="unstyled"
+                    aria-label="Відкрити публічну сторінку в новій вкладці"
+                    className="text-muted-foreground hover:text-primary inline-flex shrink-0 items-center gap-1 text-sm transition-colors"
+                >
+                    Переглянути
+                    <ExternalLink className="size-4" aria-hidden />
+                </UiLink>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div className="sm:w-56">
+                    <UiSelect
+                        label="Категорія при схваленні"
+                        labelSize="sm"
+                        options={CATALOG_CATEGORIES.map((c) => ({
+                            value: c,
+                            label: CATALOG_CATEGORY_LABEL[c],
+                        }))}
+                        value={category}
+                        onChange={(v) => setCategory(v as CatalogCategory)}
+                    />
+                </div>
+                <div className="flex gap-2">
+                    <UiButton
+                        type="button"
+                        variant="destructive-outline"
+                        size="md"
+                        onClick={onReject}
+                        disabled={actionsDisabled}
+                    >
+                        Відхилити
+                    </UiButton>
+                    <UiButton
+                        type="button"
+                        variant="filled"
+                        size="md"
+                        loading={loading}
+                        disabled={actionsDisabled}
+                        onClick={() => onApprove(category)}
+                    >
+                        Схвалити
+                    </UiButton>
+                </div>
+            </div>
+        </div>
+    );
+}

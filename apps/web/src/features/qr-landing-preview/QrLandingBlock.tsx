@@ -3,10 +3,7 @@
 import { useEffect } from 'react';
 import { useForm, type UseFormReturn } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import {
-    QrPreviewInputSchema,
-    type QrPreviewInput,
-} from '@finly/types';
+import { QrPreviewInputSchema, type QrPreviewInput } from '@finly/types';
 
 import { useQrLandingDraftStore } from '@/entities/qr-landing-draft';
 

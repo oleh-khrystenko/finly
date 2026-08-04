@@ -28,6 +28,7 @@ import {
 } from '../accounts/schemas/account.schema';
 import type { BusinessDocument } from '../businesses/schemas/business.schema';
 import { InvoiceSlugGeneratorService } from './invoice-slug-generator.service';
+import { resolveAccountPurposeTemplate } from '../accounts/payload-mapper';
 import { effectiveInvoicePurpose } from './purpose-resolver';
 import {
     InvoiceSlugHistory,
@@ -278,8 +279,8 @@ export class InvoicesService {
                         accountId: account._id,
                         slugInput: dto.slugInput,
                         paymentPurpose: dto.paymentPurpose,
-                        businessPaymentPurposeTemplate:
-                            business.paymentPurposeTemplate,
+                        inheritedPaymentPurposeTemplate:
+                            resolveAccountPurposeTemplate(business, account),
                     },
                     session
                 );
@@ -289,7 +290,7 @@ export class InvoicesService {
                 // resolved через `effectiveInvoicePurpose` як раніше.
                 const effectivePurpose = effectiveInvoicePurpose(
                     dto.paymentPurpose,
-                    business.paymentPurposeTemplate
+                    resolveAccountPurposeTemplate(business, account)
                 );
                 const docs = await this.invoiceModel.create(
                     [
@@ -509,7 +510,7 @@ export class InvoicesService {
         if (dto.paymentPurpose !== undefined) {
             const resolved = effectiveInvoicePurpose(
                 dto.paymentPurpose,
-                business.paymentPurposeTemplate
+                resolveAccountPurposeTemplate(business, account)
             );
             setStage.paymentPurpose = dto.paymentPurpose;
             // `$cond` гілки:
@@ -805,8 +806,8 @@ export class InvoicesService {
                         accountId,
                         slugInput,
                         paymentPurpose: invoice.paymentPurpose,
-                        businessPaymentPurposeTemplate:
-                            business.paymentPurposeTemplate,
+                        inheritedPaymentPurposeTemplate:
+                            resolveAccountPurposeTemplate(business, account),
                     },
                     session
                 );

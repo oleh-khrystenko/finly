@@ -6,3 +6,5 @@ export * from './guide-status';
 export * from './business-type';
 export * from './slug-preset';
 export * from './taxation-system';
+export * from './publicity-status';
+export * from './catalog-category';

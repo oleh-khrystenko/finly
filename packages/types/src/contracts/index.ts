@@ -10,6 +10,8 @@ export * from './businesses';
 export * from './invoices';
 export * from './accounts';
 export * from './qr-preview';
+export * from './personalization';
+export * from './payers';
 export * from './landing-draft';
 export * from './landing-claim';
 export * from './slug-reservation';

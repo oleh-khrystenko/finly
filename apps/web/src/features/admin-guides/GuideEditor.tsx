@@ -16,6 +16,8 @@ import UiButton from '@/shared/ui/UiButton';
 import UiInput from '@/shared/ui/UiInput';
 import UiSelect from '@/shared/ui/UiSelect';
 import UiSpinner from '@/shared/ui/UiSpinner';
+import UiPageContainer from '@/shared/ui/UiPageContainer';
+import UiPageHeading from '@/shared/ui/UiPageHeading';
 import { getZodFieldError } from '@/shared/lib';
 import {
     adminGetGuide,
@@ -150,8 +152,7 @@ export function GuideEditor({ mode, guideId }: GuideEditorProps) {
                 setPillarOptions(
                     items
                         .filter(
-                            (i) =>
-                                i.pillarSlug === null && i.id !== guideId
+                            (i) => i.pillarSlug === null && i.id !== guideId
                         )
                         .map((i) => ({ label: i.title, value: i.slug }))
                 );
@@ -187,9 +188,7 @@ export function GuideEditor({ mode, guideId }: GuideEditorProps) {
     const isDraft = guide?.status === 'draft';
     const isPublished = guide?.status === 'published';
     const isSlugLocked = Boolean(guide && guide.datePublished !== null);
-    const hasContent = Boolean(
-        guide?.blocks.some((b) => b.text.trim() !== '')
-    );
+    const hasContent = Boolean(guide?.blocks.some((b) => b.text.trim() !== ''));
 
     const onSubmit = async (values: EditorFormValues) => {
         // Кнопку не гасимо — на блокуючих станах показуємо зрозумілу причину,
@@ -239,7 +238,10 @@ export function GuideEditor({ mode, guideId }: GuideEditorProps) {
 
     if (loadError) {
         return (
-            <main className="mx-auto max-w-3xl px-4 py-14 text-center sm:px-6">
+            <UiPageContainer
+                narrow
+                className="items-center justify-center text-center"
+            >
                 <p className="text-muted-foreground text-sm">
                     Не вдалося завантажити гайд. Перевірте посилання.
                 </p>
@@ -253,7 +255,7 @@ export function GuideEditor({ mode, guideId }: GuideEditorProps) {
                 >
                     До списку
                 </UiButton>
-            </main>
+            </UiPageContainer>
         );
     }
 
@@ -268,7 +270,7 @@ export function GuideEditor({ mode, guideId }: GuideEditorProps) {
     const { errors, isSubmitting, isDirty } = form.formState;
 
     return (
-        <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6 md:py-14 lg:px-8">
+        <UiPageContainer narrow>
             <UiButton
                 as="link"
                 href="/admin/guides"
@@ -280,9 +282,9 @@ export function GuideEditor({ mode, guideId }: GuideEditorProps) {
             </UiButton>
 
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                <h1 className="text-foreground text-2xl font-semibold tracking-tight md:text-3xl">
+                <UiPageHeading>
                     {mode === 'create' ? 'Новий гайд' : 'Редагування гайда'}
-                </h1>
+                </UiPageHeading>
                 {guide && <GuideStatusBadge status={guide.status} />}
             </div>
 
@@ -356,9 +358,9 @@ export function GuideEditor({ mode, guideId }: GuideEditorProps) {
                             ) : (
                                 <>
                                     <p>
-                                        Це кінець посилання на вашу статтю, тобто
-                                        те, що люди бачитимуть в адресному рядку
-                                        після <code>/guides/</code>.
+                                        Це кінець посилання на вашу статтю,
+                                        тобто те, що люди бачитимуть в адресному
+                                        рядку після <code>/guides/</code>.
                                     </p>
                                     <p>
                                         Правила прості: тільки маленькі
@@ -421,8 +423,8 @@ export function GuideEditor({ mode, guideId }: GuideEditorProps) {
                         />
                         <FieldHint>
                             <p>
-                                Тут ви кажете, чи ця стаття головна у своїй темі,
-                                чи вона доповнює якусь головну.
+                                Тут ви кажете, чи ця стаття головна у своїй
+                                темі, чи вона доповнює якусь головну.
                             </p>
                             <p>
                                 <strong>Головна стаття</strong> це велика
@@ -431,17 +433,17 @@ export function GuideEditor({ mode, guideId }: GuideEditorProps) {
                                 «Це основний гайд».
                             </p>
                             <p>
-                                <strong>Доповнююча стаття</strong> розкриває одне
-                                вузьке питання всередині великої теми. Наприклад
-                                «Як зробити QR-код» це частинка теми про оплату.
-                                Тоді виберіть тут ту головну статтю, до якої вона
-                                підходить.
+                                <strong>Доповнююча стаття</strong> розкриває
+                                одне вузьке питання всередині великої теми.
+                                Наприклад «Як зробити QR-код» це частинка теми
+                                про оплату. Тоді виберіть тут ту головну статтю,
+                                до якої вона підходить.
                             </p>
                             <p>
                                 Що це дає: коли статті звʼязані, внизу кожної
                                 сама собою зʼявиться підказка з посиланням на
-                                сусідню, і читач легко переходитиме від однієї до
-                                іншої.
+                                сусідню, і читач легко переходитиме від однієї
+                                до іншої.
                             </p>
                         </FieldHint>
                     </div>
@@ -471,16 +473,16 @@ export function GuideEditor({ mode, guideId }: GuideEditorProps) {
                         </div>
                         <FieldHint>
                             <p>
-                                Стаття складається з блоків, які йдуть згори вниз
-                                один за одним. Один блок це один шматочок статті:
-                                невеликий заголовок і текст під ним, за бажанням
-                                з картинкою.
+                                Стаття складається з блоків, які йдуть згори
+                                вниз один за одним. Один блок це один шматочок
+                                статті: невеликий заголовок і текст під ним, за
+                                бажанням з картинкою.
                             </p>
                             <p>
                                 Розбивайте статтю на блоки за змістом, так її
                                 набагато легше читати, ніж суцільною стіною
-                                тексту. Стрілками вгору і вниз можна міняти блоки
-                                місцями, а кошиком, прибрати зайвий.
+                                тексту. Стрілками вгору і вниз можна міняти
+                                блоки місцями, а кошиком, прибрати зайвий.
                             </p>
                         </FieldHint>
                     </div>
@@ -622,6 +624,6 @@ export function GuideEditor({ mode, guideId }: GuideEditorProps) {
                     )}
                 </div>
             </form>
-        </main>
+        </UiPageContainer>
     );
 }

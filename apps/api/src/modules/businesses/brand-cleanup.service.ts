@@ -3,7 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Cron } from '@nestjs/schedule';
 import { Model, Types } from 'mongoose';
 
-import { ENV } from '../../config/env';
+import { BRAND_CLEANUP } from '../../config/cleanup.config';
 import { StorageService } from '../storage/storage.service';
 import { Business, type BusinessDocument } from './schemas/business.schema';
 
@@ -25,7 +25,7 @@ interface StalePendingBrand {
  * Sprint 21 — cron-чистка orphan pending-логотипів бренду.
  *
  * Прибирає `brand.pending`, що пролежав без оплати довше за
- * `BRAND_PENDING_CLEANUP_DAYS`: ніколи-неоплачені free-завантаження + демоутовані
+ * `BRAND_CLEANUP.pendingDays`: ніколи-неоплачені free-завантаження + демоутовані
  * після згасання тарифу (їм реконсиляція дала свіже `uploadedAt`-вікно). Повторна
  * підписка у межах вікна промотує pending назад в active (реконсиляція), тож сюди
  * він уже не потрапляє.
@@ -48,10 +48,10 @@ export class BrandCleanupService {
     async runDailyCleanup(): Promise<void> {
         const now = Date.now();
         const freeCutoff = new Date(
-            now - ENV.BRAND_PENDING_CLEANUP_DAYS * MS_PER_DAY
+            now - BRAND_CLEANUP.pendingDays * MS_PER_DAY
         );
         const demotedCutoff = new Date(
-            now - ENV.BRAND_DEMOTED_CLEANUP_DAYS * MS_PER_DAY
+            now - BRAND_CLEANUP.demotedDays * MS_PER_DAY
         );
 
         // Два бакети з різними порогами: free-завантаження (`demoted !== true` —

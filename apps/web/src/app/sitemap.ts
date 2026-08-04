@@ -1,8 +1,10 @@
+import { headers } from 'next/headers';
 import type { MetadataRoute } from 'next';
 
 import { getAllArticleSlugs, getAllAuthors } from '@/entities/help-article';
 import { loadGuideSlugsSafe } from '@/features/guides';
 import { ENV } from '@/shared/config';
+import { isPublicHost } from '@/shared/config/publicHosts';
 
 const BASE_URL = ENV.NEXT_PUBLIC_BASE_URL;
 
@@ -13,9 +15,23 @@ const BASE_URL = ENV.NEXT_PUBLIC_BASE_URL;
  * only), so unpublished drafts never leak into the sitemap.
  *
  * Legal pages stay out while they carry `noindex` pending lawyer review.
+ *
+ * **Host-aware з тієї ж причини, що й `robots.ts`.** Шлях містить крапку, тож
+ * matcher `proxy.ts` його не переписує і обидва хости доходять сюди. Без
+ * перевірки хоста `pay.finly.com.ua/sitemap.xml` віддавав би cabinet-мапу
+ * (`/help/...`, `/guides/...`) — крос-хостові дублікати рівно того сорту, що
+ * Sprint 29 §Ризики закриває ревізією robots і sitemap. Власна мапа pay-хоста
+ * живе в API (`/api/businesses/public/sitemap.xml`) і саме на неї вказує
+ * `robots.ts`; тут порожній список, щоб краулер, який вгадав шлях, не забрав
+ * чужі URL.
  */
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+    const host = (await headers()).get('host');
+    if (isPublicHost(host)) {
+        return [];
+    }
+
     const helpArticles: MetadataRoute.Sitemap = getAllArticleSlugs().map(
         (slug) => ({
             url: `${BASE_URL}/help/${slug}`,

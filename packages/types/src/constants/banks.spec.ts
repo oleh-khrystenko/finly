@@ -1,4 +1,5 @@
 import {
+    ANDROID_HIDDEN_BANKS,
     BANK_APP_LAUNCH,
     MVP_BANKS,
     buildBankAppLink,
@@ -13,6 +14,12 @@ describe('BANK_APP_LAUNCH', () => {
             expect(BANK_APP_LAUNCH[bank]).toBeDefined();
             expect(BANK_APP_LAUNCH[bank].androidPackage).toMatch(/\w+\.\w+/);
         }
+    });
+});
+
+describe('платформні списки прихованих банків', () => {
+    it('приховує ПУМБ на Android', () => {
+        expect(ANDROID_HIDDEN_BANKS).toEqual(['pumb']);
     });
 });
 

@@ -40,7 +40,9 @@ export default function ResetInvoiceSlugConfirmDialog() {
     // Скидання під час рендеру (а не в ефекті): порівнюємо ключ відкриття з
     // попереднім, інакше синхронний setState в ефекті дає каскадний ре-рендер.
     const openKey = isOpen ? (defaultMode ?? 'simple') : null;
-    const [prevOpenKey, setPrevOpenKey] = useState<AutoSlugMode | null>(openKey);
+    const [prevOpenKey, setPrevOpenKey] = useState<AutoSlugMode | null>(
+        openKey
+    );
     if (openKey !== prevOpenKey) {
         setPrevOpenKey(openKey);
         if (openKey) setSelected(openKey);
@@ -77,9 +79,9 @@ export default function ResetInvoiceSlugConfirmDialog() {
 
                     {selected === 'with-purpose' && (
                         <p className="text-muted-foreground text-sm">
-                            Зверніть увагу: у посилання потраплять ключові слова з
-                            призначення платежу. Краще для нейтральних формулювань
-                            (наприклад «послуги», «консультація»).
+                            Зверніть увагу: у посилання потраплять ключові слова
+                            з призначення платежу. Краще для нейтральних
+                            формулювань (наприклад «послуги», «консультація»).
                         </p>
                     )}
 

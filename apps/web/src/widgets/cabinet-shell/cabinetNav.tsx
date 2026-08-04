@@ -1,9 +1,11 @@
 import {
+    BadgeCheck,
     Briefcase,
     FolderClosed,
     CreditCard,
     CircleHelp,
     BookOpen,
+    Landmark,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 
@@ -21,9 +23,13 @@ export interface CabinetNavItem {
     href?: string;
     /** Disabled-тизер із бейджем «Незабаром» замість активного лінка. */
     comingSoon?: boolean;
-    /** Показувати лише для `role === 'admin'`. */
-    adminOnly?: boolean;
     badge?: string;
+    /**
+     * Додаткові префікси шляху, за яких пункт лишається активним. Потрібно, коли
+     * один пункт веде на розділ із кількома табами-роутами (каталог: сторінка
+     * «Отримувачі» на `href` + «Запити» на `/admin/publicity`).
+     */
+    matchPrefixes?: string[];
 }
 
 /** Робочі поверхні — верх sidebar. */
@@ -35,10 +41,20 @@ export const CABINET_PRIMARY_NAV: CabinetNavItem[] = [
         href: '/business',
     },
     {
+        // Каталог — чужі отримувачі, але дія та сама щоденна робота, що й свої:
+        // сплатити податок. Групуємо за частотою, не за приналежністю, тож він
+        // стоїть тут, а не серед сервісних розділів. Іконка дзеркалить знак
+        // довіри на самих картках (`UiVerifiedBadge`).
+        key: 'catalog',
+        label: 'Каталог',
+        icon: <BadgeCheck />,
+        href: '/catalog',
+    },
+    {
         // Тизер наперед: епік документів реально спланований (монетизація вже
         // існує), тож disabled-пункт із «Незабаром» задає напрям росту, а не
         // веде у порожнечу. Рівно один тизер — інакше sidebar виглядав би
-        // недоробленим.
+        // недоробленим. Стоїть останнім у групі: активні пункти йдуть підряд.
         key: 'documents',
         label: 'Документи',
         icon: <FolderClosed />,
@@ -61,11 +77,29 @@ export const CABINET_SECONDARY_NAV: CabinetNavItem[] = [
         icon: <CircleHelp />,
         href: '/help',
     },
+];
+
+/**
+ * Адмін-розділи — рендеряться одним рядком «Адмін» з попап-меню
+ * (`CabinetAdminGroup`) і лише для `role === 'admin'`. Групування замінило
+ * per-item бейджі «Адмін».
+ */
+export const CABINET_ADMIN_NAV: CabinetNavItem[] = [
     {
         key: 'admin-guides',
         label: 'Гайди',
         icon: <BookOpen />,
         href: '/admin/guides',
-        adminOnly: true,
+    },
+    {
+        // Каталог і черга публічності — два таби одного розділу, тож один пункт.
+        // `matchPrefixes` тримає його активним і на сторінці «Запити». Підпис
+        // згадує запити ще й тому, що поруч у сервісній групі стоїть
+        // користувацький «Каталог» — сама вітрина, а не її ведення.
+        key: 'admin-catalog',
+        label: 'Каталог і запити',
+        icon: <Landmark />,
+        href: '/admin/business',
+        matchPrefixes: ['/admin/publicity'],
     },
 ];

@@ -12,6 +12,11 @@ import type { UiUpsellNoteProps } from './types';
  * `actions` замінює дефолтну CTA-кнопку на довільний блок дій (наприклад,
  * `SubscribeActions` з білінг-фічі); лейаут тоді стек — ряд кнопок не
  * втискається поруч із текстом.
+ *
+ * Розкладка реагує на ширину самого блоку, не на viewport: примітив стоїть і в
+ * широкому робочому стовпі, і у вузькій бічній колонці. `@container` оголошено
+ * тут же, власною обгорткою — інакше `@sm:` мовчки не спрацював би там, де
+ * жоден предок контейнером не є (запит без контейнера завжди хибний).
  */
 export default function UiUpsellNote({
     message,
@@ -31,20 +36,22 @@ export default function UiUpsellNote({
         );
     }
     return (
-        <div className="border-primary/30 bg-primary/5 flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-muted-foreground flex items-center gap-2 text-sm">
-                <Lock className="text-primary h-4 w-4 shrink-0" />
-                {message}
-            </p>
-            <UiButton
-                as="link"
-                href={href}
-                variant="filled"
-                size="sm"
-                className="shrink-0"
-            >
-                {ctaLabel}
-            </UiButton>
+        <div className="@container">
+            <div className="border-primary/30 bg-primary/5 flex flex-col gap-3 rounded-lg border p-4 @sm:flex-row @sm:items-center @sm:justify-between">
+                <p className="text-muted-foreground flex items-center gap-2 text-sm">
+                    <Lock className="text-primary h-4 w-4 shrink-0" />
+                    {message}
+                </p>
+                <UiButton
+                    as="link"
+                    href={href}
+                    variant="filled"
+                    size="sm"
+                    className="shrink-0"
+                >
+                    {ctaLabel}
+                </UiButton>
+            </div>
         </div>
     );
 }

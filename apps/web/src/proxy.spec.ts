@@ -1,3 +1,17 @@
+// Хости тут СВІДОМО прод-подібні (кабінет і pay на різних піддоменах), як і в
+// `apps/api/src/test-setup.ts`. Dev-конфігурація (той самий `localhost`, різні
+// порти) — окремий випадок, і те, що whitelist походить саме з конфігурації,
+// покрито у `shared/config/publicHosts.spec.ts`. Мок ставиться на `./env`, а не
+// на barrel `@/shared/config`: `publicHosts` імпортує `./env` напряму, тож мок
+// barrel-а його не перехопив би і whitelist приїхав би з реального оточення.
+jest.mock('@/shared/config/env', () => ({
+    ENV: {
+        NEXT_PUBLIC_BASE_URL: 'https://finly.com.ua',
+        NEXT_PUBLIC_PAY_PUBLIC_URL: 'https://pay.finly.com.ua',
+    },
+    PAY_PUBLIC_HOST: 'pay.finly.com.ua',
+}));
+
 // Mock next/server before importing proxy
 const mockRedirect = jest.fn((url: URL, status?: number) => ({
     type: 'redirect' as const,
@@ -53,6 +67,7 @@ function createMockRequest(
         nextUrl: {
             pathname,
             search,
+            searchParams: new URLSearchParams(search),
         },
         url,
         headers: {
@@ -85,6 +100,18 @@ describe('proxy', () => {
 
         it('redirects /business to signin when no cookie (Sprint 3 §3.5 — replaces /dashboard)', () => {
             const req = createMockRequest('/business');
+            const response = proxy(req);
+
+            expect(response.status).toBe(307);
+            const url: URL = mockRedirect.mock.calls[0][0];
+            expect(url.pathname).toBe('/auth/signin');
+        });
+
+        it('redirects /catalog to signin when no cookie', () => {
+            // Кабінетна вітрина каталогу — кабінетна сторінка: без цього
+            // запису анонім побачив би оболонку кабінету і лише потім
+            // клієнтський редірект.
+            const req = createMockRequest('/catalog');
             const response = proxy(req);
 
             expect(response.status).toBe(307);
@@ -196,6 +223,47 @@ describe('proxy', () => {
 
             expect(response.status).toBe(200);
         });
+
+        // Sprint 30 — вхід з публічної сторінки несе адресу повернення. Саму
+        // ціль на іншому хості проміжний шар не резолвить: наявність cookie ще
+        // не означає живої сесії, яку видно тому хосту (cookie старого зразка —
+        // host-only на кабінеті). Пропускаємо на сторінку входу, вона повертає
+        // людину вже після підтвердження сесії.
+        it('пропускає на сторінку входу, коли ?redirect веде на pay-хост', () => {
+            const req = createMockRequest('/auth/signin', {
+                cookies: { bid_refresh: 'some-token' },
+                search: '?redirect=https%3A%2F%2Fpay.finly.com.ua%2Fdps%2Fesv',
+            });
+            const response = proxy(req);
+
+            expect(response.status).toBe(200);
+            expect(mockRedirect).not.toHaveBeenCalled();
+        });
+
+        it('повертає на свій шлях, якщо сесія вже є, а у входу є ?redirect', () => {
+            const req = createMockRequest('/auth/signin', {
+                cookies: { bid_refresh: 'some-token' },
+                search: '?redirect=%2Fbilling',
+            });
+            const response = proxy(req);
+
+            expect(response.status).toBe(307);
+            const url: URL = mockRedirect.mock.calls[0][0];
+            expect(url.pathname).toBe('/billing');
+            expect(url.host).toBe('localhost:3000');
+        });
+
+        it('ігнорує чужий домен у ?redirect і веде в кабінет', () => {
+            const req = createMockRequest('/auth/signin', {
+                cookies: { bid_refresh: 'some-token' },
+                search: '?redirect=https%3A%2F%2Fevil.example%2Fphish',
+            });
+            const response = proxy(req);
+
+            const url: URL = mockRedirect.mock.calls[0][0];
+            expect(url.pathname).toBe('/business');
+            expect(url.host).toBe('localhost:3000');
+        });
     });
 
     describe('public paths', () => {
@@ -235,16 +303,10 @@ describe('proxy', () => {
             expect(url.pathname).toBe('/host-pay/IvanEnko');
         });
 
-        it('1a. dev host pay.finly.local:3000 теж rewrite-иться (Branch A)', () => {
-            const req = createMockRequest('/IvanEnko', {
-                host: 'pay.finly.local:3000',
-            });
-            proxy(req);
-
-            expect(mockRewrite).toHaveBeenCalledTimes(1);
-            const url: URL = mockRewrite.mock.calls[0][0];
-            expect(url.pathname).toBe('/host-pay/IvanEnko');
-        });
+        // Dev-хост (той самий `localhost`, pay-порт) тут не дублюється: який
+        // саме host вважається публічним — питання конфігурації, і воно
+        // покрито у `shared/config/publicHosts.spec.ts`. Цей файл перевіряє
+        // маршрутизацію, для якої host — просто значення з whitelist.
 
         it('1b. case-preserved у rewrite — slug `CamelCase` не нормалізується до lowercase', () => {
             const req = createMockRequest('/CamelCase', {
@@ -459,9 +521,7 @@ describe('proxy', () => {
 
             expect(mockRewrite).toHaveBeenCalledTimes(1);
             const url: URL = mockRewrite.mock.calls[0][0];
-            expect(url.pathname).toBe(
-                '/host-pay/IvanEnko/aBc12345/inv-001'
-            );
+            expect(url.pathname).toBe('/host-pay/IvanEnko/aBc12345/inv-001');
         });
 
         it('Branch A3 case-preserved у всіх 3 сегментах', () => {
@@ -471,9 +531,7 @@ describe('proxy', () => {
             proxy(req);
 
             const url: URL = mockRewrite.mock.calls[0][0];
-            expect(url.pathname).toBe(
-                '/host-pay/IvanEnko/AbCdEfGh/Inv-Vanity'
-            );
+            expect(url.pathname).toBe('/host-pay/IvanEnko/AbCdEfGh/Inv-Vanity');
         });
 
         it('Branch A3 + reserved business-slug → 404', () => {

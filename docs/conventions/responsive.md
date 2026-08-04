@@ -28,16 +28,16 @@
 
 Використовуємо стандартні Tailwind v4 breakpoints плюс два санкціоновані custom (`2xs`, `xs`):
 
-| Префікс   | Min-width | Цільові пристрої                                       |
-| --------- | --------- | ------------------------------------------------------ |
-| (default) | 0px       | Найвужчі mobile portrait (iPhone SE 1, ≤389px)         |
-| `2xs:`    | 390px     | Стандартні mobile portrait (iPhone 12–16, ≥390px)      |
-| `xs:`     | 430px     | Великі mobile portrait (iPhone Pro Max та ширші)       |
-| `sm:`     | 640px     | Mobile landscape, малі планшети                        |
-| `md:`     | 768px     | Tablet portrait (iPad mini, iPad)                      |
-| `lg:`     | 1024px    | Tablet landscape, малі ноутбуки                        |
-| `xl:`     | 1280px    | Desktop                                                |
-| `2xl:`    | 1536px    | Великі desktop-монітори                                |
+| Префікс   | Min-width | Цільові пристрої                                  |
+| --------- | --------- | ------------------------------------------------- |
+| (default) | 0px       | Найвужчі mobile portrait (iPhone SE 1, ≤389px)    |
+| `2xs:`    | 390px     | Стандартні mobile portrait (iPhone 12–16, ≥390px) |
+| `xs:`     | 430px     | Великі mobile portrait (iPhone Pro Max та ширші)  |
+| `sm:`     | 640px     | Mobile landscape, малі планшети                   |
+| `md:`     | 768px     | Tablet portrait (iPad mini, iPad)                 |
+| `lg:`     | 1024px    | Tablet landscape, малі ноутбуки                   |
+| `xl:`     | 1280px    | Desktop                                           |
+| `2xl:`    | 1536px    | Великі desktop-монітори                           |
 
 **`xs` (430px)** — custom breakpoint, заведений у `apps/web/src/shared/styles/themes.css`
 (`--breakpoint-xs`). Призначення: тонкий адаптив у межах телефонів, де `sm` (640px) надто

@@ -62,6 +62,18 @@ const BrandDecreaseConfirmDialog = dynamic(
 const DeleteGuideConfirmDialog = dynamic(
     () => import('@/features/admin-guides/DeleteGuideConfirmDialog')
 );
+const RejectPublicityDialog = dynamic(
+    () => import('@/features/admin-payees/RejectPublicityDialog')
+);
+const DeleteAdminPayeeConfirmDialog = dynamic(
+    () => import('@/features/admin-payees/DeleteAdminPayeeConfirmDialog')
+);
+const DeleteAdminPayeeAccountConfirmDialog = dynamic(
+    () => import('@/features/admin-payees/DeleteAdminPayeeAccountConfirmDialog')
+);
+const PayerDeleteConfirmDialog = dynamic(
+    () => import('@/features/payers/PayerDeleteConfirmDialog')
+);
 
 export function Overlays() {
     return (
@@ -86,6 +98,10 @@ export function Overlays() {
             <BrandDetachConfirmDialog />
             <BrandDecreaseConfirmDialog />
             <DeleteGuideConfirmDialog />
+            <RejectPublicityDialog />
+            <DeleteAdminPayeeConfirmDialog />
+            <DeleteAdminPayeeAccountConfirmDialog />
+            <PayerDeleteConfirmDialog />
         </>
     );
 }

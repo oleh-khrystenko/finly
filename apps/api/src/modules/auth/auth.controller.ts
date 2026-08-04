@@ -34,7 +34,12 @@ import { SendMagicLinkDto } from './dto/send-magic-link.dto';
 import { SetPasswordDto } from './dto/set-password.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { VerifyPasswordDto } from './dto/verify-password.dto';
-import { REFRESH_COOKIE_OPTIONS } from './refresh-cookie.config';
+import {
+    clearRefreshCookie,
+    REFRESH_COOKIE_NAME,
+    setRefreshCookie,
+} from './refresh-cookie.config';
+import { assertAllowedReturnTarget } from './return-target';
 import { GoogleValidatedUser } from './strategies/google.strategy';
 
 @Controller('auth')
@@ -60,7 +65,7 @@ export class AuthController {
                 req.user as GoogleValidatedUser
             );
 
-        res.cookie('bid_refresh', tokens.refreshToken, REFRESH_COOKIE_OPTIONS);
+        setRefreshCookie(res, tokens.refreshToken);
         const callbackUrl = accountDeleted
             ? `${ENV.WEB_URL}/auth/callback?account_deleted=true`
             : `${ENV.WEB_URL}/auth/callback`;
@@ -92,7 +97,7 @@ export class AuthController {
                 dto.termsVersion
             );
 
-        res.cookie('bid_refresh', refreshToken, REFRESH_COOKIE_OPTIONS);
+        setRefreshCookie(res, refreshToken);
 
         return {
             data: {
@@ -109,6 +114,10 @@ export class AuthController {
     ): Promise<ApiMessageResponse> {
         if (dto.purpose === MAGIC_LINK_PURPOSE.DELETE_ACCOUNT) {
             throw new BadRequestException('Invalid purpose');
+        }
+
+        if (dto.redirectTo !== undefined) {
+            assertAllowedReturnTarget(dto.redirectTo);
         }
 
         await this.authService.sendMagicLink(
@@ -173,7 +182,7 @@ export class AuthController {
                 dto.newPassword
             );
 
-        res.cookie('bid_refresh', refreshToken, REFRESH_COOKIE_OPTIONS);
+        setRefreshCookie(res, refreshToken);
 
         return { data: { message: 'Password changed', accessToken } };
     }
@@ -198,7 +207,9 @@ export class AuthController {
         @Req() req: Request,
         @Res({ passthrough: true }) res: Response
     ): Promise<{ data: { accessToken: string } }> {
-        const refreshToken = req.cookies?.bid_refresh as string | undefined;
+        const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME] as
+            | string
+            | undefined;
 
         if (!refreshToken) {
             throw new UnauthorizedException('Refresh token not found');
@@ -210,20 +221,11 @@ export class AuthController {
                 dto.timezone
             );
 
-            res.cookie(
-                'bid_refresh',
-                tokens.refreshToken,
-                REFRESH_COOKIE_OPTIONS
-            );
+            setRefreshCookie(res, tokens.refreshToken);
 
             return { data: { accessToken: tokens.accessToken } };
         } catch (error) {
-            res.clearCookie('bid_refresh', {
-                httpOnly: true,
-                secure: ENV.NODE_ENV === 'production',
-                sameSite: 'lax',
-                path: '/',
-            });
+            clearRefreshCookie(res);
             throw error;
         }
     }
@@ -233,18 +235,15 @@ export class AuthController {
         @Req() req: Request,
         @Res({ passthrough: true }) res: Response
     ): Promise<ApiMessageResponse> {
-        const refreshToken = req.cookies?.bid_refresh as string | undefined;
+        const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME] as
+            | string
+            | undefined;
 
         if (refreshToken) {
             await this.authService.revokeRefreshTokenByJwt(refreshToken);
         }
 
-        res.clearCookie('bid_refresh', {
-            httpOnly: true,
-            secure: ENV.NODE_ENV === 'production',
-            sameSite: 'lax',
-            path: '/',
-        });
+        clearRefreshCookie(res);
 
         return {
             data: {

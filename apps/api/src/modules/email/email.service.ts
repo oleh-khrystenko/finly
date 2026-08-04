@@ -11,6 +11,10 @@ import {
 import { Resend } from 'resend';
 
 import { ENV } from '../../config/env';
+import {
+    ACCOUNT_DELETION_GRACE_DAYS,
+    ORPHAN_CLEANUP,
+} from '../../config/cleanup.config';
 import { MagicLinkEmail, getMagicLinkSubject } from './templates/magic-link';
 import {
     DeletionConfirmationEmail,
@@ -71,7 +75,7 @@ export class EmailService {
             react: DeletionConfirmationEmail({
                 signInUrl: `${ENV.WEB_URL}/auth/signin`,
                 formattedDate: this.formatDate(deletionDate),
-                graceDays: ENV.ACCOUNT_DELETION_GRACE_DAYS,
+                graceDays: ACCOUNT_DELETION_GRACE_DAYS,
             }),
         });
 
@@ -111,7 +115,7 @@ export class EmailService {
             subject,
             react: ProfileCompletionReminderEmail({
                 businesses: mapped,
-                deletionDays: ENV.ORPHAN_CLEANUP_DELETION_DAYS,
+                deletionDays: ORPHAN_CLEANUP.deletionDays,
                 ctaHref: `${ENV.WEB_URL}${PROFILE_COMPLETION_CTA_PATH}`,
             }),
         });

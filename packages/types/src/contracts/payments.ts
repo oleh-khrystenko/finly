@@ -99,11 +99,12 @@ export type MonobankInvoiceStatus =
     (typeof MONOBANK_INVOICE_STATUS)[keyof typeof MONOBANK_INVOICE_STATUS];
 
 /** Нетермінальні статуси: фінальний прийде окремою подією / запитом статусу. */
-export const MONOBANK_NON_TERMINAL_STATUSES: readonly MonobankInvoiceStatus[] = [
-    MONOBANK_INVOICE_STATUS.CREATED,
-    MONOBANK_INVOICE_STATUS.PROCESSING,
-    MONOBANK_INVOICE_STATUS.HOLD,
-];
+export const MONOBANK_NON_TERMINAL_STATUSES: readonly MonobankInvoiceStatus[] =
+    [
+        MONOBANK_INVOICE_STATUS.CREATED,
+        MONOBANK_INVOICE_STATUS.PROCESSING,
+        MONOBANK_INVOICE_STATUS.HOLD,
+    ];
 
 /**
  * Нормалізована подія списання monobank, яку провайдер віддає сервісу після

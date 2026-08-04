@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 
 /**
- * Окрема опція у `UiRadioCardGroup`. На відміну від `UiChipGroup` (плоский label
- * як ReactNode), радіо-картка має **обов'язковий title** і **опціональний
+ * Окрема опція у `UiRadioCardGroup`. На відміну від плоского inline-pill radio
+ * (короткий label), радіо-картка має **обов'язковий title** і **опціональний
  * description / icon** — це 2-line / 3-line content, типовий для wizard step-1
  * type selector-ів та slug-preset / payment-method-pickers.
  *

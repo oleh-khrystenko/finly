@@ -2,12 +2,13 @@ import { ArrowRight, Landmark } from 'lucide-react';
 import {
     BANK_LABEL,
     type BusinessType,
+    type CatalogCategory,
     type PublicAccountListItem,
 } from '@finly/types';
 import UiBankLogo from '@/shared/ui/UiBankLogo';
 import UiBrandLogo from '@/shared/ui/UiBrandLogo';
 import UiLink from '@/shared/ui/UiLink';
-import { formatPayeeName } from '@/entities/business';
+import { formatPayeeName, PayeeBadges } from '@/entities/business';
 
 interface Props {
     /**
@@ -20,6 +21,17 @@ interface Props {
     /** Sprint 21 — кастомний бренд (присутній лише за активного бренду). */
     logo?: string;
     brandDisplayName?: string | null;
+    /**
+     * Системний отримувач (заведений адміном) — під назвою рендериться знак
+     * довіри, і в empty-state теж: платник має розуміти, чия це сторінка, ще до
+     * появи реквізитів.
+     */
+    isSystem: boolean;
+    /**
+     * Розділ публічного каталогу, якщо отримувач у ньому стоїть. Мітка потрібна
+     * і тут: на сторінку заходять прямим посиланням і з QR, повз каталог.
+     */
+    catalogCategory?: CatalogCategory;
     /**
      * Sprint 9 §SP-4: server-side already відрізнив 0/1/2+ → цей view рендериться
      * тільки для `accounts.length === 0` (empty-state) або `>= 2` (list-of-cards).
@@ -61,6 +73,8 @@ export default function PublicBusinessView({
     slug,
     logo,
     brandDisplayName,
+    isSystem,
+    catalogCategory,
     accounts,
 }: Props) {
     const payeeName = formatPayeeName(type, name);
@@ -71,6 +85,8 @@ export default function PublicBusinessView({
                 payeeName={payeeName}
                 logo={logo}
                 brandDisplayName={brandDisplayName}
+                isSystem={isSystem}
+                catalogCategory={catalogCategory}
             />
         );
     }
@@ -90,6 +106,11 @@ export default function PublicBusinessView({
                     <h1 className="text-foreground text-2xl font-bold tracking-tight break-words md:text-3xl">
                         {payeeName}
                     </h1>
+                    <PayeeBadges
+                        isSystem={isSystem}
+                        catalogCategory={catalogCategory}
+                        className="pt-1"
+                    />
                     <p className="text-muted-foreground pt-1 text-sm">
                         Оберіть реквізити для оплати
                     </p>
@@ -137,7 +158,8 @@ function AccountCard({
             <span className="font-mono">{mask}</span>
         </>
     );
-    const primaryText = customName ?? (bankLabel ? `${bankLabel} ${mask}` : mask);
+    const primaryText =
+        customName ?? (bankLabel ? `${bankLabel} ${mask}` : mask);
 
     // Уся картка — клікабельне посилання на сторінку реквізитів. `UiLink`
     // variant="unstyled" створений саме для card-links (візуал несе вкладений
@@ -192,10 +214,14 @@ function EmptyState({
     payeeName,
     logo,
     brandDisplayName,
+    isSystem,
+    catalogCategory,
 }: {
     payeeName: string;
     logo?: string;
     brandDisplayName?: string | null;
+    isSystem: boolean;
+    catalogCategory?: CatalogCategory;
 }) {
     return (
         <div className="mx-auto max-w-xl px-4 py-16 text-center">
@@ -212,6 +238,11 @@ function EmptyState({
             <h1 className="text-foreground mt-1 text-2xl font-bold tracking-tight break-words md:text-3xl">
                 {payeeName}
             </h1>
+            <PayeeBadges
+                isSystem={isSystem}
+                catalogCategory={catalogCategory}
+                className="mt-2"
+            />
             <p className="text-muted-foreground mt-4 text-sm">
                 Власник ще не налаштував реквізити для прийому платежів.
             </p>

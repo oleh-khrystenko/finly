@@ -11,7 +11,7 @@ import { Request } from 'express';
 import { RESPONSE_CODE } from '@finly/types';
 
 import { RedisCounterService } from '../../../common/services/redis-counter.service';
-import { ENV } from '../../../config/env';
+import { HELP_CHAT } from '../../../config/help-chat.config';
 
 const HELP_IP_KEY_PREFIX = 'ai:help:ip:';
 const HELP_BUDGET_KEY = 'ai:help:budget';
@@ -57,7 +57,7 @@ export class HelpChatRateLimitGuard implements CanActivate {
                 `${HELP_IP_KEY_PREFIX}${ip}`,
                 HELP_WINDOW_SECONDS
             );
-            if (ipCount > ENV.HELP_CHAT_IP_LIMIT) {
+            if (ipCount > HELP_CHAT.ipLimit) {
                 throw new HttpException(
                     {
                         code: RESPONSE_CODE.AI_RATE_LIMIT_EXCEEDED,
@@ -71,7 +71,7 @@ export class HelpChatRateLimitGuard implements CanActivate {
                 HELP_BUDGET_KEY,
                 HELP_WINDOW_SECONDS
             );
-            if (budgetCount > ENV.HELP_CHAT_DAILY_BUDGET) {
+            if (budgetCount > HELP_CHAT.dailyBudget) {
                 throw new HttpException(
                     {
                         code: RESPONSE_CODE.AI_HELP_BUDGET_EXHAUSTED,

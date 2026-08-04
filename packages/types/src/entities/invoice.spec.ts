@@ -358,7 +358,7 @@ describe('InvoicePayeeSnapshotSchema — drift-guard від Business shape', () 
     it('Sprint 9 widening — parses snapshot з 8-digit ЄДРПОУ (tov / organization invoice)', () => {
         const result = InvoicePayeeSnapshotSchema.safeParse({
             ...VALID_SNAPSHOT,
-            recipientName: 'ТОВ Кав\'ярня',
+            recipientName: "ТОВ Кав'ярня",
             taxId: '12345678',
         });
         expect(result.success).toBe(true);
@@ -367,7 +367,7 @@ describe('InvoicePayeeSnapshotSchema — drift-guard від Business shape', () 
     it('rejects emoji у recipientName → INVALID_NAME_CHARSET (reuse businessNameSchema)', () => {
         const result = InvoicePayeeSnapshotSchema.safeParse({
             ...VALID_SNAPSHOT,
-            recipientName: '☕ Кав\'ярня',
+            recipientName: "☕ Кав'ярня",
         });
         expect(result.success).toBe(false);
         if (!result.success) {

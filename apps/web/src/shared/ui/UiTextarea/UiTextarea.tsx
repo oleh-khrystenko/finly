@@ -132,7 +132,7 @@ const UiTextarea = forwardRef<HTMLTextAreaElement, UiTextareaProps>(
                         required={required}
                         aria-invalid={error ? true : undefined}
                         aria-describedby={describedBy}
-                        className={`placeholder:text-muted-foreground w-full bg-transparent outline-none disabled:cursor-not-allowed ${noResize ? 'resize-none' : 'resize-y'}`}
+                        className={`placeholder:text-muted-foreground/50 w-full bg-transparent outline-none disabled:cursor-not-allowed ${noResize ? 'resize-none' : 'resize-y'}`}
                     />
                     {suffix}
                 </div>

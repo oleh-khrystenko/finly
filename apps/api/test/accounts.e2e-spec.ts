@@ -15,6 +15,7 @@ import { createReplSetMongo } from '../src/test-utils/mongo';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 import { REDIS_CLIENT } from '../src/common/modules/redis.module';
 import { RedisCounterService } from '../src/common/services/redis-counter.service';
+import { createCounterStub } from './redis-counter-stub';
 import { RedisLockService } from '../src/common/services/redis-lock.service';
 // Import order matters: AuthModule ↔ UsersModule ↔ StorageModule —
 // pre-existing JS-cycle (`CLAUDE.md` Known Complexities). AuthModule першим:
@@ -46,7 +47,7 @@ import {
 jest.mock('../src/config/env', () => ({
     ENV: {
         NODE_ENV: 'test',
-        PORT: '4000',
+        API_PORT: '4000',
         WEB_URL: 'https://finly.com.ua',
         PAY_PUBLIC_URL: 'https://pay.finly.com.ua',
         MONGODB_URI: 'overridden-by-MongoMemoryReplSet',
@@ -55,47 +56,16 @@ jest.mock('../src/config/env', () => ({
         JWT_REFRESH_SECRET: 'e2e-refresh-secret-must-be-long-enough',
         GOOGLE_CLIENT_ID: 'test-id.apps.googleusercontent.com',
         GOOGLE_CLIENT_SECRET: 'GOCSPX-test',
-        GOOGLE_CALLBACK_URL: 'http://localhost:4000/api/auth/google/callback',
         RESEND_API_KEY: 're_test',
         RESEND_FROM_EMAIL: 'Finly <test@test.com>',
         STRIPE_SECRET_KEY: 'sk_test',
         STRIPE_WEBHOOK_SECRET: 'whsec_test',
-        AUTH_LOCKOUT_THRESHOLDS: '5:1,10:5,20:15',
-        AUTH_LOGIN_ATTEMPTS_TTL_MIN: 15,
-        AUTH_MAGIC_LINK_TTL_MIN: 15,
-        AUTH_MAGIC_LINK_RATE_LIMIT: 3,
-        AUTH_MAGIC_LINK_RATE_WINDOW_MIN: 15,
-        AUTH_MAGIC_LINK_DEDUP_SEC: 60,
-        ACCOUNT_DELETION_GRACE_DAYS: 30,
-        AUTH_PASSWORD_MIN_LENGTH: 8,
         R2_ACCOUNT_ID: 'test-account',
         R2_ACCESS_KEY_ID: 'test-key-id',
         R2_SECRET_ACCESS_KEY: 'test-secret',
         R2_BUCKET_NAME: 'test-bucket',
         R2_PUBLIC_URL: 'https://media.test.local',
-        BILLING_BRAND_ENABLED: true,
-        BILLING_DOCUMENTS_ENABLED: false,
-        BILLING_GRID: {
-            currency: 'UAH',
-            brand: { pricePerBusiness: 4900 },
-            documents: {
-                tiers: [
-                    { size: 1, priceAmount: 29900, monthlyCredits: 1000 },
-                    { size: 5, priceAmount: 149500, monthlyCredits: 5000 },
-                ],
-                storageGbPerBusiness: 5,
-                storageRentCreditsPerGb: 10,
-                creditPacks: [{ credits: 500, priceAmount: 15000 }],
-                lowBalanceThreshold: 200,
-                criticalBalanceThreshold: 100,
-            },
-        },
     },
-    parseLockoutThresholds: (raw: string) =>
-        raw.split(',').map((entry: string) => {
-            const [attempts, blockMin] = entry.split(':').map(Number);
-            return { attempts, blockMin };
-        }),
 }));
 
 @Global()
@@ -107,10 +77,10 @@ jest.mock('../src/config/env', () => ({
         },
         {
             provide: RedisCounterService,
-            useValue: {
-                incrementFixed: jest.fn(async () => 1),
-                incrementSliding: jest.fn(async () => 1),
-            },
+            // Імена методів мусять збігатися з реальним сервісом:
+            // `UserRateLimitGuard` викликає саме `incrementFixedWindow`, і
+            // stub з іншою назвою падав би TypeError замість роботи ліміту.
+            useValue: createCounterStub(),
         },
         {
             provide: RedisLockService,
@@ -508,6 +478,30 @@ describe('Accounts E2E (Sprint 9 §SP-1..§SP-3)', () => {
             );
         });
 
+        // Sprint 29 — `name: null` знімає назву і повертає авто-label. До цього
+        // поле було одностороннім: задати назву можна, прибрати вже ні.
+        it('name: null знімає назву — 200', async () => {
+            const user = await createUser();
+            const { businessSlug, accountSlug } = await seedAccount(user);
+            await supertest(app.getHttpServer())
+                .patch(
+                    `/api/businesses/me/${businessSlug}/accounts/${accountSlug}`
+                )
+                .set('Authorization', bearerFor(user))
+                .send({ name: 'Резерв' })
+                .expect(200);
+            const res = await supertest(app.getHttpServer())
+                .patch(
+                    `/api/businesses/me/${businessSlug}/accounts/${accountSlug}`
+                )
+                .set('Authorization', bearerFor(user))
+                .send({ name: null })
+                .expect(200);
+            expect(
+                (res.body as { data: { name: string | null } }).data.name
+            ).toBeNull();
+        });
+
         it('invoiceSlugPresetDefault editable — 200', async () => {
             const user = await createUser();
             const { businessSlug, accountSlug } = await seedAccount(user);
@@ -753,8 +747,12 @@ describe('Accounts E2E (Sprint 9 §SP-1..§SP-3)', () => {
                 'ibanMask',
                 'name',
                 'nbuLinks',
+                'personalizationMarkers',
                 'slug',
             ]);
+            // Sprint 29 — звичайний рахунок: без персоналізації, посилання готові.
+            expect(data.personalizationMarkers).toEqual([]);
+            expect(data.nbuLinks).not.toBeNull();
             expect(data.ibanMask).toBe('•6001');
             expect(data).not.toHaveProperty('iban');
             expect(data).not.toHaveProperty('taxId');

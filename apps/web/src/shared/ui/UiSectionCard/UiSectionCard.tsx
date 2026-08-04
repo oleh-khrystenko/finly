@@ -17,13 +17,17 @@ const UiSectionCard = ({
     <section
         id={id}
         className={composeClasses(
-            'bg-card rounded-xl border p-6 md:p-8',
+            // `@container` — секції живуть і в широкому стовпі, і у вузькій
+            // бічній колонці двоколонкового кабінету; внутрішні розкладки
+            // (UiUpsellNote, BrandSection) реагують на ширину картки через
+            // `@sm:`/`@md:`, а не на viewport.
+            'bg-card @container rounded-xl border p-4 md:p-6',
             borderStyles[variant],
             className
         )}
     >
         <div className="flex items-center justify-between">
-            <h2 className="text-foreground text-2xl font-semibold tracking-tight">
+            <h2 className="text-foreground text-lg font-semibold tracking-tight">
                 {title}
             </h2>
             {headerRight}

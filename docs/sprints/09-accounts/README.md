@@ -4,10 +4,11 @@
 > **Передумови:** Sprint 1 (схеми Business / Invoice + slug-генератор baseline), Sprint 3 (cabinet flow `/business/[slug]`, `BusinessAccessGuard`, `SlugGeneratorService`, host-aware middleware-rewrite, `PublicBusinessesController`, `EditableField`, `scheduleDeleteWithUndo`, 5s Undo patern), Sprint 4 (інвойсний flow, `InvoiceSlugGeneratorService`, partial-unique counter-index, `payeeSnapshot`, cascade-delete через `withTransaction`, host-aware Branch A2 для 2-сегментного path, replica-set requirement), Sprint 7 (`BUSINESS_TYPES = 4 значення`, `payerTaxIdZod` union, `Business.type` immutable post-creation, type-aware coupled refines), Sprint 8 (anon QR-preview лендінг + claim-flow з Zustand-persist + `useClaimLandingDraft` hook). Усі — функціонально закриті.
 > **Що розблокує:** маркетинговий нарратив "ФОП з 2 рахунками не зобовʼязаний дублювати юр-особу", Sprint 5 per-bank deep-links (працює над тим самим payload, тільки IBAN тепер з Account, не Business), Phase 1.5 трекінг оплат (Account як точка інтеграції з Mono Acquiring / Privat API; Sprint 9 НЕ закладає placeholder-поле, але архітектура природно дозволяє додати без ремайнінгу).
 > **Що НЕ розблокує (винесено в окремі спринти 2026-05-11):**
+>
 > - **Sprint 8 anon-claim flow рефакторинг** (2 sequential POST, magic-link через Redis-draft, idempotency-key, terms-pre-stamp, LandingClaimModule, verify-page claim-state-machine) — окремий [Sprint 10](../10-anon-claim-refactor/README.md). Sprint 9 тимчасово вимикає CTA "Зберегти у кабінет" на лендінгу (deliverable у §Скоуп.Frontend); Sprint 10 повертає її з новою архітектурою.
 > - **Deep-link UX-recovery після abandoned claim** (`User.pendingPostLoginTarget` stamp+consume) — [Sprint 11](../11-deep-link-recovery/README.md).
 > - **Orphan-Business cleanup-cron + 3-stage email-pipeline** — [Sprint 12](../12-orphan-cleanup/README.md).
-> 
+>
 > **Контекст рішень:** усі продуктові розв'язки — у [`planning-questions.md`](planning-questions.md) (A1–A8). README не дублює rationale — лише імплементаційну механіку.
 > **Production-data:** ще немає. План навмисно не пише міграційний script — `dropDatabase` + чистий старт.
 
@@ -24,6 +25,7 @@
 - **Invoice** — одноразова платіжка під рахунком: businessId + **accountId** (новий) + amount/lockMask/validUntil/purpose/slug.
 
 Public URL стає матрьошковим:
+
 - `pay.finly.com.ua/{businessSlug}` — корінь: список Account (2+) / 307-redirect на per-account (1) / empty-state (0).
 - `pay.finly.com.ua/{businessSlug}/{accountSlug}` — per-account вивіска (поточна Sprint 3 функціональність — 11 банків, 2 NBU кнопки, 2 QR — переїжджає сюди з кореня).
 - `pay.finly.com.ua/{businessSlug}/{accountSlug}/{invoiceSlug}` — інвойс (Sprint 4 функціональність + новий accountSlug сегмент).
@@ -62,10 +64,11 @@ Cabinet — симетрична матрьошка: `/business/[slug]` → `/bu
     - **InvoicesSettingsSection** — preset-default переїжджає на Account (per-account нумерація, §SP-6).
     - **InvoicesSection** — інвойс-список переїжджає на Account (матрьошка §SP-5).
     - **QrSection** — QR-endpoints видаляються з business-controller-а (Скоуп.Backend, рядок про `PublicBusinessesController` рефакторинг). На business-рівні немає більше джерела даних для QR, бо payload потребує IBAN, який тепер живе на Account. QR живе на per-account-сторінці.
-  
-  Додається 1 нова: **AccountsSection** (картки-Account: name + bank label + IBAN-mask + per-card "Видалити" button + CTA "Додати рахунок"; bank-label-row рендериться лише для `bankCode !== null` — null-fallback rule §SP-9). Cards-list filter-ить через `usePendingAccountDeletesStore.keys.has(makeAccountKey(businessSlug, account.slug))` — optimistic-removal patern, симетрично Sprint 3 `/business/page.tsx` filter-у через `usePendingDeletesStore`. Per-card "Видалити" button-логіка симетрично DangerSection account-page §6: pre-check `invoicesCount > 0` → `toast.error(getApiMessage('ACCOUNT_HAS_INVOICES', 'accounts', { count }))` без timer на `> 0` → `scheduleAccountDeleteWithUndo(...)` на `=== 0`. **Per-card delete не редіректить** (на відміну від DangerSection account-page §6, що redirect-ить з per-account-page на business-cabinet) — list уже на тій самій сторінці; `pendingAccountDeletesStore.add` автоматично ховає картку синхронно, undo-cancel автоматично повертає через store-remove.
-  
-  Підсумок: 9 - 3 + 1 = 7 секцій (BasicSection, RequisitesSection, TaxationSection, BanksSection, PublicSection, AccountsSection, DangerSection). Жодних згадок про інвойси на цьому рівні (A6 матрьошка).
+
+    Додається 1 нова: **AccountsSection** (картки-Account: name + bank label + IBAN-mask + per-card "Видалити" button + CTA "Додати рахунок"; bank-label-row рендериться лише для `bankCode !== null` — null-fallback rule §SP-9). Cards-list filter-ить через `usePendingAccountDeletesStore.keys.has(makeAccountKey(businessSlug, account.slug))` — optimistic-removal patern, симетрично Sprint 3 `/business/page.tsx` filter-у через `usePendingDeletesStore`. Per-card "Видалити" button-логіка симетрично DangerSection account-page §6: pre-check `invoicesCount > 0` → `toast.error(getApiMessage('ACCOUNT_HAS_INVOICES', 'accounts', { count }))` без timer на `> 0` → `scheduleAccountDeleteWithUndo(...)` на `=== 0`. **Per-card delete не редіректить** (на відміну від DangerSection account-page §6, що redirect-ить з per-account-page на business-cabinet) — list уже на тій самій сторінці; `pendingAccountDeletesStore.add` автоматично ховає картку синхронно, undo-cancel автоматично повертає через store-remove.
+
+    Підсумок: 9 - 3 + 1 = 7 секцій (BasicSection, RequisitesSection, TaxationSection, BanksSection, PublicSection, AccountsSection, DangerSection). Жодних згадок про інвойси на цьому рівні (A6 матрьошка).
+
 - 🔲 Нова сторінка **`/business/[slug]/account/new/page.tsx`** — single-form: одне поле `iban` + (optional) `name`. На submit — POST `/businesses/me/{slug}/accounts`. Backend auto-generate `name` з МФО якщо не передано. Redirect на `/business/{slug}/account/{accountSlug}`.
 - 🔲 Нова сторінка **`/business/[slug]/account/[accountSlug]/page.tsx`** — кабінет рахунку. Структура: **6 секцій**:
     1. Основне (name inline-edit; bank label readonly з МФО — рендериться лише для `bankCode !== null` per null-fallback rule §SP-9).
@@ -79,14 +82,12 @@ Cabinet — симетрична матрьошка: `/business/[slug]` → `/bu
 - 🔲 Видалити старі route-и `/business/[slug]/invoice/new` і `/business/[slug]/invoice/[invoiceSlug]` — вони більше не існують.
 - 🔲 **`features/account-create/`** — нова feature: `AccountCreateForm`, RHF + Zod-resolver, single-field IBAN, live-validation `ibanZod`, optional name-input ("за замовчуванням буде підтягнуто з банку").
 - 🔲 **`features/account-edit/`** — нова feature. **Section-компоненти**: `BasicSection` (name inline-edit), `IbanSection` (readonly + copy), `InvoiceSettingsSection` (preset dropdown — копія Sprint 4 `InvoicesSettingsSection` з `features/invoices/`, тільки business→account), `InvoicesSection` (paginated list — копія Sprint 4 з `features/invoices/`, тільки `getByAccountId`), **`QrSection` (рівно 2 QR — NBU primary + NBU legacy, symmetric Sprint 3 PublicBusinessView; mirror-ить public-page §9.3 1:1)**, `DangerSection` (render delete-button + render `<DeleteAccountConfirmDialog>`-modal; pre-check логіка — у §9.2 account-page §6 bullet), `DeleteAccountConfirmDialog` (copy Sprint 3 `DeleteBusinessConfirmDialog` patern, без 5s-undo всередині — confirm-modal лише підтверджує намір; 5s-Undo живе у `scheduleAccountDeleteWithUndo`-helper нижче).
-    
-    **Delete-механіка (4-deliverable-set, copy Sprint 4 invoice-flow patern з `features/invoice-edit/`):**
+  **Delete-механіка (4-deliverable-set, copy Sprint 4 invoice-flow patern з `features/invoice-edit/`):**
     - **`pendingAccountDeletesStore.ts`** — Zustand store з композитним key `${businessSlug}/${accountSlug}` (копія `apps/web/src/features/invoice-edit/pendingInvoiceDeletesStore.ts` 1:1 з рефакторингом імен). **Композитний key обовʼязковий**, бо account-slug case-sensitive unique тільки per `(businessId, slug)` (§SP-10) — pure account-slug як store-key колидуватиме між business-ами того самого юзера. Sprint 3 single-key `pendingDeletesStore` (business-slug — глобально-unique через `slugLower`-index) reuse-нути неможливо.
     - **`scheduleAccountDeleteWithUndo.ts`** — helper, копія `apps/web/src/features/invoice-edit/scheduleInvoiceDeleteWithUndo.ts` 1:1 з адаптацією: API-call `deleteAccount(businessSlug, accountSlug)`, toast-копія `«${name}» буде видалено`, `getApiMessage(code, 'accounts')` на failure-mapping. **Архітектурні invariant-и переносяться без змін**: timer ID у closure (НЕ React ref); `pendingAccountDeletesStore.add` синхронно перед `setTimeout`; success НЕ remove-ить key зі store (slug-key лишається до browser-unload); failure → `remove(...)` повертає account у UI + toast.error з mapped code.
     - **`AccountsSection`-filter-консумент** живе у `features/business-edit/` (НЕ `account-edit/`), бо AccountsSection рендериться на business-cabinet-сторінці `/business/[slug]/page.tsx` як одна з 7 секцій. Без цього filter-а optimistic-removal не працює.
     - **`shared/api/accounts.ts` додає `deleteAccount(businessSlug, accountSlug): Promise<void>`** — DELETE `/businesses/me/{businessSlug}/accounts/{accountSlug}` thin wrapper (axios-call + envelope-unwrap; no body, no return-shape). Symmetric до Sprint 3 `deleteBusiness` і Sprint 4 `deleteInvoice` shape-у.
-    
-    **Доля `features/invoices/`**: після переносу обох секцій + `InvoiceCard.tsx` у `account-edit/` — папка видаляється повністю.
+      **Доля `features/invoices/`**: після переносу обох секцій + `InvoiceCard.tsx` у `account-edit/` — папка видаляється повністю.
 - 🔲 **`features/invoice-edit/pendingInvoiceDeletesStore.ts` rekey на 3-сегментний композитний key**. Поточний key `${businessSlug}/${invoiceSlug}` (Sprint 4 §4.6, `pendingInvoiceDeletesStore.ts:23-28`) виходив з invoice-slug uniqueness `(businessId, slug)` — slug-string був унікальним у межах бізнесу. Sprint 9 §SP-6 переводить uniqueness на `(accountId, slug)` (per-account counter-namespace) + §SP-10 явно дозволяє slug-collision між account-ами одного business-у (Privat-account і Mono-account можуть мати власний `inv-001` через preset `'simple'` counter=1). Без rekey filter `usePendingInvoiceDeletesStore.has(businessSlug, invoiceSlug)` у `InvoicesSection` приховає **обидва** інвойси з UI, коли користувач видалив один з них. **Зміни**: (1) `makeInvoiceKey(businessSlug, accountSlug, invoiceSlug)` — третій arg обовʼязковий; (2) `add` / `remove` / `has`-методи store-у приймають триплет; (3) усі callsite-и (`InvoicesSection`, `scheduleInvoiceDeleteWithUndo`, spec-и) синхронно адаптуються; (4) `pendingInvoiceDeletesStore.spec.ts` додає regression-test "Privat-inv-001 і Mono-inv-001 у одному business-i — `add(b, accPrivat, 'inv-001')` не впливає на `has(b, accMono, 'inv-001')`". **Симетрично rationale §SP-10**: composite-key обовʼязковий завжди, коли slug-string-uniqueness scope-ується глибше за store-key-namespace.
 - 🔲 **`features/account-public/`** — нова feature для public-зони: `PublicAccountView` — копія Sprint 3 `PublicBusinessView` (heading + 11 bank-grid + 2 NBU buttons + 2 QR), але reads з PublicAccountSchema.
 - 🔲 **`features/business-public/PublicBusinessView`** переписується. Було: full-payment view з QR. Стає: list-view карток-Account ("Оберіть рахунок" + cards). Empty-state ("Власник ще не налаштував рахунки"). 1-Account redirect — на сервер-side у Server Component `host-pay/[slug]/page.tsx`.
@@ -129,8 +130,7 @@ Cabinet — симетрична матрьошка: `/business/[slug]` → `/bu
     - `ACCOUNT_SLUG_GENERATION_FAILED` (500; **домен-isolated від Sprint 3 `SLUG_GENERATION_FAILED`** — той зарезервований за business-slug-генератором, новий код для account-domain-у).
     - `ACCOUNT_IBAN_DUPLICATE` (409; anti-duplicate IBAN під одним business-ом — §SP-2; post-insert 11000 на `(businessId, iban)` compound-unique).
     - `ACCOUNT_CREATE_FAILED` (500; **safety-net для unknown 11000-кейсів** у `AccountsService.create`).
-    
-    `mapApiCode` (web) додає UA-message для кожного з кодів.
+      `mapApiCode` (web) додає UA-message для кожного з кодів.
 
 ### Migrations
 
@@ -188,6 +188,7 @@ Cabinet — симетрична матрьошка: `/business/[slug]` → `/bu
 **Атомарність як race-protection (НЕ просто for-aesthetics):** `InvoicesService.create` пише touch-account у власній tx (Sprint 4 review fix-патерн, перенесений з Business на Account). Без `withTransaction` навколо delete-flow MongoDB не серіалізує count-then-delete з паралельним create — race "count=0 → конкурентний create-invoice → deleteOne" створив би orphan-Invoice з `accountId` на видалений Account.
 
 **Two-line-of-defense pre-check (frontend + backend узгоджені через single mapApiCode-source):**
+
 - **Frontend first line** — UX-shortcut: DangerSection account-page + per-card AccountsSection читають `invoicesCount` з вже-fetched `AccountWithCounts`-shape і викликають `toast.error` БЕЗ network-call-у на > 0.
 - **Backend second line** — race-protection: frontend-pre-check читає `invoicesCount` з cache на момент cabinet-page-render-у; за 5+ секунд між mount і delete-confirm concurrent `InvoicesService.create` може повернути `count` від 0 до 1+. Backend `AccountsService.delete` на пер-server-tick перевіряє countDocuments всередині того самого `withTransaction`.
 
@@ -198,6 +199,7 @@ Cabinet — симетрична матрьошка: `/business/[slug]` → `/bu
 ### SP-4. Public-вивіска: list-view at root, redirect-at-1, empty-at-0
 
 **Рішення:**
+
 - 0 Account → empty-state на корені ("Власник ще не налаштував рахунки").
 - 1 Account → **307 Temporary Redirect** з `/{businessSlug}` на `/{businessSlug}/{accountSlug}`.
 - 2+ Account → список карток ("Оберіть рахунок: 💳 ПриватБанк •2580 / 💳 monobank •8104"). Tap → перехід на `/{businessSlug}/{accountSlug}`.
@@ -306,7 +308,7 @@ Cabinet-точки (1, 2) і public-list-точка (3) уже мають IBAN-m
     - `getByBusinessId(businessId, { sort, withInvoicesCount })` — list usage у cabinet root + public root (різна whitelist на serialize). **Sort-параметр обовʼязковий, дві стабільні стратегії**:
         - `{ createdAt: -1 }` (desc) для cabinet-list (`AccountsController.list`).
         - `{ createdAt: 1 }` (asc) для public-list (`PublicBusinessesController.getPublic` accounts-array) — customer-perspective "перший-створений = основний-рахунок зверху".
-        Index `(businessId, createdAt)` без direction — Mongo-індекс однаково обслуговує обидві сторони `sort`. **Per-item `invoicesCount` через option `{ withInvoicesCount: true }`**: cabinet-list-callsite передає `true`; public-list — default `false`. При `withInvoicesCount: true` — single aggregation pipeline з `$lookup`.
+          Index `(businessId, createdAt)` без direction — Mongo-індекс однаково обслуговує обидві сторони `sort`. **Per-item `invoicesCount` через option `{ withInvoicesCount: true }`**: cabinet-list-callsite передає `true`; public-list — default `false`. При `withInvoicesCount: true` — single aggregation pipeline з `$lookup`.
     - `getBySlug(business, accountSlug)` — case-sensitive lookup (як invoice slug Sprint 4 §SP-8). **Response shape `AccountWithCounts = { ...account, invoicesCount }`** (§9.0 contract).
     - `update(account, dto)` — partial update name (єдине editable). `iban`/`businessId` immutable через `.strict()` write-DTO.
     - `delete(account)` — **атомарно у `session.withTransaction`**: `Invoice.countDocuments({accountId: account._id}, { session })` → `> 0` ⇒ throw `409 ACCOUNT_HAS_INVOICES` (abort tx); інакше `Account.deleteOne({ _id }, { session })` + `InvoiceSlugCounter.deleteMany({ accountId }, { session })` → commit. **Race-protection rationale** (симетрично Sprint 4 review fix touch-business pattern): `InvoicesService.create` робить touch-account через `Account.updateOne({ _id: account._id }, { $currentDate: { updatedAt: true } }, { session })` у власній tx. **Replica-set requirement** — без змін; standalone Mongo дає той самий 500 `CASCADE_DELETE_REQUIRES_REPLICA_SET`.
