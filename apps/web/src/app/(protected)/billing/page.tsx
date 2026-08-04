@@ -10,7 +10,7 @@ import {
     type BillingProfileView,
     type BusinessWithCounts,
 } from '@finly/types';
-import { BILLING_DEMO_MODE } from '@/shared/config/env';
+import { BILLING_DEMO_MODE } from '@/shared/config';
 import {
     getBillingProfile,
     getCatalog,
@@ -21,7 +21,7 @@ import {
     getApiMessage,
     listBusinesses,
 } from '@/shared/api';
-import { formatLocalDate } from '@/shared/lib';
+import { composeClasses, formatLocalDate } from '@/shared/lib';
 import {
     BrandUniverseCard,
     DemoBanner,
@@ -102,8 +102,8 @@ export default function BillingPage() {
     };
 
     return (
-        <UiPageContainer className="max-w-3xl space-y-6 py-10 md:py-14">
-            <UiPageHeading className="md:text-4xl">Тарифи</UiPageHeading>
+        <UiPageContainer className="space-y-6">
+            <UiPageHeading>Тарифи</UiPageHeading>
 
             {loading ? (
                 <div className="space-y-6">
@@ -115,7 +115,7 @@ export default function BillingPage() {
                     ))}
                 </div>
             ) : failed || !catalog ? (
-                <div className="bg-card border-border rounded-xl border p-8 text-center">
+                <div className="bg-card border-border rounded-xl border p-4 text-center md:p-6">
                     <p className="text-muted-foreground text-sm">
                         Не вдалося завантажити тарифи. Спробуйте перезавантажити
                         сторінку
@@ -134,16 +134,30 @@ export default function BillingPage() {
                         />
                     )}
 
-                    {catalog.brand.enabled && (
-                        <BrandUniverseCard
+                    {/* Два всесвіти поруч на lg+ — заповнюють робочу ширину
+                        замість стосу вузьких карток. Нижче lg — стос. Коли
+                        «Бренд» вимкнено, колонка одна — інакше самотня картка
+                        «Документи» займала б пів ряду з порожнім сусідом. */}
+                    <div
+                        className={composeClasses(
+                            'grid items-start gap-6',
+                            catalog.brand.enabled && 'lg:grid-cols-2'
+                        )}
+                    >
+                        {catalog.brand.enabled && (
+                            <BrandUniverseCard
+                                catalog={catalog}
+                                profile={profile}
+                                businesses={businesses}
+                                onChanged={reloadProfile}
+                            />
+                        )}
+
+                        <DocumentsUniverseCard
                             catalog={catalog}
                             profile={profile}
-                            businesses={businesses}
-                            onChanged={reloadProfile}
                         />
-                    )}
-
-                    <DocumentsUniverseCard catalog={catalog} profile={profile} />
+                    </div>
 
                     <RecentPayments reloadKey={String(reloadKey)} />
                 </>
@@ -175,7 +189,7 @@ function StatusCard({
 
     if (pastDue) {
         return (
-            <section className="border-warning/40 bg-warning/10 rounded-xl border p-6 md:p-8">
+            <section className="border-warning/40 bg-warning/10 rounded-xl border p-4 md:p-6">
                 <div className="flex items-start gap-3">
                     <AlertTriangle className="text-warning mt-0.5 size-5 shrink-0" />
                     <div className="space-y-3">
@@ -206,7 +220,7 @@ function StatusCard({
     if (!active) return null;
 
     return (
-        <section className="bg-card rounded-xl border p-6 md:p-8">
+        <section className="bg-card rounded-xl border p-4 md:p-6">
             <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
                     {profile.cancelAtPeriodEnd ? (

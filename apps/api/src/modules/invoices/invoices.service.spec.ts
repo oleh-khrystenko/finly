@@ -176,7 +176,7 @@ describe('InvoicesService (Sprint 9 §SP-6)', () => {
                     accountId,
                     slugInput: baseDto.slugInput,
                     paymentPurpose: null,
-                    businessPaymentPurposeTemplate: 'Default biz purpose',
+                    inheritedPaymentPurposeTemplate: 'Default biz purpose',
                 },
                 expect.anything()
             );

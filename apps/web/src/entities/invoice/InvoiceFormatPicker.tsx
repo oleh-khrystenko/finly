@@ -3,10 +3,7 @@
 import type { ReactNode } from 'react';
 import type { AutoSlugMode } from '@finly/types';
 import UiRadioCardGroup from '@/shared/ui/UiRadioCardGroup';
-import {
-    INVOICE_FORMAT_META,
-    type InvoiceFormatChoice,
-} from './invoiceFormat';
+import { INVOICE_FORMAT_META, type InvoiceFormatChoice } from './invoiceFormat';
 
 interface Props {
     value: InvoiceFormatChoice;

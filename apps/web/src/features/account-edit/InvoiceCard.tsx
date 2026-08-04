@@ -15,10 +15,11 @@ interface Props {
     /**
      * Template для legacy fallback (`payeeSnapshot === null && payment
      * Purpose === null`) — той самий runtime-resolution-path, що backend
-     * `payload-mapper`. Передається з batch-fetch-у `Business`-документу на
-     * parent-сторінці.
+     * `payload-mapper`. Sprint 29: це вже **resolved** шаблон рівня рахунку
+     * (`resolveAccountPurposeTemplate`), а не сирий шаблон отримувача, інакше
+     * картка показувала б не той текст, що піде в банк.
      */
-    businessPaymentPurposeTemplate: string;
+    inheritedPaymentPurposeTemplate: string;
 }
 
 /**
@@ -32,14 +33,14 @@ export default function InvoiceCard({
     invoice,
     businessSlug,
     accountSlug,
-    businessPaymentPurposeTemplate,
+    inheritedPaymentPurposeTemplate,
 }: Props) {
     const formattedAmount = formatKopecksAsHryvnia(invoice.amount);
     const isExpired = getInvoiceStatus(invoice.validUntil) === 'expired';
     const purpose = resolveInvoicePayeePurpose(
         invoice.payeeSnapshot,
         invoice.paymentPurpose,
-        businessPaymentPurposeTemplate
+        inheritedPaymentPurposeTemplate
     );
     const isRuntimeInherited = isInvoicePurposeRuntimeInherited(
         invoice.payeeSnapshot,
@@ -48,9 +49,7 @@ export default function InvoiceCard({
     // Рядок терміну — лише коли термін заданий. Без терміну рахунок безстроковий,
     // рядка немає (і бейджа теж — статус завжди "активний", нема про що сигналити).
     const validUntilDate =
-        invoice.validUntil !== null
-            ? formatKyivDate(invoice.validUntil)
-            : null;
+        invoice.validUntil !== null ? formatKyivDate(invoice.validUntil) : null;
 
     return (
         <UiNavCard

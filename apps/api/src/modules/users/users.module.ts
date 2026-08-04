@@ -6,6 +6,7 @@ import {
     BillingProfile,
     BillingProfileSchema,
 } from '../payments/schemas/billing-profile.schema';
+import { PayersModule } from '../payers/payers.module';
 import { SlugReservationModule } from '../slug-reservation/slug-reservation.module';
 import { StorageModule } from '../storage/storage.module';
 import { AvatarController } from './avatar.controller';
@@ -31,6 +32,9 @@ import { UsersService } from './users.service';
         // Sprint 20 — `getMe` віддає активну бронь slug (відлік + добивання
         // наміру). SlugReservationModule standalone, циклу немає.
         SlugReservationModule,
+        // Sprint 30 — остаточне видалення акаунта мусить забирати з собою його
+        // список платників: там персональні дані третіх осіб.
+        PayersModule,
     ],
     controllers: [UsersController, AvatarController],
     providers: [UsersService, AvatarService, CleanupService],

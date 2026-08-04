@@ -6,6 +6,11 @@ services:
             - '6379:6379'
         volumes:
             - redis_data_dev:/data
+        healthcheck:
+            test: ['CMD', 'redis-cli', 'ping']
+            interval: 5s
+            timeout: 3s
+            retries: 5
 
     api:
         image: node:20-alpine
@@ -22,53 +27,29 @@ services:
             - PNPM_STORE_DIR=/pnpm-store
             - CI=true
             - NODE_ENV=development
-            - PORT=${API_PORT}
+            - API_PORT=${API_PORT}
             - MONGODB_URI=${MONGODB_URI}
             - REDIS_URL=redis://redis:6379
             - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
             - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
-            - WEB_URL=http://localhost:${WEB_PORT}
-            - PAY_PUBLIC_URL=http://pay.finly.local:${WEB_PORT}
+            # Sprint 30 — dev-хости: той самий `localhost`, різні порти
+            # (кабінет WEB_PORT, pay-зона PAY_PORT). Вигаданий домен на кшталт
+            # `finly.local` тут не годиться — Google OAuth не приймає
+            # redirect-адресу на неіснуючому TLD. Cookie-scope портами не
+            # розділяється, тож спільна сесія працює як у проді.
+            - WEB_URL=${WEB_URL}
+            - PAY_PUBLIC_URL=${PAY_PUBLIC_URL}
             - REVALIDATE_SECRET=${REVALIDATE_SECRET}
             - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
             - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
-            - GOOGLE_CALLBACK_URL=${GOOGLE_CALLBACK_URL}
             - RESEND_API_KEY=${RESEND_API_KEY}
             - RESEND_FROM_EMAIL=${RESEND_FROM_EMAIL}
             - MONOBANK_TOKEN=${MONOBANK_TOKEN}
-            - BILLING_DEMO_MODE=${BILLING_DEMO_MODE}
-            - BILLING_DUNNING_MAX_ATTEMPTS=${BILLING_DUNNING_MAX_ATTEMPTS}
-            - BILLING_DUNNING_RETRY_INTERVAL_HOURS=${BILLING_DUNNING_RETRY_INTERVAL_HOURS}
-            - BILLING_BRAND_PRICE_PER_BUSINESS=${BILLING_BRAND_PRICE_PER_BUSINESS}
-            - BILLING_DOC_TIERS=${BILLING_DOC_TIERS}
-            - BILLING_DOC_STORAGE_GB_PER_BUSINESS=${BILLING_DOC_STORAGE_GB_PER_BUSINESS}
-            - BILLING_DOC_STORAGE_RENT_CREDITS_PER_GB=${BILLING_DOC_STORAGE_RENT_CREDITS_PER_GB}
-            - BILLING_DOC_CREDIT_PACKS=${BILLING_DOC_CREDIT_PACKS}
-            - BILLING_DOC_LOW_BALANCE_THRESHOLD=${BILLING_DOC_LOW_BALANCE_THRESHOLD}
-            - BILLING_DOC_CRITICAL_BALANCE_THRESHOLD=${BILLING_DOC_CRITICAL_BALANCE_THRESHOLD}
-            - BILLING_BRAND_ENABLED=${BILLING_BRAND_ENABLED}
-            - BILLING_DOCUMENTS_ENABLED=${BILLING_DOCUMENTS_ENABLED}
             - TRUST_PROXY_HOPS=${TRUST_PROXY_HOPS}
-            - AUTH_PASSWORD_MIN_LENGTH=${AUTH_PASSWORD_MIN_LENGTH}
-            - AUTH_LOCKOUT_THRESHOLDS=${AUTH_LOCKOUT_THRESHOLDS}
-            - AUTH_LOGIN_ATTEMPTS_TTL_MIN=${AUTH_LOGIN_ATTEMPTS_TTL_MIN}
-            - AUTH_MAGIC_LINK_TTL_MIN=${AUTH_MAGIC_LINK_TTL_MIN}
-            - AUTH_MAGIC_LINK_RATE_LIMIT=${AUTH_MAGIC_LINK_RATE_LIMIT}
-            - AUTH_MAGIC_LINK_RATE_WINDOW_MIN=${AUTH_MAGIC_LINK_RATE_WINDOW_MIN}
-            - AUTH_MAGIC_LINK_DEDUP_SEC=${AUTH_MAGIC_LINK_DEDUP_SEC}
-            - ACCOUNT_DELETION_GRACE_DAYS=${ACCOUNT_DELETION_GRACE_DAYS}
-            - ORPHAN_REMINDER_FIRST_DAYS=${ORPHAN_REMINDER_FIRST_DAYS}
-            - ORPHAN_REMINDER_FINAL_DAYS=${ORPHAN_REMINDER_FINAL_DAYS}
-            - ORPHAN_CLEANUP_DELETION_DAYS=${ORPHAN_CLEANUP_DELETION_DAYS}
-            - BRAND_PENDING_CLEANUP_DAYS=${BRAND_PENDING_CLEANUP_DAYS}
-            - BRAND_DEMOTED_CLEANUP_DAYS=${BRAND_DEMOTED_CLEANUP_DAYS}
             - GSC_SITE_URL=${GSC_SITE_URL}
             - GSC_CLIENT_EMAIL=${GSC_CLIENT_EMAIL}
             - GSC_PRIVATE_KEY=${GSC_PRIVATE_KEY}
             - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-            - HELP_CHAT_MAX_TOKENS=${HELP_CHAT_MAX_TOKENS}
-            - HELP_CHAT_IP_LIMIT=${HELP_CHAT_IP_LIMIT}
-            - HELP_CHAT_DAILY_BUDGET=${HELP_CHAT_DAILY_BUDGET}
             - R2_ACCOUNT_ID=${R2_ACCOUNT_ID}
             - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
             - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
@@ -90,8 +71,21 @@ services:
             - ./:/app
             - pnpm-store:/pnpm-store
             - /app/node_modules
+        # `start_period` покриває холодний старт (pnpm install + build types +
+        # nest bootstrap) — невдалі проби в цьому вікні не рахуються як фейл.
+        healthcheck:
+            test:
+                [
+                    'CMD-SHELL',
+                    'wget -q --spider http://127.0.0.1:${API_PORT}/api/health',
+                ]
+            interval: 5s
+            timeout: 3s
+            retries: 12
+            start_period: 300s
         depends_on:
-            - redis
+            redis:
+                condition: service_healthy
 
     web:
         image: node:20-alpine
@@ -111,23 +105,37 @@ services:
             - PNPM_STORE_DIR=/pnpm-store
             - PORT=${WEB_PORT}
             - API_INTERNAL_URL=http://api:${API_PORT}
-            - NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL}
-            - NEXT_PUBLIC_API_URL=http://localhost:${API_PORT}/api
-            - NEXT_PUBLIC_BILLING_DEMO_MODE=${NEXT_PUBLIC_BILLING_DEMO_MODE}
-            - NEXT_PUBLIC_PAY_PUBLIC_URL=http://pay.finly.local:${WEB_PORT}
-            - NEXT_PUBLIC_STORAGE_HOSTNAME=${NEXT_PUBLIC_STORAGE_HOSTNAME}
+            - WEB_URL=${WEB_URL}
+            - PAY_PUBLIC_URL=${PAY_PUBLIC_URL}
+            - R2_PUBLIC_URL=${R2_PUBLIC_URL}
             - REVALIDATE_SECRET=${REVALIDATE_SECRET}
             - WATCHPACK_POLLING=true
             - CHOKIDAR_USEPOLLING=true
         ports:
             - '${WEB_PORT}:${WEB_PORT}'
+            # Той самий контейнер під другим портом — публічна pay-зона.
+            # Next.js бачить `Host: localhost:${PAY_PORT}`, і `proxy.ts`
+            # розпізнає його як public host: whitelist
+            # (`apps/web/src/shared/config/publicHosts.ts`) походить від
+            # `PAY_PUBLIC_URL`, тож порт у ньому мусить збігатися з цим.
+            - '${PAY_PORT:?PAY_PORT is required - dev pay-zone port, see .env.example}:${WEB_PORT}'
         volumes:
             - ./:/app
             - pnpm-store:/pnpm-store
             - /app/node_modules
+            # Turbopack постійно переписує `.next/dev` під час HMR. Тримаємо
+            # згенеровані файли в Linux-volume, а не на повільному bind-mount
+            # macOS → Linux, щоб перебудова не залишала недоступні chunks.
+            - web_next_dev:/app/apps/web/.next
+        # Next.js dev піднімається за секунди, api — за хвилини (install + build
+        # types + nest watch). Без `service_healthy` браузер встигає викликати
+        # `/api/auth/refresh`, rewrite летить у мертвий контейнер (ECONNREFUSED)
+        # і користувача викидає на логін.
         depends_on:
-            - api
+            api:
+                condition: service_healthy
 
 volumes:
     redis_data_dev:
     pnpm-store:
+    web_next_dev:

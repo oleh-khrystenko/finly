@@ -22,6 +22,10 @@ jest.mock('@/shared/config/env', () => ({
     ENV: {
         NEXT_PUBLIC_PAY_PUBLIC_URL: 'https://pay.finly.com.ua',
     },
+    // Whitelist публічної зони (`publicHosts.ts`) походить від цього значення,
+    // тож мок `./env` мусить його віддавати — інакше host-check нижче відхилив
+    // би власний pay-хост і кожен рендер обертався б на 404.
+    PAY_PUBLIC_HOST: 'pay.finly.com.ua',
 }));
 
 const mockHeaders = jest.fn();
@@ -74,11 +78,13 @@ function makeView(
             name: 'Іваненко',
             slug: 'IvanEnko',
             seoIndexEnabled: false,
+            isSystem: false,
         },
         nbuLinks: {
             primary: 'https://qr.bank.gov.ua/abc',
             legacy: 'https://bank.gov.ua/qr/abc',
         },
+        personalizationMarkers: [],
         ...overrides,
     };
 }
@@ -155,6 +161,39 @@ describe('HostPayAccountPage — slug lookup', () => {
         ).rejects.toThrow('NEXT_PERMANENT_REDIRECT:/IvanEnko/aBc12345');
     });
 
+    it('Sprint 29 — canonical redirect зберігає query персонального посилання', async () => {
+        mockLoadPublicAccountView.mockResolvedValue(makeView());
+
+        await expect(
+            HostPayAccountPage({
+                params: Promise.resolve({
+                    slug: 'ivanenko',
+                    accountSlug: 'aBc12345',
+                }),
+                searchParams: Promise.resolve({
+                    taxId: '3456789012',
+                    period: '2026-07',
+                }),
+            })
+        ).rejects.toThrow(
+            'NEXT_PERMANENT_REDIRECT:/IvanEnko/aBc12345?taxId=3456789012&period=2026-07'
+        );
+    });
+
+    it('Sprint 29 — порожній query не додає "?" до canonical', async () => {
+        mockLoadPublicAccountView.mockResolvedValue(makeView());
+
+        await expect(
+            HostPayAccountPage({
+                params: Promise.resolve({
+                    slug: 'ivanenko',
+                    accountSlug: 'aBc12345',
+                }),
+                searchParams: Promise.resolve({}),
+            })
+        ).rejects.toThrow('NEXT_PERMANENT_REDIRECT:/IvanEnko/aBc12345');
+    });
+
     it('§SP-10 account-slug case-sensitive — НЕ перевіряємо canonical для account-slug', async () => {
         // Backend exact-match-or-404 для account-slug. Якщо backend повернув
         // view — значить account-slug у URL збігається з документом. Сервер
@@ -205,6 +244,7 @@ describe('generateMetadata', () => {
                     name: 'Іваненко',
                     slug: 'IvanEnko',
                     seoIndexEnabled: true,
+                    isSystem: false,
                 },
             })
         );
@@ -218,7 +258,7 @@ describe('generateMetadata', () => {
         expect(meta.robots).toEqual({ index: true, follow: true });
     });
 
-    it('seoIndexEnabled=false → noindex', async () => {
+    it('seoIndexEnabled=false → noindex і БЕЗ canonical (суперечливі сигнали)', async () => {
         mockLoadPublicAccountView.mockResolvedValue(makeView());
 
         const meta = await generateMetadata({
@@ -228,6 +268,33 @@ describe('generateMetadata', () => {
             }),
         });
         expect(meta.robots).toEqual({ index: false, follow: false });
+        expect(meta.alternates).toBeUndefined();
+        expect(meta.openGraph?.url).toBeUndefined();
+    });
+
+    it('Sprint 29 — персональний query → noindex без canonical навіть при seoIndexEnabled', async () => {
+        mockLoadPublicAccountView.mockResolvedValue(
+            makeView({
+                business: {
+                    type: 'fop',
+                    name: 'Іваненко',
+                    slug: 'IvanEnko',
+                    seoIndexEnabled: true,
+                    isSystem: false,
+                },
+            })
+        );
+
+        const meta = await generateMetadata({
+            params: Promise.resolve({
+                slug: 'IvanEnko',
+                accountSlug: 'aBc12345',
+            }),
+            searchParams: Promise.resolve({ taxId: '3182710695' }),
+        });
+        expect(meta.robots).toEqual({ index: false, follow: false });
+        expect(meta.alternates).toBeUndefined();
+        expect(meta.openGraph?.url).toBeUndefined();
     });
 
     it('title містить bank-label + ibanMask на non-null bankCode', async () => {
@@ -244,8 +311,18 @@ describe('generateMetadata', () => {
         );
     });
 
-    it('adds canonical and social metadata on pay host', async () => {
-        mockLoadPublicAccountView.mockResolvedValue(makeView());
+    it('adds canonical and social metadata on pay host (індексована гілка)', async () => {
+        mockLoadPublicAccountView.mockResolvedValue(
+            makeView({
+                business: {
+                    type: 'fop',
+                    name: 'Іваненко',
+                    slug: 'IvanEnko',
+                    seoIndexEnabled: true,
+                    isSystem: false,
+                },
+            })
+        );
 
         const meta = await generateMetadata({
             params: Promise.resolve({

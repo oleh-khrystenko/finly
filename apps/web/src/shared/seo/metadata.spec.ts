@@ -1,6 +1,6 @@
 jest.mock('@/shared/config', () => ({
+    API_BASE_URL: '/api',
     ENV: {
-        NEXT_PUBLIC_API_URL: 'http://localhost:4000/api',
         NEXT_PUBLIC_BASE_URL: 'http://localhost:3000',
         NEXT_PUBLIC_PAY_PUBLIC_URL: 'http://pay.localhost:3000',
     },
@@ -30,7 +30,7 @@ describe('fetchMetadata', () => {
         expect(meta.robots).toEqual({ index: false, follow: false });
     });
 
-    it('preserves canonical and openGraph regardless of noindex', () => {
+    it('drops canonical and og:url when noindex=true (суперечливі сигнали)', () => {
         const meta = fetchMetadata({
             page: 'terms',
             href: 'terms',
@@ -38,7 +38,10 @@ describe('fetchMetadata', () => {
             noindex: true,
         });
         expect(meta.title).toBe('Terms');
-        expect(meta.alternates?.canonical).toContain('/terms');
+        expect(meta.alternates).toBeUndefined();
+        expect(meta.openGraph?.url).toBeUndefined();
+        // Решта social-метаданих лишається: превʼю посилання не залежить від
+        // індексації.
         expect(meta.openGraph?.title).toBe('Terms');
     });
 

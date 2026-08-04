@@ -26,10 +26,7 @@ const EASYFIN_URL = 'https://easyfin.in.ua/';
  */
 export function LandingPartner() {
     return (
-        <section
-            aria-labelledby="partner-heading"
-            className="bg-background"
-        >
+        <section aria-labelledby="partner-heading" className="bg-background">
             <div className="container mx-auto px-6 py-16 md:py-20">
                 <div className="border-border bg-card mx-auto max-w-4xl rounded-3xl border p-6 sm:p-8 md:p-10">
                     <div className="flex flex-col items-center gap-6 text-center md:flex-row md:items-start md:gap-10 md:text-left">
@@ -56,11 +53,11 @@ export function LandingPartner() {
                                     aria-hidden
                                     className="text-primary/40 mb-2 size-6"
                                 />
-                                Я щодня бачу, як підприємці втрачають клієнтів на
-                                банальному «продиктуйте реквізити ще раз». Finly
-                                прибирає цей крок: одне посилання, заповнена
-                                форма в банку, гроші напряму на IBAN за
-                                стандартом НБУ. Саме тому я стою за цим
+                                Я щодня бачу, як підприємці втрачають клієнтів
+                                на банальному «продиктуйте реквізити ще раз».
+                                Finly прибирає цей крок: одне посилання,
+                                заповнена форма в банку, гроші напряму на IBAN
+                                за стандартом НБУ. Саме тому я стою за цим
                                 продуктом.
                             </blockquote>
 

@@ -22,6 +22,7 @@ import {
 } from '@finly/types';
 
 import { SkipOnboarding } from '../../common/decorators/skip-onboarding.decorator';
+import { skipThrottlersExcept } from '../../common/http/throttle-policy';
 import { ENV } from '../../config/env';
 import { AccountsService } from '../accounts/accounts.service';
 import type { AccountDocument } from '../accounts/schemas/account.schema';
@@ -38,6 +39,7 @@ import { QrService } from '../qr/qr.service';
 import { isInvoiceExpired } from './expiry';
 import { InvoicesService } from './invoices.service';
 import { buildPayloadInputFromInvoice } from './payload-mapper';
+import { resolveAccountPurposeTemplate } from '../accounts/payload-mapper';
 import { effectiveInvoicePurpose } from './purpose-resolver';
 import type { InvoiceDocument } from './schemas/invoice.schema';
 
@@ -54,7 +56,7 @@ import type { InvoiceDocument } from './schemas/invoice.schema';
  * **`Cache-Control: no-store`** — invoice mutable payment command. CDN-cache
  * створив би drift на edit/delete.
  */
-@SkipThrottle({ default: true })
+@SkipThrottle(skipThrottlersExcept('public-payment'))
 @Throttle({ 'public-payment': { limit: 600, ttl: 60000 } })
 @Controller('businesses/public/:slug/account/:accountSlug/invoices')
 export class PublicInvoicesController {
@@ -107,7 +109,7 @@ export class PublicInvoicesController {
                 snapshot?.paymentPurpose ??
                 effectiveInvoicePurpose(
                     invoice.paymentPurpose,
-                    business.paymentPurposeTemplate
+                    resolveAccountPurposeTemplate(business, account)
                 ),
             validUntil: invoice.validUntil,
             slug: invoice.slug,

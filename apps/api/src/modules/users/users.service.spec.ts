@@ -314,9 +314,11 @@ describe('UsersService', () => {
             expect(mockModel.findByIdAndUpdate).toHaveBeenCalledWith(
                 '507f1f77bcf86cd799439011',
                 {
-                    'profile.firstName': 'New',
-                    'profile.lastName': 'Name',
-                    'profile.avatar': 'https://new.url',
+                    $set: {
+                        'profile.firstName': 'New',
+                        'profile.lastName': 'Name',
+                        'profile.avatar': 'https://new.url',
+                    },
                 },
                 { new: true }
             );
@@ -331,9 +333,11 @@ describe('UsersService', () => {
             });
 
             const updateArg = mockModel.findByIdAndUpdate.mock.calls[0][1];
-            expect(updateArg).toEqual({ 'profile.firstName': 'Only' });
-            expect(updateArg).not.toHaveProperty('profile.lastName');
-            expect(updateArg).not.toHaveProperty('profile.avatar');
+            expect(updateArg).toEqual({
+                $set: { 'profile.firstName': 'Only' },
+            });
+            expect(updateArg.$set).not.toHaveProperty('profile.lastName');
+            expect(updateArg.$set).not.toHaveProperty('profile.avatar');
         });
 
         // Sprint 3 §3.4 — bookkeeper toggle (рішення E5).
@@ -348,8 +352,10 @@ describe('UsersService', () => {
             });
 
             const updateArg = mockModel.findByIdAndUpdate.mock.calls[0][1];
-            expect(updateArg).toEqual({ worksAsBookkeeper: true });
-            expect(updateArg).not.toHaveProperty('profile.worksAsBookkeeper');
+            expect(updateArg).toEqual({ $set: { worksAsBookkeeper: true } });
+            expect(updateArg.$set).not.toHaveProperty(
+                'profile.worksAsBookkeeper'
+            );
         });
 
         it('приймає worksAsBookkeeper=false (вимкнення режиму)', async () => {
@@ -362,7 +368,7 @@ describe('UsersService', () => {
             });
 
             const updateArg = mockModel.findByIdAndUpdate.mock.calls[0][1];
-            expect(updateArg).toEqual({ worksAsBookkeeper: false });
+            expect(updateArg).toEqual({ $set: { worksAsBookkeeper: false } });
         });
 
         it('combined update: profile-поле + worksAsBookkeeper в одному виклику', async () => {
@@ -375,8 +381,10 @@ describe('UsersService', () => {
 
             const updateArg = mockModel.findByIdAndUpdate.mock.calls[0][1];
             expect(updateArg).toEqual({
-                'profile.firstName': 'Олег',
-                worksAsBookkeeper: true,
+                $set: {
+                    'profile.firstName': 'Олег',
+                    worksAsBookkeeper: true,
+                },
             });
         });
     });

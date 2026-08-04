@@ -16,14 +16,25 @@ const growHeight = 'flex-1';
 // flex-item стиснутись); внутрішній скрол — на відповідальності consumer-а.
 const fixedHeight = 'min-h-0 flex-1';
 
+// Платформенний робочий простір: контент стартує від sidebar-а і тече на всю
+// ширину БЕЗ max-w-стелі — порожнє поле праворуч на широких моніторах читалось
+// би як недороблений лендінг. Ширину тримають не сторінка, а сітки всередині
+// (auto-fill колонки карток) і фіксований допоміжний стовп деталок. Вертикальні
+// паддінги робочі (py-6/8), не лендінгові — сторінки НЕ перекривають їх py.
+const wideWidth = '';
+// Вузька колонка для форм: довжина рядка 45-75 символів, вирівняна вліво.
+const narrowWidth = 'max-w-2xl';
+
 const UiPageContainer = ({
     fixed = false,
+    narrow = false,
     children,
     className,
 }: UiPageContainerProps) => (
     <main
         className={composeClasses(
-            'mx-auto flex w-full max-w-3xl flex-col px-4',
+            'flex w-full flex-col px-4 py-6 lg:px-8 lg:py-8',
+            narrow ? narrowWidth : wideWidth,
             fixed ? fixedHeight : growHeight,
             className
         )}

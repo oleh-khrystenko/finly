@@ -118,8 +118,8 @@ export default function BrandSection({
 
             <div className="mt-4 space-y-4">
                 {shown ? (
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-                        <div className="self-center sm:self-auto">
+                    <div className="flex flex-col gap-4 @md:flex-row @md:items-center">
+                        <div className="self-center @md:self-auto">
                             <UiBrandLogo
                                 src={shown.logoUrl}
                                 alt="Логотип бренду"

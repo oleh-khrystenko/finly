@@ -17,8 +17,14 @@ import type { AdminGuideListItem, GuideStatus } from '@finly/types';
 import UiButton from '@/shared/ui/UiButton';
 import UiLink from '@/shared/ui/UiLink';
 import UiSpinner from '@/shared/ui/UiSpinner';
-import UiChipGroup from '@/shared/ui/UiChipGroup';
-import { adminListGuides, reorderGuides, syncOrganicGuides } from '@/shared/api';
+import UiTabs, { uiTabPanelProps } from '@/shared/ui/UiTabs';
+import UiPageContainer from '@/shared/ui/UiPageContainer';
+import UiPageHeading from '@/shared/ui/UiPageHeading';
+import {
+    adminListGuides,
+    reorderGuides,
+    syncOrganicGuides,
+} from '@/shared/api';
 
 import { FieldHint } from './FieldHint';
 import { GuideStatusBadge } from './GuideStatusBadge';
@@ -45,6 +51,8 @@ const TAB_LABEL: Record<GuideStatus, string> = {
     draft: 'Чернетки',
     published: 'Опубліковані',
 };
+
+const TAB_PANEL_ID = 'admin-guides-panel';
 
 const kindLabel = (item: AdminGuideListItem): string =>
     item.pillarSlug === null ? 'Основний гайд' : 'Розділ';
@@ -207,12 +215,10 @@ export function AdminGuidesList() {
     for (const it of items) counts[it.status] += 1;
 
     return (
-        <main className="mx-auto max-w-4xl px-4 py-10 sm:px-6 md:py-14 lg:px-8">
+        <UiPageContainer>
             <header className="flex items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-foreground text-2xl font-semibold tracking-tight md:text-3xl">
-                        Гайди
-                    </h1>
+                    <UiPageHeading>Гайди</UiPageHeading>
                     <p className="text-muted-foreground mt-1 text-sm">
                         Керування статтями розділу гайдів.
                     </p>
@@ -258,23 +264,22 @@ export function AdminGuidesList() {
 
                 {state.phase === 'ready' && items.length > 0 && (
                     <>
-                        <UiChipGroup
-                            options={TAB_ORDER.map((s) => ({
+                        <UiTabs
+                            aria-label="Статуси гайдів"
+                            panelId={TAB_PANEL_ID}
+                            items={TAB_ORDER.map((s) => ({
                                 value: s,
-                                label: (
-                                    <span className="flex items-center gap-2">
-                                        {TAB_LABEL[s]}
-                                        <span className="bg-muted text-muted-foreground rounded-full px-1.5 text-xs font-medium">
-                                            {counts[s]}
-                                        </span>
-                                    </span>
-                                ),
+                                label: TAB_LABEL[s],
+                                count: counts[s],
                             }))}
                             value={tab}
-                            onChange={(v) => setTab(v as GuideStatus)}
+                            onChange={setTab}
                         />
 
-                        <div className="mt-5">
+                        <div
+                            {...uiTabPanelProps(TAB_PANEL_ID, TAB_LABEL[tab])}
+                            className="mt-5"
+                        >
                             <TabHint tab={tab} />
 
                             <div className="mt-4">
@@ -320,7 +325,7 @@ export function AdminGuidesList() {
                     </>
                 )}
             </div>
-        </main>
+        </UiPageContainer>
     );
 }
 
@@ -356,8 +361,9 @@ function TabHint({ tab }: { tab: GuideStatus }) {
             <p>
                 Статті, які зараз видно на сайті і в пошуку. Стрілками задаєте
                 порядок, у якому вони стоять на сторінці гайдів: основні гайди
-                рухаються між собою (кожен разом зі своїми розділами), а розділи,
-                лише всередині свого гайда. Порядок зберігається одразу.
+                рухаються між собою (кожен разом зі своїми розділами), а
+                розділи, лише всередині свого гайда. Порядок зберігається
+                одразу.
             </p>
             <p>
                 Біля кожної статті видно, скільки разів на неї перейшли з пошуку
@@ -450,7 +456,9 @@ function PublishedList({
                                                 : 'Показати розділи'
                                         }
                                         aria-expanded={expanded}
-                                        onClick={() => onToggle(group.pillar.id)}
+                                        onClick={() =>
+                                            onToggle(group.pillar.id)
+                                        }
                                     >
                                         <ChevronRight
                                             className={`size-5 transition-transform duration-200 ${
@@ -569,7 +577,9 @@ function GuideCardLink({
             <div className="text-muted-foreground mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
                 <span>{kind}</span>
                 <span aria-hidden>·</span>
-                <span>Оновлено {DATE_FMT.format(new Date(item.updatedAt))}</span>
+                <span>
+                    Оновлено {DATE_FMT.format(new Date(item.updatedAt))}
+                </span>
                 {showOrganic && (
                     <>
                         <span aria-hidden>·</span>

@@ -1,9 +1,6 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
-import type {
-    BusinessType,
-    PublicAccountListItem,
-} from '@finly/types';
+import type { BusinessType, PublicAccountListItem } from '@finly/types';
 import PublicBusinessView from './PublicBusinessView';
 
 const TWO_ACCOUNTS: PublicAccountListItem[] = [
@@ -38,6 +35,7 @@ describe('PublicBusinessView (Sprint 9 §SP-4)', () => {
                         type={type}
                         name="Іваненко"
                         slug="IvanEnko"
+                        isSystem={false}
                         accounts={[]}
                     />
                 );
@@ -53,6 +51,7 @@ describe('PublicBusinessView (Sprint 9 §SP-4)', () => {
                     type="fop"
                     name="Іваненко"
                     slug="IvanEnko"
+                    isSystem={false}
                     accounts={[]}
                 />
             );
@@ -69,6 +68,7 @@ describe('PublicBusinessView (Sprint 9 §SP-4)', () => {
                     type="fop"
                     name="Іваненко"
                     slug="IvanEnko"
+                    isSystem={false}
                     accounts={TWO_ACCOUNTS}
                 />
             );
@@ -85,6 +85,7 @@ describe('PublicBusinessView (Sprint 9 §SP-4)', () => {
                     type="fop"
                     name="Іваненко"
                     slug="IvanEnko"
+                    isSystem={false}
                     accounts={TWO_ACCOUNTS}
                 />
             );
@@ -111,6 +112,7 @@ describe('PublicBusinessView (Sprint 9 §SP-4)', () => {
                     type="fop"
                     name="Іваненко"
                     slug="IvanEnko"
+                    isSystem={false}
                     accounts={[
                         {
                             slug: 'aBc12345',
@@ -147,6 +149,7 @@ describe('PublicBusinessView (Sprint 9 §SP-4)', () => {
                     type="fop"
                     name="Іваненко"
                     slug="IvanEnko"
+                    isSystem={false}
                     accounts={withNullBank}
                 />
             );
@@ -168,6 +171,7 @@ describe('PublicBusinessView (Sprint 9 §SP-4)', () => {
                     type="fop"
                     name="Іваненко"
                     slug="IvanEnko"
+                    isSystem={false}
                     accounts={TWO_ACCOUNTS}
                 />
             );
@@ -184,6 +188,7 @@ describe('PublicBusinessView (Sprint 9 §SP-4)', () => {
                     type="fop"
                     name="Іваненко"
                     slug="a b"
+                    isSystem={false}
                     accounts={[
                         {
                             slug: 'c/d',

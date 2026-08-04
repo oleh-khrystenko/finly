@@ -51,7 +51,8 @@ export function useApplyPendingSlug(opts: {
                 // мертва: тоді відкриваємо поле і знімаємо її. На будь-якій іншій
                 // помилці бронь ще валідна, тож зберігаємо холд (auto-добивання
                 // повториться на наступному mount; doneRef стримує повтор тут).
-                if (extractApiErrorCode(err) !== RESPONSE_CODE.SLUG_TAKEN) return;
+                if (extractApiErrorCode(err) !== RESPONSE_CODE.SLUG_TAKEN)
+                    return;
                 // Ім'я перехопили (рідко): підписка вже діє, відкриваємо поле.
                 onTaken();
                 // Знімаємо мертву бронь і освіжаємо стор, інакше провальне

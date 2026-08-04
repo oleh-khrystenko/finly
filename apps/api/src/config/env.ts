@@ -7,7 +7,6 @@
 
 import { config } from 'dotenv';
 import { resolve } from 'path';
-import { parseBillingGrid } from './billing-grid.config';
 
 // Load .env from monorepo root before reading process.env.
 // Use __dirname (relative to this file) instead of process.cwd() which varies by runner.
@@ -37,13 +36,24 @@ export const getNonNegativeIntEnvVar = (name: string): number => {
     return Number(raw);
 };
 
-// Демо-режим білінгу. На проді з живими грошима МУСИТЬ бути false. Web-аналог:
-// NEXT_PUBLIC_BILLING_DEMO_MODE (показує демо-банер на сторінці тарифу).
-const billingDemoMode = getEnvVar('BILLING_DEMO_MODE') === 'true';
+function hostnameOf(rawUrl: string, name: string): string {
+    try {
+        return new URL(rawUrl).hostname;
+    } catch {
+        throw new Error(`❌ ${name} must be an absolute URL (got "${rawUrl}")`);
+    }
+}
+
+// Шлях OAuth-callback-у задає контролер (`GET /auth/google/callback` під
+// глобальним префіксом `/api`), тому окремою змінною він бути не може: у `.env`
+// це був просто `WEB_URL` + константа, яку легко розсинхронити.
+const GOOGLE_CALLBACK_PATH = '/api/auth/google/callback';
+
+const webUrl = getEnvVar('WEB_URL');
 
 export const ENV = {
     NODE_ENV: getEnvVar('NODE_ENV'),
-    PORT: getEnvVar('PORT'),
+    API_PORT: getEnvVar('API_PORT'),
     /**
      * Кількість довірених reverse-proxy перед API (Express `trust proxy`).
      * 0 — API дивиться у світ напряму: X-Forwarded-For ігнорується,
@@ -60,15 +70,28 @@ export const ENV = {
      * URL, email-template посилань на кабінет — усі шляхи, що ведуть
      * авторизованого ФОП назад у його кабінет.
      */
-    WEB_URL: getEnvVar('WEB_URL'),
+    WEB_URL: webUrl,
     /**
-     * Public payment-page origin (`pay.finly.com.ua` prod, `pay.finly.local:3000`
-     * dev — налаштовується через `/etc/hosts`, див. Sprint 3 §3.9). Sprint 3
+     * Public payment-page origin (`pay.finly.com.ua` prod, `localhost:3001`
+     * dev — другий port-mapping того самого web-контейнера, `PAY_PORT`;
+     * записів у `/etc/hosts` не потрібно, див. Sprint 3 §3.9). Sprint 3
      * рішення A1: cabinet і public живуть на різних host-ах для cookie/auth
      * ізоляції. QR-картинка `/businesses/public/:slug/qr/business.png` кодує
      * URL клієнта (не ФОП-а) → це **public host**, не WEB_URL.
      */
     PAY_PUBLIC_URL: getEnvVar('PAY_PUBLIC_URL'),
+
+    /**
+     * Батьківський домен сесійної cookie — хост кабінету (`finly.com.ua` prod,
+     * `localhost` dev). Кабінет і pay-хост живуть під ним, тож браузер шле
+     * `bid_refresh` на обидва: один вхід, один вихід.
+     *
+     * Похідне від `WEB_URL`, а не окрема змінна: два незалежні значення
+     * розсинхронізувалися б мовчки (браузер просто відкидає `Set-Cookie`, і
+     * сесії немає ні на одному хості). Умову «pay-хост лежить під цим доменом»
+     * перевіряє fail-fast нижче.
+     */
+    AUTH_COOKIE_DOMAIN: hostnameOf(webUrl, 'WEB_URL'),
 
     /**
      * Sprint 28 — спільний секрет для internal on-demand revalidation web-у.
@@ -85,7 +108,7 @@ export const ENV = {
 
     GOOGLE_CLIENT_ID: getEnvVar('GOOGLE_CLIENT_ID'),
     GOOGLE_CLIENT_SECRET: getEnvVar('GOOGLE_CLIENT_SECRET'),
-    GOOGLE_CALLBACK_URL: getEnvVar('GOOGLE_CALLBACK_URL'),
+    GOOGLE_CALLBACK_URL: `${webUrl.replace(/\/$/, '')}${GOOGLE_CALLBACK_PATH}`,
 
     RESEND_API_KEY: getEnvVar('RESEND_API_KEY'),
     RESEND_FROM_EMAIL: getEnvVar('RESEND_FROM_EMAIL'),
@@ -95,89 +118,6 @@ export const ENV = {
     // checkout, списання за токеном і запит статусу автентифікуються ним;
     // вебхуки верифікуються публічним ключем з GET /api/merchant/pubkey.
     MONOBANK_TOKEN: getEnvVar('MONOBANK_TOKEN'),
-
-    BILLING_DEMO_MODE: billingDemoMode,
-
-    // Sprint 22 — dunning billing-clock: скільки спроб списання у прострочці до
-    // зняття доступу і інтервал між повторами. Грейс ≈ (MAX−1) × INTERVAL.
-    // Дефолт 10 × 24год ≈ 9 днів: частий перший повтор ловить швидке поповнення
-    // картки, довге вікно перекриває зарплатну хвилю.
-    BILLING_DUNNING_MAX_ATTEMPTS: getNonNegativeIntEnvVar(
-        'BILLING_DUNNING_MAX_ATTEMPTS'
-    ),
-    BILLING_DUNNING_RETRY_INTERVAL_HOURS: getNonNegativeIntEnvVar(
-        'BILLING_DUNNING_RETRY_INTERVAL_HOURS'
-    ),
-
-    // Sprint 27 — тарифна сітка двох всесвітів, зібрана з `.env` у типізований
-    // `BillingGrid` (див. billing-grid.config.ts). Єдине джерело значень: ціни,
-    // розміри пакетів, обсяги кредитів, ГБ, пороги — усе тут, нічого в коді.
-    BILLING_GRID: parseBillingGrid(getEnvVar),
-    // Sprint 27 — які всесвіти продаються. Бренд вмикається одразу; Документи —
-    // під прапором «скоро» до спринту запуску документів (механіка будується і
-    // тестується, вітрина й checkout вимкнені).
-    BILLING_BRAND_ENABLED: getEnvVar('BILLING_BRAND_ENABLED') === 'true',
-    BILLING_DOCUMENTS_ENABLED:
-        getEnvVar('BILLING_DOCUMENTS_ENABLED') === 'true',
-
-    AUTH_PASSWORD_MIN_LENGTH: parseInt(
-        getEnvVar('AUTH_PASSWORD_MIN_LENGTH'),
-        10
-    ),
-    AUTH_LOCKOUT_THRESHOLDS: getEnvVar('AUTH_LOCKOUT_THRESHOLDS'),
-    AUTH_LOGIN_ATTEMPTS_TTL_MIN: parseInt(
-        getEnvVar('AUTH_LOGIN_ATTEMPTS_TTL_MIN'),
-        10
-    ),
-    AUTH_MAGIC_LINK_TTL_MIN: parseInt(getEnvVar('AUTH_MAGIC_LINK_TTL_MIN'), 10),
-    AUTH_MAGIC_LINK_RATE_LIMIT: parseInt(
-        getEnvVar('AUTH_MAGIC_LINK_RATE_LIMIT'),
-        10
-    ),
-    AUTH_MAGIC_LINK_RATE_WINDOW_MIN: parseInt(
-        getEnvVar('AUTH_MAGIC_LINK_RATE_WINDOW_MIN'),
-        10
-    ),
-    AUTH_MAGIC_LINK_DEDUP_SEC: parseInt(
-        getEnvVar('AUTH_MAGIC_LINK_DEDUP_SEC'),
-        10
-    ),
-    ACCOUNT_DELETION_GRACE_DAYS: parseInt(
-        getEnvVar('ACCOUNT_DELETION_GRACE_DAYS'),
-        10
-    ),
-
-    ORPHAN_REMINDER_FIRST_DAYS: parseInt(
-        getEnvVar('ORPHAN_REMINDER_FIRST_DAYS'),
-        10
-    ),
-    ORPHAN_REMINDER_FINAL_DAYS: parseInt(
-        getEnvVar('ORPHAN_REMINDER_FINAL_DAYS'),
-        10
-    ),
-    ORPHAN_CLEANUP_DELETION_DAYS: parseInt(
-        getEnvVar('ORPHAN_CLEANUP_DELETION_DAYS'),
-        10
-    ),
-
-    /**
-     * Sprint 21 — скільки днів pending-логотип бренду живе без оплати, перш ніж
-     * cron-чистка прибирає його з R2 (orphan неоплачених + демоутовані після
-     * згасання тарифу, яким дали свіже вікно). Повторна підписка у межах вікна
-     * промотує pending назад в active (реконсиляція) — чистка його не зачіпає.
-     */
-    BRAND_PENDING_CLEANUP_DAYS: getNonNegativeIntEnvVar(
-        'BRAND_PENDING_CLEANUP_DAYS'
-    ),
-    /**
-     * Sprint 21 — поріг чистки ДЕМОУТОВАНОГО (колись активного, оплаченого)
-     * pending-логотипа після згасання тарифу. Довший за
-     * `BRAND_PENDING_CLEANUP_DAYS`: платник міг передумати ненадовго, даємо більше
-     * часу повернутись (повторна підписка промотує лого назад без перезавантаження).
-     */
-    BRAND_DEMOTED_CLEANUP_DAYS: getNonNegativeIntEnvVar(
-        'BRAND_DEMOTED_CLEANUP_DAYS'
-    ),
 
     // Google Search Console (органічні кліки на гайди). Сервіс-акаунт: email +
     // приватний ключ PEM (у .env одним рядком з екранованими `\n` — розгортаємо
@@ -189,16 +129,9 @@ export const ENV = {
 
     ANTHROPIC_API_KEY: getEnvVar('ANTHROPIC_API_KEY'),
 
-    // Public help assistant (Sprint 16) — anon, no executions. Own short
-    // max-tokens (concise answers), own per-IP 24h limit and a global daily
-    // budget circuit-breaker.
-    HELP_CHAT_MAX_TOKENS: parseInt(getEnvVar('HELP_CHAT_MAX_TOKENS'), 10),
-    HELP_CHAT_IP_LIMIT: parseInt(getEnvVar('HELP_CHAT_IP_LIMIT'), 10),
-    HELP_CHAT_DAILY_BUDGET: parseInt(getEnvVar('HELP_CHAT_DAILY_BUDGET'), 10),
-
     // Cloudflare R2 — media storage (presigned uploads, Google avatar re-upload).
-    // R2_PUBLIC_URL hostname MUST match NEXT_PUBLIC_STORAGE_HOSTNAME on the web
-    // side — otherwise next/image rejects uploaded photos at runtime.
+    // Хост цього URL web бере собі для `next/image` remotePatterns напряму
+    // (`next.config.ts`), тож окремої змінної під нього не існує.
     R2_ACCOUNT_ID: getEnvVar('R2_ACCOUNT_ID'),
     R2_ACCESS_KEY_ID: getEnvVar('R2_ACCESS_KEY_ID'),
     R2_SECRET_ACCESS_KEY: getEnvVar('R2_SECRET_ACCESS_KEY'),
@@ -206,105 +139,36 @@ export const ENV = {
     R2_PUBLIC_URL: getEnvVar('R2_PUBLIC_URL'),
 };
 
-// Sprint 22 — dunning мусить мати щонайменше одну спробу і ненульовий інтервал,
-// інакше прострочка або миттєво знімала б доступ (MAX=0), або повтори злипались
-// би в один момент (INTERVAL=0), руйнуючи грейс-вікно.
-if (
-    ENV.BILLING_DUNNING_MAX_ATTEMPTS < 1 ||
-    ENV.BILLING_DUNNING_RETRY_INTERVAL_HOURS < 1
-) {
-    throw new Error(
-        `❌ BILLING_DUNNING_MAX_ATTEMPTS (${ENV.BILLING_DUNNING_MAX_ATTEMPTS}) and ` +
-            `BILLING_DUNNING_RETRY_INTERVAL_HOURS (${ENV.BILLING_DUNNING_RETRY_INTERVAL_HOURS}) ` +
-            'must both be ≥ 1.'
-    );
-}
-
-// Sprint 10 §10.1 — dedup-overwrite-flow (sendMagicLink SP-8) припускає, що
-// magic-record-у живий поки існує dedup-key. Інваріант: TTL magic-record-у
-// (хвилини → секунди) ≥ TTL dedup-key-у (секунди). Якщо інверсія — dedup-key
-// переживе magic-record-у, redis.get(`magic:${existingToken}`) поверне null,
-// dedup-overwrite-flow упаде у fallthrough на normal-flow (новий token + лист)
-// замість silent-overwrite — anti-spam invariant порушено.
-if (ENV.AUTH_MAGIC_LINK_TTL_MIN * 60 < ENV.AUTH_MAGIC_LINK_DEDUP_SEC) {
-    throw new Error(
-        `❌ AUTH_MAGIC_LINK_DEDUP_SEC (${ENV.AUTH_MAGIC_LINK_DEDUP_SEC}s) ` +
-            `must not exceed AUTH_MAGIC_LINK_TTL_MIN converted to seconds ` +
-            `(${ENV.AUTH_MAGIC_LINK_TTL_MIN}min = ${ENV.AUTH_MAGIC_LINK_TTL_MIN * 60}s). ` +
-            'Otherwise dedup-key outlives magic-record and overwrite-flow breaks.'
-    );
-}
-
-// Парсинг AUTH_LOCKOUT_THRESHOLDS="5:1,10:5,20:15" → [{ attempts: 5, blockMin: 1 }, ...]
-export function parseLockoutThresholds(
-    raw: string
-): Array<{ attempts: number; blockMin: number }> {
-    return raw.split(',').map((entry) => {
-        const [attempts, blockMin] = entry.split(':').map(Number);
-        return { attempts, blockMin };
-    });
-}
-
-// Sprint 12 §12.1a — cross-field invariant для orphan-cleanup pipeline.
-// Stage-thresholds мусять монотонно зростати: first < final < deletion. Інакше
-// 3-stage email-pipeline колапсує в один день (наприклад, first=final=deletion=2
-// → один cron-run fires і reminder, і final-warning, і cascade-delete у race),
-// порушуючи compliance-invariant "user попереджений 2 рази перед видаленням".
-// first ≥ 1 — фіксує мінімальний grace-period між створенням Business і першим
-// reminder-листом (нульовий day-0 fire ламає UX — лист приходить раніше за
-// перший вход у кабінет після magic-link-claim).
-export function validateOrphanCleanupSchedule(
-    firstDays: number,
-    finalDays: number,
-    deletionDays: number
+// Спільна сесія двох хостів тримається на одному інваріанті: хост, що читає
+// сесійну cookie, мусить лежати під її доменом. Домен беремо з кабінету, тож
+// кабінет і Google-callback під ним за побудовою — перевіряти лишається
+// pay-хост. Якщо він виїде з-під домену (наприклад, кабінет переїде на
+// піддомен), браузер мовчки відкидатиме `Set-Cookie` на pay-зоні: вхід ніби
+// проходить, а сесії там немає, і жодної помилки в логах. Тому — на старті.
+export function assertHostUnderCookieDomain(
+    cookieDomain: string,
+    name: string,
+    origin: string
 ): void {
-    if (!Number.isInteger(firstDays) || firstDays < 1) {
+    let hostname: string;
+    try {
+        hostname = new URL(origin).hostname;
+    } catch {
         throw new Error(
-            `❌ ORPHAN_REMINDER_FIRST_DAYS must be an integer ≥ 1 (got ${firstDays}).`
+            `❌ ${name} must be an absolute URL (got "${origin}").`
         );
     }
-    if (!Number.isInteger(finalDays) || !Number.isInteger(deletionDays)) {
+    if (hostname !== cookieDomain && !hostname.endsWith(`.${cookieDomain}`)) {
         throw new Error(
-            `❌ ORPHAN_REMINDER_FINAL_DAYS and ORPHAN_CLEANUP_DELETION_DAYS must be integers ` +
-                `(got ${finalDays}, ${deletionDays}).`
-        );
-    }
-    if (!(firstDays < finalDays && finalDays < deletionDays)) {
-        throw new Error(
-            `❌ Orphan-cleanup schedule must satisfy ` +
-                `ORPHAN_REMINDER_FIRST_DAYS < ORPHAN_REMINDER_FINAL_DAYS < ORPHAN_CLEANUP_DELETION_DAYS ` +
-                `(got ${firstDays} < ${finalDays} < ${deletionDays}). ` +
-                'Otherwise email-pipeline stages overlap and "user warned twice before deletion" invariant breaks.'
+            `❌ ${name} host "${hostname}" is not under the session cookie domain ` +
+                `"${cookieDomain}" (derived from WEB_URL). The browser would silently ` +
+                'drop the session cookie, leaving that host logged out.'
         );
     }
 }
 
-validateOrphanCleanupSchedule(
-    ENV.ORPHAN_REMINDER_FIRST_DAYS,
-    ENV.ORPHAN_REMINDER_FINAL_DAYS,
-    ENV.ORPHAN_CLEANUP_DELETION_DAYS
-);
-
-// Sprint 21 — cross-field invariant порогів чистки бренду. Семантика двох
-// бакетів (`BrandCleanupService`): free-pending (неоплачений) живе коротше,
-// демоутований платний (тариф міг згаснути ненадовго) — довше. Якщо пороги
-// інвертувати, демоутований логотип чистився б РАНІШЕ за free, тихо й без
-// падіння. Тримаємо ту саму fail-fast-дисципліну, що orphan-cleanup і
-// magic-link-TTL: `BRAND_PENDING_CLEANUP_DAYS ≤ BRAND_DEMOTED_CLEANUP_DAYS`.
-export function validateBrandCleanupThresholds(
-    pendingDays: number,
-    demotedDays: number
-): void {
-    if (pendingDays > demotedDays) {
-        throw new Error(
-            `❌ BRAND_PENDING_CLEANUP_DAYS (${pendingDays}) must not exceed ` +
-                `BRAND_DEMOTED_CLEANUP_DAYS (${demotedDays}). Demoted (paid) ` +
-                'logos must get at least as long a grace window as unpaid free uploads.'
-        );
-    }
-}
-
-validateBrandCleanupThresholds(
-    ENV.BRAND_PENDING_CLEANUP_DAYS,
-    ENV.BRAND_DEMOTED_CLEANUP_DAYS
+assertHostUnderCookieDomain(
+    ENV.AUTH_COOKIE_DOMAIN,
+    'PAY_PUBLIC_URL',
+    ENV.PAY_PUBLIC_URL
 );

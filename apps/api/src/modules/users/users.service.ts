@@ -127,14 +127,23 @@ export class UsersService {
             lastName?: string;
             avatar?: string;
             worksAsBookkeeper?: boolean;
+            middleName?: string;
         }
     ): Promise<UserDocument | null> {
         const update: Record<string, unknown> = {};
+        // По батькові очищуване: порожній рядок з форми означає «прибрати», а не
+        // «зберегти порожнє значення». Без `$unset` у профілі осідав би порожній
+        // рядок, і підстановка на податковій сторінці вважала б поле заповненим.
+        const unset: Record<string, 1> = {};
         if (data.firstName !== undefined)
             update['profile.firstName'] = data.firstName;
         if (data.lastName !== undefined)
             update['profile.lastName'] = data.lastName;
         if (data.avatar !== undefined) update['profile.avatar'] = data.avatar;
+        if (data.middleName !== undefined) {
+            if (data.middleName === '') unset['profile.middleName'] = 1;
+            else update['profile.middleName'] = data.middleName;
+        }
         // Sprint 3 §3.4 — bookkeeper toggle (рішення E5). Поле живе на
         // корені user-документа (не у `profile`), бо це capability акаунту,
         // не онбординг-атрибут — toggle перемикається багато разів за
@@ -143,7 +152,14 @@ export class UsersService {
         // Sprint 6 (frontend модалка "Доступно на Paid").
         if (data.worksAsBookkeeper !== undefined)
             update.worksAsBookkeeper = data.worksAsBookkeeper;
-        return this.userModel.findByIdAndUpdate(userId, update, { new: true });
+        return this.userModel.findByIdAndUpdate(
+            userId,
+            {
+                ...(Object.keys(update).length > 0 && { $set: update }),
+                ...(Object.keys(unset).length > 0 && { $unset: unset }),
+            },
+            { new: true }
+        );
     }
 
     async clearAvatar(userId: string): Promise<UserDocument | null> {

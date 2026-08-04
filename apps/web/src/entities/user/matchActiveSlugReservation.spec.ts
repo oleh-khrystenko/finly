@@ -11,7 +11,7 @@ const businessReservation: SlugReservationView = {
 };
 
 describe('matchActiveSlugReservation (Sprint 20)', () => {
-    it('повертає бажане ім\'я коли бронь стосується цієї сутності', () => {
+    it("повертає бажане ім'я коли бронь стосується цієї сутності", () => {
         expect(
             matchActiveSlugReservation(businessReservation, {
                 entityType: 'business',

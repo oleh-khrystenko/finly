@@ -125,22 +125,20 @@ describe('useQrLandingDraftStore', () => {
             ).toBeNull();
 
             setIntent('claim-pending');
-            const first =
-                useQrLandingDraftStore.getState().claimIdempotencyKey;
+            const first = useQrLandingDraftStore.getState().claimIdempotencyKey;
             expect(first).toMatch(UUID_REGEX);
 
             // Recovery-cycle reuse — той самий token.
             setIntent('claim-pending');
-            expect(
-                useQrLandingDraftStore.getState().claimIdempotencyKey
-            ).toBe(first);
+            expect(useQrLandingDraftStore.getState().claimIdempotencyKey).toBe(
+                first
+            );
         });
 
         it('середні транзиції (claim-business-pending, claim-failed-business, ...) НЕ торкають claimIdempotencyKey', () => {
             const { setIntent } = useQrLandingDraftStore.getState();
             setIntent('claim-pending');
-            const key =
-                useQrLandingDraftStore.getState().claimIdempotencyKey;
+            const key = useQrLandingDraftStore.getState().claimIdempotencyKey;
 
             (
                 [

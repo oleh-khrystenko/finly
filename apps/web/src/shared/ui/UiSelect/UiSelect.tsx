@@ -1,6 +1,6 @@
 'use client';
 
-import { forwardRef, useId } from 'react';
+import { forwardRef, Fragment, useId } from 'react';
 import {
     Listbox,
     ListboxButton,
@@ -9,7 +9,12 @@ import {
 } from '@headlessui/react';
 import { Check, ChevronDown } from 'lucide-react';
 import { composeClasses, FIELD_LABEL_STYLES } from '@/shared/lib';
-import type { UiSelectProps, UiSelectSize, UiSelectVariant } from './types';
+import type {
+    UiSelectOption,
+    UiSelectProps,
+    UiSelectSize,
+    UiSelectVariant,
+} from './types';
 
 const sizeStyles: Record<UiSelectSize, string> = {
     sm: 'px-3 py-1.5 text-sm',
@@ -32,6 +37,36 @@ const optionSizeStyles: Record<UiSelectSize, string> = {
     lg: 'px-6 py-3 text-lg',
 };
 
+const groupLabelSizeStyles: Record<UiSelectSize, string> = {
+    sm: 'px-3 pt-2 pb-1 text-xs',
+    md: 'px-4 pt-2 pb-1 text-xs',
+    lg: 'px-6 pt-3 pb-1 text-sm',
+};
+
+interface OptionSegment {
+    group: string | undefined;
+    options: UiSelectOption[];
+}
+
+/**
+ * Опції, порізані на секції за сусідством: заголовок ставиться там, де
+ * змінюється `group`. Порядок опцій задає споживач і ми його не чіпаємо —
+ * перегрупування переставляло б рядки під курсором у списку, який людина вже
+ * читає, а тут ціна помилкового кліку дорівнює платежу за не ту людину.
+ */
+function toSegments(options: UiSelectOption[]): OptionSegment[] {
+    const segments: OptionSegment[] = [];
+    for (const option of options) {
+        const last = segments[segments.length - 1];
+        if (last && last.group === option.group) {
+            last.options.push(option);
+            continue;
+        }
+        segments.push({ group: option.group, options: [option] });
+    }
+    return segments;
+}
+
 const UiSelect = forwardRef<HTMLButtonElement, UiSelectProps>((props, ref) => {
     const {
         options,
@@ -50,6 +85,35 @@ const UiSelect = forwardRef<HTMLButtonElement, UiSelectProps>((props, ref) => {
 
     const generatedId = useId();
     const selected = options.find((o) => o.value === value);
+
+    const renderOption = (option: UiSelectOption) => (
+        <ListboxOption
+            key={option.value}
+            value={option.value}
+            className={composeClasses(
+                'flex cursor-pointer items-center justify-between select-none',
+                'text-foreground rounded-md transition-colors',
+                'data-focus:bg-accent',
+                optionSizeStyles[size]
+            )}
+        >
+            {({ selected: isSelected }) => (
+                <>
+                    <span
+                        className={composeClasses(
+                            'truncate',
+                            isSelected && 'font-medium'
+                        )}
+                    >
+                        {option.label}
+                    </span>
+                    {isSelected && (
+                        <Check className="text-primary h-4 w-4 shrink-0" />
+                    )}
+                </>
+            )}
+        </ListboxOption>
+    );
 
     const buttonClasses = composeClasses(
         'flex w-full items-center justify-between gap-2',
@@ -91,7 +155,7 @@ const UiSelect = forwardRef<HTMLButtonElement, UiSelectProps>((props, ref) => {
                     <span
                         className={composeClasses(
                             'truncate',
-                            !selected && 'text-muted-foreground'
+                            !selected && 'text-muted-foreground/50'
                         )}
                     >
                         {selected?.label || placeholder}
@@ -109,34 +173,33 @@ const UiSelect = forwardRef<HTMLButtonElement, UiSelectProps>((props, ref) => {
                     )}
                 >
                     <div className="p-1">
-                        {options.map((option) => (
-                            <ListboxOption
-                                key={option.value}
-                                value={option.value}
-                                className={composeClasses(
-                                    'flex cursor-pointer items-center justify-between select-none',
-                                    'text-foreground rounded-md transition-colors',
-                                    'data-focus:bg-accent',
-                                    optionSizeStyles[size]
-                                )}
-                            >
-                                {({ selected: isSelected }) => (
-                                    <>
-                                        <span
-                                            className={composeClasses(
-                                                'truncate',
-                                                isSelected && 'font-medium'
-                                            )}
-                                        >
-                                            {option.label}
-                                        </span>
-                                        {isSelected && (
-                                            <Check className="text-primary h-4 w-4 shrink-0" />
+                        {toSegments(options).map((segment, index) => {
+                            const items = segment.options.map(renderOption);
+                            // Без підпису секція не існує як сутність: зайвий
+                            // `role="group"` без назви лише додав би скрінрідеру
+                            // рівень вкладеності ні про що.
+                            return segment.group === undefined ? (
+                                <Fragment key={`segment-${index}`}>
+                                    {items}
+                                </Fragment>
+                            ) : (
+                                <div
+                                    key={`segment-${index}`}
+                                    role="group"
+                                    aria-label={segment.group}
+                                >
+                                    <p
+                                        className={composeClasses(
+                                            'text-muted-foreground font-medium',
+                                            groupLabelSizeStyles[size]
                                         )}
-                                    </>
-                                )}
-                            </ListboxOption>
-                        ))}
+                                    >
+                                        {segment.group}
+                                    </p>
+                                    {items}
+                                </div>
+                            );
+                        })}
                     </div>
                 </ListboxOptions>
                 {error && (

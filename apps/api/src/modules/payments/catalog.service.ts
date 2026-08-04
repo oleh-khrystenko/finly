@@ -1,27 +1,30 @@
 import { Injectable } from '@nestjs/common';
 import { type BillingCatalog } from '@finly/types';
-import { ENV } from '../../config/env';
+import {
+    BILLING_GRID,
+    BILLING_UNIVERSE_ENABLED,
+} from '../../config/billing.config';
 
 /**
- * Sprint 27 — публічний каталог двох всесвітів з тарифної сітки (`.env`). Ціни,
- * розміри пакетів, обсяги кредитів і ГБ — усі з `ENV.BILLING_GRID` (єдине
+ * Sprint 27 — публічний каталог двох всесвітів з тарифної сітки. Ціни,
+ * розміри пакетів, обсяги кредитів і ГБ — усі з `BILLING_GRID` (єдине
  * джерело). `enabled`-прапори: Бренд продається одразу, Документи під прапором
  * «скоро». Приховані пакети докупівлі кредитів сюди НЕ входять — контекстні.
  */
 @Injectable()
 export class CatalogService {
-    private readonly grid = ENV.BILLING_GRID;
+    private readonly grid = BILLING_GRID;
 
     getCatalog(): BillingCatalog {
         const docs = this.grid.documents;
         return {
             currency: this.grid.currency,
             brand: {
-                enabled: ENV.BILLING_BRAND_ENABLED,
+                enabled: BILLING_UNIVERSE_ENABLED.brand,
                 pricePerBusiness: this.grid.brand.pricePerBusiness,
             },
             documents: {
-                enabled: ENV.BILLING_DOCUMENTS_ENABLED,
+                enabled: BILLING_UNIVERSE_ENABLED.documents,
                 tiers: docs.tiers.map((t) => ({
                     size: t.size,
                     priceAmount: t.priceAmount,

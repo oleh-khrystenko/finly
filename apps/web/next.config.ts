@@ -10,14 +10,41 @@ config({ path: resolve(__dirname, '../../.env') });
 // are set on the web domain and visible to middleware.
 const apiInternalUrl = process.env.API_INTERNAL_URL;
 
-// R2 CDN hostname for user-uploaded avatars. Required — the value must be
-// the hostname of the backend's R2_PUBLIC_URL (documented invariant).
-const storageHostname = process.env.NEXT_PUBLIC_STORAGE_HOSTNAME;
-if (!storageHostname) {
-    throw new Error(
-        '❌ Environment variable "NEXT_PUBLIC_STORAGE_HOSTNAME" is not defined'
-    );
+function requireEnv(name: string): string {
+    const value = process.env[name];
+    if (!value) {
+        throw new Error(`❌ Environment variable "${name}" is not defined`);
+    }
+    return value;
 }
+
+function hostnameOf(name: string): string {
+    const raw = requireEnv(name);
+    try {
+        return new URL(raw).hostname;
+    } catch {
+        throw new Error(`❌ ${name} must be an absolute URL (got "${raw}")`);
+    }
+}
+
+/**
+ * Next inline-ить у клієнтський бандл лише змінні з префіксом `NEXT_PUBLIC_`,
+ * тож origin-и кабінету і pay-зони проростають сюди під другим іменем. Але
+ * ЗНАЧЕННЯ лишається одне: джерело — `WEB_URL` / `PAY_PUBLIC_URL`, ті самі
+ * змінні, що читає API. Дві незалежні копії одного origin-а розсинхронізуються
+ * мовчки: кабінет вважав би публічною зоною не той хост, і `proxy.ts` віддавав
+ * би 404 замість сторінок.
+ */
+function exposeAsPublic(publicName: string, sourceName: string): void {
+    process.env[publicName] = requireEnv(sourceName);
+}
+
+exposeAsPublic('NEXT_PUBLIC_BASE_URL', 'WEB_URL');
+exposeAsPublic('NEXT_PUBLIC_PAY_PUBLIC_URL', 'PAY_PUBLIC_URL');
+
+// Хост R2 для `next/image`: беремо з того самого `R2_PUBLIC_URL`, що й API,
+// щоб хост картинок і хост сховища не могли розійтися.
+const storageHostname = hostnameOf('R2_PUBLIC_URL');
 
 const nextConfig: NextConfig = {
     output: 'standalone',

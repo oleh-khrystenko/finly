@@ -5,6 +5,7 @@ import { FileText, Plus } from 'lucide-react';
 import { type Invoice } from '@finly/types';
 import { extractApiErrorCode, getApiMessage, listInvoices } from '@/shared/api';
 import UiButton from '@/shared/ui/UiButton';
+import UiCardGrid from '@/shared/ui/UiCardGrid';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
 import { usePendingInvoiceDeletesStore } from '@/features/invoice-edit';
@@ -14,10 +15,11 @@ interface Props {
     businessSlug: string;
     accountSlug: string;
     /**
-     * Template з batch-fetched `Business` на parent-page. Lifted-down до
-     * `InvoiceCard` для inheritance fallback (`paymentPurpose ?? template`).
+     * Уже resolved шаблон рівня рахунку (`resolveAccountPurposeTemplate` на
+     * parent-page). Lifted-down до `InvoiceCard` для inheritance fallback
+     * (`paymentPurpose ?? template`).
      */
-    businessPaymentPurposeTemplate: string;
+    inheritedPaymentPurposeTemplate: string;
 }
 
 const PAGE_SIZE = 10;
@@ -66,7 +68,7 @@ function extractMessage(err: unknown): string {
 export default function InvoicesSection({
     businessSlug,
     accountSlug,
-    businessPaymentPurposeTemplate,
+    inheritedPaymentPurposeTemplate,
 }: Props) {
     const [data, setData] = useState<SectionData | null>(null);
     const [error, setError] = useState<SectionError | null>(null);
@@ -218,19 +220,19 @@ export default function InvoicesSection({
 
             {visibleItems !== null && visibleItems.length > 0 && (
                 <div className="mt-4 space-y-3">
-                    <div className="grid gap-4 sm:grid-cols-2">
+                    <UiCardGrid>
                         {visibleItems.map((inv) => (
                             <InvoiceCard
                                 key={inv.id}
                                 invoice={inv}
                                 businessSlug={businessSlug}
                                 accountSlug={accountSlug}
-                                businessPaymentPurposeTemplate={
-                                    businessPaymentPurposeTemplate
+                                inheritedPaymentPurposeTemplate={
+                                    inheritedPaymentPurposeTemplate
                                 }
                             />
                         ))}
-                    </div>
+                    </UiCardGrid>
                     {hasMore && (
                         <div className="flex justify-center pt-2">
                             <UiButton

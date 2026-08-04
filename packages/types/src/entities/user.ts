@@ -14,6 +14,17 @@ export const UserProfileDataSchema = z.object({
     firstName: z.string().optional(),
     lastName: z.string().optional(),
     avatar: z.string().url().optional(),
+    /**
+     * По батькові — частина ПІБ, опційна: онбординг її не вимагає, потрібна
+     * лише тому, хто платить податки через сторінки каталогу (ПІБ у призначенні
+     * платежу).
+     *
+     * Власного РНОКПП у профілі свідомо немає: податковий номер людини вже
+     * живе на її отримувачі-фізособі (`Business.taxId` для типів з РНОКПП), і
+     * друга копія в профілі розходилась би з першою після найближчого
+     * редагування отримувача. Дані клієнтів — окремим списком (`PayerSchema`).
+     */
+    middleName: z.string().optional(),
 });
 
 export const UserProfileCompletionRemindersSchema = z.object({

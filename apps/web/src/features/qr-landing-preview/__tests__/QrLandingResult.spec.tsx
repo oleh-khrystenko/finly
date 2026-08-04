@@ -4,8 +4,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 
 jest.mock('@/shared/config', () => ({
+    API_BASE_URL: '/api',
     ENV: {
-        NEXT_PUBLIC_API_URL: 'http://localhost:4000/api',
         NEXT_PUBLIC_BASE_URL: 'http://localhost:3000',
         NEXT_PUBLIC_PAY_PUBLIC_URL: 'http://localhost:3001',
     },
@@ -39,10 +39,7 @@ jest.mock('sonner', () => ({
     },
 }));
 
-import {
-    QrPreviewInputSchema,
-    type QrPreviewInput,
-} from '@finly/types';
+import { QrPreviewInputSchema, type QrPreviewInput } from '@finly/types';
 
 import { QrLandingResult } from '../QrLandingResult';
 import { useQrLandingDraftStore } from '@/entities/qr-landing-draft';

@@ -42,6 +42,11 @@ import {
 } from '@finly/types';
 import { ENV } from '../../config/env';
 import {
+    BILLING_DUNNING,
+    BILLING_GRID,
+    BILLING_UNIVERSE_ENABLED,
+} from '../../config/billing.config';
+import {
     ChargeResult,
     IPaymentProvider,
     PAYMENT_PROVIDER,
@@ -119,7 +124,7 @@ interface PendingEffect {
 @Injectable()
 export class BillingProfileService implements OnModuleInit {
     private readonly logger = new Logger(BillingProfileService.name);
-    private readonly grid: BillingGrid = ENV.BILLING_GRID;
+    private readonly grid: BillingGrid = BILLING_GRID;
 
     constructor(
         @Inject(PAYMENT_PROVIDER)
@@ -144,7 +149,7 @@ export class BillingProfileService implements OnModuleInit {
 
     /**
      * Fail-fast звірка сітки з живими складами: деплой, що прибирає з
-     * `BILLING_DOC_TIERS` пакет, на якому сидять оплачені профілі
+     * `BILLING_GRID.documents.tiers` пакет, на якому сидять оплачені профілі
      * (ACTIVE/PAST_DUE), мусить упасти на старті — інакше view і billing-clock
      * цих платників тихо ламались би на кожному зверненні (unknown tier size).
      * INCOMPLETE/CANCELED/UNPAID не блокують: їх склади перезаписуються новим
@@ -174,7 +179,7 @@ export class BillingProfileService implements OnModuleInit {
         );
         if (missing.length > 0) {
             throw new Error(
-                `❌ BILLING_DOC_TIERS has no size(s) [${missing.join(', ')}] ` +
+                `❌ BILLING_GRID.documents.tiers has no size(s) [${missing.join(', ')}] ` +
                     'still used by entitled billing profiles — restore the ' +
                     'tier(s) or migrate the profiles before deploying'
             );
@@ -1730,7 +1735,7 @@ export class BillingProfileService implements OnModuleInit {
                     amount: monthly,
                     currency: ctx.currency,
                     attempt: dunning.attempts,
-                    maxAttempts: ENV.BILLING_DUNNING_MAX_ATTEMPTS,
+                    maxAttempts: BILLING_DUNNING.maxAttempts,
                 })
             );
         }
@@ -1979,7 +1984,7 @@ export class BillingProfileService implements OnModuleInit {
                     .session(session)
                     .lean();
                 const attempts = (profile?.dunningAttempts ?? 0) + 1;
-                const exhausted = attempts >= ENV.BILLING_DUNNING_MAX_ATTEMPTS;
+                const exhausted = attempts >= BILLING_DUNNING.maxAttempts;
                 // Decline — визначений результат: якщо цю спробу супроводжував
                 // transport-unknown прапор, він знімається (дунінг сам веде
                 // профіль далі через nextRetryAt / термінальний UNPAID).
@@ -2008,7 +2013,7 @@ export class BillingProfileService implements OnModuleInit {
                 } else {
                     const nextRetryAt = new Date(
                         Date.now() +
-                            ENV.BILLING_DUNNING_RETRY_INTERVAL_HOURS * 3_600_000
+                            BILLING_DUNNING.retryIntervalHours * 3_600_000
                     );
                     await this.profileModel.updateOne(
                         { userId: new Types.ObjectId(userId) },
@@ -2689,8 +2694,8 @@ export class BillingProfileService implements OnModuleInit {
     private assertUniverseEnabled(universe: BillingUniverse): void {
         const enabled =
             universe === BILLING_UNIVERSE.BRAND
-                ? ENV.BILLING_BRAND_ENABLED
-                : ENV.BILLING_DOCUMENTS_ENABLED;
+                ? BILLING_UNIVERSE_ENABLED.brand
+                : BILLING_UNIVERSE_ENABLED.documents;
         if (!enabled) {
             throw new BadRequestException({
                 code: RESPONSE_CODE.BILLING_UNIVERSE_DISABLED,

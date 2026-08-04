@@ -14,7 +14,9 @@ import ValidUntilSection from './ValidUntilSection';
 async function pickMode(label: RegExp) {
     const trigger = screen
         .getAllByRole('button')
-        .find((b) => /Без терміну|До конкретної дати/.test(b.textContent ?? ''))!;
+        .find((b) =>
+            /Без терміну|До конкретної дати/.test(b.textContent ?? '')
+        )!;
     await act(async () => {
         fireEvent.click(trigger);
     });

@@ -15,6 +15,7 @@ const baseProps = {
         name: 'Іваненко',
         slug: 'IvanEnko',
         seoIndexEnabled: false,
+        isSystem: false,
     },
     nbuLinks: {
         primary: 'https://qr.bank.gov.ua/abc',
@@ -47,9 +48,9 @@ describe('PublicAccountView (Sprint 9 §SP-4 + §SP-9)', () => {
                     }}
                 />
             );
-            expect(
-                screen.getByRole('heading', { level: 1 })
-            ).toHaveTextContent('ФОП Іваненко');
+            expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+                'ФОП Іваненко'
+            );
             const requisites = screen.getByText('Реквізити').closest('div')!;
             expect(requisites).toHaveTextContent('•2580');
             expect(requisites).not.toHaveTextContent('ПриватБанк');
@@ -175,6 +176,71 @@ describe('PublicAccountView (Sprint 9 §SP-4 + §SP-9)', () => {
             expect(logo.getAttribute('src')).toContain('brand-logos');
             // Текстовий заголовок «Отримувач» лишається поряд (не замість).
             expect(screen.getByText('Отримувач')).toBeInTheDocument();
+        });
+    });
+
+    describe('Sprint 29 — знак довіри системного отримувача', () => {
+        it('звичайний отримувач: бейджа немає', () => {
+            render(<PublicAccountView {...baseProps} />);
+            expect(
+                screen.queryByText('Перевірений отримувач')
+            ).not.toBeInTheDocument();
+        });
+
+        it('системний отримувач: бейдж поряд із назвою', () => {
+            render(
+                <PublicAccountView
+                    {...baseProps}
+                    business={{ ...baseProps.business, isSystem: true }}
+                />
+            );
+            expect(
+                screen.getByText('Перевірений отримувач')
+            ).toBeInTheDocument();
+        });
+    });
+
+    describe('розділ публічного каталогу', () => {
+        it('поза каталогом: мітки немає', () => {
+            render(<PublicAccountView {...baseProps} />);
+            expect(
+                screen.queryByText('Державні платежі')
+            ).not.toBeInTheDocument();
+        });
+
+        it('державний отримувач: знак довіри і розділ стоять разом', () => {
+            // Разом вони і читаються: перевірений запис у розділі «Державні
+            // платежі» — не те саме, що перевірений запис узагалі.
+            render(
+                <PublicAccountView
+                    {...baseProps}
+                    business={{
+                        ...baseProps.business,
+                        isSystem: true,
+                        catalogCategory: 'state',
+                    }}
+                />
+            );
+            expect(
+                screen.getByText('Перевірений отримувач')
+            ).toBeInTheDocument();
+            expect(screen.getByText('Державні платежі')).toBeInTheDocument();
+        });
+
+        it('схвалений користувацький отримувач: лише розділ, без знака довіри', () => {
+            render(
+                <PublicAccountView
+                    {...baseProps}
+                    business={{
+                        ...baseProps.business,
+                        catalogCategory: 'business',
+                    }}
+                />
+            );
+            expect(screen.getByText('Бізнеси')).toBeInTheDocument();
+            expect(
+                screen.queryByText('Перевірений отримувач')
+            ).not.toBeInTheDocument();
         });
     });
 });

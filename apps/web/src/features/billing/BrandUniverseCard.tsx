@@ -70,8 +70,7 @@ export default function BrandUniverseCard({
     // відхиляє BILLING_PAST_DUE — період минув, пропорційна доплата була б
     // нульовою і розширення діставалось би безкоштовно. Безкоштовні дії
     // (прикріплення у вільний слот, відкріплення, зменшення) лишаються.
-    const pastDue =
-        entitled && profile.status === SUBSCRIPTION_STATUS.PAST_DUE;
+    const pastDue = entitled && profile.status === SUBSCRIPTION_STATUS.PAST_DUE;
     const capacity = entitled ? profile.brand.capacity : 0;
     const attachedIds = entitled ? profile.brand.attachedBusinessIds : [];
     // Заплановане зменшення (діє з наступного списання, скасовне до межі циклу).
@@ -207,14 +206,18 @@ export default function BrandUniverseCard({
         });
 
     return (
-        <section className="bg-card rounded-xl border p-6 md:p-8">
+        // Оболонка і шкала заголовка — ті самі, що у `UiSectionCard`
+        // (`p-4 md:p-6`, h2 `text-lg`): картка стоїть в одному стосі з
+        // `RecentPayments`. Власний `<section>` лишається через складнішу
+        // шапку: іконка + підзаголовок + цінник праворуч.
+        <section className="bg-card rounded-xl border p-4 md:p-6">
             <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-3">
                     <span className="bg-primary/10 text-primary flex size-10 items-center justify-center rounded-lg">
                         <Sparkles className="size-5" />
                     </span>
                     <div>
-                        <h2 className="text-foreground text-xl font-semibold tracking-tight">
+                        <h2 className="text-foreground text-lg font-semibold tracking-tight">
                             Бренд
                         </h2>
                         <p className="text-muted-foreground text-sm">

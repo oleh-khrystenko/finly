@@ -39,6 +39,7 @@
 **Чат-промпт-старт:** `/engineer 09-accounts 9.0` + МФО-таблиця.
 
 ### Скоуп
+
 - Новий `packages/types/src/entities/account.ts` (`AccountSchema`).
 - Новий `packages/types/src/contracts/accounts.ts` (`CreateAccountSchema`, `UpdateAccountSchema`, `PublicAccountListItemSchema`, `PublicAccountViewSchema`, `AccountWithCountsSchema`).
 - Новий `packages/types/src/constants/bank-mfo.ts` (`BANK_MFO_MAP`, `bankCodeFromIban`).
@@ -50,9 +51,11 @@
 - Нові spec-и: `account.spec.ts`, `accounts.spec.ts`, `bank-mfo.spec.ts`. Оновлення існуючих: `business.spec.ts`, `invoice.spec.ts`, `businesses.spec.ts`, `invoices.spec.ts`.
 
 ### Pre-conditions
+
 - Верифікована таблиця МФО для 10 банків з NBU public registry (privatbank, monobank, pumb, oschadbank, sense, ukrgazbank, izibank, raiffeisen, abank, credit_dnipro) + 1-2-line-comment джерела і дати перевірки кожного запису. SportBank прибрано з MVP_BANKS: проєкт закрито 06.05.2024 (Таскомбанк припинив розвиток), клієнти переведені у ТАСКОМБАНК; колишній SportBank-IBAN автодетектиться як `izibank` (один МФО 339500 у Таскомбанку на обидва продукти).
 
 ### Gate (Definition of Done)
+
 - ✅ `pnpm --filter @finly/types build` зелений.
 - ✅ `pnpm --filter @finly/types test` зелений (нові spec-и + regression існуючих).
 - ⚠️ Downstream apps (`apps/api`, `apps/web`) НЕ компілюються — це OK, 9.1 catch-up.
@@ -64,6 +67,7 @@
 **Чат-промпт-старт:** `/engineer 09-accounts 9.1` (після 9.0 merge).
 
 ### Скоуп
+
 - Нова `AccountsModule`: schema (`Account`), `AccountsService` (CRUD + cascade-delete), `AccountsController` (cabinet), `PublicAccountsController` (public), `AccountAccessGuard`, `AccountSlugGeneratorService`, `payload-mapper.ts` (`buildPayloadInputFromAccount`).
 - Рефакторинг `BusinessesModule`: schema (видалити `requisites`, додати top-level `taxId`), `BusinessesService` (cascade тепер чистить Account + Invoice + InvoiceSlugCounter; `getOwnedAndManagedWithCounts` — нове ім'я з `accountsCount` + `invoicesCount`), `PublicBusinessesController` (повертає `accounts: PublicAccountListItem[]`, QR-endpoints видаляються).
 - Рефакторинг `InvoicesModule`: schema (додати `accountId`; нові індекси `(accountId, slug)` unique, `(accountId, scope)` unique для counter, `(accountId, createdAt -1, _id -1)`; **`businessId` лишається** як denormalized), `InvoicesService` (приймає `(business, account, dto)`; touch-account замість touch-business), `InvoicesController` (URL `/businesses/me/:slug/accounts/:accountSlug/invoices`), `PublicInvoicesController` (URL `/businesses/public/:slug/account/:accountSlug/invoices/:invoiceSlug`).
@@ -71,10 +75,12 @@
 - Cascade-tests на `MongoMemoryReplSet`.
 
 ### Pre-conditions
+
 - 9.0 merged.
 - `pnpm install` пройшов (можливі нові transitive-deps).
 
 ### Gate
+
 - ✅ `pnpm --filter api build` зелений.
 - ✅ `pnpm --filter api test` зелений (unit + e2e).
 - ✅ Cascade-delete-business тест: 2 account × 3 invoices → 0 documents у Account/Invoice/InvoiceSlugCounter collections.
@@ -87,6 +93,7 @@
 **Чат-промпт-старт:** `/engineer 09-accounts 9.2` (після 9.1; може йти паралельно з 9.3).
 
 ### Скоуп
+
 - Вимкнути CTA "Зберегти у кабінет" на лендінгу (`QrLandingResult.tsx`).
 - Bump `STORAGE_VERSION 1 → 2` у `qr-landing-draft/store.ts` (defense-in-depth stale claim-intent).
 - `/business/[slug]/page.tsx` переписати: 9 секцій → 7 секцій (видалити `InvoicesSection`, `InvoicesSettingsSection`, `QrSection`; додати `AccountsSection`).
@@ -100,9 +107,11 @@
 - Новий `shared/api/accounts.ts`.
 
 ### Pre-conditions
+
 - 9.1 merged.
 
 ### Gate
+
 - ✅ `pnpm --filter web build` зелений.
 - ✅ `pnpm --filter web test` зелений.
 - ✅ Manual UAT smoke (на dev-environment): створити Business → empty-state → додати Account → побачити QR → виставити інвойс.
@@ -114,6 +123,7 @@
 **Чат-промпт-старт:** `/engineer 09-accounts 9.3` (після 9.1; парал. з 9.2).
 
 ### Скоуп
+
 - `apps/web/src/middleware.ts`: Branch A2 семантичний flip (invoice-URL → account-URL); новий Branch A3 для 3-сегментного path; Branch A1 додає `Cache-Control: no-store, no-cache, must-revalidate` (defense-in-depth для 307-redirect).
 - Server Components: `host-pay/[slug]/page.tsx` (0/1/2+ accounts branching: empty / 307 redirect / list); новий `host-pay/[slug]/[accountSlug]/page.tsx`; перенесення `host-pay/[slug]/[invoiceSlug]/page.tsx` → `host-pay/[slug]/[accountSlug]/[invoiceSlug]/page.tsx`.
 - Рефакторинг `features/business-public/PublicBusinessView`: був full-payment view → стає cards-list-view (2+ Account) + empty-state (0).
@@ -121,9 +131,11 @@
 - Рефакторинг `features/invoice-public/InvoicePublicView`: heading включає "{account.name}" як sub-info.
 
 ### Pre-conditions
+
 - 9.1 merged.
 
 ### Gate
+
 - ✅ `pnpm --filter web build` зелений.
 - ✅ `pnpm --filter web test` зелений.
 - ✅ Middleware spec-и проходять для всіх 3 branches (A1, A2, A3).
@@ -136,6 +148,7 @@
 **Чат-промпт-старт:** `/engineer 09-accounts 9.4` (фінальний; після всіх інших).
 
 ### Скоуп
+
 - `CLAUDE.md`: Domain Model (нова `Account`-сутність; рефакторинг `Business` + `Invoice`); Module Dependency Map; API Overview; Known Complexities (7 нових пунктів).
 - `docs/product/business-flow.md`: §3-§5 — 3-рівнева ієрархія `Business → Account → Invoice`.
 - `docs/product/qr-decisions.md`: §1.14 closure-маркер + §1.3 оновлення ієрархії.
@@ -144,9 +157,11 @@
 - Root `README.md`: "Sprint 9 deploy-prep" секція з `dropDatabase` instruction.
 
 ### Pre-conditions
+
 - 9.0, 9.1, 9.2, 9.3 merged.
 
 ### Gate
+
 - ✅ Усі doc-файли оновлені під реальний стан коду.
 - ✅ `docs/manual-checks/README.md` має ACC-1..ACC-7.
 - ✅ Smoke-test усього sprint flow на staging (per Sprint 9 README §Definition of Done).
@@ -155,17 +170,17 @@
 
 ## Cross-epic risks (зведення з README §Risks)
 
-| Risk | Епік де лікується |
-|------|---------------------|
-| Точний реєстр МФО (Risk #1) | 9.0 (pre-condition: користувач надає таблицю) |
-| Middleware Branch A2 семантичний flip (Risk #2) | 9.3 (test-coverage + dropDatabase на dev) |
-| InvoiceSlugCounter cascade orphan (Risk #3) | 9.1 (явні test-кейси для обох cascade-flow) |
-| Public-API breaking change (Risk #4) | 9.0 + 9.1 (PublicBusinessSchema переписано) |
-| `CreateBusinessSchema` discriminated union (Risk #5) | 9.0 (positive/negative тести на 4 type-variants) |
-| `payeeSnapshot.iban` legacy fallback (Risk #6) | 9.1 (production-data немає; на dev — dropDatabase) |
-| UX-плутанина 1-рахунок-ФОП (Risk #7) | 9.2 (counter "{N} рахунків" на бізнес-картці) |
-| `bankCodeFromIban` edge-cases (Risk #8) | 9.0 (edge-tests на короткий рядок → null) |
-| Лендінг без CTA між 9 і 10 (Risk #9) | 9.2 (CTA вимкнено + STORAGE_VERSION bump) |
-| Stale `intent='claim-pending'` (Risk #11) | 9.2 (STORAGE_VERSION bump + migration reset) |
+| Risk                                                 | Епік де лікується                                  |
+| ---------------------------------------------------- | -------------------------------------------------- |
+| Точний реєстр МФО (Risk #1)                          | 9.0 (pre-condition: користувач надає таблицю)      |
+| Middleware Branch A2 семантичний flip (Risk #2)      | 9.3 (test-coverage + dropDatabase на dev)          |
+| InvoiceSlugCounter cascade orphan (Risk #3)          | 9.1 (явні test-кейси для обох cascade-flow)        |
+| Public-API breaking change (Risk #4)                 | 9.0 + 9.1 (PublicBusinessSchema переписано)        |
+| `CreateBusinessSchema` discriminated union (Risk #5) | 9.0 (positive/negative тести на 4 type-variants)   |
+| `payeeSnapshot.iban` legacy fallback (Risk #6)       | 9.1 (production-data немає; на dev — dropDatabase) |
+| UX-плутанина 1-рахунок-ФОП (Risk #7)                 | 9.2 (counter "{N} рахунків" на бізнес-картці)      |
+| `bankCodeFromIban` edge-cases (Risk #8)              | 9.0 (edge-tests на короткий рядок → null)          |
+| Лендінг без CTA між 9 і 10 (Risk #9)                 | 9.2 (CTA вимкнено + STORAGE_VERSION bump)          |
+| Stale `intent='claim-pending'` (Risk #11)            | 9.2 (STORAGE_VERSION bump + migration reset)       |
 
 Orphan-Business cleanup (Risk #10) — Sprint 12, поза Sprint 9.

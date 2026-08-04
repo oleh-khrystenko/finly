@@ -14,7 +14,7 @@ import {
     TAXATION_SYSTEMS,
     TAXATION_SYSTEM_LABEL,
     businessNameSchema,
-    businessPaymentPurposeTemplateSchema,
+    regularPaymentPurposeTemplateSchema,
     isTaxationAllowedForType,
     requiresTaxation,
     type BusinessType,
@@ -104,7 +104,7 @@ const FormSchema = z
                     taxIdParse.error.issues[0]?.message ?? 'INVALID_TAX_ID',
             });
         }
-        const purposeParse = businessPaymentPurposeTemplateSchema.safeParse(
+        const purposeParse = regularPaymentPurposeTemplateSchema.safeParse(
             data.paymentPurposeTemplate
         );
         if (!purposeParse.success) {
@@ -371,7 +371,7 @@ export default function BusinessCreateForm({
             className="space-y-6"
             noValidate
         >
-            <div className="border-border bg-card space-y-6 rounded-xl border p-6 md:p-8">
+            <div className="border-border bg-card space-y-6 rounded-xl border p-4 md:p-6">
                 <UiRadioCardGroup<BusinessType>
                     label="Тип отримувача"
                     labelSize="md"

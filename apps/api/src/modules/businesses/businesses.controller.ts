@@ -11,7 +11,7 @@ import {
     UseGuards,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { SkipThrottle, Throttle } from '@nestjs/throttler';
+import { SkipThrottle } from '@nestjs/throttler';
 import { Model } from 'mongoose';
 import { ZodValidationPipe } from 'nestjs-zod';
 import {
@@ -26,7 +26,13 @@ import {
 
 import { CurrentBusinessBranded } from '../../common/decorators/current-business-branded.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { UserRateLimit } from '../../common/decorators/user-rate-limit.decorator';
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
+import { UserRateLimitGuard } from '../../common/guards/user-rate-limit.guard';
+import {
+    skipThrottlersExcept,
+    USER_RATE_LIMITS,
+} from '../../common/http/throttle-policy';
 import {
     Account,
     type AccountDocument,
@@ -39,6 +45,7 @@ import type { UserDocument } from '../users/schemas/user.schema';
 import { toSlugReservationView } from '../slug-reservation/slug-reservation.service';
 import { BusinessAccessGuard, CurrentBusiness } from './business-access.guard';
 import { BusinessesService } from './businesses.service';
+import { SetCatalogVisibilityDto } from './dto/set-catalog-visibility.dto';
 import { UpdateBusinessDto } from './dto/update-business.dto';
 import type { BusinessDocument } from './schemas/business.schema';
 
@@ -64,6 +71,11 @@ import type { BusinessDocument } from './schemas/business.schema';
  */
 @Controller('businesses/me')
 @UseGuards(JwtActiveGuard)
+// Кабінет за логіном: throttle вимкнено повністю. Ліміти тут стоять на шляху
+// реальних клієнтів (fan-out сторінки, спільний IP за NAT дають хибний 429), а
+// захист слабкий — користувач відомий поіменно. Публічні роути лишаються під
+// лімітами (`skipThrottlersExcept()` скіпає всі бакети, включно з майбутніми).
+@SkipThrottle(skipThrottlersExcept())
 export class BusinessesController {
     constructor(
         private readonly businessesService: BusinessesService,
@@ -178,20 +190,15 @@ export class BusinessesController {
      * Sprint 20 — live-перевірка доступності бажаного slug до будь-якої оплати
      * (гачок конверсії). Доступно всім рівням; окремий rate-limit проти
      * перебору. Без запису. Формат валідує `BusinessSlugCandidateSchema`.
+     *
+     * Ліміт per-user (не per-IP): кабінет ходить через rewrite web-контейнера,
+     * тож IP-бакет тут був би спільним лічильником на весь продукт. Guard стоїть
+     * перед `BusinessAccessGuard` — відмова коштує одного Redis-INCR без
+     * DB-lookup-у.
      */
     @Get(':slug/slug-availability')
-    @UseGuards(BusinessAccessGuard)
-    // Лише власний бакет `slug-availability` (30/min) має керувати цим роутом.
-    // Skip усіх інших named-throttler-ів: інакше нижчі `qr-preview` (10/min) і
-    // `help-chat` (20/min), що теж діють на кожному роуті, тіньовили б 30 до
-    // ефективних 10 і давали б хибний 429 на live-набір імені.
-    @Throttle({ 'slug-availability': { limit: 30, ttl: 60_000 } })
-    @SkipThrottle({
-        default: true,
-        'public-payment': true,
-        'qr-preview': true,
-        'help-chat': true,
-    })
+    @UserRateLimit(USER_RATE_LIMITS.slugAvailability)
+    @UseGuards(UserRateLimitGuard, BusinessAccessGuard)
     async checkSlugAvailability(
         @CurrentUser() user: UserDocument,
         @CurrentBusiness() business: BusinessDocument,
@@ -225,6 +232,46 @@ export class BusinessesController {
             user._id.toString()
         );
         return { data: toSlugReservationView(reservation) };
+    }
+
+    /**
+     * Sprint 29 — подання запиту на публічність (потрапляння у каталог). Гейт
+     * красивого slug і стан-машина живуть у сервісі.
+     */
+    @Post(':slug/publicity-request')
+    @UseGuards(BusinessAccessGuard)
+    @HttpCode(HttpStatus.OK)
+    async requestPublicity(
+        @CurrentBusiness() business: BusinessDocument
+    ): Promise<{ data: BusinessDocument }> {
+        const updated = await this.businessesService.requestPublicity(business);
+        return { data: updated };
+    }
+
+    /** Sprint 29 — скасування запиту або зняття отримувача з каталогу. */
+    @Delete(':slug/publicity-request')
+    @UseGuards(BusinessAccessGuard)
+    @HttpCode(HttpStatus.OK)
+    async withdrawPublicity(
+        @CurrentBusiness() business: BusinessDocument
+    ): Promise<{ data: BusinessDocument }> {
+        const updated =
+            await this.businessesService.withdrawPublicity(business);
+        return { data: updated };
+    }
+
+    /** Sprint 29 — тогл видимості отримувача у каталозі (діє лише після схвалення). */
+    @Patch(':slug/catalog-visibility')
+    @UseGuards(BusinessAccessGuard)
+    async setCatalogVisibility(
+        @CurrentBusiness() business: BusinessDocument,
+        @Body() dto: SetCatalogVisibilityDto
+    ): Promise<{ data: BusinessDocument }> {
+        const updated = await this.businessesService.setCatalogVisibility(
+            business,
+            dto.visible
+        );
+        return { data: updated };
     }
 
     @Delete(':slug')

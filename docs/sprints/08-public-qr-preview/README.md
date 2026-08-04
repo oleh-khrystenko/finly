@@ -94,15 +94,15 @@ Anon реєструється (Google OAuth або magic-link)
 
 Повне обґрунтування — у [`planning-questions.md`](planning-questions.md). Тут — лише висновки.
 
-| #  | Рішення                                                                                        | Альтернатива (reject-нута)                                                |
-| -- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| D1 | Серверний рендер QR через `POST /api/qr/preview`                                               | Клієнтський QR через додавання `qrcode` лібу у web-bundle                 |
-| D2 | Throttle-bucket `'qr-preview'` (10 req/min/IP) у `ThrottlerModule.forRoot`                     | Default 60/min — недостатньо restrictive для anon-зони                    |
-| D3 | Persistence через Zustand+`persist`+localStorage у entity `qr-landing-draft`                   | sessionStorage (не переживає закриття вкладки), або без persistence       |
-| D4 | Claim-flow: auto-create після auth з `acceptedBanks=[...MVP_BANKS]` + banner на business-detail | Pre-fill wizard з extra-кліком; новий "from-landing" endpoint            |
-| D5 | Захардкожений `type='individual'` (без UI-перемикача типу)                                     | Повний multi-type селектор як у Sprint 7 wizard                          |
-| D6 | Shared contract `packages/types/src/contracts/qr-preview.ts` (reuse existing field-schemas)    | Inline Zod на API і дублікат на web                                       |
-| D7 | Один QR (тільки `NBU_HOST_PRIMARY`)                                                            | Дві кнопки primary/legacy як на public business page                      |
+| #   | Рішення                                                                                         | Альтернатива (reject-нута)                                          |
+| --- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| D1  | Серверний рендер QR через `POST /api/qr/preview`                                                | Клієнтський QR через додавання `qrcode` лібу у web-bundle           |
+| D2  | Throttle-bucket `'qr-preview'` (10 req/min/IP) у `ThrottlerModule.forRoot`                      | Default 60/min — недостатньо restrictive для anon-зони              |
+| D3  | Persistence через Zustand+`persist`+localStorage у entity `qr-landing-draft`                    | sessionStorage (не переживає закриття вкладки), або без persistence |
+| D4  | Claim-flow: auto-create після auth з `acceptedBanks=[...MVP_BANKS]` + banner на business-detail | Pre-fill wizard з extra-кліком; новий "from-landing" endpoint       |
+| D5  | Захардкожений `type='individual'` (без UI-перемикача типу)                                      | Повний multi-type селектор як у Sprint 7 wizard                     |
+| D6  | Shared contract `packages/types/src/contracts/qr-preview.ts` (reuse existing field-schemas)     | Inline Zod на API і дублікат на web                                 |
+| D7  | Один QR (тільки `NBU_HOST_PRIMARY`)                                                             | Дві кнопки primary/legacy як на public business page                |
 
 ---
 
@@ -164,6 +164,7 @@ export type QrPreviewResponse = z.infer<typeof QrPreviewResponseSchema>;
 ### 8.1 Backend — `POST /api/qr/preview`
 
 **Файли:**
+
 - `apps/api/src/modules/qr/dto/qr-preview.dto.ts` (новий) — `class QrPreviewDto extends createZodDto(QrPreviewInputSchema) {}`.
 - `apps/api/src/modules/qr/qr.controller.ts` (новий).
 - `apps/api/src/modules/qr/qr.module.ts` — додати `controllers: [QrController]`.
@@ -176,10 +177,7 @@ export type QrPreviewResponse = z.infer<typeof QrPreviewResponseSchema>;
 ```ts
 import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
-import {
-    NBU_HOST_PRIMARY,
-    type QrPreviewResponse,
-} from '@finly/types';
+import { NBU_HOST_PRIMARY, type QrPreviewResponse } from '@finly/types';
 
 import { SkipOnboarding } from '../../common/decorators/skip-onboarding.decorator';
 import { QrService } from './qr.service';
@@ -276,6 +274,7 @@ ThrottlerModule.forRoot({
 ### 8.2 Frontend — entity `qr-landing-draft` (persistence layer)
 
 **Файли:**
+
 - `apps/web/src/entities/qr-landing-draft/store.ts` (новий).
 - `apps/web/src/entities/qr-landing-draft/index.ts` (новий) — public re-exports.
 - `apps/web/src/entities/qr-landing-draft/store.spec.ts` (новий).
@@ -314,8 +313,7 @@ export const useQrLandingDraftStore = create<QrLandingDraftState>()(
             setResult: (result) => set({ result }),
             invalidateResult: () => set({ result: null }),
             setIntent: (intent) => set({ intent }),
-            clearAll: () =>
-                set({ formData: {}, result: null, intent: 'idle' }),
+            clearAll: () => set({ formData: {}, result: null, intent: 'idle' }),
         }),
         {
             name: STORAGE_KEY,
@@ -358,6 +356,7 @@ export const useQrLandingDraftStore = create<QrLandingDraftState>()(
 ### 8.3 Frontend — feature `qr-landing-preview`
 
 **Файли:**
+
 - `apps/web/src/features/qr-landing-preview/index.ts` (новий) — public exports.
 - `apps/web/src/features/qr-landing-preview/QrLandingBlock.tsx` (новий) — orchestrator (form + result side-by-side).
 - `apps/web/src/features/qr-landing-preview/QrLandingForm.tsx` (новий) — RHF + Zod-resolver.
@@ -403,10 +402,10 @@ export function QrLandingBlock() {
 
 - Read-only badge "Тип отримувача: **Фіз особа**" (нерозкривний; пояснює, що під капотом залочений `type='individual'`).
 - 4 поля:
-  - `UiInput` — "Отримувач" (приклад значення «Іваненко Олена Петрівна», `autoComplete="name"`).
-  - `UiInput` — "IBAN" (приклад значення `UA213223130000026007233566001`, `inputMode="text"`, `autoComplete="off"`, `spellCheck={false}`).
-  - `UiInput` — "РНОКПП" (приклад значення «1234567890», `inputMode="numeric"`, `maxLength={10}`, `pattern="[0-9]*"`).
-  - `UiTextarea` — "Призначення" (default value `"Поповнення рахунку"`, max-length підказка під полем).
+    - `UiInput` — "Отримувач" (приклад значення «Іваненко Олена Петрівна», `autoComplete="name"`).
+    - `UiInput` — "IBAN" (приклад значення `UA213223130000026007233566001`, `inputMode="text"`, `autoComplete="off"`, `spellCheck={false}`).
+    - `UiInput` — "РНОКПП" (приклад значення «1234567890», `inputMode="numeric"`, `maxLength={10}`, `pattern="[0-9]*"`).
+    - `UiTextarea` — "Призначення" (default value `"Поповнення рахунку"`, max-length підказка під полем).
 - Кнопка "Створити QR" (disabled поки `formState.isValid !== true` або `isSubmitting`).
 - При зміні **будь-якого** валідного поля після генерації — викликаємо `invalidateResult()` зі store, щоб старий QR не вводив в оману.
 
@@ -442,16 +441,16 @@ const onSubmit = async (data: QrPreviewInput) => {
 **`QrLandingResult.tsx`:**
 
 - **Empty-state** (`result === null`):
-  - Центрований empty-state: декоративна QR-іконка (контурна, не справжній код) + текст: "Ваш QR-код зʼявиться тут після введення даних".
+    - Центрований empty-state: декоративна QR-іконка (контурна, не справжній код) + текст: "Ваш QR-код зʼявиться тут після введення даних".
 - **Filled-state** (`result !== null`):
-  - `<UiQrImage src={data:image/png;base64,...} alt="Платіжний QR-код">` — реюз існуючого primitive-у.
-  - Truncated link: показуємо перші ~50 символів (host + початок Base64URL) + ellipsis. Точна довжина — derived з `host.length + 12 chars payload + '…'` для візуальної консистентності між короткими і довгими payload-ами.
-  - Кнопка "Скопіювати посилання" (Sonner toast "Скопійовано" на success, `navigator.clipboard.writeText`).
-  - Warning-banner (під QR): "Ці дані не зберігаються на нашому сервері. Збережіть бізнес у кабінет, зареєструвавшись."
-  - CTA: `UiButton variant="filled"` "Зберегти у кабінет" — поведінка залежить від `useAuthStore.isAuthenticated`:
-    - **Anon:** `setIntent('claim-pending')` + `router.push('/auth/signin')`.
-    - **Logged-in:** прямий виклик `claimLandingDraftAsBusiness()` (див. §8.4).
-  - Secondary: `UiButton variant="text"` "Очистити" → `clearAll()` + `form.reset()`. (`'text'` — low-emphasis variant у whitelist-і `UiButton/types.ts:4-12`; `'ghost'` у нашій design-системі не існує.)
+    - `<UiQrImage src={data:image/png;base64,...} alt="Платіжний QR-код">` — реюз існуючого primitive-у.
+    - Truncated link: показуємо перші ~50 символів (host + початок Base64URL) + ellipsis. Точна довжина — derived з `host.length + 12 chars payload + '…'` для візуальної консистентності між короткими і довгими payload-ами.
+    - Кнопка "Скопіювати посилання" (Sonner toast "Скопійовано" на success, `navigator.clipboard.writeText`).
+    - Warning-banner (під QR): "Ці дані не зберігаються на нашому сервері. Збережіть бізнес у кабінет, зареєструвавшись."
+    - CTA: `UiButton variant="filled"` "Зберегти у кабінет" — поведінка залежить від `useAuthStore.isAuthenticated`:
+        - **Anon:** `setIntent('claim-pending')` + `router.push('/auth/signin')`.
+        - **Logged-in:** прямий виклик `claimLandingDraftAsBusiness()` (див. §8.4).
+    - Secondary: `UiButton variant="text"` "Очистити" → `clearAll()` + `form.reset()`. (`'text'` — low-emphasis variant у whitelist-і `UiButton/types.ts:4-12`; `'ghost'` у нашій design-системі не існує.)
 
 **Truncation helper (note для імплементації):**
 
@@ -535,6 +534,7 @@ export async function claimLandingDraftAsBusiness(
 ### 8.4 Frontend — claim-flow після auth
 
 **Файли:**
+
 - `apps/web/src/features/qr-landing-preview/useClaimLandingDraft.ts` (новий).
 - `apps/web/src/app/(protected)/layout.tsx` — інтегрувати hook (одна-разовий effect).
 - `apps/web/src/features/qr-landing-preview/__tests__/claim-flow.spec.tsx` (новий).
@@ -691,6 +691,7 @@ export function ClaimLandingDraftHook(): null {
 ### 8.5 Banner на business-detail (post-claim nudge)
 
 **Файли:**
+
 - `apps/web/src/features/business-edit/CompletedFromLandingBanner.tsx` (новий).
 - `apps/web/src/app/(protected)/business/[slug]/page.tsx` — інтегрувати banner; **додати `id="banks"` на `<BanksSection>` обгортку** (поточний рендер `<BanksSection business={business} onSave={handlePatch} />` не має anchor-target — banner-CTA `<a href="#banks">` без цього не скролить). Конкретно: обгорнути `<BanksSection>` у `<section id="banks">` або передати `id`-prop, якщо `BanksSection` його приймає (за конвенцією `UiSectionCard` — перевірити). Без цього sub-task §8.5 CTA не функціональний.
 
@@ -698,10 +699,10 @@ export function ClaimLandingDraftHook(): null {
 
 - На mount читаємо `searchParams.get('completed-from') === 'landing'`.
 - Якщо так — показуємо banner у верху сторінки:
-  - Заголовок: "Дані з лендінгу збережено"
-  - Текст: "За замовчуванням бізнес приймає всі 11 банків. Перевірте список і зніміть галочки з тих, що не використовуєте."
-  - Кнопка: "Перейти до банків" (`<a href="#banks">`, scroll-to-section).
-  - Кнопка-Х: dismiss → setQueryParam без `completed-from` через `router.replace` (без створення history-entry).
+    - Заголовок: "Дані з лендінгу збережено"
+    - Текст: "За замовчуванням бізнес приймає всі 11 банків. Перевірте список і зніміть галочки з тих, що не використовуєте."
+    - Кнопка: "Перейти до банків" (`<a href="#banks">`, scroll-to-section).
+    - Кнопка-Х: dismiss → setQueryParam без `completed-from` через `router.replace` (без створення history-entry).
 - Banner показується ТІЛЬКИ один раз — query-param removal на dismiss + не персиститься.
 
 **Чому не додавати dismissed-flag у localStorage:** baner показується ОДИН раз ПІСЛЯ claim-у. Якщо юзер ігнорує — на наступному вході `?completed-from=landing` уже немає в URL → baner не зʼявляється. Жодної додаткової state-management складності не треба.
@@ -715,6 +716,7 @@ export function ClaimLandingDraftHook(): null {
 ### 8.6 Hero-section
 
 **Файли:**
+
 - `apps/web/src/widgets/landing-hero/LandingHero.tsx` (новий).
 - `apps/web/src/widgets/landing-hero/index.ts` (новий).
 - `apps/web/src/app/page.tsx` — переписати.
@@ -731,14 +733,21 @@ export function LandingHero() {
                 <h1 className="text-4xl font-semibold tracking-tight sm:text-6xl">
                     Платіжні QR-коди
                     <br />
-                    <span className="text-primary">для українського бізнесу</span>
+                    <span className="text-primary">
+                        для українського бізнесу
+                    </span>
                 </h1>
                 <p className="text-muted-foreground mx-auto mt-6 max-w-2xl text-lg">
-                    Згенеруйте QR-код за стандартом НБУ і прийміть оплату
-                    в один тап з будь-якого банк-додатку.
+                    Згенеруйте QR-код за стандартом НБУ і прийміть оплату в один
+                    тап з будь-якого банк-додатку.
                 </p>
                 <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-                    <UiButton as="link" href="#try-now" variant="filled" size="lg">
+                    <UiButton
+                        as="link"
+                        href="#try-now"
+                        variant="filled"
+                        size="lg"
+                    >
                         Спробувати без реєстрації
                     </UiButton>
                     <UiButton
@@ -768,10 +777,12 @@ export function LandingHero() {
                     </p>
                 </li>
                 <li className="bg-card border-border rounded-xl border p-6">
-                    <h3 className="text-base font-medium">Без комісій від Finly</h3>
+                    <h3 className="text-base font-medium">
+                        Без комісій від Finly
+                    </h3>
                     <p className="text-muted-foreground mt-2 text-sm">
-                        Сервіс не утримує процент з платежу. Гроші йдуть
-                        напряму на ваш IBAN.
+                        Сервіс не утримує процент з платежу. Гроші йдуть напряму
+                        на ваш IBAN.
                     </p>
                 </li>
             </ul>
@@ -781,6 +792,7 @@ export function LandingHero() {
 ```
 
 Кожен з трьох tile-ів описує **конкретний** факт продукту:
+
 - "Стандарт НБУ" — посилається на постанову № 97 (єдина існуюча нормативна база, не перебільшення).
 - "Один тап" — описує реальний UX flow universal-link → app-link → банк-додаток.
 - "Без комісій від Finly" — фактичне обмеження бізнес-моделі MVP (Sprint 6 додає Paid-плани, але % з платежу не входить у roadmap).

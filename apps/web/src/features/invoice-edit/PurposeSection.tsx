@@ -1,17 +1,18 @@
 'use client';
 
-import {
-    invoicePaymentPurposeSchema,
-    type Business,
-    type Invoice,
-} from '@finly/types';
+import { invoicePaymentPurposeSchema, type Invoice } from '@finly/types';
 import UiTextarea from '@/shared/ui/UiTextarea';
 import UiEditableField from '@/shared/ui/UiEditableField';
 import { mapValidationCode } from '@/shared/lib';
 
 interface Props {
     invoice: Invoice;
-    business: Business;
+    /**
+     * Sprint 29 — уже resolved шаблон рівня рахунку
+     * (`resolveAccountPurposeTemplate`), не сирий шаблон отримувача: рахунок має
+     * власне призначення, і саме воно піде у банк, якщо поле документа `null`.
+     */
+    inheritedPaymentPurposeTemplate: string;
     onSave: (patch: Partial<Pick<Invoice, 'paymentPurpose'>>) => Promise<void>;
 }
 
@@ -22,10 +23,14 @@ interface Props {
  * («Призначення платежу») несе смисл рядка, окремий титул-картки прибрано.
  *
  * **Inheritance UI:** якщо `paymentPurpose === null`, відображаємо italic
- * fallback з business.paymentPurposeTemplate, щоб ФОП бачив, що насправді
- * надсилається у банк (через `effectiveInvoicePurpose`-resolver на backend).
+ * fallback з успадкованого шаблону, щоб ФОП бачив, що насправді надсилається у
+ * банк (через `effectiveInvoicePurpose`-resolver на backend).
  */
-export default function PurposeSection({ invoice, business, onSave }: Props) {
+export default function PurposeSection({
+    invoice,
+    inheritedPaymentPurposeTemplate,
+    onSave,
+}: Props) {
     return (
         <UiEditableField<string | null>
             label="Призначення платежу"
@@ -33,8 +38,8 @@ export default function PurposeSection({ invoice, business, onSave }: Props) {
             renderRead={(v) =>
                 v === null ? (
                     <span className="text-muted-foreground italic">
-                        Використано з налаштувань отримувача: «
-                        {business.paymentPurposeTemplate}»
+                        Використано за замовчуванням: «
+                        {inheritedPaymentPurposeTemplate}»
                     </span>
                 ) : (
                     v
@@ -43,7 +48,7 @@ export default function PurposeSection({ invoice, business, onSave }: Props) {
             renderEdit={({ value, setValue, error }) => (
                 <UiTextarea
                     value={value ?? ''}
-                    placeholder={`За замовчуванням: «${business.paymentPurposeTemplate}»`}
+                    placeholder={`За замовчуванням: «${inheritedPaymentPurposeTemplate}»`}
                     onChange={(e) => {
                         const v = e.target.value;
                         setValue(v === '' ? null : v);

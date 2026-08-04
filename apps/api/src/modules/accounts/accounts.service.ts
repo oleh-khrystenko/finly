@@ -1,4 +1,5 @@
 import {
+    BadRequestException,
     ConflictException,
     Injectable,
     InternalServerErrorException,
@@ -11,10 +12,13 @@ import {
     RESPONSE_CODE,
     SLUG_AVAILABILITY_STATUS,
     bankCodeFromIban,
+    canEnterCatalog,
     type AccountWithCounts,
     type CreateAccountRequest,
+    type CreateSystemPayeeAccountRequest,
     type SlugAvailabilityStatus,
     type UpdateAccountRequest,
+    type UpdateSystemPayeeAccountRequest,
 } from '@finly/types';
 
 import { assertSlugEditAllowed } from '../../common/billing/assert-access';
@@ -52,6 +56,21 @@ import { Account, AccountDocument } from './schemas/account.schema';
  * (touch-account у власній tx, symmetric до Sprint 4 touch-business pattern)
  * серіалізується Mongo write-write conflict-detection-ом.
  */
+/**
+ * Sprint 29 — контекст, що не є полем DTO і не має сенсу як черговий позиційний
+ * булеан у сигнатурі `update`.
+ */
+export interface UpdateAccountOptions {
+    /**
+     * Чи споживати активну slug-бронь користувача при успішному rename
+     * (Sprint 20 механіка). `true` за замовчуванням — кабінетний flow, де
+     * `userId` це власник рахунку. `false` для адмінського редагування
+     * системних реквізитів: там `userId` це адмін, чия бронь стосується його
+     * власного бізнесу, а системний запис живе поза slug-монетизацією.
+     */
+    consumeSlugReservation?: boolean;
+}
+
 @Injectable()
 export class AccountsService {
     private readonly logger = new Logger(AccountsService.name);
@@ -173,7 +192,10 @@ export class AccountsService {
      */
     async create(
         business: BusinessDocument,
-        dto: CreateAccountRequest
+        // Sprint 29 — адмінський варіант відрізняється лише допустимістю маркерів
+        // підстановки у призначенні (перевірено Zod-схемою контролера); поля
+        // однакові, тож шлях створення спільний.
+        dto: CreateAccountRequest | CreateSystemPayeeAccountRequest
     ): Promise<AccountDocument> {
         const bankCode = bankCodeFromIban(dto.iban);
         const slug = await this.slugGenerator.generateUnique(business._id);
@@ -201,6 +223,9 @@ export class AccountsService {
                             iban: dto.iban,
                             bankCode,
                             name: dto.name ?? null,
+                            // Sprint 29 — `null` = успадкувати шаблон отримувача.
+                            paymentPurposeTemplate:
+                                dto.paymentPurposeTemplate ?? null,
                             slug,
                             slugLower: slug.toLowerCase(),
                         },
@@ -298,6 +323,18 @@ export class AccountsService {
                             $ifNull: ['$invoiceSlugPresetDefault', null],
                         },
                         bankCode: { $ifNull: ['$bankCode', null] },
+                        // Sprint 29 — aggregation не застосовує Mongoose-дефолти,
+                        // тож документ до Sprint 29 віддав би поле відсутнім, і
+                        // кабінет не відрізнив би «успадковую» від «поля немає».
+                        // Те саме для решти полів, доданих пізніше за створення
+                        // документа: без нормалізації list-шлях віддавав би
+                        // `undefined` там, де контракт `AccountWithCounts`
+                        // обіцяє boolean (перемикач видимості читає саме це).
+                        paymentPurposeTemplate: {
+                            $ifNull: ['$paymentPurposeTemplate', null],
+                        },
+                        catalogVisible: { $ifNull: ['$catalogVisible', false] },
+                        slugCustomized: { $ifNull: ['$slugCustomized', false] },
                     },
                 },
                 { $unset: ['__invoicesCount', '_id', '__v'] },
@@ -369,12 +406,13 @@ export class AccountsService {
 
     async update(
         account: AccountDocument,
-        dto: UpdateAccountRequest,
+        dto: UpdateAccountRequest | UpdateSystemPayeeAccountRequest,
         // Sprint 27 — чи брендований батьківський бізнес (per-business гейт slug).
         isBranded: boolean,
         // Sprint 20 — власник, чию активну бронь споживає успішний rename.
         userId: string,
-        markSlugCustomized = true
+        markSlugCustomized = true,
+        options: UpdateAccountOptions = {}
     ): Promise<AccountDocument> {
         if (Object.keys(dto).length === 0) {
             return account;
@@ -401,7 +439,8 @@ export class AccountsService {
                 account,
                 dto,
                 userId,
-                markSlugCustomized
+                markSlugCustomized,
+                options.consumeSlugReservation ?? true
             );
         }
 
@@ -447,9 +486,10 @@ export class AccountsService {
      */
     private async renameAndUpdate(
         account: AccountDocument,
-        dto: UpdateAccountRequest,
+        dto: UpdateAccountRequest | UpdateSystemPayeeAccountRequest,
         userId: string,
-        markSlugCustomized: boolean
+        markSlugCustomized: boolean,
+        consumeSlugReservation: boolean
     ): Promise<AccountDocument> {
         const businessId = account.businessId;
         const oldLower = account.slugLower;
@@ -479,6 +519,7 @@ export class AccountsService {
                     newLower,
                     setPayload,
                     userId,
+                    consumeSlugReservation,
                     session
                 );
             });
@@ -515,6 +556,7 @@ export class AccountsService {
         newLower: string,
         setPayload: Record<string, unknown>,
         userId: string,
+        consumeSlugReservation: boolean,
         session: ClientSession
     ): Promise<AccountDocument> {
         await this.historyModel
@@ -525,10 +567,16 @@ export class AccountsService {
             { session }
         );
         // Sprint 20 — атомарно споживаємо власну бронь користувача.
-        await this.slugReservations.consumeForUser(
-            new Types.ObjectId(userId),
-            session
-        );
+        // Sprint 29 — крім адмінського перейменування системних реквізитів:
+        // `userId` там це адмін (лише контекст для перевірки чужих броней), а
+        // бронь на його ім'я належить його ВЛАСНОМУ бізнесу і до системного
+        // запису стосунку не має. Споживання знищило б її без жодної причини.
+        if (consumeSlugReservation) {
+            await this.slugReservations.consumeForUser(
+                new Types.ObjectId(userId),
+                session
+            );
+        }
         const updated = await this.accountModel
             .findOneAndUpdate(
                 { _id: accountId },
@@ -561,6 +609,46 @@ export class AccountsService {
         // assertSlugEditAllowed не спрацьовує (умова `&& markSlugCustomized`),
         // тож рівень доступу тут не читається: reset доступний усім рівням.
         return this.update(account, { slug: newSlug }, false, userId, false);
+    }
+
+    /**
+     * Sprint 29 — тогл видимості реквізитів у каталозі (кабінет). Увімкнути
+     * можна лише коли рівень допущений: батьківський отримувач публічний
+     * (схвалений або системний) І сам рахунок має красивий slug. Вимкнути —
+     * завжди. `business` приходить з `BusinessAccessGuard` (публічність батька).
+     */
+    async setCatalogVisibility(
+        account: AccountDocument,
+        business: BusinessDocument,
+        visible: boolean
+    ): Promise<AccountDocument> {
+        if (
+            visible &&
+            !canEnterCatalog({
+                isSystem: business.isSystem,
+                publicityStatus: business.publicityStatus,
+                slugCustomized: account.slugCustomized,
+            })
+        ) {
+            throw new BadRequestException({
+                code: RESPONSE_CODE.CATALOG_VISIBILITY_NOT_ELIGIBLE,
+                message: 'Account is not eligible for the catalog',
+            });
+        }
+        const updated = await this.accountModel
+            .findOneAndUpdate(
+                { _id: account._id },
+                { $set: { catalogVisible: visible } },
+                { new: true }
+            )
+            .exec();
+        if (!updated) {
+            throw new NotFoundException({
+                code: RESPONSE_CODE.ACCOUNT_NOT_FOUND,
+                message: 'Account disappeared between guard and update',
+            });
+        }
+        return updated;
     }
 
     private async assertSlugAvailable(

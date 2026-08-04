@@ -10,9 +10,9 @@ In Cloudflare dashboard:
 
 1. **R2 → Create bucket** → `<PROJECT>-backups`. Default region is fine. Object lifecycle: optional, e.g. "Abort multipart uploads after 1 day".
 2. **R2 → Manage R2 API Tokens → Create API token**:
-   - Permissions: **Object Read & Write**.
-   - Bucket: limit to `<PROJECT>-backups` only.
-   - Save the **Access Key ID**, **Secret Access Key**, and **Account ID** (shown in the R2 sidebar).
+    - Permissions: **Object Read & Write**.
+    - Bucket: limit to `<PROJECT>-backups` only.
+    - Save the **Access Key ID**, **Secret Access Key**, and **Account ID** (shown in the R2 sidebar).
 
 ## 2. Install restic
 

@@ -10,6 +10,7 @@ import {
     Post,
     UseGuards,
 } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import {
     type AdminGuideListItem,
     type CommitGuideImageResponse,
@@ -20,6 +21,7 @@ import {
 import { SkipOnboarding } from '../../common/decorators/skip-onboarding.decorator';
 import { AdminGuard } from '../../common/guards/admin.guard';
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
+import { skipThrottlersExcept } from '../../common/http/throttle-policy';
 import { CommitGuideImageDto } from './dto/commit-guide-image.dto';
 import { ReorderGuidesDto } from './dto/reorder-guides.dto';
 import { UpsertGuideDto } from './dto/upsert-guide.dto';
@@ -40,6 +42,8 @@ import type { GuideDocument } from './schemas/guide.schema';
 @Controller('admin/guides')
 @UseGuards(JwtActiveGuard, AdminGuard)
 @SkipOnboarding()
+// Staff-зона за логіном: throttle вимкнено повністю (див. BusinessesController).
+@SkipThrottle(skipThrottlersExcept())
 export class GuidesAdminController {
     constructor(
         private readonly guidesService: GuidesService,

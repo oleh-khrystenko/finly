@@ -1,6 +1,6 @@
 import type { HelpChatSSEEvent, HelpChatHistoryMessage } from '@finly/types';
 
-import { ENV } from '@/shared/config';
+import { API_BASE_URL } from '@/shared/config';
 
 /**
  * Публічний endpoint AI-помічника довідки (Sprint 16). Без auth, без
@@ -93,7 +93,7 @@ export async function streamHelpChat(
     signal?: AbortSignal
 ): Promise<void> {
     const response = await fetch(
-        `${ENV.NEXT_PUBLIC_API_URL}${HELP_CHAT_ENDPOINT}`,
+        `${API_BASE_URL}${HELP_CHAT_ENDPOINT}`,
         {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

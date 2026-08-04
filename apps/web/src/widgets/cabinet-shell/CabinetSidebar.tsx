@@ -4,6 +4,7 @@ import { Logo } from '@/entities/brand';
 import UiButton from '@/shared/ui/UiButton';
 import ChangeTheme from '@/features/change-theme';
 import { CabinetNavList } from './CabinetNavList';
+import { CabinetAdminGroup } from './CabinetAdminGroup';
 import { AccountSection } from './AccountSection';
 import { useCabinetNav } from './useCabinetNav';
 
@@ -13,7 +14,7 @@ import { useCabinetNav } from './useCabinetNav';
  * акаунт-кластер у футері. На вужчих екранах прихований — там drawer.
  */
 export function CabinetSidebar() {
-    const { primary, secondary } = useCabinetNav();
+    const { primary, secondary, admin } = useCabinetNav();
 
     return (
         <aside className="bg-card border-border sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r lg:flex">
@@ -40,6 +41,7 @@ export function CabinetSidebar() {
                 <div className="mt-auto flex flex-col gap-2">
                     <div className="bg-border mx-3 h-px" />
                     <CabinetNavList items={secondary} />
+                    <CabinetAdminGroup items={admin} />
                 </div>
             </nav>
 

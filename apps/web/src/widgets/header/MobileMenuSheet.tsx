@@ -9,6 +9,7 @@ import {
     LogIn,
     Briefcase,
     BookOpen,
+    Landmark,
 } from 'lucide-react';
 import ChangeTheme, {
     THEME_ICONS,
@@ -28,8 +29,8 @@ import {
 import { useAuthStore } from '@/entities/user';
 import { getFullName } from '@finly/types';
 import { useHeaderNavStore } from '@/entities/navigation';
+import { useUserMenu } from '@/features/user-menu';
 import { useMobileMenuSheetStore } from './mobileMenuSheetStore';
-import { useUserMenu } from './useUserMenu';
 
 const menuItemBase =
     '-mx-2 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors';
@@ -63,7 +64,8 @@ export default function MobileMenuSheet() {
         businesses: <Briefcase />,
         profile: <User />,
         billing: <CreditCard />,
-        admin: <BookOpen />,
+        adminGuides: <BookOpen />,
+        adminCatalog: <Landmark />,
         logout: <LogOut />,
     });
 
@@ -172,6 +174,7 @@ export default function MobileMenuSheet() {
 
                             <ChangeTheme
                                 align="start"
+                                onSelected={close}
                                 trigger={
                                     <UiButton
                                         type="button"
@@ -209,6 +212,7 @@ export default function MobileMenuSheet() {
                         <div className="flex flex-col gap-1">
                             <ChangeTheme
                                 align="start"
+                                onSelected={close}
                                 trigger={
                                     <UiButton
                                         type="button"

@@ -19,9 +19,11 @@ import {
     getBusinessBySlug,
     reserveAccountSlug,
     resetAccountSlug,
+    setAccountCatalogVisibility,
     updateAccount,
 } from '@/shared/api';
 import { OwnershipBadge, isBusinessBranded } from '@/entities/business';
+import { resolveAccountPurposeTemplate } from '@/entities/invoice';
 import {
     matchActiveSlugReservation,
     useApplyPendingSlug,
@@ -39,7 +41,9 @@ import UiBreadcrumb from '@/shared/ui/UiBreadcrumb';
 import UiPageContainer from '@/shared/ui/UiPageContainer';
 import UiSectionCard from '@/shared/ui/UiSectionCard';
 import UiSpinner from '@/shared/ui/UiSpinner';
+import UiWorkspaceColumns from '@/shared/ui/UiWorkspaceColumns';
 import {
+    AccountCatalogSection,
     DangerSection,
     EditableAccountName,
     InvoicesSection,
@@ -237,8 +241,8 @@ export default function AccountCabinetPage() {
 
     if (!isDataCurrent && !error) {
         return (
-            <UiPageContainer className="py-16">
-                <div className="flex justify-center">
+            <UiPageContainer>
+                <div className="flex flex-1 items-center justify-center">
                     <UiSpinner size="md" />
                 </div>
             </UiPageContainer>
@@ -250,8 +254,8 @@ export default function AccountCabinetPage() {
     }
     if (!data || !isDataCurrent) {
         return (
-            <UiPageContainer className="py-16">
-                <div className="flex justify-center">
+            <UiPageContainer>
+                <div className="flex flex-1 items-center justify-center">
                     <UiSpinner size="md" />
                 </div>
             </UiPageContainer>
@@ -293,6 +297,36 @@ export default function AccountCabinetPage() {
 
     const last4 = account.iban.slice(-4);
 
+    // Sprint 29 — тогл видимості цих реквізитів у каталозі.
+    const handleToggleCatalog = async (visible: boolean) => {
+        const businessSlug = business.slug;
+        const accountSlug = account.slug;
+        try {
+            const updated = await setAccountCatalogVisibility(
+                businessSlug,
+                accountSlug,
+                visible
+            );
+            setData((prev) =>
+                prev &&
+                prev.business.slug === businessSlug &&
+                prev.account.slug === accountSlug
+                    ? {
+                          ...prev,
+                          account: {
+                              ...updated,
+                              invoicesCount: prev.account.invoicesCount,
+                          },
+                      }
+                    : prev
+            );
+        } catch (err) {
+            const msg = getApiMessage(extractErrorCode(err), 'accounts');
+            toast.error(msg);
+            throw new Error(msg);
+        }
+    };
+
     const handleDelete = () => {
         openDeleteConfirm(account, account.invoicesCount, () => {
             scheduleAccountDeleteWithUndo({
@@ -313,8 +347,8 @@ export default function AccountCabinetPage() {
     };
 
     return (
-        <UiPageContainer className="space-y-6 py-10 md:py-14">
-            <div className="flex flex-col gap-4">
+        <UiPageContainer className="space-y-6">
+            <div className="flex flex-col gap-3">
                 {/* Лінія 1 — хлібні крихти, наодинці */}
                 <UiBreadcrumb
                     items={[
@@ -351,43 +385,69 @@ export default function AccountCabinetPage() {
                 </div>
             </div>
 
-            <PublicSection
-                account={account}
-                businessSlug={business.slug}
-                brandVersion={qrBrandVersion(business.brand?.active?.logoUrl)}
-                payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
-                isPaid={isPaid}
-                onSave={onSaveAccount}
-                onResetSlug={handleResetSlug}
-                checkSlugAvailability={(slug) =>
-                    checkAccountSlugAvailability(
-                        business.slug,
-                        account.slug,
-                        slug
-                    ).then((r) => r.status)
+            <UiWorkspaceColumns
+                main={
+                    <>
+                        <PublicSection
+                            account={account}
+                            businessSlug={business.slug}
+                            brandVersion={qrBrandVersion(
+                                business.brand?.active?.logoUrl
+                            )}
+                            payPublicOrigin={ENV.NEXT_PUBLIC_PAY_PUBLIC_URL}
+                            isPaid={isPaid}
+                            onSave={onSaveAccount}
+                            onResetSlug={handleResetSlug}
+                            checkSlugAvailability={(slug) =>
+                                checkAccountSlugAvailability(
+                                    business.slug,
+                                    account.slug,
+                                    slug
+                                ).then((r) => r.status)
+                            }
+                            reserveSlug={(slug) =>
+                                reserveAccountSlug(
+                                    business.slug,
+                                    account.slug,
+                                    slug
+                                )
+                            }
+                            onSubscribe={handleSubscribe}
+                            subscribePriceLabel={subscribeLabel}
+                            initialReservation={
+                                !isPaid && desiredSlug ? reservation : null
+                            }
+                            autoStartSlugEdit={autoEditSlug}
+                        />
+                        <InvoicesSection
+                            businessSlug={business.slug}
+                            accountSlug={account.slug}
+                            inheritedPaymentPurposeTemplate={resolveAccountPurposeTemplate(
+                                account.paymentPurposeTemplate,
+                                business.paymentPurposeTemplate
+                            )}
+                        />
+                        <RequisitesSection account={account} />
+                    </>
                 }
-                reserveSlug={(slug) =>
-                    reserveAccountSlug(business.slug, account.slug, slug)
+                aside={
+                    <>
+                        <BrandSection
+                            business={business}
+                            isPaid={isPaid}
+                            onSubscribe={handleSubscribe}
+                            subscribePriceLabel={subscribeLabel}
+                            onApplied={handleBrandApplied}
+                        />
+                        <AccountCatalogSection
+                            business={business}
+                            account={account}
+                            onToggle={handleToggleCatalog}
+                        />
+                        <DangerSection onDelete={handleDelete} />
+                    </>
                 }
-                onSubscribe={handleSubscribe}
-                subscribePriceLabel={subscribeLabel}
-                initialReservation={!isPaid && desiredSlug ? reservation : null}
-                autoStartSlugEdit={autoEditSlug}
             />
-            <BrandSection
-                business={business}
-                isPaid={isPaid}
-                onSubscribe={handleSubscribe}
-                subscribePriceLabel={subscribeLabel}
-                onApplied={handleBrandApplied}
-            />
-            <InvoicesSection
-                businessSlug={business.slug}
-                accountSlug={account.slug}
-                businessPaymentPurposeTemplate={business.paymentPurposeTemplate}
-            />
-            <RequisitesSection account={account} />
-            <DangerSection onDelete={handleDelete} />
         </UiPageContainer>
     );
 }
@@ -405,7 +465,7 @@ function ErrorPage({ code }: { code: string }) {
                   : getApiMessage(code, 'accounts');
 
     return (
-        <UiPageContainer className="space-y-6 py-12">
+        <UiPageContainer className="space-y-6">
             <UiSectionCard title={message}>
                 <p className="text-muted-foreground mt-2 text-sm">
                     Поверніться до отримувача і оберіть інші реквізити.

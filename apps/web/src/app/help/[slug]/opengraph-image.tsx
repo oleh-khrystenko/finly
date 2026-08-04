@@ -4,10 +4,7 @@ import { join } from 'node:path';
 import { notFound } from 'next/navigation';
 import { ImageResponse } from 'next/og';
 
-import {
-    getAllArticleSlugs,
-    getArticleBySlug,
-} from '@/entities/help-article';
+import { getAllArticleSlugs, getArticleBySlug } from '@/entities/help-article';
 import { OG_COLORS } from '@/shared/styles/ogColors';
 
 export const size = { width: 1200, height: 630 };
@@ -22,8 +19,12 @@ export function generateStaticParams() {
 const FONT_DIR = join(process.cwd(), 'src/shared/fonts/ttf');
 
 // satori не читає CSS-змінних теми — літерали живуть у shared/styles/ogColors.
-const { background: BG, accent: ACCENT, title: TITLE, muted: MUTED } =
-    OG_COLORS;
+const {
+    background: BG,
+    accent: ACCENT,
+    title: TITLE,
+    muted: MUTED,
+} = OG_COLORS;
 
 export default async function Image({
     params,
@@ -43,74 +44,72 @@ export default async function Image({
     ]);
 
     return new ImageResponse(
-        (
+        <div
+            style={{
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                padding: '80px',
+                backgroundColor: BG,
+                backgroundImage: OG_COLORS.glow,
+                fontFamily: 'Mulish',
+            }}
+        >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <div
+                    style={{
+                        display: 'flex',
+                        width: '44px',
+                        height: '44px',
+                        borderRadius: '12px',
+                        background: ACCENT,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: BG,
+                        fontSize: '30px',
+                        fontWeight: 700,
+                    }}
+                >
+                    ₴
+                </div>
+                <span
+                    style={{
+                        fontSize: '26px',
+                        fontWeight: 700,
+                        color: ACCENT,
+                        letterSpacing: '0.04em',
+                    }}
+                >
+                    Довідка Finly
+                </span>
+            </div>
+
             <div
                 style={{
-                    width: '100%',
-                    height: '100%',
                     display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    padding: '80px',
-                    backgroundColor: BG,
-                    backgroundImage: OG_COLORS.glow,
-                    fontFamily: 'Mulish',
+                    fontSize: '68px',
+                    fontWeight: 700,
+                    lineHeight: 1.1,
+                    color: TITLE,
+                    maxWidth: '1000px',
                 }}
             >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <div
-                        style={{
-                            display: 'flex',
-                            width: '44px',
-                            height: '44px',
-                            borderRadius: '12px',
-                            background: ACCENT,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: BG,
-                            fontSize: '30px',
-                            fontWeight: 700,
-                        }}
-                    >
-                        ₴
-                    </div>
-                    <span
-                        style={{
-                            fontSize: '26px',
-                            fontWeight: 700,
-                            color: ACCENT,
-                            letterSpacing: '0.04em',
-                        }}
-                    >
-                        Довідка Finly
-                    </span>
-                </div>
-
-                <div
-                    style={{
-                        display: 'flex',
-                        fontSize: '68px',
-                        fontWeight: 700,
-                        lineHeight: 1.1,
-                        color: TITLE,
-                        maxWidth: '1000px',
-                    }}
-                >
-                    {title}
-                </div>
-
-                <div
-                    style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        fontSize: '28px',
-                        color: MUTED,
-                    }}
-                >
-                    Платіжні QR-коди і рахунки за стандартом НБУ · finly.com.ua
-                </div>
+                {title}
             </div>
-        ),
+
+            <div
+                style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    fontSize: '28px',
+                    color: MUTED,
+                }}
+            >
+                Платіжні QR-коди і рахунки за стандартом НБУ · finly.com.ua
+            </div>
+        </div>,
         {
             ...size,
             fonts: [

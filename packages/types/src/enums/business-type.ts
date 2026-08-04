@@ -81,3 +81,20 @@ const TAX_ID_LENGTH_BY_TYPE: Record<BusinessType, 8 | 10> = {
 
 export const taxIdLengthFor = (type: BusinessType): 8 | 10 =>
     TAX_ID_LENGTH_BY_TYPE[type];
+
+/** Нормативна довжина РНОКПП — вона ж дискримінатор «фізособа vs юрособа». */
+const INDIVIDUAL_TAX_ID_LENGTH = 10;
+
+/**
+ * Типи, чий `taxId` — це РНОКПП конкретної людини, а не ЄДРПОУ юрособи.
+ *
+ * Потрібно там, де дані отримувача читаються у ролі **платника** податків
+ * (Sprint 30 — підстановка на податковій сторінці): підставляти можна лише те,
+ * що є податковим номером фізособи. Список **похідний** від таблиці довжин, а
+ * не окремо перелічений: інакше новий тип фізособи мовчки випав би з таких
+ * вибірок, і користувач не побачив би свого ж отримувача серед джерел.
+ */
+export const INDIVIDUAL_TAX_ID_TYPES: readonly BusinessType[] =
+    BUSINESS_TYPES.filter(
+        (type) => TAX_ID_LENGTH_BY_TYPE[type] === INDIVIDUAL_TAX_ID_LENGTH
+    );

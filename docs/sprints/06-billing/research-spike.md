@@ -12,6 +12,7 @@ WayForPay закриває потребу Finly у білінгу власної
 **Провідна гіпотеза** («підписка керується провайдером») підтверджується для Моделі A: нативний режим покриває і скасування, і зміну суми/інтервалу штатно. Резерв B лишаємо на випадок, якщо нативний режим у sandbox виявиться обмеженим або потребуватиме довгого lead-time активації.
 
 **Блокери, які треба запустити негайно (lead-time до коду):**
+
 - **Активація рекурентів/токенізації.** Пряма згадка в доці: «нативний режим зазвичай потребує активації з боку WayForPay» — увімкнення Regular payments та/або токенізації може потребувати окремого запиту в підтримку. Подати першим, ще до коду шедулера/нативного режиму. Точний lead-time дока не фіксує — питання до sandbox/support.
 - **Договір з WayForPay.** Укладається в кабінеті (розділ «Відшкодування» → «Мої реквізити» → «Договір»), Дія.Підпис + пакет верифікаційних документів. Це календарний, не кодовий блокер — стартувати паралельно.
 
@@ -22,13 +23,13 @@ WayForPay закриває потребу Finly у білінгу власної
 ### Автентифікація і підпис запитів
 
 - Підпис **усіх** запитів — `HMAC-MD5` над полями, зʼєднаними роздільником `;` (UTF-8), ключ = `merchantSecretKey` (у SDK — `merchant_password`). Параметри мерчанта: `merchantAccount` + `merchantSecretKey`.
-  - SDK: `const FIELDS_DELIMITER = ';'`; `hash_hmac('md5', implode(';', $data), $merchant_password)`.
-  - Джерела: [wiki 852102](https://wiki.wayforpay.com/en/view/852102), [wiki 852194](https://wiki.wayforpay.com/en/view/852194), [WayForPay/PHP SDK](https://github.com/wayforpay/PHP/blob/master/WayForPay.php).
+    - SDK: `const FIELDS_DELIMITER = ';'`; `hash_hmac('md5', implode(';', $data), $merchant_password)`.
+    - Джерела: [wiki 852102](https://wiki.wayforpay.com/en/view/852102), [wiki 852194](https://wiki.wayforpay.com/en/view/852194), [WayForPay/PHP SDK](https://github.com/wayforpay/PHP/blob/master/WayForPay.php).
 - **Purchase і Charge — ідентичний набір і порядок полів підпису:** `merchantAccount, merchantDomainName, orderReference, orderDate, amount, currency`, далі **всі** `productName[]`, потім **всі** `productCount[]`, потім **всі** `productPrice[]` (згруповано по типу, не interleaved). Джерело: [wiki 852102](https://wiki.wayforpay.com/en/view/852102) / [852194](https://wiki.wayforpay.com/en/view/852194).
 - **CHECK_STATUS — асиметричний підпис** (не плутати request і response):
-  - request-підпис = `HMAC-MD5(merchantAccount;orderReference)` — 2 поля;
-  - response-підпис покриває 8 полів `merchantAccount;orderReference;amount;currency;authCode;cardPan;transactionStatus;reasonCode`.
-  - Джерело: [wiki 852117](https://wiki.wayforpay.com/en/view/852117).
+    - request-підпис = `HMAC-MD5(merchantAccount;orderReference)` — 2 поля;
+    - response-підпис покриває 8 полів `merchantAccount;orderReference;amount;currency;authCode;cardPan;transactionStatus;reasonCode`.
+    - Джерело: [wiki 852117](https://wiki.wayforpay.com/en/view/852117).
 
 > ⚠️ Розбіжність із нашою доменною моделлю: `amount` у Purchase/Charge передається як **decimal-сума у валюті** (напр. `1547.36`), а не в копійках-integer, як зберігаємо ми (`Invoice.amount` у копійках). Конверсія копійки↔decimal — обовʼязковий крок payload-mapper. (Підтвердити точний формат — десяткові коми/крапки, к-ть знаків — у sandbox.)
 
@@ -37,10 +38,10 @@ WayForPay закриває потребу Finly у білінгу власної
 - **Провайдер сам списує** за збереженим розкладом: «Payment is made automatically, according to the specified payment schedule»; при невдачі — ретрай наступного дня. Джерело: [wiki 852496](https://wiki.wayforpay.com/en/view/852496).
 - `regularMode` (інтервали): `once, daily, weekly, monthly, quarterly, bimonthly, halfyearly, yearly` (+ `client`, `none` як службові). Джерело: [wiki 852102](https://wiki.wayforpay.com/en/view/852102).
 - **Керування — один endpoint** `POST https://api.wayforpay.com/regularApi`, операція задається `requestType`:
-  - `STATUS` — стан підписки; повертає lifecycle `Active/Suspended/Created/Removed/Confirmed/Completed` + `dateBegin/dateEnd/lastPayedDate/nextPaymentDate`. [wiki 852526](https://wiki.wayforpay.com/en/view/852526)
-  - `SUSPEND` / `RESUME` — пауза / відновлення. [wiki 852506](https://wiki.wayforpay.com/en/view/852506) / [852513](https://wiki.wayforpay.com/en/view/852513)
-  - `REMOVE` — дострокове припинення «без можливості відновлення»; поля `merchantAccount, merchantPassword, orderReference`. [wiki 852521](https://wiki.wayforpay.com/en/view/852521)
-  - `CHANGE` — змінює `AMOUNT, CURRENCY, regularMode, DATEBEGIN, DATEEND` за `ORDERREFERENCE`: «Change the debit amount, debit frequency or date of next payment, or end date». [wiki 13271051](https://wiki.wayforpay.com/en/view/13271051)
+    - `STATUS` — стан підписки; повертає lifecycle `Active/Suspended/Created/Removed/Confirmed/Completed` + `dateBegin/dateEnd/lastPayedDate/nextPaymentDate`. [wiki 852526](https://wiki.wayforpay.com/en/view/852526)
+    - `SUSPEND` / `RESUME` — пауза / відновлення. [wiki 852506](https://wiki.wayforpay.com/en/view/852506) / [852513](https://wiki.wayforpay.com/en/view/852513)
+    - `REMOVE` — дострокове припинення «без можливості відновлення»; поля `merchantAccount, merchantPassword, orderReference`. [wiki 852521](https://wiki.wayforpay.com/en/view/852521)
+    - `CHANGE` — змінює `AMOUNT, CURRENCY, regularMode, DATEBEGIN, DATEEND` за `ORDERREFERENCE`: «Change the debit amount, debit frequency or date of next payment, or end date». [wiki 13271051](https://wiki.wayforpay.com/en/view/13271051)
 - Стан підписки WayForPay **зберігає на своєму боці** — наш `STATUS`-poll або вебхук тримають нас у синхроні.
 
 ### Модель B — токенізація (recToken + Charge)
@@ -52,10 +53,15 @@ WayForPay закриває потребу Finly у білінгу власної
 
 - Вхідний колбек підписаний `HMAC-MD5(merchantAccount;orderReference;amount;currency;authCode;cardPan;transactionStatus;reasonCode)`.
 - **Мерчант ЗОБОВʼЯЗАНИЙ відповісти підписаним accept-handshake** JSON:
-  ```json
-  {"orderReference":"DH783023","status":"accept","time":1415379863,"signature":"<HMAC-MD5(orderReference;status;time)>"}
-  ```
-  Без цієї відповіді WayForPay **повторює доставку події**. Джерело: [wiki 852102](https://wiki.wayforpay.com/en/view/852102).
+    ```json
+    {
+        "orderReference": "DH783023",
+        "status": "accept",
+        "time": 1415379863,
+        "signature": "<HMAC-MD5(orderReference;status;time)>"
+    }
+    ```
+    Без цієї відповіді WayForPay **повторює доставку події**. Джерело: [wiki 852102](https://wiki.wayforpay.com/en/view/852102).
 - **Idempotency / guard проти подій не в порядку дока НЕ описує** — інженерна відповідальність мерчанта (див. відкриті питання). У кодовій базі вже є будівельні блоки: `ProcessedWebhookEvent` (two-phase pending→applied) і патерн `lastProviderEventAt: $lt`.
 
 ### Разові платежі (пакети executions)
@@ -71,8 +77,8 @@ WayForPay закриває потребу Finly у білінгу власної
 - WayForPay **реально онбордить UA ФОП** і приймає **UA банк-рахунок** — прямий контраст зі Stripe.
 - Договір: кабінет → «Відшкодування» → «Мої реквізити» → «Договір»; генерується документ під підпис (зокрема Дія.Підпис). Джерело: [help 1737806](https://help.wayforpay.com/view/1737806).
 - Пакет документів ([help 13730003](https://help.wayforpay.com/view/13730003)):
-  - **ФОП:** виписка з ЄДР, паспорт (книжечка або ID-картка з обох боків), довідка про місце проживання, ІПН.
-  - **ТОВ:** установчий документ, паспорт директора, ІПН, наказ про призначення директора, протокол, банківська виписка, фінансова звітність за останній звітній період.
+    - **ФОП:** виписка з ЄДР, паспорт (книжечка або ID-картка з обох боків), довідка про місце проживання, ІПН.
+    - **ТОВ:** установчий документ, паспорт директора, ІПН, наказ про призначення директора, протокол, банківська виписка, фінансова звітність за останній звітній період.
 
 ### Customer portal / повернення
 
@@ -83,14 +89,14 @@ WayForPay закриває потребу Finly у білінгу власної
 
 Stripe — інкумбент, якого замінюємо; таблиця показує, що міняється для нас.
 
-| Ось | WayForPay | Stripe (чинний) |
-| --- | --- | --- |
-| **UA ФОП/ТОВ + UA рахунок** | ✅ так, приймає | ❌ не обслуговує UA sole proprietors |
-| **Нативні рекуренти** | ✅ Regular payments (provider-driven), `CHANGE` міняє суму+інтервал на льоту | ✅ зрілі Subscriptions |
-| **Підпис** | HMAC-**MD5**, `;`-конкатенація, response-handshake обовʼязковий | `stripe-signature` header |
-| **Customer portal** | ❌ будуємо самі поверх `regularApi` | ✅ готовий Billing Portal (втрачаємо) |
-| **Комісія UA** | ❓ не підтверджено цифрами (треба договір/прайс) | n/a для UA ФОП |
-| **Lead-time блокер** | активація рекурентів/токенізації + договір (Дія.Підпис) | — |
+| Ось                         | WayForPay                                                                    | Stripe (чинний)                       |
+| --------------------------- | ---------------------------------------------------------------------------- | ------------------------------------- |
+| **UA ФОП/ТОВ + UA рахунок** | ✅ так, приймає                                                              | ❌ не обслуговує UA sole proprietors  |
+| **Нативні рекуренти**       | ✅ Regular payments (provider-driven), `CHANGE` міняє суму+інтервал на льоту | ✅ зрілі Subscriptions                |
+| **Підпис**                  | HMAC-**MD5**, `;`-конкатенація, response-handshake обовʼязковий              | `stripe-signature` header             |
+| **Customer portal**         | ❌ будуємо самі поверх `regularApi`                                          | ✅ готовий Billing Portal (втрачаємо) |
+| **Комісія UA**              | ❓ не підтверджено цифрами (треба договір/прайс)                             | n/a для UA ФОП                        |
+| **Lead-time блокер**        | активація рекурентів/токенізації + договір (Дія.Підпис)                      | —                                     |
 
 > Комісію WayForPay цей раунд **не** підтвердив конкретними відсотками — підтвердити в договорі/прайсі.
 

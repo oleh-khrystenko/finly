@@ -35,10 +35,9 @@ const guideImageSrcSchema = z
     .string()
     .min(1)
     .max(500)
-    .refine(
-        (src) => src.startsWith('/') || /^https?:\/\//.test(src),
-        { message: 'INVALID_GUIDE_IMAGE_SRC' }
-    );
+    .refine((src) => src.startsWith('/') || /^https?:\/\//.test(src), {
+        message: 'INVALID_GUIDE_IMAGE_SRC',
+    });
 
 export const GuideBlockImageSchema = z.object({
     src: guideImageSrcSchema,

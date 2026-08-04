@@ -98,9 +98,7 @@ describe('InvoicePublicView (Sprint 4 §4.7 + Sprint 9 §SP-6)', () => {
     describe('Expired-banner — server-driven через nbuLinks=null (review fix)', () => {
         it('nbuLinks=null → "Термін оплати минув" banner з поясненням + дією', () => {
             render(<InvoicePublicView {...baseProps} nbuLinks={null} />);
-            expect(
-                screen.getByText('Термін оплати минув')
-            ).toBeInTheDocument();
+            expect(screen.getByText('Термін оплати минув')).toBeInTheDocument();
             expect(
                 screen.getByText(/недоступний для оплати/)
             ).toBeInTheDocument();

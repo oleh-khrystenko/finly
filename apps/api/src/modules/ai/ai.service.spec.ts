@@ -1,13 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 
 import { AI_PROVIDER } from './interfaces/ai-provider.interface';
+import { HELP_CHAT } from '../../config/help-chat.config';
 import { AiService } from './ai.service';
-
-jest.mock('../../config/env', () => ({
-    ENV: {
-        HELP_CHAT_MAX_TOKENS: 400,
-    },
-}));
 
 const mockAiProvider = {
     streamChat: jest.fn(),
@@ -100,7 +95,7 @@ describe('AiService', () => {
             expect(mockAiProvider.streamChat).toHaveBeenCalledWith(
                 messages,
                 expect.any(String),
-                400,
+                HELP_CHAT.maxTokens,
                 signal
             );
         });

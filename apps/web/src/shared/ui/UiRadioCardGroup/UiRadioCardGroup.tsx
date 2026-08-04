@@ -8,11 +8,11 @@ import type { UiRadioCardGroupColumns, UiRadioCardGroupProps } from './types';
 /**
  * Grid-стиль radio-cards з title + description + optional icon.
  *
- * **Чому окремий primitive від `UiChipGroup`** — chip — горизонтальний
- * inline-pill (`flex flex-wrap`, малі px/py); card — багаторядковий
- * (title + 1-2 line description), responsive grid layout, opt-in icon
- * у corner. Перевантаження `UiChipGroup` опцією `layout` зробило б його
- * полісемантичним, що ламає single-responsibility primitive-у.
+ * **Чому саме картки, а не плоскі inline-pill-и** — pill це однорядковий
+ * короткий лейбл; card — багаторядковий (title + 1-2 line description),
+ * responsive grid layout, opt-in icon у corner. Продукт майже завжди
+ * потребує пояснення під варіантом вибору, тож flat-pill radio тут не
+ * підходить — картка несе цей опис у собі.
  *
  * **Accessibility (єдина точка):** Headless UI `RadioGroup` дає з коробки:
  *  - `role="radiogroup"` / `role="radio"` + `aria-checked`

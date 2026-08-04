@@ -18,32 +18,32 @@ Read the files in numeric order. Each file is self-contained: explanation → ex
 
 Replace these placeholders everywhere:
 
-| Placeholder | Meaning | Example |
-|---|---|---|
-| `<DOMAIN>` | apex domain | `cyanship.com` |
-| `<EMAIL>` | ops contact, used for Let's Encrypt fallback | `ops@example.com` |
-| `<USER>` | non-root sudo user | `ubuntu` |
-| `<PROJECT>` | repo / compose project name | `cyanship` |
-| `<R2_ACCOUNT_ID>` | Cloudflare R2 account ID | `abcd1234…` |
-| `<R2_ACCESS_KEY_ID>` / `<R2_SECRET_ACCESS_KEY>` | R2 API token, scoped to one bucket | `…` |
-| `<GITHUB_REPO>` | git URL of the app repo | `git@github.com:org/repo.git` |
+| Placeholder                                     | Meaning                                      | Example                       |
+| ----------------------------------------------- | -------------------------------------------- | ----------------------------- |
+| `<DOMAIN>`                                      | apex domain                                  | `cyanship.com`                |
+| `<EMAIL>`                                       | ops contact, used for Let's Encrypt fallback | `ops@example.com`             |
+| `<USER>`                                        | non-root sudo user                           | `ubuntu`                      |
+| `<PROJECT>`                                     | repo / compose project name                  | `cyanship`                    |
+| `<R2_ACCOUNT_ID>`                               | Cloudflare R2 account ID                     | `abcd1234…`                   |
+| `<R2_ACCESS_KEY_ID>` / `<R2_SECRET_ACCESS_KEY>` | R2 API token, scoped to one bucket           | `…`                           |
+| `<GITHUB_REPO>`                                 | git URL of the app repo                      | `git@github.com:org/repo.git` |
 
 ## Files
 
-| # | File | What it does |
-|---|---|---|
-| 0 | `README.md` | This file. Index + preflight. |
-| 00 | `00-prod-checklist.md` | **Run BEFORE `01`**: збирає всі prod-значення (OVH VPS purchase, Claude Code CLI bootstrap, DNS, certs, secrets, .env, GitHub Actions). Без нього `05` зламається на `getEnvVar(...) throw`. |
-| AI | `AI-RUNBOOK.md` | **Опціонально, замість ручного `01..08`**: self-contained prompt для Claude Code CLI, запущеного на VPS після §0.5 чек-листа. AI виконує phases A..Z з handoff-points на `.env`, Origin Cert, R2 backup creds. Усі safety-constraints inline (нема `CLAUDE.md` на VPS). |
-| 1 | `01-server-bootstrap.md` | Provision VPS, first SSH, hostname, timezone, NTP, base updates. |
-| 2 | `02-security-hardening.md` | Non-root sudo, key-only SSH, sshd hardening, UFW, fail2ban, secrets perms. |
-| 3 | `03-swap-and-tuning.md` | Swap file, `vm.swappiness`, sysctl tweaks, journal limits. |
-| 4 | `04-docker.md` | Install docker-ce + buildx + compose, `daemon.json` (log-opts + live-restore), prune cron. |
-| 5 | `05-app-deploy.md` | Clone repo to `/opt/<PROJECT>`, `.env` template, healthchecks, `compose up -d`. |
-| 6 | `06-caddy-cloudflare.md` | Install Caddy, Cloudflare DNS + Origin Cert, Caddyfile (headers, encode, log). |
-| 7 | `07-monitoring.md` | Uptime checks, log inspection commands, optional Netdata/ctop. |
-| 8 | `08-backups.md` | restic → R2, daily cron, retention 7/4/6, mongodump, restore drill. |
-| 99 | `99-runbook.md` | Incident playbooks: site down, OOM, disk full, cert broken, locked out, key compromise. |
+| #   | File                       | What it does                                                                                                                                                                                                                                                            |
+| --- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0   | `README.md`                | This file. Index + preflight.                                                                                                                                                                                                                                           |
+| 00  | `00-prod-checklist.md`     | **Run BEFORE `01`**: збирає всі prod-значення (OVH VPS purchase, Claude Code CLI bootstrap, DNS, certs, secrets, .env, GitHub Actions). Без нього `05` зламається на `getEnvVar(...) throw`.                                                                            |
+| AI  | `AI-RUNBOOK.md`            | **Опціонально, замість ручного `01..08`**: self-contained prompt для Claude Code CLI, запущеного на VPS після §0.5 чек-листа. AI виконує phases A..Z з handoff-points на `.env`, Origin Cert, R2 backup creds. Усі safety-constraints inline (нема `CLAUDE.md` на VPS). |
+| 1   | `01-server-bootstrap.md`   | Provision VPS, first SSH, hostname, timezone, NTP, base updates.                                                                                                                                                                                                        |
+| 2   | `02-security-hardening.md` | Non-root sudo, key-only SSH, sshd hardening, UFW, fail2ban, secrets perms.                                                                                                                                                                                              |
+| 3   | `03-swap-and-tuning.md`    | Swap file, `vm.swappiness`, sysctl tweaks, journal limits.                                                                                                                                                                                                              |
+| 4   | `04-docker.md`             | Install docker-ce + buildx + compose, `daemon.json` (log-opts + live-restore), prune cron.                                                                                                                                                                              |
+| 5   | `05-app-deploy.md`         | Clone repo to `/opt/<PROJECT>`, `.env` template, healthchecks, `compose up -d`.                                                                                                                                                                                         |
+| 6   | `06-caddy-cloudflare.md`   | Install Caddy, Cloudflare DNS + Origin Cert, Caddyfile (headers, encode, log).                                                                                                                                                                                          |
+| 7   | `07-monitoring.md`         | Uptime checks, log inspection commands, optional Netdata/ctop.                                                                                                                                                                                                          |
+| 8   | `08-backups.md`            | restic → R2, daily cron, retention 7/4/6, mongodump, restore drill.                                                                                                                                                                                                     |
+| 99  | `99-runbook.md`            | Incident playbooks: site down, OOM, disk full, cert broken, locked out, key compromise.                                                                                                                                                                                 |
 
 ## Preflight checklist
 

@@ -1,7 +1,11 @@
 import { z } from 'zod';
 
 import { CURRENT_TERMS_VERSION } from '../constants/terms';
-import { firstNameSchema, lastNameSchema } from '../validation/common';
+import {
+    firstNameSchema,
+    lastNameSchema,
+    middleNameSchema,
+} from '../validation/common';
 
 /**
  * `lastName` приходить як non-empty string, якщо передається. Empty literal
@@ -27,6 +31,12 @@ export const UpdateProfileSchema = z.object({
      * non-null value через DTO відсікається тут як anti-injection-rule.
      */
     pendingPostLoginTarget: z.literal(null).optional(),
+    /**
+     * По батькові — частина ПІБ, потрібна у призначенні податкового платежу. На
+     * відміну від прізвища, поле очищуване: порожній рядок означає «прибрати»
+     * (сервіс робить `$unset`), а не збереження порожнього значення.
+     */
+    middleName: z.union([middleNameSchema, z.literal('')]).optional(),
 });
 
 export const AcceptTermsSchema = z.object({

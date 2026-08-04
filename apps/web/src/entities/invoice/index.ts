@@ -5,6 +5,7 @@ export {
 } from './formatKopecks';
 export {
     effectiveInvoicePurpose,
+    resolveAccountPurposeTemplate,
     resolveInvoicePayeePurpose,
     isInvoicePurposeRuntimeInherited,
 } from './effectiveInvoicePurpose';

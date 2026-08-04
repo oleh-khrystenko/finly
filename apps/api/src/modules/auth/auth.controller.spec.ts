@@ -8,7 +8,8 @@ import { AuthService } from './auth.service';
 jest.mock('../../config/env', () => ({
     ENV: {
         NODE_ENV: 'development',
-        WEB_URL: 'http://localhost:3000',
+        WEB_URL: 'http://finly.local:3000',
+        AUTH_COOKIE_DOMAIN: 'finly.local',
     },
 }));
 
@@ -255,7 +256,7 @@ describe('AuthController', () => {
                 expect.objectContaining({ httpOnly: true })
             );
             expect(res.redirect).toHaveBeenCalledWith(
-                'http://localhost:3000/auth/callback'
+                'http://finly.local:3000/auth/callback'
             );
         });
 
@@ -274,7 +275,7 @@ describe('AuthController', () => {
             await controller.googleCallback(req as any, res as any);
 
             expect(res.redirect).toHaveBeenCalledWith(
-                'http://localhost:3000/auth/callback?account_deleted=true'
+                'http://finly.local:3000/auth/callback?account_deleted=true'
             );
         });
     });

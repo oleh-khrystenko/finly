@@ -12,7 +12,7 @@ import {
     Query,
     UseGuards,
 } from '@nestjs/common';
-import { SkipThrottle, Throttle } from '@nestjs/throttler';
+import { SkipThrottle } from '@nestjs/throttler';
 import { ZodValidationPipe } from 'nestjs-zod';
 
 import {
@@ -23,7 +23,13 @@ import {
 } from '@finly/types';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { UserRateLimit } from '../../common/decorators/user-rate-limit.decorator';
 import { JwtActiveGuard } from '../../common/guards/jwt-active.guard';
+import { UserRateLimitGuard } from '../../common/guards/user-rate-limit.guard';
+import {
+    skipThrottlersExcept,
+    USER_RATE_LIMITS,
+} from '../../common/http/throttle-policy';
 import {
     AccountAccessGuard,
     CurrentAccount,
@@ -54,6 +60,8 @@ import type { InvoiceDocument } from './schemas/invoice.schema';
  */
 @Controller('businesses/me/:slug/accounts/:accountSlug/invoices')
 @UseGuards(JwtActiveGuard, BusinessAccessGuard, AccountAccessGuard)
+// Кабінет за логіном: throttle вимкнено повністю (див. BusinessesController).
+@SkipThrottle(skipThrottlersExcept())
 export class InvoicesController {
     constructor(private readonly invoicesService: InvoicesService) {}
 
@@ -134,19 +142,11 @@ export class InvoicesController {
 
     /**
      * Sprint 20 — live-доступність бажаного імені документа до оплати. Усі
-     * рівні, окремий rate-limit.
+     * рівні, окремий rate-limit — per-user (див. `businesses.controller`).
      */
     @Get(':invoiceSlug/slug-availability')
-    @UseGuards(InvoiceAccessGuard)
-    // Лише власний бакет `slug-availability` (30/min) — skip інших named-
-    // throttler-ів, що інакше тіньовили б ліміт (див. businesses.controller).
-    @Throttle({ 'slug-availability': { limit: 30, ttl: 60_000 } })
-    @SkipThrottle({
-        default: true,
-        'public-payment': true,
-        'qr-preview': true,
-        'help-chat': true,
-    })
+    @UserRateLimit(USER_RATE_LIMITS.slugAvailability)
+    @UseGuards(UserRateLimitGuard, InvoiceAccessGuard)
     async checkSlugAvailability(
         @CurrentUser() user: UserDocument,
         @CurrentInvoice() invoice: InvoiceDocument,

@@ -14,9 +14,16 @@ import type { InvoicePayeeSnapshot } from '@finly/types';
  * mirror-яться через однакову формулу `value ?? template`.
  *
  * **Контракт.** `invoicePaymentPurpose` — те, що зберіг ФОП у документі (НЕ
- * post-resolve). `null` ⇒ inheritance signal на business-template. Resolver НЕ
+ * post-resolve). `null` ⇒ inheritance signal на успадкований шаблон. Resolver НЕ
  * перевіряє на whitespace/empty — Sprint 1 Zod-entity (`Business.payment
  * PurposeTemplate.min(1)`) гарантує non-empty bottom-string на write-side.
+ *
+ * **Sprint 29 — ланцюг трирівневий: `invoice → account → business`.** Другий
+ * аргумент — вже resolved шаблон рівнем нижче (`resolveAccountPurposeTemplate`),
+ * а не сирий `business.paymentPurposeTemplate`; рахунок має власний
+ * `paymentPurposeTemplate`, і якби документ під ним стрибав одразу на шаблон
+ * отримувача, UI підказував би не те призначення, що піде в банк. Дзеркалить
+ * backend `purpose-resolver.ts` дослівно, включно з дволанковою сигнатурою.
  *
  * **Чому окремий від `resolveInvoicePayeePurpose`.** Sprint 1 contract — pure
  * inheritance-rule (legacy fallback path, edit-form prediction "що буде, якщо
@@ -27,9 +34,29 @@ import type { InvoicePayeeSnapshot } from '@finly/types';
  */
 export function effectiveInvoicePurpose(
     invoicePaymentPurpose: string | null,
+    inheritedPaymentPurposeTemplate: string
+): string {
+    return invoicePaymentPurpose ?? inheritedPaymentPurposeTemplate;
+}
+
+/**
+ * Sprint 29 — frontend mirror backend-резолвера
+ * `apps/api/src/modules/accounts/payload-mapper.ts::resolveAccountPurposeTemplate`.
+ *
+ * Рахунок легітимно тримає власне призначення (один отримувач, окремі реквізити
+ * під ЄСВ і під військовий збір — саме призначення розносить платіж), тому
+ * шаблон не може бути спільним на весь отримувач. `null` на рахунку ⇒
+ * успадкування з отримувача.
+ *
+ * **Єдина точка резолву account-рівня на вебі.** Кожен UI-споживач, що показує
+ * «за замовчуванням буде ось це», зобовʼязаний пройти через неї: інакше кабінет
+ * підказує шаблон отримувача, а в `payeeSnapshot` і QR іде шаблон рахунку.
+ */
+export function resolveAccountPurposeTemplate(
+    accountPaymentPurposeTemplate: string | null,
     businessPaymentPurposeTemplate: string
 ): string {
-    return invoicePaymentPurpose ?? businessPaymentPurposeTemplate;
+    return accountPaymentPurposeTemplate ?? businessPaymentPurposeTemplate;
 }
 
 /**
@@ -55,13 +82,13 @@ export function effectiveInvoicePurpose(
 export function resolveInvoicePayeePurpose(
     snapshot: InvoicePayeeSnapshot | null,
     invoicePaymentPurpose: string | null,
-    businessPaymentPurposeTemplate: string
+    inheritedPaymentPurposeTemplate: string
 ): string {
     return (
         snapshot?.paymentPurpose ??
         effectiveInvoicePurpose(
             invoicePaymentPurpose,
-            businessPaymentPurposeTemplate
+            inheritedPaymentPurposeTemplate
         )
     );
 }

@@ -105,23 +105,14 @@ describe('documentsMonthlyAmount / credits', () => {
         [20, 598000, 20000],
         [50, 1495000, 50000],
         [100, 2990000, 100000],
-    ])(
-        'пакет %s → сума %i, кредити %i',
-        (size, amount, credits) => {
-            expect(
-                documentsMonthlyAmount(
-                    GRID.documents,
-                    size as number | null
-                )
-            ).toBe(amount);
-            expect(
-                documentsMonthlyCredits(
-                    GRID.documents,
-                    size as number | null
-                )
-            ).toBe(credits);
-        }
-    );
+    ])('пакет %s → сума %i, кредити %i', (size, amount, credits) => {
+        expect(
+            documentsMonthlyAmount(GRID.documents, size as number | null)
+        ).toBe(amount);
+        expect(
+            documentsMonthlyCredits(GRID.documents, size as number | null)
+        ).toBe(credits);
+    });
 
     it('кидає на невідомому розмірі пакета', () => {
         expect(() => documentsMonthlyAmount(GRID.documents, 7)).toThrow(
@@ -173,9 +164,7 @@ describe('suggestCheaperDocumentsTier', () => {
         expect(hint?.size).toBe(10);
         // Найменший вигідніший, не найбільший.
         expect(documentsPerBusinessAmount(hint!)).toBeLessThan(
-            documentsPerBusinessAmount(
-                findDocumentsTierBySize(discounted, 5)!
-            )
+            documentsPerBusinessAmount(findDocumentsTierBySize(discounted, 5)!)
         );
     });
 

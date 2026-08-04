@@ -156,11 +156,7 @@ export default async function GuideArticlePage({
                     ],
                 }}
             />
-            <GuideArticleView
-                guide={guide}
-                pillar={pillar}
-                related={related}
-            />
+            <GuideArticleView guide={guide} pillar={pillar} related={related} />
         </>
     );
 }

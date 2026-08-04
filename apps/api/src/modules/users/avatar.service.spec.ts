@@ -7,6 +7,11 @@ import { StorageService } from '../storage/storage.service';
 import { AvatarService } from './avatar.service';
 import { User } from './schemas/user.schema';
 
+// Мок мусить повторювати форму РЕАЛЬНОГО модуля: sharp — callable CJS-експорт
+// (`module.exports = sharp`), без властивості `default`. Попередня версія цього
+// мока віддавала `{ __esModule: true, default: fn }`, і саме тому дефект
+// default-імпорту (`(0, sharp_1.default) is not a function`) жив у проді при
+// зелених тестах: у тесті `.default` існував, у справжньому sharp — ні.
 jest.mock('sharp', () => {
     const fakeBuffer = Buffer.from('webp-bytes');
     const pipeline = {
@@ -14,12 +19,11 @@ jest.mock('sharp', () => {
         webp: jest.fn().mockReturnThis(),
         toBuffer: jest.fn().mockResolvedValue(fakeBuffer),
     };
-    return {
-        __esModule: true,
-        default: jest.fn(() => pipeline),
+    const sharpFn = jest.fn(() => pipeline);
+    return Object.assign(sharpFn, {
         __pipeline: pipeline,
         __fakeBuffer: fakeBuffer,
-    };
+    });
 });
 
 const UUID_QUEUE = [
@@ -421,7 +425,7 @@ describe('AvatarService', () => {
         const sharpMock = jest.requireMock('sharp');
 
         beforeEach(() => {
-            sharpMock.default.mockClear();
+            sharpMock.mockClear();
             sharpMock.__pipeline.resize.mockClear();
             sharpMock.__pipeline.webp.mockClear();
             sharpMock.__pipeline.toBuffer.mockClear();
@@ -449,7 +453,7 @@ describe('AvatarService', () => {
 
             expect(storage.isR2Url).toHaveBeenCalledWith(externalUrl);
             expect(fetchSpy).toHaveBeenCalledWith(externalUrl);
-            expect(sharpMock.default).toHaveBeenCalledTimes(1);
+            expect(sharpMock).toHaveBeenCalledTimes(1);
             expect(sharpMock.__pipeline.resize).toHaveBeenCalledWith(
                 AVATAR.OUTPUT_SIZE,
                 AVATAR.OUTPUT_SIZE,

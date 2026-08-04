@@ -36,9 +36,9 @@ describe('brandDisplayNameSchema', () => {
     });
 
     it('відхиляє перенос рядка (ламає однорядкову бренд-марку)', () => {
-        expect(
-            brandDisplayNameSchema.safeParse(`Зерно${LF}Кава`).success
-        ).toBe(false);
+        expect(brandDisplayNameSchema.safeParse(`Зерно${LF}Кава`).success).toBe(
+            false
+        );
     });
 
     it('відхиляє контрол-символи (BEL / DEL)', () => {
@@ -78,7 +78,9 @@ describe('brandSlotSchema', () => {
     });
 
     it('pendingBrandSlotSchema вимагає uploadedAt + demoted', () => {
-        expect(pendingBrandSlotSchema.safeParse(VALID_SLOT).success).toBe(false);
+        expect(pendingBrandSlotSchema.safeParse(VALID_SLOT).success).toBe(
+            false
+        );
         // uploadedAt без demoted — все ще невалідний.
         expect(
             pendingBrandSlotSchema.safeParse({

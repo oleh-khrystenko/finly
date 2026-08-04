@@ -52,7 +52,9 @@ export const usePendingInvoiceDeletesStore = create<PendingInvoiceDeletesState>(
         add: (businessSlug, accountSlug, invoiceSlug) =>
             set((s) => {
                 const next = new Set(s.keys);
-                next.add(makeInvoiceKey(businessSlug, accountSlug, invoiceSlug));
+                next.add(
+                    makeInvoiceKey(businessSlug, accountSlug, invoiceSlug)
+                );
                 return { keys: next };
             }),
         remove: (businessSlug, accountSlug, invoiceSlug) =>

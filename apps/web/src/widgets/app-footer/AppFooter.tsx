@@ -3,36 +3,24 @@ import { Mail } from 'lucide-react';
 import { Copyright } from '@/entities/brand';
 import UiButton from '@/shared/ui/UiButton';
 
-const HELP_LINK = { href: '/help', label: 'Довідка' } as const;
-const LEGAL_LINKS = [
+const NAV_LINKS = [
+    { href: '/help', label: 'Довідка' },
     { href: '/privacy', label: 'Конфіденційність' },
     { href: '/terms', label: 'Умови використання' },
 ] as const;
 
-interface AppFooterProps {
-    /**
-     * Показувати пункт «Довідка». У кабінеті `false` — Довідка тепер
-     * першокласний пункт навігації у бічному меню, дублювати у футері зайве.
-     * На auth/legal-поверхнях (де sidebar немає) лишається `true`.
-     */
-    showHelpLink?: boolean;
-}
-
 /**
- * Мінімальний футер для non-marketing-поверхонь — auth, legal (`/privacy`,
- * `/terms`) і весь кабінет. На відміну від landing/help/public-футерів не несе
- * compliance-плашки чи growth-CTA.
+ * Мінімальний футер для non-marketing-поверхонь без sidebar — auth і legal
+ * (`/privacy`, `/terms`). У кабінеті футера немає взагалі: юридика і підтримка
+ * живуть в акаунт-меню бічного меню (`CabinetShell`). На відміну від
+ * landing/help/public-футерів не несе compliance-плашки чи growth-CTA.
  *
  * Структура дзеркалить `Copyright`-смугу (flex-col + center на mobile →
  * flex-row + justify-between на desktop): навігація ліворуч над ©, контакт
  * праворуч над кредитами — єдиний візуальний ритм через обидва рядки. Усі
  * лінки internal (cabinet-host `finly.com.ua`), тож `baseUrl` не потрібен.
  */
-export function AppFooter({ showHelpLink = true }: AppFooterProps) {
-    const navLinks = showHelpLink
-        ? [HELP_LINK, ...LEGAL_LINKS]
-        : [...LEGAL_LINKS];
-
+export function AppFooter() {
     return (
         <footer className="bg-card border-border border-t">
             <nav
@@ -40,7 +28,7 @@ export function AppFooter({ showHelpLink = true }: AppFooterProps) {
                 className="container mx-auto flex flex-col items-center gap-3 px-6 py-4 sm:flex-row sm:justify-between sm:gap-6"
             >
                 <ul className="flex flex-wrap items-center justify-center gap-x-6 gap-y-1 sm:justify-start">
-                    {navLinks.map(({ href, label }) => (
+                    {NAV_LINKS.map(({ href, label }) => (
                         <li key={href}>
                             <UiButton
                                 as="link"

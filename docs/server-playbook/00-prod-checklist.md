@@ -4,11 +4,11 @@
 
 Замінники з кореневого `README.md`:
 
-| Placeholder | Значення для Finly |
-|---|---|
-| `<DOMAIN>` | `finly.com.ua` |
-| `<PROJECT>` | `finly` |
-| `<USER>` | `ubuntu` (рекомендований non-root sudo user — налаштовується у §02) |
+| Placeholder | Значення для Finly                                                  |
+| ----------- | ------------------------------------------------------------------- |
+| `<DOMAIN>`  | `finly.com.ua`                                                      |
+| `<PROJECT>` | `finly`                                                             |
+| `<USER>`    | `ubuntu` (рекомендований non-root sudo user — налаштовується у §02) |
 
 ## 0. OVH VPS purchase walkthrough
 
@@ -17,16 +17,16 @@
 1. Створи акаунт на **[ovhcloud.com](https://www.ovhcloud.com)** (якщо ще немає). Білінг — карта або bank transfer.
 2. У навігації: **Hosting → VPS → Order VPS** (або прямо [ovhcloud.com/uk/vps/](https://www.ovhcloud.com/uk/vps/)).
 3. **Plan:** для Finly — **VPS-2** (раніше називався `vps-2024-le-2`):
-   - 2 vCPU, **8 GB RAM**, 80 GB NVMe SSD, 500 Mbps unmetered
-   - Це мінімум: Next.js + NestJS build процеси разом їдять >4 GB RAM peak. VPS-1 (4 GB) ризикує OOM під час `compose up --build`.
+    - 2 vCPU, **8 GB RAM**, 80 GB NVMe SSD, 500 Mbps unmetered
+    - Це мінімум: Next.js + NestJS build процеси разом їдять >4 GB RAM peak. VPS-1 (4 GB) ризикує OOM під час `compose up --build`.
 4. **Datacenter:** для UA users — **Warsaw (Poland)** або **Frankfurt (Germany)**. Strasbourg/Gravelines теж працюють, але латентність +20-30ms.
 5. **OS:** Ubuntu **24.04 LTS Server** (no GUI). Не Debian, не Ubuntu 22.04 — playbook валідовано конкретно на 24.04.
 6. **SSH key:** на цьому кроці OVH дає upload-нути public key. Згенеруй локально на ноутбуці нову пару спеціально для VPS:
-   ```bash
-   ssh-keygen -t ed25519 -f ~/.ssh/finly_vps -N "" -C "finly-prod-root@$(hostname)"
-   cat ~/.ssh/finly_vps.pub   # це upload-уй в OVH UI
-   ```
-   Private key (`~/.ssh/finly_vps`) залишається на ноутбуці; **не комітити** в репо.
+    ```bash
+    ssh-keygen -t ed25519 -f ~/.ssh/finly_vps -N "" -C "finly-prod-root@$(hostname)"
+    cat ~/.ssh/finly_vps.pub   # це upload-уй в OVH UI
+    ```
+    Private key (`~/.ssh/finly_vps`) залишається на ноутбуці; **не комітити** в репо.
 7. **Backups:** включи **Automated Backups** (~+20% до місячної ціни). Це провайдер-side daily snapshots — окремо від `08-backups.md` restic-схеми, дублювання навмисне. Якщо бюджет тісний — пропусти, але §08 restic-flow стає єдиним рятувальним кругом.
 8. **Period:** monthly billing для початку (≈€10-12/міс для VPS-2 Comfort у Warsaw). Annual дає ~10% знижки, але міняти план потім складніше.
 9. **Anti-DDoS:** **OVH Game DDoS protection НЕ потрібен** (це для game-servers, дорого, додаткова латентність). Базовий OVH anti-DDoS уже включений безкоштовно.
@@ -128,12 +128,14 @@ source ~/.bashrc
 Дві опції:
 
 **(a) Paste через TUI** (найпростіше):
+
 ```bash
 claude   # запускає interactive TUI
 # Потім paste-уй ВЕСЬ зміст AI-RUNBOOK.md як першу message.
 ```
 
 **(b) Через file** (якщо repo публічний):
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/<owner>/finly/main/docs/server-playbook/AI-RUNBOOK.md > /tmp/runbook.md
 claude
@@ -141,6 +143,7 @@ claude
 ```
 
 > **Перед стартом AI** переконайся, що у тебе під рукою (для handoff-points):
+>
 > - `.env` файл готовий (повністю заповнений по §1..§11 нижче)
 > - `origin.pem` + `origin-key.pem` (Cloudflare Origin Cert, §2)
 > - R2 backup token + restic password (§8 нижче, готується пізніше)
@@ -152,13 +155,13 @@ AI зупинятиметься на handoff-points і питатиме ці з�
 
 В дашборді Cloudflare для `finly.com.ua`:
 
-| Type | Name | Content | Proxy |
-|---|---|---|---|
-| A | `@` | `<IPV4>` (з провайдера VPS) | proxied (orange cloud) |
-| AAAA | `@` | `<IPV6>` (якщо є) | proxied |
-| CNAME | `www` | `finly.com.ua` | proxied |
-| CNAME | `pay` | `finly.com.ua` | proxied |
-| CNAME | `media` | `<R2_PUBLIC_BUCKET_HOSTNAME>` (див. R2 нижче) | proxied |
+| Type  | Name    | Content                                       | Proxy                  |
+| ----- | ------- | --------------------------------------------- | ---------------------- |
+| A     | `@`     | `<IPV4>` (з провайдера VPS)                   | proxied (orange cloud) |
+| AAAA  | `@`     | `<IPV6>` (якщо є)                             | proxied                |
+| CNAME | `www`   | `finly.com.ua`                                | proxied                |
+| CNAME | `pay`   | `finly.com.ua`                                | proxied                |
+| CNAME | `media` | `<R2_PUBLIC_BUCKET_HOSTNAME>` (див. R2 нижче) | proxied                |
 
 SSL/TLS → Overview → **Full (strict)**. `Always Use HTTPS` ON, `Min TLS Version` 1.2.
 
@@ -179,22 +182,21 @@ SSL/TLS → Origin Server → Create Certificate:
 - **Network access:** додати public IP VPS у whitelist (`<IPV4>/32`). Альтернативно — Atlas VPC Peering / PrivateLink, якщо провайдер підтримує.
 - **Database user:** dedicated `finly-api` user, password 32+ chars, **readWrite** на `finly` DB only.
 - **Connection string** (Atlas → Connect → Drivers):
-  ```
-  mongodb+srv://finly-api:<password>@<cluster>.mongodb.net/finly?retryWrites=true&w=majority&appName=finly-api
-  ```
-  → `.env` `MONGODB_URI`.
+    ```
+    mongodb+srv://finly-api:<password>@<cluster>.mongodb.net/finly?retryWrites=true&w=majority&appName=finly-api
+    ```
+    → `.env` `MONGODB_URI`.
 
 > **Backup:** Atlas M10+ робить continuous backup (24h restore window). У §08 playbook `mongodump` опціональний — можна вимкнути, якщо довіряєте провайдер-snapshot-ам.
 
-## 4. Payments provider — WayForPay
+## 4. Payments provider — monobank «Плата»
 
-Поточна runtime-реалізація платежів — WayForPay (`apps/api/src/modules/payments`). Stripe у прод-сценарії більше не використовується.
+Поточна runtime-реалізація платежів — monobank (`apps/api/src/modules/payments`). Розкладом списань керує наш billing-clock, провайдер лише проводить платіж.
 
-1. WayForPay merchant cabinet → отримати `merchantAccount`, `merchantSecretKey` і merchant domain.
-2. У WayForPay merchant domain має збігатися з `.env` `WAYFORPAY_MERCHANT_DOMAIN=finly.com.ua`.
-3. Webhook/service URL: `https://finly.com.ua/api/payments/webhook/wayforpay`.
-4. Return URL для користувача йде через web-origin `https://finly.com.ua/billing-return`.
-5. Для sandbox/staging можна лишити тестові merchant credentials; для live payments `BILLING_DEMO_MODE=false` і `NEXT_PUBLIC_BILLING_DEMO_MODE=false`.
+1. Кабінет merchant monobank → отримати X-Token (`MONOBANK_TOKEN`). Це єдиний секрет провайдера: ним автентифікуються checkout, списання за токеном і запит статусу.
+2. Webhook URL формується з `WEB_URL`: `https://finly.com.ua/api/payments/webhook/monobank`. Вебхуки верифікуються публічним ключем з `GET /api/merchant/pubkey`, окремого secret-у для підпису немає.
+3. Return URL для користувача — `https://finly.com.ua/billing-return`.
+4. Для sandbox/staging використовуйте тестовий токен з api.monobank.ua; демо-банер на сторінці тарифу вмикається у коді (`apps/web/src/shared/config/billing.ts`), не через `.env`.
 
 ## 5. Google OAuth (production credentials)
 
@@ -203,7 +205,7 @@ Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client ID
 - **Authorized JavaScript origins:** `https://finly.com.ua`
 - **Authorized redirect URIs:** `https://finly.com.ua/api/auth/google/callback`
 - Client ID + Client Secret → `.env` `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`
-- `.env` `GOOGLE_CALLBACK_URL` = `https://finly.com.ua/api/auth/google/callback`
+- Redirect URI = `WEB_URL` + `/api/auth/google/callback` (`https://finly.com.ua/api/auth/google/callback`) — окремої змінної немає, значення виводить API
 
 > Окремий OAuth client від dev — dev має `http://localhost:3000` redirect, ці URI не можна змішувати в одному credential.
 
@@ -221,13 +223,12 @@ Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client ID
 2. Bucket → Settings → **Public access** → enable. Скопіювати `R2.dev` URL.
 3. Опціонально (рекомендовано): Bucket → Custom Domains → Add → `media.finly.com.ua`. Це створює CNAME у Cloudflare DNS автоматично (звір з §1 — запис `media`).
 4. R2 → Manage API Tokens → Create:
-   - Permissions: **Object Read & Write**
-   - TTL: forever
-   - Bucket: `finly-media` only
-   - → `.env` `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ACCOUNT_ID` (Account ID — у R2 sidebar)
+    - Permissions: **Object Read & Write**
+    - TTL: forever
+    - Bucket: `finly-media` only
+    - → `.env` `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ACCOUNT_ID` (Account ID — у R2 sidebar)
 5. `.env` `R2_BUCKET_NAME=finly-media`
-6. `.env` `R2_PUBLIC_URL=https://media.finly.com.ua` (custom domain) — **hostname МУСИТЬ збігатися** з `NEXT_PUBLIC_STORAGE_HOSTNAME`, інакше `next/image` блокує фото (`next.config.ts` fail-fast).
-7. `.env` `NEXT_PUBLIC_STORAGE_HOSTNAME=media.finly.com.ua`
+6. `.env` `R2_PUBLIC_URL=https://media.finly.com.ua` (custom domain) — цей же хост web бере для `next/image` `remotePatterns` (`next.config.ts`), окремої змінної під нього немає.
 
 > Окремий R2 bucket для backups — `finly-backups`, окремий API token, scoped до нього (див. §08 playbook).
 
@@ -254,12 +255,12 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 Repo → Settings → Secrets and variables → Actions → New repository secret:
 
-| Secret | Значення |
-|---|---|
-| `VPS_HOST` | `<IPV4>` (або DNS-name, якщо налаштовано) |
-| `VPS_USER` | `ubuntu` (deploy-user з §02) |
-| `VPS_SSH_KEY` | private SSH key цього юзера (формат: повний `-----BEGIN OPENSSH PRIVATE KEY-----...`). Згенерувати окрему пару `id_ed25519_finly_deploy` на ноутбуці, public-частину додати у `~/.ssh/authorized_keys` ubuntu-юзера на VPS. |
-| `VPS_DEPLOY_PATH` | `/opt/finly` |
+| Secret            | Значення                                                                                                                                                                                                                    |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `VPS_HOST`        | `<IPV4>` (або DNS-name, якщо налаштовано)                                                                                                                                                                                   |
+| `VPS_USER`        | `ubuntu` (deploy-user з §02)                                                                                                                                                                                                |
+| `VPS_SSH_KEY`     | private SSH key цього юзера (формат: повний `-----BEGIN OPENSSH PRIVATE KEY-----...`). Згенерувати окрему пару `id_ed25519_finly_deploy` на ноутбуці, public-частину додати у `~/.ssh/authorized_keys` ubuntu-юзера на VPS. |
+| `VPS_DEPLOY_PATH` | `/opt/finly`                                                                                                                                                                                                                |
 
 > `deploy.yml` workflow тригериться на `workflow_run` після CI на `main` — щойно секрети додані, наступний merge у `main` запустить SSH-deploy.
 
@@ -270,7 +271,6 @@ Repo → Settings → Secrets and variables → Actions → New repository secre
 ```env
 # ─── Runtime ───
 NODE_ENV=production
-PORT=4000
 WEB_PORT=3000
 API_PORT=4000
 
@@ -285,53 +285,22 @@ JWT_REFRESH_SECRET=<32-byte hex з §9>
 
 GOOGLE_CLIENT_ID=<з §5>.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=<з §5>
-GOOGLE_CALLBACK_URL=https://finly.com.ua/api/auth/google/callback
 
 RESEND_API_KEY=<з §6>
 RESEND_FROM_EMAIL=Finly <no-reply@finly.com.ua>
 
-WAYFORPAY_MERCHANT_ACCOUNT=<з §4>
-WAYFORPAY_MERCHANT_SECRET_KEY=<з §4>
-WAYFORPAY_MERCHANT_DOMAIN=finly.com.ua
-PAYMENTS_SUBSCRIPTION_ENABLED=true
-PAYMENTS_ONE_OFF_ENABLED=true
-BILLING_DEMO_MODE=false
+MONOBANK_TOKEN=<з §4>
 
 ANTHROPIC_API_KEY=sk-ant-<з §8>
-HELP_CHAT_MAX_TOKENS=800
-HELP_CHAT_IP_LIMIT=20
-HELP_CHAT_DAILY_BUDGET=1000
-
-AUTH_PASSWORD_MIN_LENGTH=8
-AUTH_LOCKOUT_THRESHOLDS=5:1,10:5,20:15
-AUTH_LOGIN_ATTEMPTS_TTL_MIN=15
-AUTH_MAGIC_LINK_TTL_MIN=15
-AUTH_MAGIC_LINK_RATE_LIMIT=3
-AUTH_MAGIC_LINK_RATE_WINDOW_MIN=15
-AUTH_MAGIC_LINK_DEDUP_SEC=60
-ACCOUNT_DELETION_GRACE_DAYS=30
-
-ORPHAN_REMINDER_FIRST_DAYS=1
-ORPHAN_REMINDER_FINAL_DAYS=6
-ORPHAN_CLEANUP_DELETION_DAYS=7
 
 R2_ACCOUNT_ID=<з §7>
 R2_ACCESS_KEY_ID=<з §7>
 R2_SECRET_ACCESS_KEY=<з §7>
 R2_BUCKET_NAME=finly-media
 R2_PUBLIC_URL=https://media.finly.com.ua
-BRAND_PENDING_CLEANUP_DAYS=30
-BRAND_DEMOTED_CLEANUP_DAYS=90
 
 # ─── Frontend (build args + runtime) ───
 API_INTERNAL_URL=http://api:4000
-NEXT_PUBLIC_BASE_URL=https://finly.com.ua
-NEXT_PUBLIC_API_URL=/api
-NEXT_PUBLIC_PAY_PUBLIC_URL=https://pay.finly.com.ua
-NEXT_PUBLIC_PAYMENTS_SUBSCRIPTION_ENABLED=true
-NEXT_PUBLIC_PAYMENTS_ONE_OFF_ENABLED=true
-NEXT_PUBLIC_BILLING_DEMO_MODE=false
-NEXT_PUBLIC_STORAGE_HOSTNAME=media.finly.com.ua
 ```
 
 `chmod 600 .env`, owner = `<USER>:<USER>`.
@@ -354,6 +323,6 @@ NEXT_PUBLIC_STORAGE_HOSTNAME=media.finly.com.ua
 - [ ] R2 avatar upload — кабінет → Profile → upload .jpg → перевірити `media.finly.com.ua/avatars/...` 200.
 - [ ] `docker compose ps` — усі контейнери `Up`. Healthcheck-блоків у `docker-compose.yml` немає (deploy перевіряє через `curl` у `deploy.yml`), але всі три сервіси мають бути в стані `running`, не `restarting`.
 - [ ] `journalctl -u caddy -n 50` — без `400/502` репорту.
-- [ ] **Payments**: WayForPay checkout/webhook перевіряються окремо від базового SEO/host smoke-test.
+- [ ] **Payments**: monobank checkout/webhook перевіряються окремо від базового SEO/host smoke-test.
 
 Якщо все зелене — рухайся до `99-runbook.md` як reference для incident-response. Інакше — кожна failure-row має конкретний log location у §99.

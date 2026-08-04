@@ -55,7 +55,7 @@ describe('CreateAccountSchema', () => {
     it('rejects emoji у name (NBU charset)', () => {
         const r = CreateAccountSchema.safeParse({
             iban: VALID_IBAN,
-            name: '☕ Кав\'ярня',
+            name: "☕ Кав'ярня",
         });
         expect(r.success).toBe(false);
     });

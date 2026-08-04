@@ -3,14 +3,13 @@ import { getModelToken } from '@nestjs/mongoose';
 
 import { AuthService } from '../auth/auth.service';
 import { EmailService } from '../email/email.service';
+import { PayersService } from '../payers/payers.service';
 import { BillingProfile } from '../payments/schemas/billing-profile.schema';
 import { CleanupService } from './cleanup.service';
 import { User } from './schemas/user.schema';
 
-jest.mock('../../config/env', () => ({
-    ENV: {
-        ACCOUNT_DELETION_GRACE_DAYS: 2,
-    },
+jest.mock('../../config/cleanup.config', () => ({
+    ACCOUNT_DELETION_GRACE_DAYS: 2,
 }));
 
 const mockModel = {
@@ -61,6 +60,10 @@ function timezoneWithLocalHour(targetHour: number): string {
     return `Etc/GMT${sign}${etcOffset}`;
 }
 
+const mockPayersService = {
+    deleteAllForUser: jest.fn().mockResolvedValue(0),
+};
+
 describe('CleanupService', () => {
     let service: CleanupService;
 
@@ -75,6 +78,7 @@ describe('CleanupService', () => {
                 },
                 { provide: AuthService, useValue: mockAuthService },
                 { provide: EmailService, useValue: mockEmailService },
+                { provide: PayersService, useValue: mockPayersService },
             ],
         }).compile();
 

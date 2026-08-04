@@ -2,15 +2,15 @@ import { BillingCatalogSchema, type BillingCatalog } from '@finly/types';
 
 /**
  * Server-side fetch каталогу для structured-data offers на лендінгу (Server
- * Component). Реальні ціни живуть тільки на API (накладаються з ENV), тож
+ * Component). Реальні ціни живуть тільки на API (тарифна сітка у `billing.config.ts`), тож
  * розмітка бере їх з того ж публічного ендпоінта, що й сторінка тарифів, —
  * одне джерело правди, ціна в offers завжди збігається з тарифами.
  *
- * `API_INTERNAL_URL` (не `NEXT_PUBLIC_API_URL`): server-side у docker-compose
+ * `API_INTERNAL_URL` (не браузерний `API_BASE_URL`): server-side у docker-compose
  * рендер ходить на internal-host напряму, без Next.js `/api` proxy hop —
  * той самий патерн, що `loadPublicView`.
  *
- * `revalidate` (не `no-store`): ціни майже статичні (env-driven, змінюються лише
+ * `revalidate` (не `no-store`): ціни майже статичні (змінюються лише
  * на деплой), тож лендінг лишається ISR-кешованим замість повного SSR щоразу.
  *
  * Повертає `null` замість throw при будь-якому збої (включно з невиставленим

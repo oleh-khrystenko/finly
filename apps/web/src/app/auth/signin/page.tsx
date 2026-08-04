@@ -21,7 +21,7 @@ import UiInput from '@/shared/ui/UiInput';
 import UiPasswordInput from '@/shared/ui/UiPasswordInput';
 import UiSpinner from '@/shared/ui/UiSpinner';
 import { GoogleIcon } from '@/shared/icons';
-import { ENV } from '@/shared/config';
+import { API_BASE_URL } from '@/shared/config';
 import {
     checkEmail,
     loginWithPassword,
@@ -30,12 +30,13 @@ import {
     getMe,
     getApiMessage,
 } from '@/shared/api';
+import { getZodFieldError, INTL_LOCALE } from '@/shared/lib';
 import {
+    isValidRedirect,
     saveRedirect,
     consumeRedirect,
-    getZodFieldError,
-    INTL_LOCALE,
-} from '@/shared/lib';
+    navigateToReturnTarget,
+} from '@/shared/lib/redirect';
 import { useAuthStore } from '@/entities/user';
 import {
     awaitLandingDraftHydration,
@@ -89,11 +90,21 @@ function SigninContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const redirect = searchParams.get('redirect');
+    /**
+     * Адреса повернення після входу — прокидається у КОЖЕН magic-link-виклик,
+     * що завершується входом, а не лише у перший. Лист відкривають з поштової
+     * скриньки (часто на іншому пристрої), тож збережений тут `saveRedirect`
+     * там недосяжний: повернення живе виключно всередині самого посилання.
+     * Пропущене значення на повторній відправці означало б, що людина, яка
+     * прийшла зі сторінки оплати, після входу опиняється у кабінеті.
+     */
+    const returnTo = redirect ?? undefined;
     const initialEmail = searchParams.get('email');
     const initialStep = searchParams.get('step');
     const startWithPassword = !!(initialEmail && initialStep === 'password');
 
     const setUser = useAuthStore((s) => s.setUser);
+    const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
     const emailForm = useForm<EmailFormValues>({
         resolver: zodResolver(EmailFormSchema),
@@ -123,10 +134,40 @@ function SigninContent() {
     const [termsError, setTermsError] = useState('');
     const lastPurposeRef = useRef<MagicLinkPurpose>('login');
     const timerRef = useRef<ReturnType<typeof setInterval>>(null);
+    /**
+     * Sprint 30 — «повернути мовчки, бо сесія вже є» дозволено лише доти, доки
+     * людина не почала входити тут і зараз. Після першої дії з формою рішення
+     * про перехід ухвалює сам обробник входу, інакше на одну подію було б два
+     * переходи.
+     */
+    const allowSessionResume = useRef(true);
 
     useEffect(() => {
         if (redirect) saveRedirect(redirect);
     }, [redirect]);
+
+    /**
+     * Sprint 30 — повернення на pay-хост, коли сесія вже була. Проміжний шар
+     * (`proxy.ts`) свідомо не робить цього сам: там відомо лише те, що cookie з
+     * таким іменем існує. Для cookie старого зразка (host-only на кабінеті) це
+     * означало б повернення на публічну сторінку, де людина й далі анонім, —
+     * цикл без виходу і без жодної можливості побачити форму входу.
+     *
+     * Тут же сесія вже підтверджена: `AuthInitializer` оновив її і завантажив
+     * профіль. Невдале підтвердження лишає людину на цій сторінці з формою, а
+     * cookie обох зразків до того моменту вже погашено сервером.
+     */
+    useEffect(() => {
+        if (!allowSessionResume.current) return;
+        if (!isAuthenticated || !returnTo) return;
+        // Свій шлях сюди не доходить: його повертає `proxy.ts` ще до рендеру.
+        if (returnTo.startsWith('/') || !isValidRedirect(returnTo)) return;
+        allowSessionResume.current = false;
+        // Ціль саме споживаємо, а не лише читаємо з адреси: `saveRedirect` вище
+        // вже поклав її у сховище вкладки, і незібране значення вистрелило б на
+        // наступному вході, якого про повернення ніхто не просив.
+        navigateToReturnTarget(router, consumeRedirect(returnTo), 'replace');
+    }, [isAuthenticated, returnTo, router]);
 
     const startResendTimer = useCallback(() => {
         setResendCountdown(60);
@@ -168,11 +209,9 @@ function SigninContent() {
                 purposeForResend === 'reset-password'
                     ? {}
                     : resolveLandingClaimPayload();
-            await sendMagicLink(email, purposeForResend, undefined, {
+            await sendMagicLink(email, purposeForResend, returnTo, {
                 ...claimPayload,
-                termsVersion: agreedToTerms
-                    ? CURRENT_TERMS_VERSION
-                    : undefined,
+                termsVersion: agreedToTerms ? CURRENT_TERMS_VERSION : undefined,
             });
             startResendTimer();
         } catch {
@@ -210,16 +249,18 @@ function SigninContent() {
     };
 
     const handleGoogleSignin = () => {
+        allowSessionResume.current = false;
         if (!agreedToTerms) {
             setTermsError(
                 'Для продовження прийміть Умови використання та Політику конфіденційності'
             );
             return;
         }
-        window.location.href = `${ENV.NEXT_PUBLIC_API_URL}/auth/google`;
+        window.location.href = `${API_BASE_URL}/auth/google`;
     };
 
     const onEmailSubmit = async (data: EmailFormValues) => {
+        allowSessionResume.current = false;
         if (!agreedToTerms) {
             setTermsError(
                 'Для продовження прийміть Умови використання та Політику конфіденційності'
@@ -240,17 +281,12 @@ function SigninContent() {
                 lastPurposeRef.current = purpose;
                 // Sprint 10 §10.2 — submit-side hydration-gate.
                 await awaitLandingDraftHydration();
-                await sendMagicLink(
-                    data.email,
-                    purpose,
-                    redirect ?? undefined,
-                    {
-                        ...resolveLandingClaimPayload(),
-                        termsVersion: agreedToTerms
-                            ? CURRENT_TERMS_VERSION
-                            : undefined,
-                    }
-                );
+                await sendMagicLink(data.email, purpose, returnTo, {
+                    ...resolveLandingClaimPayload(),
+                    termsVersion: agreedToTerms
+                        ? CURRENT_TERMS_VERSION
+                        : undefined,
+                });
                 startResendTimer();
                 setState('magic-link-sent');
             }
@@ -261,6 +297,7 @@ function SigninContent() {
     };
 
     const onPasswordSubmit = async (data: PasswordFormValues) => {
+        allowSessionResume.current = false;
         passwordForm.clearErrors('root');
         setShowMagicLinkSuggestion(false);
 
@@ -288,7 +325,7 @@ function SigninContent() {
             } else {
                 const me = await getMe();
                 setUser(me);
-                router.push(consumeRedirect('/business'));
+                navigateToReturnTarget(router, consumeRedirect('/business'));
             }
         } catch (err) {
             const code =
@@ -331,9 +368,7 @@ function SigninContent() {
             // anon-claim; landingDraft + claimIdempotencyKey НЕ прокидаємо.
             // termsVersion прокидаємо, якщо user уже погодився на email-step.
             await sendMagicLink(email, 'reset-password', undefined, {
-                termsVersion: agreedToTerms
-                    ? CURRENT_TERMS_VERSION
-                    : undefined,
+                termsVersion: agreedToTerms ? CURRENT_TERMS_VERSION : undefined,
             });
             toast.success(sentMessage);
             startResendTimer();
@@ -354,7 +389,7 @@ function SigninContent() {
             toast.success('Акаунт відновлено!');
             const me = await getMe();
             setUser(me);
-            router.push(consumeRedirect('/business'));
+            navigateToReturnTarget(router, consumeRedirect('/business'));
         } catch (err) {
             setSubmitting(false);
             handleError(err);
@@ -368,11 +403,9 @@ function SigninContent() {
             lastPurposeRef.current = 'login';
             // Sprint 10 §10.2 — submit-side hydration-gate.
             await awaitLandingDraftHydration();
-            await sendMagicLink(email, 'login', undefined, {
+            await sendMagicLink(email, 'login', returnTo, {
                 ...resolveLandingClaimPayload(),
-                termsVersion: agreedToTerms
-                    ? CURRENT_TERMS_VERSION
-                    : undefined,
+                termsVersion: agreedToTerms ? CURRENT_TERMS_VERSION : undefined,
             });
             startResendTimer();
             setState('magic-link-sent');
@@ -492,24 +525,23 @@ function SigninContent() {
             onSubmit={passwordForm.handleSubmit(onPasswordSubmit)}
             className="space-y-4"
         >
-            <div className="relative">
-                <UiInput
-                    type="email"
-                    value={email}
-                    readOnly
-                    IconLeft={<Mail />}
-                    size="lg"
-                    className="pr-20"
-                />
-                <UiButton
-                    variant="text"
-                    size="sm"
-                    onClick={goBackToEmail}
-                    className="text-primary absolute top-1/2 right-3 -translate-y-1/2 text-sm font-medium hover:underline"
-                >
-                    Змінити
-                </UiButton>
-            </div>
+            <UiInput
+                type="email"
+                value={email}
+                readOnly
+                IconLeft={<Mail />}
+                size="lg"
+                IconRight={
+                    <UiButton
+                        variant="text"
+                        size="sm"
+                        onClick={goBackToEmail}
+                        className="text-primary text-sm font-medium hover:underline"
+                    >
+                        Змінити
+                    </UiButton>
+                }
+            />
 
             <UiPasswordInput
                 {...passwordForm.register('password', {

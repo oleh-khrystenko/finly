@@ -36,13 +36,15 @@ export default function UiBreadcrumb({ items, className }: UiBreadcrumbProps) {
                                     variant="muted"
                                     // py-3/-my-3 — tap-зона 44px (responsive.md
                                     // #2) без росту візуальної висоти крихт.
-                                    className="block max-w-[9rem] truncate py-3 -my-3 sm:max-w-[16rem]"
+                                    className="-my-3 block max-w-[9rem] truncate py-3 sm:max-w-[16rem]"
                                 >
                                     {item.label}
                                 </UiLink>
                             ) : (
                                 <span
-                                    aria-current={isCurrent ? 'page' : undefined}
+                                    aria-current={
+                                        isCurrent ? 'page' : undefined
+                                    }
                                     className="text-foreground truncate py-0.5 font-medium"
                                 >
                                     {item.label}

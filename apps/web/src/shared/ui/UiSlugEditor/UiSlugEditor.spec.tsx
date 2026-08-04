@@ -43,7 +43,7 @@ async function openEditAndType(value: string) {
 }
 
 describe('UiSlugEditor (Sprint 20 — slug upsell flow)', () => {
-    it('free: Save кладе ім\'я на холд і відкриває inline-апсел замість запису', async () => {
+    it("free: Save кладе ім'я на холд і відкриває inline-апсел замість запису", async () => {
         const props = { ...baseProps(), isPaid: false };
         render(<UiSlugEditor {...props} />);
 
@@ -75,7 +75,7 @@ describe('UiSlugEditor (Sprint 20 — slug upsell flow)', () => {
         expect(props.reserve).not.toHaveBeenCalled();
     });
 
-    it('зайняте ім\'я не бронюється і не пишеться', async () => {
+    it("зайняте ім'я не бронюється і не пишеться", async () => {
         const props = {
             ...baseProps(),
             isPaid: false,
@@ -200,19 +200,19 @@ describe('UiSlugEditor (Sprint 20 — slug upsell flow)', () => {
         render(<UiSlugEditor {...props} />);
 
         const input = await openEditAndType('ів');
-        expect(await screen.findByText('Невалідний формат')).toBeInTheDocument();
+        expect(
+            await screen.findByText('Невалідний формат')
+        ).toBeInTheDocument();
 
         fireEvent.change(input, { target: { value: 'acme' } });
         expect(await screen.findByText('Адреса вільна')).toBeInTheDocument();
-        expect(
-            screen.queryByText('Невалідний формат')
-        ).not.toBeInTheDocument();
+        expect(screen.queryByText('Невалідний формат')).not.toBeInTheDocument();
         expect(
             screen.getByRole('button', { name: 'Зберегти' })
         ).not.toBeDisabled();
     });
 
-    it('зайняте ім\'я: live-статус блокує Save до кліку', async () => {
+    it("зайняте ім'я: live-статус блокує Save до кліку", async () => {
         const props = {
             ...baseProps(),
             isPaid: true,

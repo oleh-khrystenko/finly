@@ -6,8 +6,8 @@ export const CCY_UAH = 980;
 
 /**
  * monobank приймає/повертає суму у мінорних одиницях (копійки) — збігається з
- * нашим доменним інваріантом, тож конверсії немає (на відміну від WayForPay
- * decimal). Хелпери лишаються точкою істини на випадок зміни.
+ * нашим доменним інваріантом, тож конверсії немає. Хелпери лишаються точкою
+ * істини на випадок провайдера з decimal-сумами.
  */
 export function currencyToCcy(currency: string): number {
     if (currency === BILLING_CURRENCY) return CCY_UAH;

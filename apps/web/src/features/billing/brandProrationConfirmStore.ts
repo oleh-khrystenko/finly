@@ -24,8 +24,8 @@ interface BrandProrationConfirmState {
     close: () => void;
 }
 
-export const useBrandProrationConfirmStore =
-    create<BrandProrationConfirmState>((set) => ({
+export const useBrandProrationConfirmStore = create<BrandProrationConfirmState>(
+    (set) => ({
         isOpen: false,
         businessId: null,
         newCapacity: 0,
@@ -35,4 +35,5 @@ export const useBrandProrationConfirmStore =
         onDone: null,
         open: (payload) => set({ isOpen: true, ...payload }),
         close: () => set({ isOpen: false }),
-    }));
+    })
+);

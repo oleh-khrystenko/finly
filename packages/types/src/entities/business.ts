@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { businessBrandSchema } from './brand';
 import { MVP_BANKS } from '../constants/banks';
 import { BUSINESS_TYPES, requiresTaxation } from '../enums/business-type';
+import { CATALOG_CATEGORIES } from '../enums/catalog-category';
+import { PUBLICITY_STATUSES } from '../enums/publicity-status';
 import {
     TAXATION_SYSTEMS,
     isTaxationAllowedForType,
@@ -12,6 +14,11 @@ import { isWithinNbuCharset } from '../qr/charset';
 import { effectiveLimit, isWithinByteLimit } from '../qr/limits';
 import { objectIdSchema } from '../validation/common';
 import { isTaxIdValidForType, payerTaxIdZod } from '../validation/tax-id';
+import {
+    containsPurposeMarker,
+    findUnknownPurposeMarkers,
+    hasUnmatchedPurposeBraces,
+} from './purpose-markers';
 
 /**
  * Бізнес — юр-особа з унікальною публічною сторінкою (`pay.finly.com.ua/{slug}`).
@@ -129,6 +136,40 @@ export const businessPaymentPurposeTemplateSchema = z
     })
     .refine(isWithinNbuCharset, { message: 'INVALID_PURPOSE_CHARSET' });
 
+/**
+ * Sprint 29 — призначення платежу звичайного платника. Той самий base, плюс
+ * заборона маркерів підстановки (`{taxId}` тощо): вони існують лише у системних
+ * отримувачів, інакше публічна сторінка звичайного платника рендерила б
+ * несподівану форму підстановки. Дужки як literal-текст лишаються дозволені —
+ * блокуються тільки ВІДОМІ маркери.
+ */
+export const regularPaymentPurposeTemplateSchema =
+    businessPaymentPurposeTemplateSchema.refine(
+        (v) => !containsPurposeMarker(v),
+        { message: 'PURPOSE_MARKERS_NOT_ALLOWED' }
+    );
+
+/**
+ * Sprint 29 — призначення платежу системного отримувача. Дозволяє маркери
+ * підстановки зі словника (`{taxId}`, `{fullName}`, `{period}`); невідомий
+ * токен `{word}` reject-иться, щоб адмін не лишив «мертвий» маркер, який форма
+ * підстановки не заповнить.
+ *
+ * Окремий refine на незбалансовані дужки: незакритий/вкладений токен
+ * (`ЄСВ {taxId за {period}`) `MARKER_TOKEN_PATTERN` не матчить узагалі, тож
+ * unknown-перевірка його не бачить — без цього refine одрукована дужка
+ * проходила б валідацію, форма рендерила б не всі поля, і літеральний
+ * `{taxId за ` їхав у призначення податкового платежу.
+ */
+export const systemPaymentPurposeTemplateSchema =
+    businessPaymentPurposeTemplateSchema
+        .refine((v) => !hasUnmatchedPurposeBraces(v), {
+            message: 'PURPOSE_MARKER_UNBALANCED',
+        })
+        .refine((v) => findUnknownPurposeMarkers(v).length === 0, {
+            message: 'PURPOSE_MARKER_UNKNOWN',
+        });
+
 export const BusinessSchema = z
     .object({
         id: objectIdSchema,
@@ -137,6 +178,12 @@ export const BusinessSchema = z
         managers: z.array(objectIdSchema),
         slug: businessSlugSchema,
         slugLower: businessSlugLowerSchema,
+        /**
+         * Чи slug вручну кастомізований (красивий). Внутрішній прапор, але
+         * кабінет його читає: допуск у каталог (Sprint 29) вимагає красивого
+         * slug. `.default(false)` страхує read через aggregation і legacy-документи.
+         */
+        slugCustomized: z.boolean().default(false),
         name: businessNameSchema,
         /**
          * Sprint 10 §SP-11 — anti-duplicate-Business token для anon-claim-flow.
@@ -173,6 +220,38 @@ export const BusinessSchema = z
         isVatPayer: z.boolean().nullable(),
         paymentPurposeTemplate: businessPaymentPurposeTemplateSchema,
         seoIndexEnabled: z.boolean(),
+        /**
+         * Sprint 29 — системний отримувач, створений адміном (податкова, фонди).
+         * `true` ⇒ `ownerId === null` і `managers === []` (нічий, керується лише
+         * адмінкою; enforced refine-ом `SYSTEM_PAYEE_MUST_BE_OWNERLESS` нижче),
+         * маркери підстановки у `paymentPurposeTemplate` дозволені,
+         * запис поза claim-flow / бухгалтерськими вибірками / orphan-cleanup.
+         * `.default(false)` страхує read через aggregation (яка не застосовує
+         * Mongoose-дефолти) і документи, створені до Sprint 29.
+         */
+        isSystem: z.boolean().default(false),
+        /**
+         * Sprint 29 — чи отримувач видимий у публічному каталозі. Гранулярність:
+         * власний прапор також на кожних реквізитах (`Account.catalogVisible`);
+         * глибше не йде, бо документ це персональний виставлений рахунок і у
+         * каталозі не показується. Дефолт прихований; допуск у каталог додатково
+         * вимагає схваленого запиту і красивого slug (`canEnterCatalog`).
+         */
+        catalogVisible: z.boolean().default(false),
+        /**
+         * Sprint 29 — стан запиту на публічність. Звичайний бізнес потрапляє у
+         * каталог лише через `approved`; системний — без запиту. `.default('none')`
+         * страхує read через aggregation і документи до Sprint 29.
+         */
+        publicityStatus: z.enum(PUBLICITY_STATUSES).default('none'),
+        publicityRequestedAt: z.coerce.date().nullable().default(null),
+        publicityReviewedAt: z.coerce.date().nullable().default(null),
+        publicityRejectionReason: z.string().nullable().default(null),
+        /**
+         * Sprint 29 — категорія-секція у публічному каталозі. Призначає адмін;
+         * дефолт `business`. `.default` страхує read через aggregation і legacy.
+         */
+        catalogCategory: z.enum(CATALOG_CATEGORIES).default('business'),
         deletedAt: z.coerce.date().nullable(),
         /**
          * Sprint 27 — денормалізований прапор «бізнес у активному Бренд-складі».
@@ -193,10 +272,61 @@ export const BusinessSchema = z
         createdAt: z.coerce.date(),
         updatedAt: z.coerce.date(),
     })
-    .refine((b) => b.ownerId !== null || b.managers.length >= 1, {
-        message: 'OWNERLESS_BUSINESS_REQUIRES_MANAGER',
-        path: ['managers'],
-    })
+    .refine(
+        // Sprint 29 — системний отримувач легітимно нічий і без керівників
+        // (керується лише адмінкою). Для звичайних бізнесів інваріант чинний:
+        // ownerless без керівника — недосяжний стан БД.
+        (b) => b.isSystem || b.ownerId !== null || b.managers.length >= 1,
+        {
+            message: 'OWNERLESS_BUSINESS_REQUIRES_MANAGER',
+            path: ['managers'],
+        }
+    )
+    .refine(
+        // Sprint 29 — зворотний бік інваріанта вище: системний отримувач нічий
+        // (керується лише адмінкою). Документ з `isSystem: true` і власником або
+        // керівниками — corrupt state з подвійною поверхнею доступу (одночасно
+        // «свій» у кабінеті власника і редагований адмін-роутами поза
+        // ownership-перевірками).
+        (b) => !b.isSystem || (b.ownerId === null && b.managers.length === 0),
+        {
+            message: 'SYSTEM_PAYEE_MUST_BE_OWNERLESS',
+            path: ['isSystem'],
+        }
+    )
+    .refine(
+        // Sprint 29 — маркери підстановки у призначенні дозволені лише системним
+        // отримувачам. Звичайний бізнес із маркером — невалідний stored state
+        // (його публічна сторінка не має форми підстановки).
+        (b) => b.isSystem || !containsPurposeMarker(b.paymentPurposeTemplate),
+        {
+            message: 'PURPOSE_MARKERS_NOT_ALLOWED',
+            path: ['paymentPurposeTemplate'],
+        }
+    )
+    .refine(
+        // Sprint 29 — зворотний бік маркер-інваріанта: у системного отримувача
+        // шаблон мусить бути валідним для форми підстановки і на read-side
+        // (дзеркало write-side `systemPaymentPurposeTemplateSchema`). Без цього
+        // corrupt-документ з незакритою дужкою проходив би entity-parse, форма
+        // рендерила б не всі поля, і літеральний уривок `{taxId за ` їхав у
+        // призначення реального податкового платежу.
+        (b) =>
+            !b.isSystem || !hasUnmatchedPurposeBraces(b.paymentPurposeTemplate),
+        {
+            message: 'PURPOSE_MARKER_UNBALANCED',
+            path: ['paymentPurposeTemplate'],
+        }
+    )
+    .refine(
+        (b) =>
+            !b.isSystem ||
+            findUnknownPurposeMarkers(b.paymentPurposeTemplate).length === 0,
+        {
+            message: 'PURPOSE_MARKER_UNKNOWN',
+            path: ['paymentPurposeTemplate'],
+        }
+    )
     .refine((b) => b.slugLower === b.slug.toLowerCase(), {
         message: 'SLUG_LOWER_MISMATCH',
         path: ['slugLower'],

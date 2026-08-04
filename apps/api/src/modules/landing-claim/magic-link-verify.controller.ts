@@ -9,7 +9,10 @@ import { Response } from 'express';
 
 import { AuthService } from '../auth/auth.service';
 import { VerifyMagicLinkDto } from '../auth/dto/verify-magic-link.dto';
-import { REFRESH_COOKIE_OPTIONS } from '../auth/refresh-cookie.config';
+import {
+    clearRefreshCookie,
+    setRefreshCookie,
+} from '../auth/refresh-cookie.config';
 import { mapUserToProfileResponse } from '../users/user-profile.mapper';
 import { UsersService } from '../users/users.service';
 import { LandingClaimService } from './landing-claim.service';
@@ -40,7 +43,7 @@ export class MagicLinkVerifyController {
         const result = await this.authService.verifyMagicLink(dto.token);
 
         if (result.deleted) {
-            res.clearCookie('bid_refresh', { path: '/' });
+            clearRefreshCookie(res);
             return {
                 data: {
                     deleted: true,
@@ -71,7 +74,7 @@ export class MagicLinkVerifyController {
             );
         }
 
-        res.cookie('bid_refresh', tokens.refreshToken, REFRESH_COOKIE_OPTIONS);
+        setRefreshCookie(res, tokens.refreshToken);
 
         return {
             data: {

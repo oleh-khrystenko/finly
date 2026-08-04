@@ -107,6 +107,7 @@ You changed sshd config and your session is dead. **As long as you have the prov
 5. `sudo systemctl reload ssh`
 
 If the issue is "I removed my own pubkey":
+
 1. Console-login as your user.
 2. `vim ~/.ssh/authorized_keys` — paste your key back.
 3. `chmod 600 ~/.ssh/authorized_keys`
@@ -148,6 +149,7 @@ sudo dockerd --debug   # only as a last resort, in another terminal
 ```
 
 Common causes:
+
 - Corrupted `daemon.json` — `sudo python3 -c 'import json; json.load(open("/etc/docker/daemon.json"))'`. Fix syntax, restart.
 - Disk full — see section C.
 - Storage driver mismatch after a kernel/version skew — last-resort: stop docker, move `/var/lib/docker` aside, restart, restore.
@@ -163,6 +165,7 @@ sudo run-parts --test /etc/cron.daily   # not for /etc/cron.d, just sanity
 ```
 
 Common causes:
+
 - R2 credentials rotated and not updated in `/etc/restic/<PROJECT>.env`.
 - `/root/.restic-password` permission accidentally changed → can't read.
 - Mongo URI changed in `.env` and the script's parser broke.

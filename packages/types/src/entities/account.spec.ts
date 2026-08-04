@@ -144,7 +144,7 @@ describe('accountNameSchema', () => {
     });
 
     it('rejects name з emoji → INVALID_ACCOUNT_NAME_CHARSET (NBU charset)', () => {
-        const result = accountNameSchema.safeParse('☕ Кав\'ярня');
+        const result = accountNameSchema.safeParse("☕ Кав'ярня");
         expect(result.success).toBe(false);
         if (!result.success) {
             expect(
