@@ -31,7 +31,7 @@ import { CURRENT_TERMS_VERSION } from '@finly/types';
 jest.mock('../src/config/env', () => ({
     ENV: {
         NODE_ENV: 'test',
-        PORT: '4000',
+        API_PORT: '4000',
         WEB_URL: 'http://localhost:3000',
         MONGODB_URI: 'overridden-by-MongoMemoryServer',
         REDIS_URL: 'redis://mock',
@@ -39,7 +39,6 @@ jest.mock('../src/config/env', () => ({
         JWT_REFRESH_SECRET: 'e2e-test-refresh-secret-must-be-long-enough',
         GOOGLE_CLIENT_ID: 'test-id.apps.googleusercontent.com',
         GOOGLE_CLIENT_SECRET: 'GOCSPX-test-secret',
-        GOOGLE_CALLBACK_URL: 'http://localhost:4000/api/auth/google/callback',
         RESEND_API_KEY: 're_test_key',
         RESEND_FROM_EMAIL: 'Finly <test@test.com>',
         STRIPE_SECRET_KEY: 'sk_test_xxx',
