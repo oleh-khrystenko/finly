@@ -124,8 +124,8 @@ export function getKyivYearMonth(date: Date): {
  * Kyiv-локальні `{ year, month, day }` календарного дня instant-а. Той самий
  * `Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv' })`-патерн, що й решта
  * хелперів цього файлу — єдине джерело Kyiv-tz-семантики для дат у проєкті
- * (напр. WayForPay regular-дати `DD.MM.YYYY`, які норматив трактує як локальний
- * український час). `month` у людському range `[1, 12]`.
+ * (норматив трактує дати як локальний український час). `month` у людському
+ * range `[1, 12]`.
  */
 const KYIV_YMD_FORMATTER = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Europe/Kyiv',

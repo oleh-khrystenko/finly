@@ -36,13 +36,24 @@ export const getNonNegativeIntEnvVar = (name: string): number => {
     return Number(raw);
 };
 
-// Демо-режим білінгу. На проді з живими грошима МУСИТЬ бути false. Web-аналог:
-// NEXT_PUBLIC_BILLING_DEMO_MODE (показує демо-банер на сторінці тарифу).
-const billingDemoMode = getEnvVar('BILLING_DEMO_MODE') === 'true';
+function hostnameOf(rawUrl: string, name: string): string {
+    try {
+        return new URL(rawUrl).hostname;
+    } catch {
+        throw new Error(`❌ ${name} must be an absolute URL (got "${rawUrl}")`);
+    }
+}
+
+// Шлях OAuth-callback-у задає контролер (`GET /auth/google/callback` під
+// глобальним префіксом `/api`), тому окремою змінною він бути не може: у `.env`
+// це був просто `WEB_URL` + константа, яку легко розсинхронити.
+const GOOGLE_CALLBACK_PATH = '/api/auth/google/callback';
+
+const webUrl = getEnvVar('WEB_URL');
 
 export const ENV = {
     NODE_ENV: getEnvVar('NODE_ENV'),
-    PORT: getEnvVar('PORT'),
+    API_PORT: getEnvVar('API_PORT'),
     /**
      * Кількість довірених reverse-proxy перед API (Express `trust proxy`).
      * 0 — API дивиться у світ напряму: X-Forwarded-For ігнорується,
@@ -59,7 +70,7 @@ export const ENV = {
      * URL, email-template посилань на кабінет — усі шляхи, що ведуть
      * авторизованого ФОП назад у його кабінет.
      */
-    WEB_URL: getEnvVar('WEB_URL'),
+    WEB_URL: webUrl,
     /**
      * Public payment-page origin (`pay.finly.com.ua` prod, `localhost:3001`
      * dev — другий port-mapping того самого web-контейнера, `PAY_PORT`;
@@ -71,16 +82,16 @@ export const ENV = {
     PAY_PUBLIC_URL: getEnvVar('PAY_PUBLIC_URL'),
 
     /**
-     * Sprint 30 — батьківський домен сесійної cookie (`finly.com.ua` prod,
+     * Батьківський домен сесійної cookie — хост кабінету (`finly.com.ua` prod,
      * `localhost` dev). Кабінет і pay-хост живуть під ним, тож браузер шле
-     * `bid_refresh` на обидва: один вхід, один вихід. Значення БЕЗ схеми, порту
-     * і провідної крапки — це саме домен, не origin.
+     * `bid_refresh` на обидва: один вхід, один вихід.
      *
-     * Обов'язкова змінна без дефолту: мовчазний fallback (host-only cookie)
-     * означав би тихо зламану спільну сесію в проді — pay-хост просто не бачив
-     * би користувача, і жодна помилка про це не сказала б.
+     * Похідне від `WEB_URL`, а не окрема змінна: два незалежні значення
+     * розсинхронізувалися б мовчки (браузер просто відкидає `Set-Cookie`, і
+     * сесії немає ні на одному хості). Умову «pay-хост лежить під цим доменом»
+     * перевіряє fail-fast нижче.
      */
-    AUTH_COOKIE_DOMAIN: getEnvVar('AUTH_COOKIE_DOMAIN'),
+    AUTH_COOKIE_DOMAIN: hostnameOf(webUrl, 'WEB_URL'),
 
     /**
      * Sprint 28 — спільний секрет для internal on-demand revalidation web-у.
@@ -97,7 +108,7 @@ export const ENV = {
 
     GOOGLE_CLIENT_ID: getEnvVar('GOOGLE_CLIENT_ID'),
     GOOGLE_CLIENT_SECRET: getEnvVar('GOOGLE_CLIENT_SECRET'),
-    GOOGLE_CALLBACK_URL: getEnvVar('GOOGLE_CALLBACK_URL'),
+    GOOGLE_CALLBACK_URL: `${webUrl.replace(/\/$/, '')}${GOOGLE_CALLBACK_PATH}`,
 
     RESEND_API_KEY: getEnvVar('RESEND_API_KEY'),
     RESEND_FROM_EMAIL: getEnvVar('RESEND_FROM_EMAIL'),
@@ -107,8 +118,6 @@ export const ENV = {
     // checkout, списання за токеном і запит статусу автентифікуються ним;
     // вебхуки верифікуються публічним ключем з GET /api/merchant/pubkey.
     MONOBANK_TOKEN: getEnvVar('MONOBANK_TOKEN'),
-
-    BILLING_DEMO_MODE: billingDemoMode,
 
     // Google Search Console (органічні кліки на гайди). Сервіс-акаунт: email +
     // приватний ключ PEM (у .env одним рядком з екранованими `\n` — розгортаємо
@@ -121,8 +130,8 @@ export const ENV = {
     ANTHROPIC_API_KEY: getEnvVar('ANTHROPIC_API_KEY'),
 
     // Cloudflare R2 — media storage (presigned uploads, Google avatar re-upload).
-    // R2_PUBLIC_URL hostname MUST match NEXT_PUBLIC_STORAGE_HOSTNAME on the web
-    // side — otherwise next/image rejects uploaded photos at runtime.
+    // Хост цього URL web бере собі для `next/image` remotePatterns напряму
+    // (`next.config.ts`), тож окремої змінної під нього не існує.
     R2_ACCOUNT_ID: getEnvVar('R2_ACCOUNT_ID'),
     R2_ACCESS_KEY_ID: getEnvVar('R2_ACCESS_KEY_ID'),
     R2_SECRET_ACCESS_KEY: getEnvVar('R2_SECRET_ACCESS_KEY'),
@@ -130,52 +139,36 @@ export const ENV = {
     R2_PUBLIC_URL: getEnvVar('R2_PUBLIC_URL'),
 };
 
-// Sprint 30 — спільна сесія двох хостів тримається на одному інваріанті: кожен
-// хост, що ставить або читає сесійну cookie, мусить лежати під її доменом. Якщо
-// це не так (класика: dev-кабінет лишився на `localhost`, а домен cookie вже
-// `finly.local`), браузер мовчки відкидає `Set-Cookie` — вхід ніби проходить,
-// але сесії немає ні на одному хості, і жодної помилки в логах. Тому
-// перевіряємо на старті.
-//
-// Google-callback тут нарівні з хостами застосунку і саме тому, що він єдиний з
-// них СТАВИТЬ cookie напряму з браузера: решта викликів API йдуть через rewrite
-// web-контейнера, тобто з origin-у, вже перевіреного нижче. Callback поза
-// доменом cookie давав би тихо зламаний вхід через Google при цілком робочому
-// вході паролем — найдорожчий різновид збою, бо жодна помилка про нього не
-// скаже.
-export function validateAuthCookieDomain(
+// Спільна сесія двох хостів тримається на одному інваріанті: хост, що читає
+// сесійну cookie, мусить лежати під її доменом. Домен беремо з кабінету, тож
+// кабінет і Google-callback під ним за побудовою — перевіряти лишається
+// pay-хост. Якщо він виїде з-під домену (наприклад, кабінет переїде на
+// піддомен), браузер мовчки відкидатиме `Set-Cookie` на pay-зоні: вхід ніби
+// проходить, а сесії там немає, і жодної помилки в логах. Тому — на старті.
+export function assertHostUnderCookieDomain(
     cookieDomain: string,
-    origins: Record<string, string>
+    name: string,
+    origin: string
 ): void {
-    if (cookieDomain.startsWith('.') || cookieDomain.includes('/')) {
+    let hostname: string;
+    try {
+        hostname = new URL(origin).hostname;
+    } catch {
         throw new Error(
-            `❌ AUTH_COOKIE_DOMAIN must be a bare domain without scheme, port or leading dot (got "${cookieDomain}").`
+            `❌ ${name} must be an absolute URL (got "${origin}").`
         );
     }
-    for (const [name, origin] of Object.entries(origins)) {
-        let hostname: string;
-        try {
-            hostname = new URL(origin).hostname;
-        } catch {
-            throw new Error(
-                `❌ ${name} must be an absolute URL (got "${origin}").`
-            );
-        }
-        if (
-            hostname !== cookieDomain &&
-            !hostname.endsWith(`.${cookieDomain}`)
-        ) {
-            throw new Error(
-                `❌ ${name} host "${hostname}" is not under AUTH_COOKIE_DOMAIN ` +
-                    `"${cookieDomain}". The browser would silently drop the session cookie, ` +
-                    'leaving both hosts logged out.'
-            );
-        }
+    if (hostname !== cookieDomain && !hostname.endsWith(`.${cookieDomain}`)) {
+        throw new Error(
+            `❌ ${name} host "${hostname}" is not under the session cookie domain ` +
+                `"${cookieDomain}" (derived from WEB_URL). The browser would silently ` +
+                'drop the session cookie, leaving that host logged out.'
+        );
     }
 }
 
-validateAuthCookieDomain(ENV.AUTH_COOKIE_DOMAIN, {
-    WEB_URL: ENV.WEB_URL,
-    PAY_PUBLIC_URL: ENV.PAY_PUBLIC_URL,
-    GOOGLE_CALLBACK_URL: ENV.GOOGLE_CALLBACK_URL,
-});
+assertHostUnderCookieDomain(
+    ENV.AUTH_COOKIE_DOMAIN,
+    'PAY_PUBLIC_URL',
+    ENV.PAY_PUBLIC_URL
+);

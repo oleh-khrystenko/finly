@@ -27,7 +27,7 @@ services:
             - PNPM_STORE_DIR=/pnpm-store
             - CI=true
             - NODE_ENV=development
-            - PORT=${API_PORT}
+            - API_PORT=${API_PORT}
             - MONGODB_URI=${MONGODB_URI}
             - REDIS_URL=redis://redis:6379
             - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
@@ -37,23 +37,14 @@ services:
             # `finly.local` тут не годиться — Google OAuth не приймає
             # redirect-адресу на неіснуючому TLD. Cookie-scope портами не
             # розділяється, тож спільна сесія працює як у проді.
-            #
-            # `:?` (mandatory variable) — не косметика: без нього compose
-            # підставив би порожній рядок, `PAY_PUBLIC_URL` став би
-            # `http://localhost:` (валідна адреса на 80-му порту!), fail-fast
-            # на старті API пропустив би це, а pay-зона тихо не працювала б —
-            # QR-коди і copy-link вели б у нікуди.
-            - WEB_URL=http://localhost:${WEB_PORT}
-            - PAY_PUBLIC_URL=http://localhost:${PAY_PORT:?PAY_PORT is required - dev pay-zone port, see .env.example}
-            - AUTH_COOKIE_DOMAIN=${AUTH_COOKIE_DOMAIN}
+            - WEB_URL=${WEB_URL}
+            - PAY_PUBLIC_URL=${PAY_PUBLIC_URL}
             - REVALIDATE_SECRET=${REVALIDATE_SECRET}
             - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
             - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
-            - GOOGLE_CALLBACK_URL=${GOOGLE_CALLBACK_URL}
             - RESEND_API_KEY=${RESEND_API_KEY}
             - RESEND_FROM_EMAIL=${RESEND_FROM_EMAIL}
             - MONOBANK_TOKEN=${MONOBANK_TOKEN}
-            - BILLING_DEMO_MODE=${BILLING_DEMO_MODE}
             - TRUST_PROXY_HOPS=${TRUST_PROXY_HOPS}
             - GSC_SITE_URL=${GSC_SITE_URL}
             - GSC_CLIENT_EMAIL=${GSC_CLIENT_EMAIL}
@@ -114,10 +105,9 @@ services:
             - PNPM_STORE_DIR=/pnpm-store
             - PORT=${WEB_PORT}
             - API_INTERNAL_URL=http://api:${API_PORT}
-            - NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL}
-            - NEXT_PUBLIC_BILLING_DEMO_MODE=${NEXT_PUBLIC_BILLING_DEMO_MODE}
-            - NEXT_PUBLIC_PAY_PUBLIC_URL=http://localhost:${PAY_PORT:?PAY_PORT is required - dev pay-zone port, see .env.example}
-            - NEXT_PUBLIC_STORAGE_HOSTNAME=${NEXT_PUBLIC_STORAGE_HOSTNAME}
+            - WEB_URL=${WEB_URL}
+            - PAY_PUBLIC_URL=${PAY_PUBLIC_URL}
+            - R2_PUBLIC_URL=${R2_PUBLIC_URL}
             - REVALIDATE_SECRET=${REVALIDATE_SECRET}
             - WATCHPACK_POLLING=true
             - CHOKIDAR_USEPOLLING=true
@@ -127,8 +117,7 @@ services:
             # Next.js бачить `Host: localhost:${PAY_PORT}`, і `proxy.ts`
             # розпізнає його як public host: whitelist
             # (`apps/web/src/shared/config/publicHosts.ts`) походить від
-            # `NEXT_PUBLIC_PAY_PUBLIC_URL`, тобто від цього ж PAY_PORT — саме
-            # тому порт не потрібно дублювати у коді.
+            # `PAY_PUBLIC_URL`, тож порт у ньому мусить збігатися з цим.
             - '${PAY_PORT:?PAY_PORT is required - dev pay-zone port, see .env.example}:${WEB_PORT}'
         volumes:
             - ./:/app

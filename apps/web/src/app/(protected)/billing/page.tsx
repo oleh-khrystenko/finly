@@ -10,7 +10,7 @@ import {
     type BillingProfileView,
     type BusinessWithCounts,
 } from '@finly/types';
-import { BILLING_DEMO_MODE } from '@/shared/config/env';
+import { BILLING_DEMO_MODE } from '@/shared/config';
 import {
     getBillingProfile,
     getCatalog,

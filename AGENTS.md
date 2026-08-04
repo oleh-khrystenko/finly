@@ -11,12 +11,12 @@
 | API             | NestJS, Passport, nestjs-zod, @nestjs/throttler/schedule | Nest 11, JWT + Google OAuth, global ZodValidationPipe                    |
 | Data            | MongoDB, Mongoose, Redis, ioredis                        | Mongoose 8 documents, Mongo transactions, Redis locks/rate/session state |
 | Product Engines | @finly/types, qrcode, sharp, opentype.js                 | Zod contracts, NBU payload 002/003, branded PNG QR rendering             |
-| Integrations    | WayForPay, Resend, Anthropic, Cloudflare R2              | billing, email, public help chat, media storage                          |
+| Integrations    | monobank «Плата», Resend, Anthropic, Cloudflare R2       | billing, email, public help chat, media storage                          |
 | Testing         | Jest, Supertest, MongoMemoryServer, jsdom                | API unit/e2e, web unit/component, shared contract tests                  |
 
 ## Architecture Overview
 
-Finly — модульний monorepo-monolith із трьома основними частинами: `apps/api`, `apps/web`, `packages/types`. API є system of record для auth/session lifecycle, users/billing, businesses/accounts/invoices, slug history/reservations, QR rendering, storage, public help AI, email і cleanup cron jobs. Web — тонкий Next App Router shell із FSD layers, client auth bootstrap, global overlay registry і host-aware public payment routing через `apps/web/src/proxy.ts`. `packages/types` є спільним contract layer для Zod entities, DTO contracts, enums, validation, help content і NBU QR payload generation. Реалізовано public payment pages, accounts, invoices, WayForPay billing і custom QR branding; `ReportsModule` лишається scaffold-only.
+Finly — модульний monorepo-monolith із трьома основними частинами: `apps/api`, `apps/web`, `packages/types`. API є system of record для auth/session lifecycle, users/billing, businesses/accounts/invoices, slug history/reservations, QR rendering, storage, public help AI, email і cleanup cron jobs. Web — тонкий Next App Router shell із FSD layers, client auth bootstrap, global overlay registry і host-aware public payment routing через `apps/web/src/proxy.ts`. `packages/types` є спільним contract layer для Zod entities, DTO contracts, enums, validation, help content і NBU QR payload generation. Реалізовано public payment pages, accounts, invoices, monobank billing і custom QR branding; `ReportsModule` лишається scaffold-only.
 
 ## Project Structure
 
@@ -49,7 +49,7 @@ docs/
 
 - `profile`, `executions`, `billing`, reminder stamps, terms і pending redirect target живуть як embedded fields; `worksAsBookkeeper` — account capability, не role.
 - Soft-delete використовує `deletedAt`; restore flow працює через `JwtAuthGuard`, більшість authenticated endpoints — через `JwtActiveGuard`.
-- WayForPay billing state зберігає `orderReference`, `recToken`, plan/one-off access, scheduled changes і `reconcileRequiredAt`; `recToken` ніколи не серіалізується у web.
+- monobank billing state зберігає `orderReference`, `recToken`, plan/one-off access, scheduled changes і `reconcileRequiredAt`; `recToken` ніколи не серіалізується у web.
 
 ### ExecutionTransaction
 
@@ -110,23 +110,16 @@ docs/
 
 Файл: `apps/api/src/modules/payments/schemas/processed-webhook-event.schema.ts`
 
-- WayForPay webhook idempotency ledger із unique `(provider, providerEventId)`.
+- monobank webhook idempotency ledger із unique `(provider, providerEventId)`.
 - Two-phase `pending -> applied`; старі `pending` rows є crash-orphans і sweep-яться cleanup service.
 
 ### PaymentRecord
 
 Файл: `apps/api/src/modules/payments/schemas/payment-record.schema.ts` | Contract: `packages/types/src/contracts/payments.ts`
 
-- Money-movement history для cabinet і refunds; наповнюється WayForPay webhooks.
+- Money-movement history для cabinet і refunds; наповнюється monobank webhooks.
 - Зберігає provider-internal IDs, але controller явно мапить public shape.
 - Amounts і refunds — integer kopecks.
-
-### FailedRecurringRemoval
-
-Файл: `apps/api/src/modules/payments/schemas/failed-recurring-removal.schema.ts`
-
-- Retry queue для failed WayForPay recurring `REMOVE` після cancel/reset/rebind cleanup.
-- Unique `(provider, orderReference)` не дає дублювати retry jobs.
 
 ## Module Dependency Map
 
@@ -140,7 +133,7 @@ docs/
 - `InvoicesModule` → `BusinessesModule`, `AccountsModule`, `QrModule`, `SlugReservationModule`.
 - `LandingClaimModule` → `BusinessesModule`, `AccountsModule`, `UsersModule`, `AuthModule`; володіє orchestration для `POST /auth/magic-link/verify`.
 - `OrphanCleanupModule` → `UsersModule`, `BusinessesModule`; `EmailModule` є `@Global()`.
-- `PaymentsModule` → `UsersModule`, `BusinessesModule`, WayForPay provider abstraction, payment models.
+- `PaymentsModule` → `UsersModule`, `BusinessesModule`, monobank provider abstraction, payment models.
 - `QrModule` — reusable rendering; експортує `QrService` і brand mark baker.
 - `AiModule` — standalone public help chat; без `UsersModule` і без executions reservation.
 - Web root layout → `Providers` + `AuthInitializer` + `Overlays`; protected layout → host check + `Header` + `ClaimLandingDraftHook` + `AuthGuard`.
@@ -149,7 +142,7 @@ docs/
 
 ### Endpoint Creation
 
-Controller + guard/decorator + DTO/Zod pipe + service. JSON responses ідуть через `{ data: ... }`, крім health/hello, PNG QR responses, SSE і WayForPay webhooks. Приклади: `apps/api/src/modules/businesses/businesses.controller.ts`, `apps/api/src/modules/payments/payments.controller.ts`.
+Controller + guard/decorator + DTO/Zod pipe + service. JSON responses ідуть через `{ data: ... }`, крім health/hello, PNG QR responses, SSE і monobank webhooks. Приклади: `apps/api/src/modules/businesses/businesses.controller.ts`, `apps/api/src/modules/payments/payments.controller.ts`.
 
 ### Validation
 
@@ -177,7 +170,7 @@ Editable slugs — case-preserved display values із lowercase lookup fields. R
 
 ### Public Payment Host
 
-`apps/web/src/proxy.ts` rewrite-ить публічний host (prod — `pay.finly.com.ua`; dev — `localhost:3001`, той самий контейнер під другим port-mapping) у internal `app/host-pay/*` routes і блокує cabinet routes на public host. Whitelist `PUBLIC_HOSTS` не зашитий у код — походить від `NEXT_PUBLIC_PAY_PUBLIC_URL`. Server Components fetch-ать API через `API_INTERNAL_URL`; public data loaders живуть у `apps/web/src/features/*-public/load*.ts`.
+`apps/web/src/proxy.ts` rewrite-ить публічний host (prod — `pay.finly.com.ua`; dev — `localhost:3001`, той самий контейнер під другим port-mapping) у internal `app/host-pay/*` routes і блокує cabinet routes на public host. Whitelist `PUBLIC_HOSTS` не зашитий у код — походить від `PAY_PUBLIC_URL`. Server Components fetch-ать API через `API_INTERNAL_URL`; public data loaders живуть у `apps/web/src/features/*-public/load*.ts`.
 
 ### Public APIs
 
@@ -187,9 +180,9 @@ Public payment endpoints no-auth, мають `@SkipOnboarding()`, strip-ятьс
 
 Pure payload builders живуть у `packages/types/src/qr/*`; Node PNG rendering, logo composition і brand mark baking — у `apps/api/src/modules/qr/*`. `QrService.renderForUrl()` і `renderForNbuPayload()` навмисно розділені.
 
-### WayForPay Billing
+### monobank Billing
 
-Catalog статичний у `packages/types/src/contracts/payments.ts`; provider operations живуть за `apps/api/src/modules/payments/interfaces/payment-provider.interface.ts`. Webhook processing потребує Nest `rawBody`, створює `ProcessedWebhookEvent`, transactionally apply-ить side effects, повертає signed WayForPay accept для valid callbacks і queue-ить failed recurring removals.
+Тарифна сітка — типізована константа у `apps/api/src/config/billing.config.ts`; provider operations живуть за `apps/api/src/modules/payments/interfaces/payment-provider.interface.ts`, реалізація — `providers/monobank`. Розкладом списань керує наш billing-clock, не провайдер. Webhook processing потребує Nest `rawBody`, верифікує підпис публічним ключем merchant-API, створює `ProcessedWebhookEvent` і transactionally apply-ить side effects.
 
 ### Mongo Transactions
 
@@ -296,12 +289,12 @@ Global prefix: `/api`. Global setup: `ThrottlerGuard`, `OnboardingInterceptor`, 
 **Payments** (`apps/api/src/modules/payments/payments.controller.ts`)
 
 - `GET /api/payments/catalog` — public + `SkipThrottle` + `SkipOnboarding` — pricing catalog
-- `POST /api/payments/checkout-session` — `JwtActiveGuard` — WayForPay checkout
+- `POST /api/payments/checkout` — `JwtActiveGuard` — monobank checkout
 - `POST /api/payments/subscription/cancel` — `JwtActiveGuard` — cancel/refund subscription
 - `POST /api/payments/subscription/change-plan` — `JwtActiveGuard` — change plan
 - `POST /api/payments/subscription/update-card` — `JwtActiveGuard` — re-bind card
 - `GET /api/payments/payments?limit=` — `JwtActiveGuard` — recent money movements
-- `POST /api/payments/webhook/:provider` — public + `SkipThrottle` — WayForPay webhook
+- `POST /api/payments/webhook/:provider` — public + `SkipThrottle` — monobank webhook
 
 **QR / AI / Reports**
 
@@ -322,23 +315,16 @@ Global prefix: `/api`. Global setup: `ThrottlerGuard`, `OnboardingInterceptor`, 
 
 **API env: required**
 
-- Runtime/data: `NODE_ENV`, `PORT`, `TRUST_PROXY_HOPS`, `WEB_URL`, `PAY_PUBLIC_URL`, `MONGODB_URI`, `REDIS_URL`
+- Runtime/data: `NODE_ENV`, `API_PORT`, `TRUST_PROXY_HOPS`, `WEB_URL`, `PAY_PUBLIC_URL`, `MONGODB_URI`, `REDIS_URL`
 - Auth: `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`
-- OAuth/email: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`
-- WayForPay: `WAYFORPAY_MERCHANT_ACCOUNT`, `WAYFORPAY_MERCHANT_SECRET_KEY`, `WAYFORPAY_MERCHANT_DOMAIN`
-- Payments flags: `PAYMENTS_SUBSCRIPTION_ENABLED`, `PAYMENTS_ONE_OFF_ENABLED`, `BILLING_DEMO_MODE`
-- Auth tuning: `AUTH_PASSWORD_MIN_LENGTH`, `AUTH_LOCKOUT_THRESHOLDS`, `AUTH_LOGIN_ATTEMPTS_TTL_MIN`, `AUTH_MAGIC_LINK_TTL_MIN`, `AUTH_MAGIC_LINK_RATE_LIMIT`, `AUTH_MAGIC_LINK_RATE_WINDOW_MIN`, `AUTH_MAGIC_LINK_DEDUP_SEC`, `ACCOUNT_DELETION_GRACE_DAYS`
-- Orphan cleanup: `ORPHAN_REMINDER_FIRST_DAYS`, `ORPHAN_REMINDER_FINAL_DAYS`, `ORPHAN_CLEANUP_DELETION_DAYS`
-- Brand cleanup: `BRAND_PENDING_CLEANUP_DAYS`, `BRAND_DEMOTED_CLEANUP_DAYS`
-- AI/help: `ANTHROPIC_API_KEY`, `HELP_CHAT_MAX_TOKENS`, `HELP_CHAT_IP_LIMIT`, `HELP_CHAT_DAILY_BUDGET`
+- OAuth/email: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL` (redirect URI виводиться з `WEB_URL`)
+- monobank: `MONOBANK_TOKEN`
+- AI/help: `ANTHROPIC_API_KEY`
 - Storage: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_URL`
 
 **Web env: required**
 
-- Public base/API: `NEXT_PUBLIC_BASE_URL`, `NEXT_PUBLIC_API_URL`
-- Public payment host: `NEXT_PUBLIC_PAY_PUBLIC_URL`
-- Payments flags: `NEXT_PUBLIC_PAYMENTS_SUBSCRIPTION_ENABLED`, `NEXT_PUBLIC_PAYMENTS_ONE_OFF_ENABLED`, `NEXT_PUBLIC_BILLING_DEMO_MODE`
-- Storage image host: `NEXT_PUBLIC_STORAGE_HOSTNAME`
+- Origin-и і хост сховища web бере з тих самих `WEB_URL`, `PAY_PUBLIC_URL`, `R2_PUBLIC_URL`, що й API; `next.config.ts` проростає перші два у `NEXT_PUBLIC_*` для клієнтського бандла.
 
 **Runtime/build env outside loaders**
 
@@ -353,10 +339,9 @@ Global prefix: `/api`. Global setup: `ThrottlerGuard`, `OnboardingInterceptor`, 
 - `BRAND_PENDING_CLEANUP_DAYS <= BRAND_DEMOTED_CLEANUP_DAYS`.
 - `TRUST_PROXY_HOPS` має бути non-negative integer; неправильне значення ламає per-IP throttling behind proxies.
 - `MONGODB_URI` має вказувати на replica set для transaction-backed create/delete flows.
-- Hostname у `R2_PUBLIC_URL` має дорівнювати `NEXT_PUBLIC_STORAGE_HOSTNAME`.
-- `GOOGLE_CALLBACK_URL` має вказувати на web-origin `/api/auth/google/callback`, щоб refresh cookies лишались на web domain.
-- `PAY_PUBLIC_URL`, `NEXT_PUBLIC_PAY_PUBLIC_URL` і `PUBLIC_HOSTS` мають описувати ту саму public payment zone.
-- `BILLING_DEMO_MODE` / `NEXT_PUBLIC_BILLING_DEMO_MODE` мають бути `false` для live payments.
+- Хост картинок і Google redirect URI — похідні від `R2_PUBLIC_URL` і `WEB_URL`; розсинхронити їх окремими змінними більше неможливо.
+- `PAY_PUBLIC_URL` — єдине джерело public payment zone: з нього походять і клієнтський origin, і `PUBLIC_HOSTS`.
+- Демо-банер білінгу — константа `BILLING_DEMO_MODE` у `apps/web/src/shared/config/billing.ts`; для live payments лишається `false`.
 
 **Fail-fast policy**
 
@@ -423,14 +408,14 @@ Full index: [docs/conventions/README.md](docs/conventions/README.md)
 
 ## Known Complexities
 
-- `README.md`, `apps/web/README.md`, частина sprint docs і comments ще згадують `app/[locale]`, `next-intl`, Stripe або `middleware.ts`; current code — root App Router, single-locale UA, WayForPay і `apps/web/src/proxy.ts`.
+- `README.md`, `apps/web/README.md`, частина sprint docs і comments ще згадують `app/[locale]`, `next-intl`, Stripe або `middleware.ts`; current code — root App Router, single-locale UA, monobank і `apps/web/src/proxy.ts`.
 - Cabinet `/ai/chat`, chat history і AI reservation endpoints видалені; current AI API — тільки public stateless `POST /api/ai/help/chat`. `ExecutionTransaction` лишився credit ledger, але controller не expose-ить spend/history routes.
 - Public host routing має чотири branches: bare `/`, `/{business}`, `/{business}/{account}`, `/{business}/{account}/{invoice}`. Business з одним account redirect-ить через 307, не 308, бо цей state може змінитись.
 - `API_INTERNAL_URL` не входить у web fail-fast loader, але public Server Component rendering падає без нього.
-- Public/cabinet auth isolation залежить від `PAY_PUBLIC_URL` (api) і `NEXT_PUBLIC_PAY_PUBLIC_URL` (web); `PUBLIC_HOSTS` — похідне від другого. Записів у `/etc/hosts` не потрібно: у dev pay-зона — це той самий `localhost` під `PAY_PORT` (3001), бо Google OAuth не приймає redirect-адресу на вигаданому TLD.
+- Public/cabinet auth isolation залежить від `PAY_PUBLIC_URL`, яке читають обидва процеси; `PUBLIC_HOSTS` — похідне від нього. Записів у `/etc/hosts` не потрібно: у dev pay-зона — це той самий `localhost` під `PAY_PORT` (3001), бо Google OAuth не приймає redirect-адресу на вигаданому TLD.
 - Web proxy auth decisions дивляться на cookie presence (`bid_refresh`, `bid_account_deleted`), а не на token validation; stale cookies чистяться client/server auth flows.
 - Mongo transactions require replica set. Standalone local Mongo ламає cascade/create transaction flows, навіть якщо simple reads працюють.
-- WayForPay webhook handling залежить від Nest `rawBody` і `POST /api/payments/webhook/wayforpay`; Stripe portal/customer code у current runtime немає.
+- monobank webhook handling залежить від Nest `rawBody` і `POST /api/payments/webhook/monobank`; Stripe portal/customer code у current runtime немає.
 - Access reconciliation може block-ити public pages, reset-ити customized slugs, demote-ити brand slots і stamp-ити `reconcileRequiredAt`; billing і business changes зазвичай мають запускати reconciliation під shared billing lock.
 - Avatar endpoints живуть під `/storage/avatar/*`, але controller resident у `UsersModule`; `StorageModule` навмисно autonomous R2 transport.
 - R2 avatar upload використовує native `fetch`, не `apiClient`; uploaded `Content-Type` має точно збігатися з presigned contract.

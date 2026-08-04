@@ -28,13 +28,6 @@ export const ENV = {
         process.env.NEXT_PUBLIC_PAY_PUBLIC_URL,
         'NEXT_PUBLIC_PAY_PUBLIC_URL'
     ),
-    // Hostname of the R2 public CDN. Used by next/image `remotePatterns`.
-    // MUST equal the hostname of `R2_PUBLIC_URL` on the API — otherwise
-    // next/image blocks uploaded photos at runtime.
-    NEXT_PUBLIC_STORAGE_HOSTNAME: assertEnv(
-        process.env.NEXT_PUBLIC_STORAGE_HOSTNAME,
-        'NEXT_PUBLIC_STORAGE_HOSTNAME'
-    ),
 } as const;
 
 function parseHost(value: string, name: string): string {
@@ -87,12 +80,3 @@ function resolvePayPublicHost(): string {
 }
 
 export const PAY_PUBLIC_HOST = resolvePayPublicHost();
-
-// Демо-банер на сторінці білінгу (тестова картка, "кошти не списуються").
-// Тільки для sandbox-стадії monobank; у проді МУСИТЬ бути 'false', інакше
-// реальним користувачам показується хибне твердження про відсутність списань.
-export const BILLING_DEMO_MODE =
-    assertEnv(
-        process.env.NEXT_PUBLIC_BILLING_DEMO_MODE,
-        'NEXT_PUBLIC_BILLING_DEMO_MODE'
-    ) === 'true';

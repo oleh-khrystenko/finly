@@ -1,7 +1,7 @@
 // Set test-only env vars that are required by fail-fast policy
 // but not needed for unit tests (mocked at service level).
 process.env.NODE_ENV ??= 'test';
-process.env.PORT ??= '4000';
+process.env.API_PORT ??= '4000';
 process.env.TRUST_PROXY_HOPS ??= '0';
 // Хости тут СВІДОМО прод-подібні (два різні хости під спільним батьківським
 // доменом), а не dev-ові `localhost:3000` / `localhost:3001`. Dev розділяє
@@ -13,19 +13,15 @@ process.env.TRUST_PROXY_HOPS ??= '0';
 process.env.WEB_URL ??= 'http://finly.local:3000';
 process.env.REVALIDATE_SECRET ??= 'test-revalidate-secret';
 process.env.PAY_PUBLIC_URL ??= 'http://pay.finly.local:3000';
-process.env.AUTH_COOKIE_DOMAIN ??= 'finly.local';
 process.env.MONGODB_URI ??= 'mongodb://localhost:27017/test';
 process.env.JWT_ACCESS_SECRET ??= 'test-access-secret';
 process.env.JWT_REFRESH_SECRET ??= 'test-refresh-secret';
 process.env.REDIS_URL ??= 'redis://localhost:6379';
 process.env.GOOGLE_CLIENT_ID ??= 'google-client-id-placeholder';
 process.env.GOOGLE_CLIENT_SECRET ??= 'google-client-secret-placeholder';
-process.env.GOOGLE_CALLBACK_URL ??=
-    'http://finly.local:3000/api/auth/google/callback';
 process.env.RESEND_API_KEY ??= 're_test_placeholder';
 process.env.RESEND_FROM_EMAIL ??= 'Finly <test@test.dev>';
 process.env.MONOBANK_TOKEN ??= 'test-monobank-token';
-process.env.BILLING_DEMO_MODE ??= 'true';
 process.env.GSC_SITE_URL ??= 'sc-domain:test.local';
 process.env.GSC_CLIENT_EMAIL ??= 'test-gsc@test.iam.gserviceaccount.com';
 process.env.GSC_PRIVATE_KEY ??=

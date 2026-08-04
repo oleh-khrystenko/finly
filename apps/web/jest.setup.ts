@@ -19,10 +19,11 @@ import '@testing-library/jest-dom';
 // би вважатися публічним і host-isolation-перевірки лишились би формально
 // зеленими. Сам dev-варіант (той самий host, різні порти) покритий у
 // `shared/config/publicHosts.spec.ts`.
+// У рантаймі ці імена проростає `next.config.ts` з `WEB_URL` / `PAY_PUBLIC_URL`
+// (єдине джерело origin-ів, спільне з API). Jest next.config не виконує, тож
+// підставляємо їх тут напряму.
 process.env.NEXT_PUBLIC_BASE_URL ??= 'https://finly.com.ua';
 process.env.NEXT_PUBLIC_PAY_PUBLIC_URL ??= 'https://pay.finly.com.ua';
-process.env.NEXT_PUBLIC_STORAGE_HOSTNAME ??= 'media.test.local';
-process.env.NEXT_PUBLIC_BILLING_DEMO_MODE ??= 'false';
 
 // jsdom 26+ не вшиває `TextEncoder` у global; isomorphic utility у
 // `@finly/types` (`utf8ByteLength` для NBU byte-limits) кидає

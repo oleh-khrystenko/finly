@@ -189,15 +189,14 @@ SSL/TLS → Origin Server → Create Certificate:
 
 > **Backup:** Atlas M10+ робить continuous backup (24h restore window). У §08 playbook `mongodump` опціональний — можна вимкнути, якщо довіряєте провайдер-snapshot-ам.
 
-## 4. Payments provider — WayForPay
+## 4. Payments provider — monobank «Плата»
 
-Поточна runtime-реалізація платежів — WayForPay (`apps/api/src/modules/payments`). Stripe у прод-сценарії більше не використовується.
+Поточна runtime-реалізація платежів — monobank (`apps/api/src/modules/payments`). Розкладом списань керує наш billing-clock, провайдер лише проводить платіж.
 
-1. WayForPay merchant cabinet → отримати `merchantAccount`, `merchantSecretKey` і merchant domain.
-2. У WayForPay merchant domain має збігатися з `.env` `WAYFORPAY_MERCHANT_DOMAIN=finly.com.ua`.
-3. Webhook/service URL: `https://finly.com.ua/api/payments/webhook/wayforpay`.
-4. Return URL для користувача йде через web-origin `https://finly.com.ua/billing-return`.
-5. Для sandbox/staging можна лишити тестові merchant credentials; для live payments `BILLING_DEMO_MODE=false` і `NEXT_PUBLIC_BILLING_DEMO_MODE=false`.
+1. Кабінет merchant monobank → отримати X-Token (`MONOBANK_TOKEN`). Це єдиний секрет провайдера: ним автентифікуються checkout, списання за токеном і запит статусу.
+2. Webhook URL формується з `WEB_URL`: `https://finly.com.ua/api/payments/webhook/monobank`. Вебхуки верифікуються публічним ключем з `GET /api/merchant/pubkey`, окремого secret-у для підпису немає.
+3. Return URL для користувача — `https://finly.com.ua/billing-return`.
+4. Для sandbox/staging використовуйте тестовий токен з api.monobank.ua; демо-банер на сторінці тарифу вмикається у коді (`apps/web/src/shared/config/billing.ts`), не через `.env`.
 
 ## 5. Google OAuth (production credentials)
 
@@ -206,7 +205,7 @@ Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client ID
 - **Authorized JavaScript origins:** `https://finly.com.ua`
 - **Authorized redirect URIs:** `https://finly.com.ua/api/auth/google/callback`
 - Client ID + Client Secret → `.env` `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`
-- `.env` `GOOGLE_CALLBACK_URL` = `https://finly.com.ua/api/auth/google/callback`
+- Redirect URI = `WEB_URL` + `/api/auth/google/callback` (`https://finly.com.ua/api/auth/google/callback`) — окремої змінної немає, значення виводить API
 
 > Окремий OAuth client від dev — dev має `http://localhost:3000` redirect, ці URI не можна змішувати в одному credential.
 
@@ -229,8 +228,7 @@ Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client ID
     - Bucket: `finly-media` only
     - → `.env` `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ACCOUNT_ID` (Account ID — у R2 sidebar)
 5. `.env` `R2_BUCKET_NAME=finly-media`
-6. `.env` `R2_PUBLIC_URL=https://media.finly.com.ua` (custom domain) — **hostname МУСИТЬ збігатися** з `NEXT_PUBLIC_STORAGE_HOSTNAME`, інакше `next/image` блокує фото (`next.config.ts` fail-fast).
-7. `.env` `NEXT_PUBLIC_STORAGE_HOSTNAME=media.finly.com.ua`
+6. `.env` `R2_PUBLIC_URL=https://media.finly.com.ua` (custom domain) — цей же хост web бере для `next/image` `remotePatterns` (`next.config.ts`), окремої змінної під нього немає.
 
 > Окремий R2 bucket для backups — `finly-backups`, окремий API token, scoped до нього (див. §08 playbook).
 
@@ -273,7 +271,6 @@ Repo → Settings → Secrets and variables → Actions → New repository secre
 ```env
 # ─── Runtime ───
 NODE_ENV=production
-PORT=4000
 WEB_PORT=3000
 API_PORT=4000
 
@@ -288,17 +285,11 @@ JWT_REFRESH_SECRET=<32-byte hex з §9>
 
 GOOGLE_CLIENT_ID=<з §5>.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=<з §5>
-GOOGLE_CALLBACK_URL=https://finly.com.ua/api/auth/google/callback
 
 RESEND_API_KEY=<з §6>
 RESEND_FROM_EMAIL=Finly <no-reply@finly.com.ua>
 
-WAYFORPAY_MERCHANT_ACCOUNT=<з §4>
-WAYFORPAY_MERCHANT_SECRET_KEY=<з §4>
-WAYFORPAY_MERCHANT_DOMAIN=finly.com.ua
-PAYMENTS_SUBSCRIPTION_ENABLED=true
-PAYMENTS_ONE_OFF_ENABLED=true
-BILLING_DEMO_MODE=false
+MONOBANK_TOKEN=<з §4>
 
 ANTHROPIC_API_KEY=sk-ant-<з §8>
 
@@ -310,10 +301,6 @@ R2_PUBLIC_URL=https://media.finly.com.ua
 
 # ─── Frontend (build args + runtime) ───
 API_INTERNAL_URL=http://api:4000
-NEXT_PUBLIC_BASE_URL=https://finly.com.ua
-NEXT_PUBLIC_PAY_PUBLIC_URL=https://pay.finly.com.ua
-NEXT_PUBLIC_BILLING_DEMO_MODE=false
-NEXT_PUBLIC_STORAGE_HOSTNAME=media.finly.com.ua
 ```
 
 `chmod 600 .env`, owner = `<USER>:<USER>`.
@@ -336,6 +323,6 @@ NEXT_PUBLIC_STORAGE_HOSTNAME=media.finly.com.ua
 - [ ] R2 avatar upload — кабінет → Profile → upload .jpg → перевірити `media.finly.com.ua/avatars/...` 200.
 - [ ] `docker compose ps` — усі контейнери `Up`. Healthcheck-блоків у `docker-compose.yml` немає (deploy перевіряє через `curl` у `deploy.yml`), але всі три сервіси мають бути в стані `running`, не `restarting`.
 - [ ] `journalctl -u caddy -n 50` — без `400/502` репорту.
-- [ ] **Payments**: WayForPay checkout/webhook перевіряються окремо від базового SEO/host smoke-test.
+- [ ] **Payments**: monobank checkout/webhook перевіряються окремо від базового SEO/host smoke-test.
 
 Якщо все зелене — рухайся до `99-runbook.md` як reference для incident-response. Інакше — кожна failure-row має конкретний log location у §99.

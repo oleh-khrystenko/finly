@@ -6,7 +6,7 @@
 
 ## Поточний стан
 
-Реалізовано public payment pages, QR/НБУ payloads, рахунки, інвойси, WayForPay billing, R2 avatar/brand storage, public help AI і модульну архітектуру на Next.js 16 + NestJS 11. Reports module лишається scaffold-only.
+Реалізовано public payment pages, QR/НБУ payloads, рахунки, інвойси, monobank billing, R2 avatar/brand storage, public help AI і модульну архітектуру на Next.js 16 + NestJS 11. Reports module лишається scaffold-only.
 
 ---
 
@@ -27,7 +27,7 @@ finly/
 │           ├── modules/
 │           │   ├── auth/             # Google OAuth, Magic Link, Password, JWT
 │           │   ├── users/            # CRUD, profile, soft-delete, executions ledger
-│           │   ├── payments/         # WayForPay billing + webhook idempotency
+│           │   ├── payments/         # monobank billing + webhook idempotency
 │           │   ├── ai/               # Public help chat (Anthropic SSE)
 │           │   ├── storage/          # Cloudflare R2 transport
 │           │   ├── reports/          # Scaffold-only
@@ -51,7 +51,7 @@ finly/
 | Monorepo | Turborepo + pnpm workspaces                                                   |
 | Frontend | Next.js 16 (App Router), React 19, Zustand, TailwindCSS 4, next-themes        |
 | Backend  | NestJS 11, Mongoose (MongoDB), Passport (JWT + Google OAuth), ioredis (Redis) |
-| Payments | WayForPay (subscriptions, one-off access, webhook idempotency)                |
+| Payments | monobank «Плата» (billing-clock, списання за токеном, webhook idempotency)     |
 | Shared   | Zod 4 (single source of truth), TypeScript 5.9 (strict)                       |
 | Email    | Resend                                                                        |
 | Тести    | Jest 30, Supertest, MongoMemoryServer                                         |
@@ -62,7 +62,7 @@ finly/
 
 - **Auth**: Google OAuth, Magic Link, Password login, brute force protection, token rotation з reuse detection
 - **Users**: Profile management, preferred language, account soft-delete з 30-day grace period, scheduled cleanup
-- **Payments**: WayForPay subscriptions, one-off access, two-phase webhook idempotency
+- **Payments**: monobank «Плата» — власний billing-clock, списання за збереженим токеном, two-phase webhook idempotency
 - **Public pay host**: `pay.finly.com.ua` / `localhost:3001` у dev, з host-aware routing
 - **Theming**: Light / Dark / System (next-themes)
 - **UI**: Feature-Sliced Design, Headless UI, Radix, polymorphic components
@@ -84,14 +84,12 @@ finly/
 ```env
 # Обов'язкові
 NODE_ENV=development
-PORT=4000
 WEB_PORT=3000
 API_PORT=4000
 PAY_PORT=3001
 TRUST_PROXY_HOPS=0
 WEB_URL=http://localhost:3000
 PAY_PUBLIC_URL=http://localhost:3001
-AUTH_COOKIE_DOMAIN=localhost
 
 # MongoDB — MUST бути replica-set (cascade-delete у Sprint 4 використовує
 # `session.withTransaction`). `docker-compose.dev.yml` Mongo не запускає —
@@ -109,29 +107,18 @@ REDIS_URL=redis://redis:6379
 # Google OAuth
 GOOGLE_CLIENT_ID=your-google-client-id
 GOOGLE_CLIENT_SECRET=your-google-client-secret
-GOOGLE_CALLBACK_URL=http://localhost:4000/api/auth/google/callback
 
 # Resend
 RESEND_API_KEY=your-resend-api-key
 RESEND_FROM_EMAIL=Finly <onboarding@resend.dev>
 
-# WayForPay
-WAYFORPAY_MERCHANT_ACCOUNT=test_merch_n1
-WAYFORPAY_MERCHANT_SECRET_KEY=flk3409refn54t54t*FNJRET
-WAYFORPAY_MERCHANT_DOMAIN=finly.com.ua
-
-PAYMENTS_SUBSCRIPTION_ENABLED=true
-PAYMENTS_ONE_OFF_ENABLED=true
-BILLING_DEMO_MODE=true
+# monobank «Плата» — X-Token з кабінету merchant
+MONOBANK_TOKEN=your-monobank-token
 
 ANTHROPIC_API_KEY=sk-ant-your-anthropic-api-key
 
 # Web
 API_INTERNAL_URL=http://localhost:4000
-NEXT_PUBLIC_BASE_URL=http://localhost:3000
-NEXT_PUBLIC_PAY_PUBLIC_URL=http://localhost:3001
-NEXT_PUBLIC_BILLING_DEMO_MODE=true
-NEXT_PUBLIC_STORAGE_HOSTNAME=media.finly.com.ua
 ```
 
 Повний список змінних: [apps/api/src/config/env.ts](apps/api/src/config/env.ts), [apps/web/src/shared/config/env.ts](apps/web/src/shared/config/env.ts). У `.env` живе лише конфігурація середовища (секрети, адреси, підключення); продуктові налаштування — тарифна сітка, ліміти авторизації, пороги чисток, ліміти help-асистента — у коді: `apps/api/src/config/{billing,auth,cleanup,help-chat}.config.ts`.
@@ -147,7 +134,7 @@ Public payment-page (`pay.finly.com.ua` у prod) у dev слухає `http://loc
 
 Ціна компромісу: локально не перевіряється саме перетин cookie між різними ХОСТАМИ (у dev їх один). Цей випадок покривають API-тести — вони навмисно тримають прод-подібні хости (див. коментар у `apps/api/src/test-setup.ts`).
 
-> **Prod.** Другого порту немає: `pay.finly.com.ua` має DNS-A/CNAME-record на той самий сервер, що `finly.com.ua`, і reverse-proxy (nginx/Caddy) проксує обидва host-header-и на один Next.js container. `AUTH_COOKIE_DOMAIN=finly.com.ua`.
+> **Prod.** Другого порту немає: `pay.finly.com.ua` має DNS-A/CNAME-record на той самий сервер, що `finly.com.ua`, і reverse-proxy (nginx/Caddy) проксує обидва host-header-и на один Next.js container. Домен сесійної cookie — хост `WEB_URL`, тобто `finly.com.ua`.
 
 ### 3. Запуск для розробки
 
