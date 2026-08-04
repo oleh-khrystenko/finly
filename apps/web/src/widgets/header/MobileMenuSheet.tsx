@@ -174,6 +174,7 @@ export default function MobileMenuSheet() {
 
                             <ChangeTheme
                                 align="start"
+                                onSelected={close}
                                 trigger={
                                     <UiButton
                                         type="button"
@@ -211,6 +212,7 @@ export default function MobileMenuSheet() {
                         <div className="flex flex-col gap-1">
                             <ChangeTheme
                                 align="start"
+                                onSelected={close}
                                 trigger={
                                     <UiButton
                                         type="button"

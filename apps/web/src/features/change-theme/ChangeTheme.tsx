@@ -25,6 +25,12 @@ const THEME_VALUES: Theme[] = [THEME.LIGHT, THEME.SYSTEM, THEME.DARK];
 interface ChangeThemeProps {
     trigger?: ReactNode;
     align?: 'start' | 'end';
+    /**
+     * Викликається після вибору теми. Потрібне, коли меню тем живе всередині
+     * панелі (мобільний sheet): сама панель має закритись, інакше людина
+     * лишається за нею і не бачить, що змінилось.
+     */
+    onSelected?: () => void;
 }
 
 const subscribe = () => () => {};
@@ -52,6 +58,7 @@ const getActiveTheme = (
 const ChangeTheme: FC<ChangeThemeProps> = ({
     trigger: customTrigger,
     align = 'end',
+    onSelected,
 }) => {
     const { theme, setTheme } = useTheme();
     const isHydrated = useIsHydrated();
@@ -81,7 +88,10 @@ const ChangeTheme: FC<ChangeThemeProps> = ({
     return (
         <UiDropdownMenu
             items={items}
-            onSelect={setTheme}
+            onSelect={(value) => {
+                setTheme(value);
+                onSelected?.();
+            }}
             activeValue={activeTheme}
             align={align}
             size="sm"
