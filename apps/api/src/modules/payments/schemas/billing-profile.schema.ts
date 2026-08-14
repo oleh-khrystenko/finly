@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
+import { type CardPaymentMethod } from '@finly/types';
 
 export type BillingProfileDocument = HydratedDocument<BillingProfile>;
 
@@ -109,6 +110,22 @@ export class BillingProfile {
 
     @Prop({ type: String, default: null })
     cardMask!: string | null;
+
+    /**
+     * Спосіб оплати з `paymentInfo.paymentMethod`. Фіксується РІВНО на checkout —
+     * там, де платник прив'язує картку. Циклові списання йдуть збереженим токеном
+     * і завжди повертають `wallet`, тобто перезапис звідти стер би знання про те,
+     * чим картку прив'язували, і кабінет після першого ж продовження почав би
+     * показувати цифри підставного номера як справжні (`hasRealCardNumber`).
+     */
+    @Prop({ type: String, default: null })
+    cardPaymentMethod!: CardPaymentMethod | null;
+
+    @Prop({ type: String, default: null })
+    cardPaymentSystem!: string | null;
+
+    @Prop({ type: String, default: null })
+    cardBank!: string | null;
 
     @Prop({ type: String, default: null })
     currency!: string | null;

@@ -26,6 +26,7 @@ import {
     BrandUniverseCard,
     DemoBanner,
     DocumentsUniverseCard,
+    formatCardLabel,
     RecentPayments,
     useCancelSubscriptionDialogStore,
 } from '@/features/billing';
@@ -166,6 +167,19 @@ export default function BillingPage() {
     );
 }
 
+/**
+ * Прив'язаний спосіб оплати. Показується в КОЖНОМУ стані підписки, не лише в
+ * активному: коли списання не пройшло, питання «з чого саме намагались зняти»
+ * і є головним, а на скасованій підписці з цієї ж картки піде поновлення.
+ */
+function PaymentMethodLine({ label }: { label: string }) {
+    return (
+        <p className="text-muted-foreground mt-1 text-xs">
+            Спосіб оплати: {label}
+        </p>
+    );
+}
+
 function StatusCard({
     profile,
     onResume,
@@ -186,6 +200,7 @@ function StatusCard({
         profile.nextChargeAmount > 0
             ? formatPrice(profile.nextChargeAmount, profile.currency ?? 'UAH')
             : null;
+    const cardLabel = formatCardLabel(profile);
 
     if (pastDue) {
         return (
@@ -201,6 +216,9 @@ function StatusCard({
                                 Доступ ще діє. Оплатіть, щоб не втратити бренд
                                 своїх отримувачів.
                             </p>
+                            {cardLabel && (
+                                <PaymentMethodLine label={cardLabel} />
+                            )}
                         </div>
                         <UiButton
                             variant="filled"
@@ -217,7 +235,13 @@ function StatusCard({
         );
     }
 
-    if (!active) return null;
+    if (!active) {
+        return cardLabel ? (
+            <section className="bg-card rounded-xl border p-4 md:p-6">
+                <PaymentMethodLine label={cardLabel} />
+            </section>
+        ) : null;
+    }
 
     return (
         <section className="bg-card rounded-xl border p-4 md:p-6">
@@ -237,11 +261,7 @@ function StatusCard({
                                 : 'Підписка активна'}
                         </p>
                     )}
-                    {profile.cardMask && (
-                        <p className="text-muted-foreground mt-1 text-xs">
-                            Картка {profile.cardMask}
-                        </p>
-                    )}
+                    {cardLabel && <PaymentMethodLine label={cardLabel} />}
                 </div>
                 {!profile.cancelAtPeriodEnd && (
                     <UiButton

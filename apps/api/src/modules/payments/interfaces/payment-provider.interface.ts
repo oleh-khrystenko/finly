@@ -1,4 +1,4 @@
-import { BillingWebhookEvent } from '@finly/types';
+import { BillingWebhookEvent, CardDetails } from '@finly/types';
 
 /**
  * Абстракція провайдера білінгу. Sprint 22 — monobank «Плата» без власного
@@ -52,12 +52,11 @@ export interface ChargeByTokenInput {
     serviceUrl: string;
 }
 
-export interface ChargeResult {
+export interface ChargeResult extends CardDetails {
     /** monobank invoiceId — ключ для подальшого запиту статусу. */
     invoiceId: string;
     /** Статус рахунку monobank (success / failure / processing / ...). */
     status: string;
-    cardMask: string | null;
     /** Свіжий токен картки, якщо провайдер його ротував. */
     cardToken: string | null;
     failureReason: string | null;

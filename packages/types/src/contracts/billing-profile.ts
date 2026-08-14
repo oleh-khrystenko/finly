@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { SUBSCRIPTION_STATUS } from './payments';
+import { CardDetailsSchema, SUBSCRIPTION_STATUS } from './payments';
 import { BILLING_UNIVERSE, creditPackSchema } from './billing-grid';
 import { objectIdSchema } from '../validation/common';
 
@@ -108,7 +108,7 @@ export const BillingProfileViewSchema = z.object({
     currentPeriodEnd: z.coerce.date().nullable(),
     nextChargeAt: z.coerce.date().nullable(),
     cancelAtPeriodEnd: z.boolean(),
-    cardMask: z.string().nullable(),
+    ...CardDetailsSchema.shape,
     /** Розрахункова сума наступного місячного списання, копійки. */
     nextChargeAmount: z.number().int().nonnegative(),
     brand: BrandWarehouseViewSchema,
