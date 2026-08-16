@@ -23,6 +23,7 @@ import { UiAvatar } from '@/shared/ui/UiAvatar';
 import {
     UiSheet,
     UiSheetContent,
+    UiSheetBody,
     UiSheetHeader,
     UiSheetTitle,
 } from '@/shared/ui/UiSheet';
@@ -82,7 +83,7 @@ export default function MobileMenuSheet() {
                     </UiSheetTitle>
                 </UiSheetHeader>
 
-                <div className="flex flex-col gap-6 px-5 pb-6">
+                <UiSheetBody className="gap-6 px-5 pb-6">
                     {/* Navigation */}
                     {hasNav && (
                         <nav className="flex flex-col gap-1">
@@ -264,7 +265,7 @@ export default function MobileMenuSheet() {
                             {cta.label}
                         </UiButton>
                     )}
-                </div>
+                </UiSheetBody>
             </UiSheetContent>
         </UiSheet>
     );
