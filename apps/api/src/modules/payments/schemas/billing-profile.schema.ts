@@ -184,6 +184,24 @@ export class BillingProfile {
     needsManualReview!: boolean;
 
     /**
+     * Sprint 32 — пауза планувальника на час вікна відновлення акаунта.
+     * Ставиться при підтвердженні видалення, знімається при відновленні,
+     * зникає разом з профілем при остаточному прибиранні.
+     *
+     * Поки стоїть, billing-clock не бере профіль ні у чергове списання, ні у
+     * повторну спробу по боргу (перекриті обидві доріжки). Жодне інше поле
+     * білінгу підтвердження не чіпає: картка, межі оплаченого періоду, статус і
+     * склад прикріплень лишаються недоторканими, тож відновлення повертає
+     * людину рівно у той стан, у якому вона була.
+     *
+     * Наявне `cancelAtPeriodEnd` для цього не годиться: воно стирає збережену
+     * картку, а на межі періоду гасить платника (штампи `brandedAt` знімаються,
+     * кастомні slug-и йдуть у slug-rent) — і зворотної дії до нього немає.
+     */
+    @Prop({ type: Date, default: null })
+    billingPausedAt!: Date | null;
+
+    /**
      * Durable-маркер незавершеної реконсиляції прикріплених бізнесів. Стемпиться
      * при флипі доступу; знімається `ReconciliationService` після повного
      * проходу; daily-sweep добиває стемпнутих.
@@ -224,6 +242,13 @@ BillingProfileSchema.index({ nextChargeAt: 1 }, { sparse: true });
 BillingProfileSchema.index({ nextRetryAt: 1 }, { sparse: true });
 // daily-sweep незавершених реконсиляцій.
 BillingProfileSchema.index({ reconcileRequiredAt: 1 }, { sparse: true });
+// Sprint 32 — компенсаційний прохід (`CleanupService.resyncRestoredAccounts`)
+// шукає паузу, що пережила відновлення акаунта. Partial, а не sparse: дефолт
+// поля — `null`, тобто значення присутнє, і sparse тримав би кожен профіль.
+BillingProfileSchema.index(
+    { billingPausedAt: 1 },
+    { partialFilterExpression: { billingPausedAt: { $type: 'date' } } }
+);
 // Per-business гейтинг: «які профілі мають цей бізнес прикріпленим у складі».
 // Multikey-індекс за масивом прикріплень кожного всесвіту — гаряча перевірка
 // «чи бізнес у активному Бренд/Документному складі».

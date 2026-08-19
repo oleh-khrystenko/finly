@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { AccountDeletionModule } from '../account-deletion/account-deletion.module';
 import { AccountsModule } from '../accounts/accounts.module';
 import { AuthModule } from '../auth/auth.module';
 import { BusinessesModule } from '../businesses/businesses.module';
@@ -21,11 +22,23 @@ import { MagicLinkVerifyController } from './magic-link-verify.controller';
  * (і отримувало `BusinessesModule = undefined` у `imports[0]`).
  *
  * Dependency DAG:
- *   LandingClaimModule → {BusinessesModule, AccountsModule, UsersModule, AuthModule}
+ *   LandingClaimModule → {BusinessesModule, AccountsModule, UsersModule, AuthModule,
+ *                         AccountDeletionModule}
  *   AuthModule       → {UsersModule (forwardRef)}  (НЕ → LandingClaimModule)
+ *
+ * Sprint 32 — `AccountDeletionModule` доданий, бо підтвердження видалення
+ * акаунта через посилання з листа завершується саме у цьому контролері, і разом
+ * з деактивацією мусить гасити публічність отримувачів і зупиняти списання.
+ * Ребра назад немає: account-deletion про landing-claim не знає.
  */
 @Module({
-    imports: [BusinessesModule, AccountsModule, UsersModule, AuthModule],
+    imports: [
+        BusinessesModule,
+        AccountsModule,
+        UsersModule,
+        AuthModule,
+        AccountDeletionModule,
+    ],
     controllers: [MagicLinkVerifyController],
     providers: [LandingClaimService],
     exports: [LandingClaimService],

@@ -57,7 +57,14 @@ export class BillingClockService {
         }
     }
 
-    /** ACTIVE профілі з насталою датою списання — продовжуємо цикл за токеном. */
+    /**
+     * ACTIVE профілі з насталою датою списання — продовжуємо цикл за токеном.
+     *
+     * Sprint 32 — профіль з паузою (акаунт деактивовано, йде вікно відновлення)
+     * пропускається: сервіс людині вже вимкнено, тож списання за нього було б
+     * платою за ніщо без жодного шляху повернути гроші. Дата лишається у
+     * минулому, і перший прохід після відновлення просто продовжує цикл.
+     */
     private async chargeDueCycles(): Promise<void> {
         const now = new Date();
         const due = await this.profileModel
@@ -65,6 +72,7 @@ export class BillingClockService {
                 {
                     status: SUBSCRIPTION_STATUS.ACTIVE,
                     cancelAtPeriodEnd: false,
+                    billingPausedAt: null,
                     nextChargeAt: { $ne: null, $lte: now },
                 },
                 { userId: 1 }
@@ -77,13 +85,21 @@ export class BillingClockService {
         }
     }
 
-    /** PAST_DUE профілі з насталим часом повтору — повторна спроба списання. */
+    /**
+     * PAST_DUE профілі з насталим часом повтору — повторна спроба списання.
+     *
+     * Sprint 32 — пауза перекриває і цю доріжку. Інакше платник, у якого
+     * списання не пройшло ще до видалення акаунта, отримав би повторну спробу
+     * вже у вікні відновлення — рівно те списання за вимкнений сервіс, якого
+     * пауза й уникає.
+     */
     private async retryDunning(): Promise<void> {
         const now = new Date();
         const due = await this.profileModel
             .find(
                 {
                     status: SUBSCRIPTION_STATUS.PAST_DUE,
+                    billingPausedAt: null,
                     nextRetryAt: { $ne: null, $lte: now },
                 },
                 { userId: 1 }

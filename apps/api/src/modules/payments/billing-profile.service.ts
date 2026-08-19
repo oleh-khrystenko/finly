@@ -1447,6 +1447,14 @@ export class BillingProfileService implements OnModuleInit {
         if (
             !profile ||
             profile.cancelAtPeriodEnd ||
+            // Sprint 32 — пауза вікна відновлення акаунта. Планувальник уже
+            // відфільтрував її у своїй вибірці, але між тією вибіркою і цим
+            // списанням проходить увесь батч (на кожного платника — звернення до
+            // monobank), і підтвердження видалення цілком може встигнути
+            // вклинитись. Тоді застарілий список зняв би плату за вже вимкнений
+            // сервіс без жодного шляху повернути гроші. Свіже слово — за
+            // профілем під локом, як і решта перевірок нижче.
+            profile.billingPausedAt ||
             !profile.cardToken ||
             !profile.currentPeriodEnd ||
             (profile.status !== SUBSCRIPTION_STATUS.ACTIVE &&

@@ -7,6 +7,7 @@ import {
 } from '@finly/types';
 import { Response } from 'express';
 
+import { AccountDeletionService } from '../account-deletion/account-deletion.service';
 import { AuthService } from '../auth/auth.service';
 import { VerifyMagicLinkDto } from '../auth/dto/verify-magic-link.dto';
 import {
@@ -32,7 +33,8 @@ export class MagicLinkVerifyController {
     constructor(
         private readonly authService: AuthService,
         private readonly usersService: UsersService,
-        private readonly landingClaimService: LandingClaimService
+        private readonly landingClaimService: LandingClaimService,
+        private readonly accountDeletion: AccountDeletionService
     ) {}
 
     @Post('magic-link/verify')
@@ -43,6 +45,15 @@ export class MagicLinkVerifyController {
         const result = await this.authService.verifyMagicLink(dto.token);
 
         if (result.deleted) {
+            // Sprint 32 — публічність отримувачів гасне і списання зупиняються
+            // рівно тут, на переході за посиланням, а не на натисканні кнопки у
+            // кабінеті. Крах між soft-delete і цим кроком добиває фонове
+            // прибирання (`CleanupService.resyncDeactivationEffects`), тому
+            // збій тут НЕ валить перехід за посиланням: акаунт уже
+            // деактивовано, і помилка сказала б людині неправду.
+            await this.accountDeletion.applyDeactivationEffectsBestEffort(
+                result.userId
+            );
             clearRefreshCookie(res);
             return {
                 data: {

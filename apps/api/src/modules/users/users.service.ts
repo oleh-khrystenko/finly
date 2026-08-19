@@ -112,12 +112,31 @@ export class UsersService {
         });
     }
 
-    async restore(userId: string): Promise<void> {
-        await this.userModel.findByIdAndUpdate(userId, {
-            deletedAt: null,
-            accountDeletionRequestedAt: null,
-            deletionReminderSentAt: null,
-        });
+    /**
+     * Sprint 32 — знімає деактивацію, але лише поки остаточне прибирання за цей
+     * акаунт ще не взялось. Умова `accountPurgeStartedAt: null` живе всередині
+     * самого запису (одна атомарна операція), а не в перевірці перед ним:
+     * прохід прибирання довгий, і читання «чи ще деактивований» перед оновленням
+     * лишало б вікно, у якому обидві сторони вважали б, що виграли.
+     *
+     * Повертає `false`, якщо прибирання вже почалось — отримувачі на той момент
+     * уже знесені, тож чесна відповідь одна: повертати нема чого.
+     */
+    async restore(userId: string): Promise<boolean> {
+        const restored = await this.userModel
+            .findOneAndUpdate(
+                { _id: userId, accountPurgeStartedAt: null },
+                {
+                    deletedAt: null,
+                    accountDeletionRequestedAt: null,
+                    deletionReminderSentAt: null,
+                },
+                { new: true }
+            )
+            .select('_id')
+            .lean()
+            .exec();
+        return restored !== null;
     }
 
     async updateProfile(

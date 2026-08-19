@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { MAGIC_LINK_PURPOSE } from '@finly/types';
 
+import { AccountDeletionService } from '../account-deletion/account-deletion.service';
 import { AuthService } from '../auth/auth.service';
 import { UsersService } from '../users/users.service';
 import { LandingClaimService } from './landing-claim.service';
@@ -34,6 +35,10 @@ const mockLandingClaimService = {
     attemptLandingClaim: jest.fn(),
 };
 
+const mockAccountDeletion = {
+    applyDeactivationEffectsBestEffort: jest.fn().mockResolvedValue(undefined),
+};
+
 const createMockResponse = () => ({
     cookie: jest.fn(),
     clearCookie: jest.fn(),
@@ -51,6 +56,10 @@ describe('MagicLinkVerifyController', () => {
                 {
                     provide: LandingClaimService,
                     useValue: mockLandingClaimService,
+                },
+                {
+                    provide: AccountDeletionService,
+                    useValue: mockAccountDeletion,
                 },
             ],
         }).compile();
@@ -271,6 +280,7 @@ describe('MagicLinkVerifyController', () => {
         it('clears cookie and returns deleted response for delete-account purpose', async () => {
             mockAuthService.verifyMagicLink.mockResolvedValue({
                 deleted: true,
+                userId: '507f1f77bcf86cd799439011',
                 message: 'Account scheduled for deletion',
                 purpose: MAGIC_LINK_PURPOSE.DELETE_ACCOUNT,
             });
@@ -290,6 +300,11 @@ describe('MagicLinkVerifyController', () => {
             expect(
                 mockLandingClaimService.attemptLandingClaim
             ).not.toHaveBeenCalled();
+            // Sprint 32 — публічність отримувачів гасне і списання зупиняються
+            // саме на переході за посиланням; userId у відповідь не потрапляє.
+            expect(
+                mockAccountDeletion.applyDeactivationEffectsBestEffort
+            ).toHaveBeenCalledWith('507f1f77bcf86cd799439011');
             expect(result.data).toEqual({
                 deleted: true,
                 purpose: MAGIC_LINK_PURPOSE.DELETE_ACCOUNT,

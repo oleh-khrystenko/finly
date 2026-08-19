@@ -16,3 +16,4 @@ export * from './landing-draft';
 export * from './landing-claim';
 export * from './slug-reservation';
 export * from './guides';
+export * from './account-deletion';

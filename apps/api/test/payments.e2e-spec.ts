@@ -544,6 +544,30 @@ describe('Payments E2E (Sprint 27 — два всесвіти)', () => {
         expect(updated?.nextRetryAt).toBeTruthy();
     });
 
+    // Sprint 32 — пауза вікна відновлення акаунта перекрита не лише вибіркою
+    // планувальника, а й повторною перевіркою під локом: між вибіркою і цим
+    // списанням проходить увесь батч, тож підтвердження видалення встигає
+    // вклинитись і застарілий список зняв би плату за вимкнений сервіс.
+    it('cycle renewal: профіль на паузі видалення акаунта → списання не відбувається', async () => {
+        const user = await createUser();
+        const profile = await seedActiveProfile(user, {
+            currentPeriodEnd: new Date(Date.now() - 1000),
+            nextChargeAt: new Date(Date.now() - 1000),
+            billingPausedAt: new Date(),
+        });
+        const boundary = profile.currentPeriodEnd!;
+
+        await billing.chargeDueCycle(user._id.toString());
+
+        expect(providerMock.chargeByToken).not.toHaveBeenCalled();
+        const updated = await profileModel.findOne({ userId: user._id });
+        expect(updated?.currentPeriodEnd!.getTime()).toBe(boundary.getTime());
+        expect(updated?.status).toBe(SUBSCRIPTION_STATUS.ACTIVE);
+        expect(
+            await paymentRecordModel.countDocuments({ userId: user._id })
+        ).toBe(0);
+    });
+
     // ─── Cancel ───
 
     it('POST /subscription/cancel → cancelAtPeriodEnd, токен стерто', async () => {

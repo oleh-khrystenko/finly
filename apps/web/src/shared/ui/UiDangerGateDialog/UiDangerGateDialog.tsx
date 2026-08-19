@@ -1,15 +1,17 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useState } from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import UiButton from '@/shared/ui/UiButton';
-import UiInput from '@/shared/ui/UiInput';
 import {
     UiModal,
     UiModalContent,
     UiModalHeader,
     UiModalTitle,
 } from '@/shared/ui/UiModal';
+import UiDangerGateFields, {
+    areDangerGatesSatisfied,
+} from './UiDangerGateFields';
 import type {
     DangerGate,
     DangerGateInput,
@@ -85,45 +87,22 @@ function GateForm({
     onConfirm,
     onCancel,
 }: GateFormProps) {
-    const baseId = useId();
     const [values, setValues] = useState<string[]>(() => gates.map(() => ''));
-
-    const allMatch =
-        gates.length > 0 &&
-        gates.every((gate, i) => values[i]?.trim() === gate.expected);
-
-    const renderInput: DangerGateInput = (index) => {
-        const gate = gates[index];
-        if (!gate) return null;
-        return (
-            <span className="inline-block w-16 align-middle">
-                <UiInput
-                    id={`${baseId}-${index}`}
-                    aria-label={gate.label}
-                    size="sm"
-                    inputMode="numeric"
-                    autoComplete="off"
-                    className="text-center"
-                    value={values[index] ?? ''}
-                    onChange={(e) =>
-                        setValues((prev) => {
-                            const next = [...prev];
-                            next[index] = e.target.value;
-                            return next;
-                        })
-                    }
-                />
-            </span>
-        );
-    };
 
     return (
         <div className="flex flex-col gap-5 px-4 pb-4">
-            {/* `<div>`, не `<p>`: inline-поля — це UiInput з блоковим коренем,
-                а `<div>` усередині `<p>` дав би невалідний DOM-nesting. */}
-            <div className="text-foreground text-sm leading-9">
-                {renderPrompt(renderInput)}
-            </div>
+            <UiDangerGateFields
+                gates={gates}
+                values={values}
+                onChange={(index, value) =>
+                    setValues((prev) => {
+                        const next = [...prev];
+                        next[index] = value;
+                        return next;
+                    })
+                }
+                renderPrompt={renderPrompt}
+            />
 
             <div className="flex justify-end gap-3">
                 <UiButton
@@ -138,7 +117,7 @@ function GateForm({
                     type="button"
                     variant="destructive-outline"
                     size="md"
-                    disabled={!allMatch}
+                    disabled={!areDangerGatesSatisfied(gates, values)}
                     onClick={onConfirm}
                 >
                     {confirmLabel}
