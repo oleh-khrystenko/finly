@@ -13,6 +13,7 @@ import { ClientSession, Connection, Model, Types } from 'mongoose';
 import {
     BILLING_CURRENCY,
     BILLING_UNIVERSE,
+    type CardDetails,
     CREDIT_LEDGER_ENTRY_TYPE,
     MONOBANK_INVOICE_STATUS,
     MONOBANK_NON_TERMINAL_STATUSES,
@@ -52,6 +53,7 @@ import {
     PAYMENT_PROVIDER,
     ProviderRequestError,
 } from './interfaces/payment-provider.interface';
+import { cardProfileFields, cardRecordFields } from './card-details';
 import {
     BillingProfile,
     BillingProfileDocument,
@@ -237,6 +239,9 @@ export class BillingProfileService implements OnModuleInit {
             nextChargeAt: p.nextChargeAt,
             cancelAtPeriodEnd: p.cancelAtPeriodEnd,
             cardMask: p.cardMask,
+            cardPaymentMethod: p.cardPaymentMethod ?? null,
+            cardPaymentSystem: p.cardPaymentSystem ?? null,
+            cardBank: p.cardBank ?? null,
             // Наступне списання — за ЕФЕКТИВНИМ складом (відкладені зменшення
             // враховано): саме цю суму clock спише на межі циклу. Без живого
             // доступу списання не буде (0); заразом stale-склад INCOMPLETE/
@@ -1125,7 +1130,7 @@ export class BillingProfileService implements OnModuleInit {
                 userId,
                 orderReference,
                 result.invoiceId,
-                result.cardMask
+                result
             );
             return false;
         }
@@ -1134,7 +1139,7 @@ export class BillingProfileService implements OnModuleInit {
             userId,
             orderReference,
             result.invoiceId,
-            result.cardMask
+            result
         );
         throw new BadRequestException({
             code: RESPONSE_CODE.BILLING_CHARGE_DECLINED,
@@ -1151,7 +1156,7 @@ export class BillingProfileService implements OnModuleInit {
         userId: string,
         orderReference: string,
         invoiceId: string,
-        cardMask: string | null
+        card: CardDetails
     ): Promise<void> {
         // Фільтр на PENDING обов'язковий двічі: (1) єдиний індекс на
         // orderReference — partial по status:pending, запит без статусу йшов би
@@ -1167,7 +1172,7 @@ export class BillingProfileService implements OnModuleInit {
             userId,
             orderReference,
             invoiceId,
-            cardMask,
+            card,
             effect
         );
         const complete = await this.reconcileBusinessesSafe(businessIds);
@@ -1180,7 +1185,7 @@ export class BillingProfileService implements OnModuleInit {
         userId: string,
         orderReference: string,
         invoiceId: string,
-        cardMask: string | null
+        card: CardDetails
     ): Promise<void> {
         const session = await this.connection.startSession();
         try {
@@ -1189,7 +1194,7 @@ export class BillingProfileService implements OnModuleInit {
                     orderReference,
                     PAYMENT_RECORD_STATUS.DECLINED,
                     invoiceId,
-                    cardMask,
+                    card,
                     session
                 );
                 // Відмова — теж РОЗВ'ЯЗАНА невизначеність: гроші точно не
@@ -1214,7 +1219,7 @@ export class BillingProfileService implements OnModuleInit {
         userId: string,
         orderReference: string,
         invoiceId: string,
-        cardMask: string | null,
+        card: CardDetails,
         effect: PendingEffect
     ): Promise<{ businessIds: string[]; marker: Date | null }> {
         const session = await this.connection.startSession();
@@ -1228,7 +1233,7 @@ export class BillingProfileService implements OnModuleInit {
                     orderReference,
                     PAYMENT_RECORD_STATUS.APPROVED,
                     invoiceId,
-                    cardMask,
+                    card,
                     session
                 );
                 if (!matched) return;
@@ -1442,6 +1447,14 @@ export class BillingProfileService implements OnModuleInit {
         if (
             !profile ||
             profile.cancelAtPeriodEnd ||
+            // Sprint 32 — пауза вікна відновлення акаунта. Планувальник уже
+            // відфільтрував її у своїй вибірці, але між тією вибіркою і цим
+            // списанням проходить увесь батч (на кожного платника — звернення до
+            // monobank), і підтвердження видалення цілком може встигнути
+            // вклинитись. Тоді застарілий список зняв би плату за вже вимкнений
+            // сервіс без жодного шляху повернути гроші. Свіже слово — за
+            // профілем під локом, як і решта перевірок нижче.
+            profile.billingPausedAt ||
             !profile.cardToken ||
             !profile.currentPeriodEnd ||
             (profile.status !== SUBSCRIPTION_STATUS.ACTIVE &&
@@ -1522,7 +1535,7 @@ export class BillingProfileService implements OnModuleInit {
             currency,
             status: result.status,
             invoiceId: result.invoiceId,
-            cardMask: result.cardMask,
+            card: result,
             cardToken: result.cardToken,
         });
     }
@@ -1626,14 +1639,14 @@ export class BillingProfileService implements OnModuleInit {
                 userId,
                 orderReference,
                 event.invoiceId,
-                event.cardMask
+                event
             );
         } else {
             await this.settleImmediateDecline(
                 userId,
                 orderReference,
                 event.invoiceId,
-                event.cardMask
+                event
             );
         }
     }
@@ -1666,7 +1679,7 @@ export class BillingProfileService implements OnModuleInit {
             currency,
             status: event.status,
             invoiceId: event.invoiceId,
-            cardMask: event.cardMask,
+            card: event,
             cardToken: event.cardToken,
         });
     }
@@ -1679,7 +1692,7 @@ export class BillingProfileService implements OnModuleInit {
             currency: string;
             status: string;
             invoiceId: string;
-            cardMask: string | null;
+            card: CardDetails;
             cardToken: string | null;
         }
     ): Promise<void> {
@@ -1693,7 +1706,7 @@ export class BillingProfileService implements OnModuleInit {
                 orderReference,
                 boundary,
                 ctx.invoiceId,
-                ctx.cardMask,
+                ctx.card,
                 ctx.cardToken
             );
             if (applied) {
@@ -1712,7 +1725,7 @@ export class BillingProfileService implements OnModuleInit {
             userId,
             orderReference,
             ctx.invoiceId,
-            ctx.cardMask
+            ctx.card
         );
         if (!dunning) return;
         if (dunning.exhausted) {
@@ -1751,7 +1764,7 @@ export class BillingProfileService implements OnModuleInit {
         orderReference: string,
         boundary: Date,
         invoiceId: string,
-        cardMask: string | null,
+        card: CardDetails,
         cardToken: string | null
     ): Promise<{ detached: string[] } | null> {
         const session = await this.connection.startSession();
@@ -1762,14 +1775,14 @@ export class BillingProfileService implements OnModuleInit {
                     orderReference,
                     PAYMENT_RECORD_STATUS.APPROVED,
                     invoiceId,
-                    cardMask,
+                    card,
                     session
                 );
                 if (!matched) return;
                 const detached = await this.advanceCycle(
                     userId,
                     boundary,
-                    cardMask,
+                    card,
                     cardToken,
                     session
                 );
@@ -1789,7 +1802,7 @@ export class BillingProfileService implements OnModuleInit {
     private async advanceCycle(
         userId: string,
         boundary: Date,
-        cardMask: string | null,
+        card: CardDetails,
         cardToken: string | null,
         session: ClientSession
     ): Promise<string[]> {
@@ -1820,7 +1833,7 @@ export class BillingProfileService implements OnModuleInit {
         set['nextRetryAt'] = null;
         set['needsManualReview'] = false;
         set['lastProviderEventAt'] = new Date();
-        if (cardMask) set['cardMask'] = cardMask;
+        Object.assign(set, cardProfileFields(card));
         if (cardToken) set['cardToken'] = cardToken;
 
         const update: Record<string, unknown> = { $set: set };
@@ -1965,7 +1978,7 @@ export class BillingProfileService implements OnModuleInit {
         userId: string,
         orderReference: string,
         invoiceId: string,
-        cardMask: string | null
+        card: CardDetails
     ): Promise<{ exhausted: boolean; attempts: number } | null> {
         const session = await this.connection.startSession();
         try {
@@ -1975,7 +1988,7 @@ export class BillingProfileService implements OnModuleInit {
                     orderReference,
                     PAYMENT_RECORD_STATUS.DECLINED,
                     invoiceId,
-                    cardMask,
+                    card,
                     session
                 );
                 if (!matched) return;
@@ -2138,7 +2151,7 @@ export class BillingProfileService implements OnModuleInit {
                     currency: event.currency,
                     status: PAYMENT_RECORD_STATUS.DECLINED,
                     providerTransactionId: event.invoiceId,
-                    cardMask: event.cardMask,
+                    card: event,
                 },
                 session
             );
@@ -2169,7 +2182,7 @@ export class BillingProfileService implements OnModuleInit {
                     currency: event.currency,
                     status: PAYMENT_RECORD_STATUS.APPROVED,
                     providerTransactionId: event.invoiceId,
-                    cardMask: event.cardMask,
+                    card: event,
                 },
                 session
             );
@@ -2210,7 +2223,7 @@ export class BillingProfileService implements OnModuleInit {
                     currency: event.currency,
                     status: PAYMENT_RECORD_STATUS.APPROVED,
                     providerTransactionId: event.invoiceId,
-                    cardMask: event.cardMask,
+                    card: event,
                 },
                 session
             );
@@ -2247,7 +2260,7 @@ export class BillingProfileService implements OnModuleInit {
             reconcileRequiredAt: new Date(),
         };
         if (event.cardToken) set['cardToken'] = event.cardToken;
-        if (event.cardMask) set['cardMask'] = event.cardMask;
+        Object.assign(set, cardProfileFields(event));
         const updated = await this.applyProfileUpdate(
             userId,
             event,
@@ -2273,7 +2286,7 @@ export class BillingProfileService implements OnModuleInit {
                 currency: event.currency,
                 status: PAYMENT_RECORD_STATUS.APPROVED,
                 providerTransactionId: event.invoiceId,
-                cardMask: event.cardMask,
+                card: event,
             },
             session
         );
@@ -2427,6 +2440,9 @@ export class BillingProfileService implements OnModuleInit {
                 status: PAYMENT_RECORD_STATUS.PENDING,
                 providerTransactionId: null,
                 cardMask: null,
+                cardPaymentMethod: null,
+                cardPaymentSystem: null,
+                cardBank: null,
                 refundAmount: null,
                 pendingEffect,
             });
@@ -2451,14 +2467,14 @@ export class BillingProfileService implements OnModuleInit {
             | typeof PAYMENT_RECORD_STATUS.APPROVED
             | typeof PAYMENT_RECORD_STATUS.DECLINED,
         invoiceId: string,
-        cardMask: string | null,
+        card: CardDetails,
         session: ClientSession
     ): Promise<boolean> {
         const set: Record<string, unknown> = {
             status,
             providerTransactionId: invoiceId,
         };
-        if (cardMask) set.cardMask = cardMask;
+        Object.assign(set, cardRecordFields(card));
         const res = await this.paymentRecordModel.updateOne(
             { orderReference, status: PAYMENT_RECORD_STATUS.PENDING },
             { $set: set },
@@ -2476,7 +2492,7 @@ export class BillingProfileService implements OnModuleInit {
             currency: string;
             status: (typeof PAYMENT_RECORD_STATUS)[keyof typeof PAYMENT_RECORD_STATUS];
             providerTransactionId: string | null;
-            cardMask: string | null;
+            card: CardDetails;
         },
         session?: ClientSession
     ): Promise<void> {
@@ -2490,7 +2506,7 @@ export class BillingProfileService implements OnModuleInit {
                     currency: data.currency,
                     status: data.status,
                     providerTransactionId: data.providerTransactionId,
-                    cardMask: data.cardMask,
+                    ...cardRecordFields(data.card),
                     refundAmount: null,
                     pendingEffect: null,
                 },

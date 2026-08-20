@@ -1,4 +1,5 @@
 export { useAuthStore } from './authStore';
+export { performLogout } from './performLogout';
 export { AdminGate } from './AdminGate';
 export { useBookkeeperMode } from './useBookkeeperMode';
 export { useApplyPendingSlug } from './useApplyPendingSlug';

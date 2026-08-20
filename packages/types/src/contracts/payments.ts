@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CARD_PAYMENT_METHODS } from '../enums/card-payment-method';
 
 // --- Billing-wide constants ---
 // Один продукт = одна валюта (гривня).
@@ -54,6 +55,23 @@ export const PAYMENT_RECORD_STATUS = {
 export type PaymentRecordStatus =
     (typeof PAYMENT_RECORD_STATUS)[keyof typeof PAYMENT_RECORD_STATUS];
 
+/**
+ * Опис картки так, як його віддає monobank у `paymentInfo`. Кабінет показує ці
+ * поля разом, а не голий номер: для Apple Pay / Google Pay цифри належать
+ * підставному номеру пристрою, тож упізнати по них картку неможливо, і замість
+ * них лишається назва гаманця, платіжна система і банк (`hasRealCardNumber`).
+ */
+export const CardDetailsSchema = z.object({
+    cardMask: z.string().nullable(),
+    cardPaymentMethod: z.enum(CARD_PAYMENT_METHODS).nullable(),
+    /** Платіжна система картки; сирий рядок провайдера (`visa` / `mastercard`). */
+    cardPaymentSystem: z.string().nullable(),
+    /** Назва банку-емітента; лишається впізнаваною і для гаманцевих оплат. */
+    cardBank: z.string().nullable(),
+});
+
+export type CardDetails = z.infer<typeof CardDetailsSchema>;
+
 /** Public shape списку списань у кабінеті (без provider-secret полів). */
 export const PaymentRecordSchema = z.object({
     id: z.string(),
@@ -71,7 +89,7 @@ export const PaymentRecordSchema = z.object({
         PAYMENT_RECORD_STATUS.DECLINED,
         PAYMENT_RECORD_STATUS.REFUNDED,
     ]),
-    cardMask: z.string().nullable(),
+    ...CardDetailsSchema.shape,
     refundAmount: z.number().int().nullable(),
     createdAt: z.coerce.date(),
 });
@@ -128,7 +146,7 @@ export const BillingWebhookEventSchema = z.object({
     amount: z.number().int(), // копійки
     currency: z.string(),
     cardToken: z.string().nullable(),
-    cardMask: z.string().nullable(),
+    ...CardDetailsSchema.shape,
     failureReason: z.string().nullable(),
     errCode: z.string().nullable(),
     raw: z.record(z.string(), z.unknown()),

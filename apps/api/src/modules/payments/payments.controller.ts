@@ -246,6 +246,9 @@ function mapPaymentRecord(record: PaymentRecordLean): PaymentRecord {
         currency: record.currency,
         status: record.status,
         cardMask: record.cardMask,
+        cardPaymentMethod: record.cardPaymentMethod ?? null,
+        cardPaymentSystem: record.cardPaymentSystem ?? null,
+        cardBank: record.cardBank ?? null,
         refundAmount: record.refundAmount,
         createdAt: record.createdAt,
     };

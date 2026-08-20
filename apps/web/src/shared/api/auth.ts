@@ -1,5 +1,6 @@
 import {
     CURRENT_TERMS_VERSION,
+    type AccountDeletionPreview,
     type AuthResponse,
     type CheckEmailResponse,
     type LandingDraft,
@@ -113,6 +114,18 @@ export async function updateProfile(
     const { data } = await apiClient.patch<{ data: UserProfile }>(
         '/users/me',
         dto
+    );
+    return data.data;
+}
+
+/**
+ * Sprint 32 — що зникне разом з акаунтом, плюс шлях підтвердження. Викликається
+ * ДО будь-якої руйнівної дії: перелік і вписані кількості стоять перед
+ * підтвердженням в обох сценаріях (пароль і лист).
+ */
+export async function getAccountDeletionPreview(): Promise<AccountDeletionPreview> {
+    const { data } = await apiClient.get<{ data: AccountDeletionPreview }>(
+        '/users/account/delete/preview'
     );
     return data.data;
 }

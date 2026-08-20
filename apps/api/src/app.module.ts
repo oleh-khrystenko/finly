@@ -10,6 +10,7 @@ import { THROTTLERS } from './common/http/throttle-policy';
 import { OnboardingInterceptor } from './common/interceptors/onboarding.interceptor';
 import { ENV } from './config/env';
 import { RedisModule } from './common/modules/redis.module';
+import { AccountDeletionModule } from './modules/account-deletion/account-deletion.module';
 import { AccountsModule } from './modules/accounts/accounts.module';
 import { AdminPayeesModule } from './modules/admin-payees/admin-payees.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -49,6 +50,7 @@ import { GuidesModule } from './modules/guides/guides.module';
         AccountsModule,
         InvoicesModule,
         LandingClaimModule,
+        AccountDeletionModule,
         OrphanCleanupModule,
         ReportsModule,
         StorageModule,

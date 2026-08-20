@@ -858,6 +858,9 @@ export class BusinessesService {
             .find({
                 catalogVisible: true,
                 deletedAt: null,
+                // Sprint 32 — картка призупиненого отримувача зникає з каталогу
+                // разом з його сторінкою: інакше вітрина вела б платника на 404.
+                publicitySuspendedAt: null,
                 $or: [
                     { isSystem: true },
                     { publicityStatus: 'approved', slugCustomized: true },
@@ -1190,12 +1193,20 @@ export class BusinessesService {
      *
      * Один extra query лише на cache-miss old-slug — happy-path (поточний slug)
      * не платить нічого (`historyExists` не викликається коли business знайдено).
+     *
+     * **Sprint 32 — призупинена публічність гасне саме тут.** Це єдина точка
+     * входу публічної зони у отримувача (сторінка, реквізити, інвойс, усі QR і
+     * персоналізовані посилання), тож фільтр стоїть один раз і покриває всі
+     * поверхні. Для caller-а це `null`, тобто рівно та сама 404, що у
+     * неопублікованого запису — окремих натяків на причину не дається.
      */
     async getBySlugOrHistorical(
         slug: string
     ): Promise<BusinessDocument | null> {
         const slugLower = slug.toLowerCase();
-        const business = await this.businessModel.findOne({ slugLower }).exec();
+        const business = await this.businessModel
+            .findOne({ slugLower, publicitySuspendedAt: null })
+            .exec();
         if (business) return business;
         // Sprint 19 — lapse-записи (redirect:false) НЕ редіректять: ім'я лише
         // зарезервоване на холд, публічний хіт неактивний. `$ne: false` ловить і
@@ -1205,7 +1216,12 @@ export class BusinessesService {
             .lean<{ businessId: Types.ObjectId }>()
             .exec();
         if (!historyEntry) return null;
-        return this.businessModel.findById(historyEntry.businessId).exec();
+        return this.businessModel
+            .findOne({
+                _id: historyEntry.businessId,
+                publicitySuspendedAt: null,
+            })
+            .exec();
     }
 
     async update(

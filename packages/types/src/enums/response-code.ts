@@ -12,6 +12,13 @@ export const RESPONSE_CODE = {
     // --- users success ---
     TERMS_ACCEPTED: 'TERMS_ACCEPTED',
 
+    /**
+     * Sprint 32 — відновити акаунт уже пізно: фонове прибирання встигло взятись
+     * за нього, отримувачі з усім піддеревом знесені. Окремий код замість
+     * «акаунт не видалено»: стан інший і пояснення людині потрібне інше.
+     */
+    ACCOUNT_PURGE_IN_PROGRESS: 'ACCOUNT_PURGE_IN_PROGRESS',
+
     // --- payers error (Sprint 30) ---
     /**
      * Платника з таким ідентифікатором немає у списку користувача. Чужий запис
@@ -512,6 +519,7 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.TERMS_ACCEPTED]: RESPONSE_TYPE.SUCCESS,
     [RESPONSE_CODE.ACCOUNT_DELETED]: RESPONSE_TYPE.SUCCESS,
     [RESPONSE_CODE.ACCOUNT_RESTORED]: RESPONSE_TYPE.SUCCESS,
+    [RESPONSE_CODE.ACCOUNT_PURGE_IN_PROGRESS]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.PAYER_NOT_FOUND]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.PAYER_TAX_ID_DUPLICATE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.PAYER_LIMIT_REACHED]: RESPONSE_TYPE.ERROR,

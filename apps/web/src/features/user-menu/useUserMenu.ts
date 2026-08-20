@@ -1,8 +1,7 @@
 import { type ReactNode } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { getFullName, getInitials } from '@finly/types';
-import { logout } from '@/shared/api';
-import { useAuthStore } from '@/entities/user';
+import { performLogout, useAuthStore } from '@/entities/user';
 
 interface UserMenuItem {
     value: string;
@@ -34,13 +33,6 @@ interface UserMenuOptions {
      * — `router.push('/business')` дав би там 404.
      */
     cabinetBaseUrl?: string;
-    /**
-     * Що робити після виходу. Дефолт — на корінь поточного хоста (кабінет).
-     * Публічна сторінка передає перезавантаження: людина лишається там, де
-     * платила, а введені у форму дані попереднього платника зникають разом зі
-     * станом сторінки.
-     */
-    onLoggedOut?: () => void;
 }
 
 export function useUserMenu(
@@ -58,10 +50,9 @@ export function useUserMenu(
     const router = useRouter();
     const pathname = usePathname();
     const user = useAuthStore((s) => s.user);
-    const clearUser = useAuthStore((s) => s.clearUser);
 
     const isAdmin = user?.role === 'admin';
-    const { cabinetBaseUrl, onLoggedOut } = options;
+    const { cabinetBaseUrl } = options;
 
     const withHref = (item: UserMenuItem): UserMenuItem =>
         cabinetBaseUrl && item.route
@@ -143,24 +134,9 @@ export function useUserMenu(
         if (item?.route) {
             router.push(item.route);
         } else if (value === 'logout') {
-            void (async () => {
-                // Server-side revoke — best-effort: interceptor пропускає
-                // `/auth/logout`-помилки наскрізь, і без catch користувач
-                // лишався б «не вийшов» без жодної реакції. Локальний вихід
-                // (clearUser + redirect) виконується завжди; невідкликаний
-                // refresh-token доживе до TTL або ротації.
-                try {
-                    await logout();
-                } catch (error) {
-                    console.warn('Logout request failed', error);
-                }
-                clearUser();
-                if (onLoggedOut) {
-                    onLoggedOut();
-                    return;
-                }
-                window.location.assign('/');
-            })();
+            // Куди вести після виходу вирішує сам `performLogout` за хостом:
+            // публічна pay-сторінка перезавантажується, кабінет іде на корінь.
+            void performLogout();
         }
     };
 

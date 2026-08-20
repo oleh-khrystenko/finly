@@ -275,19 +275,45 @@ describe('UsersService', () => {
     });
 
     describe('restore', () => {
-        it('should clear deletedAt', async () => {
-            mockModel.findByIdAndUpdate.mockResolvedValue(undefined);
+        const restoreChain = (result: unknown) => ({
+            select: jest.fn().mockReturnValue({
+                lean: jest.fn().mockReturnValue({
+                    exec: jest.fn().mockResolvedValue(result),
+                }),
+            }),
+        });
 
-            await service.restore('507f1f77bcf86cd799439011');
+        it('should clear deletedAt while purge has not started', async () => {
+            mockModel.findOneAndUpdate.mockReturnValue(
+                restoreChain({ _id: '507f1f77bcf86cd799439011' })
+            );
 
-            expect(mockModel.findByIdAndUpdate).toHaveBeenCalledWith(
-                '507f1f77bcf86cd799439011',
+            await expect(
+                service.restore('507f1f77bcf86cd799439011')
+            ).resolves.toBe(true);
+
+            expect(mockModel.findOneAndUpdate).toHaveBeenCalledWith(
+                {
+                    _id: '507f1f77bcf86cd799439011',
+                    accountPurgeStartedAt: null,
+                },
                 {
                     deletedAt: null,
                     accountDeletionRequestedAt: null,
                     deletionReminderSentAt: null,
-                }
+                },
+                { new: true }
             );
+        });
+
+        // Sprint 32 — умова живе всередині запису, тож прибирання, яке вже
+        // взялось за акаунт, лишає відновлення ні з чим: отримувачі знесені.
+        it('should report failure when purge already claimed the account', async () => {
+            mockModel.findOneAndUpdate.mockReturnValue(restoreChain(null));
+
+            await expect(
+                service.restore('507f1f77bcf86cd799439011')
+            ).resolves.toBe(false);
         });
     });
 

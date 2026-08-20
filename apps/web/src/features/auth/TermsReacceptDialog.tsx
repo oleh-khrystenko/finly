@@ -12,7 +12,7 @@ import UiButton from '@/shared/ui/UiButton';
 import UiCheckbox from '@/shared/ui/UiCheckbox';
 import UiLink from '@/shared/ui/UiLink';
 import { acceptTerms } from '@/shared/api';
-import { useAuthStore } from '@/entities/user';
+import { performLogout, useAuthStore } from '@/entities/user';
 import { useTermsReacceptDialogStore } from './termsReacceptDialogStore';
 
 const REQUIRED_ERROR = 'Необхідно прийняти оновлені умови для продовження.';
@@ -22,6 +22,7 @@ function TermsReacceptForm({ onClose }: { onClose: () => void }) {
     const [agreed, setAgreed] = useState(false);
     const [error, setError] = useState('');
     const [submitting, setSubmitting] = useState(false);
+    const [declining, setDeclining] = useState(false);
 
     const handleSubmit = async () => {
         if (!agreed) {
@@ -43,6 +44,14 @@ function TermsReacceptForm({ onClose }: { onClose: () => void }) {
             setError(GENERIC_ERROR);
             setSubmitting(false);
         }
+    };
+
+    // Діалог не закриваємо: `performLogout` перезавантажує сторінку, і стан
+    // overlay-store згасає разом з нею. Якби навігація чомусь не сталася,
+    // відкритий діалог — правильний стан: умови не прийняті, вихід не відбувся.
+    const handleDecline = () => {
+        setDeclining(true);
+        void performLogout();
     };
 
     return (
@@ -87,15 +96,31 @@ function TermsReacceptForm({ onClose }: { onClose: () => void }) {
                     </UiLink>
                 </UiCheckbox>
 
-                <UiButton
-                    variant="filled"
-                    size="lg"
-                    className="w-full justify-center"
-                    loading={submitting}
-                    onClick={handleSubmit}
-                >
-                    Прийняти та продовжити
-                </UiButton>
+                <div className="space-y-3">
+                    <UiButton
+                        variant="filled"
+                        size="lg"
+                        className="w-full justify-center"
+                        loading={submitting}
+                        disabled={declining}
+                        onClick={handleSubmit}
+                    >
+                        Прийняти та продовжити
+                    </UiButton>
+                    <UiButton
+                        variant="text"
+                        size="md"
+                        // `min-h-11` — touch-target 44×44 за responsive.md §2:
+                        // baseline у примітиві покриває лише `icon`/`link`,
+                        // а `text size="md"` дає 40px.
+                        className="min-h-11 w-full justify-center"
+                        loading={declining}
+                        disabled={submitting}
+                        onClick={handleDecline}
+                    >
+                        Відмовитись і вийти
+                    </UiButton>
+                </div>
             </div>
         </>
     );

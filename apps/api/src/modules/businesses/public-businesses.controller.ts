@@ -101,6 +101,10 @@ export class PublicBusinessesController {
             .find({
                 seoIndexEnabled: true,
                 deletedAt: null,
+                // Sprint 32 — сторінка призупиненого отримувача віддає 404, тож
+                // її URL не можна подавати Google: інакше «Submitted URL not
+                // found» у Search Console на кожному видаленому акаунті.
+                publicitySuspendedAt: null,
             })
             .select(
                 '_id slug updatedAt seoIndexEnabled isSystem catalogVisible'

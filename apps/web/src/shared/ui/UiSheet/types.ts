@@ -22,6 +22,8 @@ export interface UiSheetContentProps extends ComponentPropsWithoutRef<
     hideOverlay?: boolean;
 }
 
+export type UiSheetBodyProps = ComponentPropsWithoutRef<'div'>;
+
 export type UiSheetHeaderProps = ComponentPropsWithoutRef<'div'>;
 
 export type UiSheetTitleProps = ComponentPropsWithoutRef<
