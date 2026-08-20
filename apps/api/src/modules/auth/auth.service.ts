@@ -368,6 +368,13 @@ export class AuthService {
           }
         | {
               deleted: true;
+              /**
+               * Sprint 32 — кому саме деактивовано акаунт. Внутрішнє поле:
+               * `MagicLinkVerifyController` застосовує за ним ефекти
+               * підтвердження (гасіння публічності отримувачів + пауза списань)
+               * і у відповідь клієнту його не кладе.
+               */
+              userId: string;
               message: string;
               purpose: typeof MAGIC_LINK_PURPOSE.DELETE_ACCOUNT;
           }
@@ -432,18 +439,21 @@ export class AuthService {
 
     private async handleDeleteAccountVerification(email: string): Promise<{
         deleted: true;
+        userId: string;
         message: string;
         purpose: typeof MAGIC_LINK_PURPOSE.DELETE_ACCOUNT;
     }> {
         const user = await this.usersService.findByEmail(email);
         if (!user) throw new NotFoundException('User not found');
 
-        await this.usersService.softDelete(user._id.toString());
-        await this.revokeAllUserTokens(user._id.toString());
+        const userId = user._id.toString();
+        await this.usersService.softDelete(userId);
+        await this.revokeAllUserTokens(userId);
         await this.sendDeletionConfirmationEmail(email);
 
         return {
             deleted: true,
+            userId,
             message: 'Account scheduled for deletion',
             purpose: MAGIC_LINK_PURPOSE.DELETE_ACCOUNT,
         };

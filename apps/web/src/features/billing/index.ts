@@ -9,3 +9,4 @@ export {
     startSubscriptionCheckout,
 } from './subscribeUpsell';
 export { loadCatalog } from './loadCatalog';
+export { formatCardLabel } from './formatCard';

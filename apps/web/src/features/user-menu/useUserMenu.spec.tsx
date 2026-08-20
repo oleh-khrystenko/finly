@@ -23,7 +23,9 @@ jest.mock('next/navigation', () => ({
 }));
 
 const userState: { user: typeof baseUser | null } = { user: null };
+const mockPerformLogout = jest.fn();
 jest.mock('@/entities/user', () => ({
+    performLogout: (...args: unknown[]) => mockPerformLogout(...args),
     useAuthStore: (
         selector: (s: {
             user: typeof baseUser | null;

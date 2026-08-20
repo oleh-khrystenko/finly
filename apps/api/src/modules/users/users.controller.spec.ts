@@ -1,8 +1,5 @@
-import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { RESPONSE_CODE, MAGIC_LINK_PURPOSE } from '@finly/types';
 
-import { AuthService } from '../auth/auth.service';
 import { SlugReservationService } from '../slug-reservation/slug-reservation.service';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
@@ -21,16 +18,6 @@ const mockUser = {
 
 const mockUsersService = {
     updateProfile: jest.fn(),
-    softDelete: jest.fn(),
-    restore: jest.fn(),
-    setDeletionRequested: jest.fn(),
-};
-
-const mockAuthService = {
-    sendMagicLink: jest.fn(),
-    verifyPassword: jest.fn(),
-    revokeAllUserTokens: jest.fn(),
-    sendDeletionConfirmationEmail: jest.fn(),
 };
 
 const mockSlugReservations = {
@@ -46,7 +33,6 @@ describe('UsersController', () => {
             controllers: [UsersController],
             providers: [
                 { provide: UsersService, useValue: mockUsersService },
-                { provide: AuthService, useValue: mockAuthService },
                 {
                     provide: SlugReservationService,
                     useValue: mockSlugReservations,
@@ -175,125 +161,6 @@ describe('UsersController', () => {
                 mockUser._id
             );
             expect(result).toEqual({ data: { released: true } });
-        });
-    });
-
-    describe('POST /users/account/delete', () => {
-        it('should return requiresPassword: true when user has password', async () => {
-            const result = await controller.deleteAccount(mockUser as any);
-
-            expect(result).toEqual({
-                data: { requiresPassword: true },
-            });
-            expect(mockAuthService.sendMagicLink).not.toHaveBeenCalled();
-        });
-
-        it('should send magic link and return requiresMagicLink: true when no password', async () => {
-            const userNoPass = { ...mockUser, passwordHash: null };
-            mockAuthService.sendMagicLink.mockResolvedValue(undefined);
-            mockUsersService.setDeletionRequested.mockResolvedValue(undefined);
-
-            const result = await controller.deleteAccount(userNoPass as any);
-
-            expect(mockAuthService.sendMagicLink).toHaveBeenCalledWith(
-                'test@gmail.com',
-                MAGIC_LINK_PURPOSE.DELETE_ACCOUNT
-            );
-            expect(mockUsersService.setDeletionRequested).toHaveBeenCalledWith(
-                '507f1f77bcf86cd799439011'
-            );
-            expect(result).toEqual({
-                data: {
-                    requiresMagicLink: true,
-                    message: 'Confirmation link sent',
-                },
-            });
-        });
-    });
-
-    describe('POST /users/account/delete/confirm', () => {
-        it('should soft-delete, revoke tokens, send email, clear cookie', async () => {
-            mockAuthService.verifyPassword.mockResolvedValue(true);
-            mockUsersService.softDelete.mockResolvedValue(undefined);
-            mockAuthService.revokeAllUserTokens.mockResolvedValue(undefined);
-            mockAuthService.sendDeletionConfirmationEmail.mockResolvedValue(
-                undefined
-            );
-            const res = { clearCookie: jest.fn() };
-
-            const result = await controller.confirmDeleteAccount(
-                mockUser as any,
-                { password: 'correct' } as any,
-                res as any
-            );
-
-            expect(mockAuthService.verifyPassword).toHaveBeenCalledWith(
-                '507f1f77bcf86cd799439011',
-                'correct'
-            );
-            expect(mockUsersService.softDelete).toHaveBeenCalledWith(
-                '507f1f77bcf86cd799439011'
-            );
-            expect(mockAuthService.revokeAllUserTokens).toHaveBeenCalledWith(
-                '507f1f77bcf86cd799439011'
-            );
-            expect(
-                mockAuthService.sendDeletionConfirmationEmail
-            ).toHaveBeenCalledWith('test@gmail.com');
-            expect(res.clearCookie).toHaveBeenCalledWith(
-                'bid_refresh',
-                expect.objectContaining({ path: '/' })
-            );
-            expect(result).toEqual({
-                data: {
-                    code: RESPONSE_CODE.ACCOUNT_DELETED,
-                    message: 'Account scheduled for deletion',
-                },
-            });
-        });
-
-        it('should throw 401 on invalid password', async () => {
-            mockAuthService.verifyPassword.mockResolvedValue(false);
-
-            await expect(
-                controller.confirmDeleteAccount(
-                    mockUser as any,
-                    { password: 'wrong' } as any,
-                    {} as any
-                )
-            ).rejects.toThrow(UnauthorizedException);
-
-            expect(mockUsersService.softDelete).not.toHaveBeenCalled();
-        });
-    });
-
-    describe('POST /users/account/restore', () => {
-        it('should restore deleted user and return ACCOUNT_RESTORED', async () => {
-            const deletedUser = {
-                ...mockUser,
-                deletedAt: new Date('2026-01-01'),
-            };
-            mockUsersService.restore.mockResolvedValue(undefined);
-
-            const result = await controller.restoreAccount(deletedUser as any);
-
-            expect(mockUsersService.restore).toHaveBeenCalledWith(
-                '507f1f77bcf86cd799439011'
-            );
-            expect(result).toEqual({
-                data: {
-                    code: RESPONSE_CODE.ACCOUNT_RESTORED,
-                    message: 'Account restored',
-                },
-            });
-        });
-
-        it('should throw 400 when account is not deleted', async () => {
-            await expect(
-                controller.restoreAccount(mockUser as any)
-            ).rejects.toThrow(BadRequestException);
-
-            expect(mockUsersService.restore).not.toHaveBeenCalled();
         });
     });
 });

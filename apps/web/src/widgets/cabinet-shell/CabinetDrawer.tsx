@@ -4,6 +4,7 @@ import { Logo } from '@/entities/brand';
 import {
     UiSheet,
     UiSheetContent,
+    UiSheetBody,
     UiSheetHeader,
     UiSheetTitle,
 } from '@/shared/ui/UiSheet';
@@ -32,18 +33,28 @@ export default function CabinetDrawer() {
                     </UiSheetTitle>
                 </UiSheetHeader>
 
-                <nav
-                    aria-label="Навігація кабінету"
-                    className="flex flex-1 flex-col gap-6 overflow-y-auto px-5 pb-6"
-                >
-                    <CabinetNavList items={primary} onNavigate={close} />
-                    {/* Сервіс притиснутий донизу — дзеркало sidebar-а. */}
-                    <div className="mt-auto flex flex-col gap-2">
-                        <div className="bg-border h-px" />
-                        <CabinetNavList items={secondary} onNavigate={close} />
-                        <CabinetAdminGroup items={admin} onNavigate={close} />
-                    </div>
-                </nav>
+                {/* Прокручується лише список — логотип зверху і акаунт-кластер
+                    знизу лишаються на місці, як у sidebar-і. */}
+                <UiSheetBody>
+                    <nav
+                        aria-label="Навігація кабінету"
+                        className="flex flex-1 flex-col gap-6 px-5 pb-6"
+                    >
+                        <CabinetNavList items={primary} onNavigate={close} />
+                        {/* Сервіс притиснутий донизу — дзеркало sidebar-а. */}
+                        <div className="mt-auto flex flex-col gap-2">
+                            <div className="bg-border h-px" />
+                            <CabinetNavList
+                                items={secondary}
+                                onNavigate={close}
+                            />
+                            <CabinetAdminGroup
+                                items={admin}
+                                onNavigate={close}
+                            />
+                        </div>
+                    </nav>
+                </UiSheetBody>
 
                 <AccountSection onNavigate={close} />
             </UiSheetContent>

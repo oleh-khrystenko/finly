@@ -19,6 +19,7 @@ export {
     resetPassword,
     verifyPassword,
     updateProfile,
+    getAccountDeletionPreview,
     deleteUserAccount,
     confirmDeleteAccount,
     restoreAccount,

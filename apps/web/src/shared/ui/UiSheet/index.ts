@@ -3,6 +3,7 @@ export {
     UiSheetTrigger,
     UiSheetClose,
     UiSheetContent,
+    UiSheetBody,
     UiSheetHeader,
     UiSheetTitle,
 } from './UiSheet';
@@ -11,6 +12,7 @@ export type {
     UiSheetTriggerProps,
     UiSheetCloseProps,
     UiSheetContentProps,
+    UiSheetBodyProps,
     UiSheetHeaderProps,
     UiSheetTitleProps,
     UiSheetSide,

@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
 import {
+    type CardPaymentMethod,
     PAYMENT_RECORD_STATUS,
     PAYMENT_RECORD_TYPE,
     type PaymentRecordStatus,
@@ -55,6 +56,16 @@ export class PaymentRecord {
 
     @Prop({ type: String, default: null })
     cardMask!: string | null;
+
+    /** Спосіб оплати цього конкретного списання (`wallet` для циклових). */
+    @Prop({ type: String, default: null })
+    cardPaymentMethod!: CardPaymentMethod | null;
+
+    @Prop({ type: String, default: null })
+    cardPaymentSystem!: string | null;
+
+    @Prop({ type: String, default: null })
+    cardBank!: string | null;
 
     @Prop({ type: Number, default: null })
     refundAmount!: number | null;

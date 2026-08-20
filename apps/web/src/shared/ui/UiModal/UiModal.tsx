@@ -67,13 +67,19 @@ function UiModalContent({
                 {!hideCloseButton && (
                     <DialogPrimitive.Close
                         className={composeClasses(
-                            'absolute top-3 right-4 flex size-8 cursor-pointer items-center justify-center rounded-md opacity-70 transition-opacity',
-                            'focus:ring-ring hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-none',
+                            // Близнюк кнопки з UiSheet: size-11 — touch-target
+                            // 44×44 за responsive.md §2, top-2/right-3 тримають
+                            // іконку там само, де вона стояла при size-8.
+                            // Підкладки (`bg-background`) тут немає навмисно —
+                            // кнопка лежить у самому scroll-контейнері й їде
+                            // разом із вмістом, тож під нею ніщо не проїжджає.
+                            'group absolute top-2 right-3 flex size-11 cursor-pointer items-center justify-center rounded-md',
+                            'focus:ring-ring focus:ring-2 focus:ring-offset-2 focus:outline-none',
                             'disabled:pointer-events-none'
                         )}
                     >
-                        <X className="size-5" />
-                        <span className="sr-only">Close</span>
+                        <X className="size-5 opacity-70 transition-opacity group-hover:opacity-100" />
+                        <span className="sr-only">Закрити</span>
                     </DialogPrimitive.Close>
                 )}
             </DialogPrimitive.Content>

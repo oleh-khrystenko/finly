@@ -61,14 +61,9 @@ export default function PublicHeaderAuth() {
             adminCatalog: <Landmark />,
             logout: <LogOut />,
         },
-        {
-            cabinetBaseUrl: CABINET_URL,
-            // Вихід на публічній сторінці лишає людину там, де вона платила.
-            // Перезавантаження, а не просто зміна стану: разом зі сторінкою
-            // зникають підставлені у форму дані платника — на спільному
-            // комп'ютері наступний відвідувач їх не побачить.
-            onLoggedOut: () => window.location.reload(),
-        }
+        // Куди веде вихід — визначає `performLogout` за хостом: на публічній
+        // сторінці він перезавантажує її, лишаючи людину там, де вона платила.
+        { cabinetBaseUrl: CABINET_URL }
     );
 
     if (isLoading) {

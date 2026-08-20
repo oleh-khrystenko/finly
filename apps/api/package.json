@@ -30,8 +30,11 @@
         "migration:guides-seed": "ts-node scripts/migrations/2026-07-15-guides-seed.ts",
         "migration:publicity-defaults": "ts-node scripts/migrations/2026-07-21-publicity-defaults.ts",
         "migration:drop-user-tax-profile": "ts-node scripts/migrations/2026-07-30-drop-user-tax-profile.ts",
+        "migration:card-payment-method": "ts-node scripts/migrations/2026-08-13-card-payment-method-backfill.ts",
         "migration:drop-legacy": "ts-node scripts/migrations/2026-07-17-drop-legacy-collections.ts",
-        "migration:drop-legacy:force": "ts-node scripts/migrations/2026-07-17-drop-legacy-collections.ts --force"
+        "migration:drop-legacy:force": "ts-node scripts/migrations/2026-07-17-drop-legacy-collections.ts --force",
+        "migration:orphan-businesses": "ts-node scripts/migrations/2026-08-16-orphan-businesses-cleanup.ts",
+        "migration:orphan-businesses:force": "ts-node scripts/migrations/2026-08-16-orphan-businesses-cleanup.ts --force"
     },
     "dependencies": {
         "@anthropic-ai/sdk": "^0.80.0",

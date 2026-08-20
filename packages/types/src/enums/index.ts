@@ -8,3 +8,4 @@ export * from './slug-preset';
 export * from './taxation-system';
 export * from './publicity-status';
 export * from './catalog-category';
+export * from './card-payment-method';

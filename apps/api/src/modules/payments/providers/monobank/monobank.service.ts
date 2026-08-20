@@ -20,16 +20,19 @@ import {
     str,
     verifyWebhookSignature,
 } from './monobank.signature';
+import {
+    MONOBANK_API_BASE,
+    MONOBANK_INVOICE_CREATE,
+    MONOBANK_INVOICE_STATUS,
+    MONOBANK_PUBKEY,
+    MONOBANK_REQUEST_TIMEOUT_MS,
+    MONOBANK_WALLET_PAYMENT,
+    cardDetailsFromPayload,
+} from './monobank.contract';
 
-const API_BASE = 'https://api.monobank.ua';
-const INVOICE_CREATE = '/api/merchant/invoice/create';
-const WALLET_PAYMENT = '/api/merchant/wallet/payment';
-const INVOICE_STATUS = '/api/merchant/invoice/status';
-const PUBKEY = '/api/merchant/pubkey';
 const PAYMENT_TYPE_DEBIT = 'debit';
 /** merchant-initiated: списання за токеном без присутності клієнта і без 3DS. */
 const INITIATION_MERCHANT = 'merchant';
-const REQUEST_TIMEOUT_MS = 20_000;
 
 /**
  * monobank «Плата» (Sprint 22). Тонкий виконавець без рекуренту: хостований
@@ -38,6 +41,7 @@ const REQUEST_TIMEOUT_MS = 20_000;
  *
  * Контракт заземлено на офіційну документацію (monobank.ua/api-docs/acquiring);
  * перед фіналізацією на проді звіряється у sandbox (набір полів, формат вебхука).
+ * Адреси і розбір полів — у `monobank.contract.ts` (спільні зі скриптами).
  */
 @Injectable()
 export class MonobankService implements IPaymentProvider {
@@ -49,7 +53,7 @@ export class MonobankService implements IPaymentProvider {
     async createSubscriptionCheckout(
         input: SubscriptionCheckoutInput
     ): Promise<CheckoutResult> {
-        const res = await this.postJson(INVOICE_CREATE, {
+        const res = await this.postJson(MONOBANK_INVOICE_CREATE, {
             amount: input.amount,
             ccy: currencyToCcy(input.currency),
             paymentType: PAYMENT_TYPE_DEBIT,
@@ -68,7 +72,7 @@ export class MonobankService implements IPaymentProvider {
     async createOneOffCheckout(
         input: OneOffCheckoutInput
     ): Promise<CheckoutResult> {
-        const res = await this.postJson(INVOICE_CREATE, {
+        const res = await this.postJson(MONOBANK_INVOICE_CREATE, {
             amount: input.amount,
             ccy: currencyToCcy(input.currency),
             paymentType: PAYMENT_TYPE_DEBIT,
@@ -98,7 +102,7 @@ export class MonobankService implements IPaymentProvider {
     }
 
     async chargeByToken(input: ChargeByTokenInput): Promise<ChargeResult> {
-        const res = await this.postJson(WALLET_PAYMENT, {
+        const res = await this.postJson(MONOBANK_WALLET_PAYMENT, {
             cardToken: input.cardToken,
             amount: input.amount,
             ccy: currencyToCcy(input.currency),
@@ -119,11 +123,10 @@ export class MonobankService implements IPaymentProvider {
             );
         }
         const walletData = asRecord(res.walletData);
-        const paymentInfo = asRecord(res.paymentInfo);
         return {
             invoiceId,
             status,
-            cardMask: paymentInfo ? str(paymentInfo.maskedPan) : null,
+            ...cardDetailsFromPayload(res),
             cardToken: walletData ? str(walletData.cardToken) : null,
             failureReason: str(res.failureReason),
             errCode: str(res.errCode),
@@ -135,7 +138,7 @@ export class MonobankService implements IPaymentProvider {
         orderReference: string
     ): Promise<BillingWebhookEvent | null> {
         const res = await this.getJson(
-            `${INVOICE_STATUS}?invoiceId=${encodeURIComponent(invoiceId)}`
+            `${MONOBANK_INVOICE_STATUS}?invoiceId=${encodeURIComponent(invoiceId)}`
         );
         const status = str(res.status);
         if (!status) return null;
@@ -191,7 +194,7 @@ export class MonobankService implements IPaymentProvider {
             return this.cachedPublicKeyPem;
         }
         try {
-            const res = await this.getJson(PUBKEY);
+            const res = await this.getJson(MONOBANK_PUBKEY);
             const keyBase64 = str(res.key);
             if (!keyBase64) {
                 this.logger.error('monobank pubkey: missing key field');
@@ -222,7 +225,6 @@ export class MonobankService implements IPaymentProvider {
         const invoiceId = str(data.invoiceId) ?? '';
         const status = str(data.status) ?? '';
         const walletData = asRecord(data.walletData);
-        const paymentInfo = asRecord(data.paymentInfo);
         const modifiedDate = str(data.modifiedDate);
         return {
             providerEventId: `${invoiceId}:${status}`,
@@ -233,7 +235,7 @@ export class MonobankService implements IPaymentProvider {
             amount: int(data.finalAmount) ?? int(data.amount) ?? 0,
             currency: ccyToCurrency(int(data.ccy) ?? 0),
             cardToken: walletData ? str(walletData.cardToken) : null,
-            cardMask: paymentInfo ? str(paymentInfo.maskedPan) : null,
+            ...cardDetailsFromPayload(data),
             failureReason: str(data.failureReason),
             errCode: str(data.errCode),
             raw: data,
@@ -265,17 +267,17 @@ export class MonobankService implements IPaymentProvider {
         path: string,
         init: RequestInit
     ): Promise<Record<string, unknown>> {
-        const url = `${API_BASE}${path}`;
+        const url = `${MONOBANK_API_BASE}${path}`;
         let res: Awaited<ReturnType<typeof fetch>>;
         try {
             res = await fetch(url, {
                 ...init,
-                signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+                signal: AbortSignal.timeout(MONOBANK_REQUEST_TIMEOUT_MS),
             });
         } catch (err) {
             const reason =
                 err instanceof Error && err.name === 'TimeoutError'
-                    ? `timeout after ${REQUEST_TIMEOUT_MS}ms`
+                    ? `timeout after ${MONOBANK_REQUEST_TIMEOUT_MS}ms`
                     : err instanceof Error
                       ? err.message
                       : 'network error';

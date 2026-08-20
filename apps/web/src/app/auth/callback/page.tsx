@@ -2,10 +2,17 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { AxiosError } from 'axios';
 import { toast } from 'sonner';
 import UiButton from '@/shared/ui/UiButton';
 import UiFullPageLoader from '@/shared/ui/UiFullPageLoader';
-import { refreshToken, getMe, restoreAccount, acceptTerms } from '@/shared/api';
+import {
+    refreshToken,
+    getMe,
+    restoreAccount,
+    acceptTerms,
+    getApiMessage,
+} from '@/shared/api';
 import { consumeRedirect, navigateToReturnTarget } from '@/shared/lib/redirect';
 import { useAuthStore } from '@/entities/user';
 
@@ -68,7 +75,19 @@ export default function CallbackPage() {
                 consumeRedirect('/business'),
                 'replace'
             );
-        } catch {
+        } catch (err) {
+            // Найчастіша причина тут — вікно відновлення закінчилось і фонове
+            // прибирання вже взялось за акаунт. Мовчазний редірект лишав би
+            // людину гадати, чому кнопка «Відновити» нічого не зробила.
+            const code =
+                err instanceof AxiosError
+                    ? err.response?.data?.error?.code
+                    : undefined;
+            toast.error(
+                code
+                    ? getApiMessage(code, 'auth')
+                    : 'Не вдалося виконати операцію. Спробуйте пізніше'
+            );
             setSubmitting(false);
             router.replace('/auth/signin');
         }
