@@ -306,7 +306,7 @@ describe('UsersService', () => {
             );
         });
 
-        // Sprint 32 — умова живе всередині запису, тож прибирання, яке вже
+        // Sprint 31 — умова живе всередині запису, тож прибирання, яке вже
         // взялось за акаунт, лишає відновлення ні з чим: отримувачі знесені.
         it('should report failure when purge already claimed the account', async () => {
             mockModel.findOneAndUpdate.mockReturnValue(restoreChain(null));

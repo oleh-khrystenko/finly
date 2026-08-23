@@ -45,7 +45,7 @@ export class MagicLinkVerifyController {
         const result = await this.authService.verifyMagicLink(dto.token);
 
         if (result.deleted) {
-            // Sprint 32 — публічність отримувачів гасне і списання зупиняються
+            // Sprint 31 — публічність отримувачів гасне і списання зупиняються
             // рівно тут, на переході за посиланням, а не на натисканні кнопки у
             // кабінеті. Крах між soft-delete і цим кроком добиває фонове
             // прибирання (`CleanupService.resyncDeactivationEffects`), тому

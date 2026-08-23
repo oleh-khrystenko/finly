@@ -31,7 +31,7 @@ import { UsersService } from '../users/users.service';
 import { AccountDeletionService } from './account-deletion.service';
 
 /**
- * Sprint 32 — життєвий цикл видалення акаунта повністю. Контролер живе тут, а
+ * Sprint 31 — життєвий цикл видалення акаунта повністю. Контролер живе тут, а
  * не в `UsersModule`, бо кожен його крок торкається отримувачів, а ребро
  * `Users → Businesses` зламало б one-way DAG (той самий мотив, що у
  * `MagicLinkVerifyController` з `LandingClaimModule`). Префікс лишається

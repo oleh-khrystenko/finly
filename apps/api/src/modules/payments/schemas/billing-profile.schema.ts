@@ -184,7 +184,7 @@ export class BillingProfile {
     needsManualReview!: boolean;
 
     /**
-     * Sprint 32 — пауза планувальника на час вікна відновлення акаунта.
+     * Sprint 31 — пауза планувальника на час вікна відновлення акаунта.
      * Ставиться при підтвердженні видалення, знімається при відновленні,
      * зникає разом з профілем при остаточному прибиранні.
      *
@@ -242,7 +242,7 @@ BillingProfileSchema.index({ nextChargeAt: 1 }, { sparse: true });
 BillingProfileSchema.index({ nextRetryAt: 1 }, { sparse: true });
 // daily-sweep незавершених реконсиляцій.
 BillingProfileSchema.index({ reconcileRequiredAt: 1 }, { sparse: true });
-// Sprint 32 — компенсаційний прохід (`CleanupService.resyncRestoredAccounts`)
+// Sprint 31 — компенсаційний прохід (`CleanupService.resyncRestoredAccounts`)
 // шукає паузу, що пережила відновлення акаунта. Partial, а не sparse: дефолт
 // поля — `null`, тобто значення присутнє, і sparse тримав би кожен профіль.
 BillingProfileSchema.index(

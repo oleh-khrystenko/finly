@@ -26,7 +26,7 @@ import { MagicLinkVerifyController } from './magic-link-verify.controller';
  *                         AccountDeletionModule}
  *   AuthModule       → {UsersModule (forwardRef)}  (НЕ → LandingClaimModule)
  *
- * Sprint 32 — `AccountDeletionModule` доданий, бо підтвердження видалення
+ * Sprint 31 — `AccountDeletionModule` доданий, бо підтвердження видалення
  * акаунта через посилання з листа завершується саме у цьому контролері, і разом
  * з деактивацією мусить гасити публічність отримувачів і зупиняти списання.
  * Ребра назад немає: account-deletion про landing-claim не знає.
