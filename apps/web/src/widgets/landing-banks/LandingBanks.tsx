@@ -2,7 +2,7 @@ import { BANK_LABEL, MVP_BANKS } from '@finly/types';
 import UiBankLogo from '@/shared/ui/UiBankLogo';
 
 /**
- * Trust-rail з 11 банків. Логотипи — через `UiBankLogo` (єдине джерело істини,
+ * Trust-rail з усіх банків `MVP_BANKS`. Логотипи — через `UiBankLogo` (єдине джерело істини,
  * `public/banks/*.webp`); власних плейсхолдерів блок не тримає.
  */
 export function LandingBanks() {
