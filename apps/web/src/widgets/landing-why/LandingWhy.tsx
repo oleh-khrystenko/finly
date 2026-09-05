@@ -1,4 +1,6 @@
 import { Building2, Shield, Sparkles, Wallet } from 'lucide-react';
+import { BANK_LABEL, MVP_BANKS, SUPPORTED_BANKS_COUNT } from '@finly/types';
+import { pluralizeUa } from '@/shared/lib';
 
 const FEATURES = [
     {
@@ -13,8 +15,8 @@ const FEATURES = [
     },
     {
         Icon: Building2,
-        title: '10 банків у списку',
-        body: 'Privat, monobank, ПУМБ, Ощад, Sense, Укргазбанк, IZIBank, Райф, A-Bank, Кредит Дніпро. Паралельно підтримуємо старий формат 002.',
+        title: `${pluralizeUa(SUPPORTED_BANKS_COUNT, 'банк', 'банки', 'банків')} у списку`,
+        body: `${MVP_BANKS.map((code) => BANK_LABEL[code]).join(', ')}. Паралельно підтримуємо старий формат 002.`,
     },
     {
         Icon: Sparkles,

@@ -24,6 +24,13 @@ export const MVP_BANKS = [
 export type BankCode = (typeof MVP_BANKS)[number];
 
 /**
+ * Кількість підтримуваних банків — похідна від `MVP_BANKS`, а не літерал у
+ * копії. Будь-який user-facing текст, що називає число банків, читає звідси:
+ * додавання банку у `MVP_BANKS` оновлює його автоматично.
+ */
+export const SUPPORTED_BANKS_COUNT = MVP_BANKS.length;
+
+/**
  * UA-лейбли для UI (wizard step 4, кабінет banks-section, public-сторінка).
  * Sprint 3 рішення B5 каже про реальні логотипи на public-сторінці; cabinet
  * UI Phase 7-8 використовує text labels (іконки додаються разом з public
