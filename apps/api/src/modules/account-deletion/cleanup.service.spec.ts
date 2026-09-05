@@ -92,7 +92,7 @@ function timezoneWithLocalHour(targetHour: number): string {
     return `Etc/GMT${sign}${etcOffset}`;
 }
 
-describe('CleanupService (Sprint 32)', () => {
+describe('CleanupService (Sprint 31)', () => {
     let service: CleanupService;
 
     beforeEach(async () => {

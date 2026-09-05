@@ -18,7 +18,7 @@ describe('BANK_PAYLOAD_VERSION', () => {
         }
     });
 
-    it('MVP-стан: усі 11 банків — на 003', () => {
+    it('MVP-стан: усі банки MVP_BANKS — на 003', () => {
         expect(Object.keys(BANK_PAYLOAD_VERSION)).toHaveLength(
             MVP_BANKS.length
         );

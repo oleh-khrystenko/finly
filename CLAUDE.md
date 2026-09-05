@@ -57,10 +57,10 @@ docs/
 ├── manual-checks/           # UAT-чекліст (живі банк-додатки, друк, малі екрани)
 ├── product/                 # business-flow, qr-decisions, qr-custom-branding, qr-spec, tech-backlog
 ├── server-playbook/         # bootstrap, deploy, caddy, backups, runbook
-└── sprints/                 # 01-foundation … 30-shared-session-payer-profile
+└── sprints/                 # 01-foundation … 39-legal-and-help
 ```
 
-> `docs/sprints/README.md` відстає від коду (спринти 27–30 позначені «не стартував», хоча реалізовані). Джерело правди — код.
+> Спринти епіку документів перенумеровано 2026-08-23 (видалення акаунта 32→31, злиття записів 31→37, решта слотів 32–36, 38, 39). Джерело правди — код.
 
 ## Domain Model
 

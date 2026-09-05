@@ -54,7 +54,7 @@ export function HelpChat() {
     const [notice, setNotice] = useState<Notice>(null);
     const [degraded, setDegraded] = useState(false);
 
-    const messagesEndRef = useRef<HTMLDivElement>(null);
+    const messagesRef = useRef<HTMLDivElement>(null);
     const abortRef = useRef<AbortController | null>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -62,8 +62,15 @@ export function HelpChat() {
         return () => abortRef.current?.abort();
     }, []);
 
+    // Крутимо САМЕ контейнер повідомлень, а не `scrollIntoView` на якорі:
+    // той прокручує всіх скрол-предків, включно з вікном, і сторінка
+    // від'їжджала так, що вгорі виявлялось поле вводу замість відповіді.
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        const el = messagesRef.current;
+        if (!el) {
+            return;
+        }
+        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
     }, [messages]);
 
     const handleSubmit = useCallback(async () => {
@@ -197,6 +204,7 @@ export function HelpChat() {
 
             {/* Messages */}
             <div
+                ref={messagesRef}
                 className="h-[24rem] overflow-y-auto px-5 py-4 md:h-[28rem]"
                 role="log"
                 aria-label="Розмова з помічником"
@@ -267,7 +275,6 @@ export function HelpChat() {
                                 </div>
                             </div>
                         ))}
-                        <div ref={messagesEndRef} />
                     </div>
                 )}
             </div>

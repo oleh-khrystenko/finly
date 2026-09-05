@@ -300,7 +300,7 @@ describe('MagicLinkVerifyController', () => {
             expect(
                 mockLandingClaimService.attemptLandingClaim
             ).not.toHaveBeenCalled();
-            // Sprint 32 — публічність отримувачів гасне і списання зупиняються
+            // Sprint 31 — публічність отримувачів гасне і списання зупиняються
             // саме на переході за посиланням; userId у відповідь не потрапляє.
             expect(
                 mockAccountDeletion.applyDeactivationEffectsBestEffort
