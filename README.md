@@ -111,6 +111,8 @@ GOOGLE_CLIENT_SECRET=your-google-client-secret
 # Resend
 RESEND_API_KEY=your-resend-api-key
 RESEND_FROM_EMAIL=Finly <onboarding@resend.dev>
+# Скринька адміністратора для службових листів
+OPS_ALERT_EMAIL=you@example.com
 
 # monobank «Плата» — X-Token з кабінету merchant
 MONOBANK_TOKEN=your-monobank-token

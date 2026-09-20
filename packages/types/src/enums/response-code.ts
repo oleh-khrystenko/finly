@@ -67,9 +67,11 @@ export const RESPONSE_CODE = {
     /** Немає збереженої картки для негайного списання (спершу перша купівля). */
     BILLING_NO_CARD_ON_FILE: 'BILLING_NO_CARD_ON_FILE',
     /**
-     * Підписку скасовано до кінця періоду: токен картки стерто, платні зміни
-     * (розширення ємності, докупівля кредитів) недоступні до згасання профілю.
-     * Recovery: дочекатись кінця оплаченого періоду і оформити нову купівлю.
+     * Підписку скасовано до кінця періоду: платні зміни (розширення ємності,
+     * докупівля кредитів) свідомо заблоковані, бо куплене згасло б разом з
+     * підпискою на межі періоду. Sprint 43 — картка при цьому лишається на
+     * місці. Recovery: відновити підписку, після чого платні дії доступні як
+     * звичайно.
      */
     BILLING_CANCEL_PENDING: 'BILLING_CANCEL_PENDING',
     /**
@@ -79,6 +81,36 @@ export const RESPONSE_CODE = {
      * після цього розширювати.
      */
     BILLING_PAST_DUE: 'BILLING_PAST_DUE',
+    /**
+     * Sprint 43 — відновлювати нічого: підписку не скасовано (або профіль уже
+     * згас). Recovery: дія недоступна, кабінет її і не показує.
+     */
+    BILLING_NOT_CANCELED: 'BILLING_NOT_CANCELED',
+    /**
+     * Sprint 43 — межа оплаченого періоду вже минула, підписки фактично немає.
+     * Відновлювати нема чого: сюди веде звичайна нова купівля. Окремий код від
+     * `BILLING_NOT_CANCELED`, бо стан інший і шлях виходу інший.
+     */
+    BILLING_PERIOD_ENDED: 'BILLING_PERIOD_ENDED',
+    /**
+     * Sprint 43 — дія потребує збереженої картки, а її немає. Відновлення без
+     * картки заборонене: підписка поновлювалась би, а списувати в день межі
+     * було б нічим — планувальник мовчки пропускає профіль без картки, фонове
+     * згасання його теж не бачить (шукає лише скасовані), і доступ лишався б
+     * безкоштовним назавжди без жодного сигналу. Recovery: прив'язати картку,
+     * після збереження підписка відновиться сама.
+     */
+    BILLING_CARD_REQUIRED: 'BILLING_CARD_REQUIRED',
+    /**
+     * Sprint 43 — дія доступна лише профілю, якому доступ вимкнено вичерпаною
+     * прострочкою. Recovery: кабінет її і не показує в інших станах.
+     */
+    BILLING_NOT_DISABLED: 'BILLING_NOT_DISABLED',
+    /**
+     * Sprint 43 — сторінка повернення з банку питає про прив'язку картки, якої
+     * платник не починав. Recovery: почати прив'язку заново.
+     */
+    BILLING_NO_CARD_VERIFICATION: 'BILLING_NO_CARD_VERIFICATION',
     INVALID_UNIVERSE: 'INVALID_UNIVERSE',
     INVALID_TIER: 'INVALID_TIER',
     INVALID_CAPACITY: 'INVALID_CAPACITY',
@@ -534,6 +566,11 @@ export const RESPONSE_CODE_TYPE: Record<ResponseCode, ResponseType> = {
     [RESPONSE_CODE.BILLING_UNIVERSE_DISABLED]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.BILLING_NO_CARD_ON_FILE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.BILLING_CANCEL_PENDING]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BILLING_NOT_CANCELED]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BILLING_PERIOD_ENDED]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BILLING_CARD_REQUIRED]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BILLING_NOT_DISABLED]: RESPONSE_TYPE.ERROR,
+    [RESPONSE_CODE.BILLING_NO_CARD_VERIFICATION]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.BILLING_PAST_DUE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVALID_UNIVERSE]: RESPONSE_TYPE.ERROR,
     [RESPONSE_CODE.INVALID_TIER]: RESPONSE_TYPE.ERROR,

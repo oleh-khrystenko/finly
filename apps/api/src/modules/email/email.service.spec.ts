@@ -9,6 +9,7 @@ jest.mock('../../config/env', () => ({
     ENV: {
         RESEND_API_KEY: 'test-key',
         RESEND_FROM_EMAIL: 'Finly <test@resend.dev>',
+        OPS_ALERT_EMAIL: 'ops@finly.test',
         WEB_URL: 'http://localhost:3000',
     },
 }));
@@ -403,6 +404,115 @@ describe('EmailService', () => {
                 emailService.sendProfileCompletionFinalWarning({
                     user,
                     businesses: [buildBusiness('ФОП Іваненко')],
+                })
+            ).rejects.toThrow(InternalServerErrorException);
+        });
+    });
+
+    describe('sendManualReviewAlert (Sprint 43)', () => {
+        const userId = '507f1f77bcf86cd799439011';
+        const charge = {
+            createdAt: new Date('2026-05-14T12:00:00Z'),
+            amount: 4900,
+            currency: 'UAH',
+            invoiceId: 'inv_dbl2',
+            orderReference: `fin-chk-${userId}-abc`,
+        };
+
+        it('sends to the ops address with payer and charge details', async () => {
+            await emailService.sendManualReviewAlert({
+                userId,
+                userEmail: 'fop@example.com',
+                stillFlagged: true,
+                unmatched: [charge],
+                unsettled: [],
+            });
+
+            expect(sendSpy).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    to: 'ops@finly.test',
+                    subject: 'Finly: платіж потребує ручної перевірки',
+                })
+            );
+            const html = getRenderedHtml();
+            expect(html).toContain('fop@example.com');
+            expect(html).toContain(userId);
+            expect(html).toContain('49 грн');
+            expect(html).toContain('inv_dbl2');
+        });
+
+        it('names a charge without invoice by its attempt and a deleted payer explicitly', async () => {
+            await emailService.sendManualReviewAlert({
+                userId,
+                userEmail: null,
+                stillFlagged: false,
+                unmatched: [],
+                unsettled: [{ ...charge, invoiceId: null }],
+            });
+
+            const html = getRenderedHtml();
+            expect(html).toContain('акаунт уже видалено');
+            expect(html).toContain(charge.orderReference);
+            expect(html).not.toMatch(/[!]/);
+        });
+
+        it('throws InternalServerErrorException when Resend fails', async () => {
+            sendSpy.mockResolvedValue({ error: { message: 'Send failed' } });
+
+            await expect(
+                emailService.sendManualReviewAlert({
+                    userId,
+                    userEmail: 'fop@example.com',
+                    stillFlagged: true,
+                    unmatched: [charge],
+                    unsettled: [],
+                })
+            ).rejects.toThrow(InternalServerErrorException);
+        });
+    });
+
+    describe('sendCardRevocationFailed (Sprint 43)', () => {
+        const userId = '507f1f77bcf86cd799439011';
+
+        it('sends to the ops address with the wallet to clean up by hand', async () => {
+            await emailService.sendCardRevocationFailed({
+                userId,
+                walletId: 'wallet-7',
+                attempts: 24,
+            });
+
+            expect(sendSpy).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    to: 'ops@finly.test',
+                    subject: 'Finly: картку не вдалося відкликати в monobank',
+                })
+            );
+            const html = getRenderedHtml();
+            expect(html).toContain(userId);
+            expect(html).toContain('wallet-7');
+            expect(html).toContain('24');
+        });
+
+        it('says plainly when the profile carries no wallet', async () => {
+            await emailService.sendCardRevocationFailed({
+                userId,
+                walletId: null,
+                attempts: 24,
+            });
+
+            const html = getRenderedHtml();
+            expect(html).toContain('у профілі не вказано');
+            expect(html).not.toMatch(/[!]/);
+        });
+
+        it('throws InternalServerErrorException when Resend fails', async () => {
+            sendSpy.mockResolvedValue({ error: { message: 'Send failed' } });
+
+            await expect(
+                emailService.sendCardRevocationFailed({
+                    userId,
+                    walletId: 'wallet-7',
+                    attempts: 24,
                 })
             ).rejects.toThrow(InternalServerErrorException);
         });

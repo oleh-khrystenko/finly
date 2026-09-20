@@ -19,6 +19,8 @@ import { useCancelSubscriptionDialogStore } from './cancelSubscriptionDialogStor
 /**
  * Sprint 22 — скасування лише у кінці періоду (refund і зміна тарифу зрізані).
  * Доступ доживає оплачений період; повторне списання припиняється.
+ * Sprint 43 — скасування оборотне: до межі періоду його можна відкликати одним
+ * натисканням, без грошей і без повторного введення картки.
  */
 export default function CancelSubscriptionDialog() {
     const isOpen = useCancelSubscriptionDialogStore((s) => s.isOpen);
@@ -60,8 +62,8 @@ export default function CancelSubscriptionDialog() {
                 <div className="space-y-5 px-4 pb-6">
                     <p className="text-muted-foreground text-sm">
                         {periodLabel
-                            ? `Доступ діятиме до ${periodLabel}, далі підписка не поновлюється. Щоб перейти на інший тариф, після завершення періоду оформіть нову підписку.`
-                            : 'Доступ діятиме до кінця оплаченого періоду, далі підписка не поновлюється.'}
+                            ? `Доступ діятиме до ${periodLabel}, далі підписка не поновлюється. Передумаєте — відновіть підписку до цієї дати, доплачувати не доведеться.`
+                            : 'Доступ діятиме до кінця оплаченого періоду, далі підписка не поновлюється. Передумаєте — відновіть підписку до кінця періоду.'}
                     </p>
 
                     <div className="flex justify-end gap-3">

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { BILLING_RETURN_FLOW } from '@finly/types';
 
 /**
  * Міст повернення з хостованої сторінки оплати (returnUrl).
@@ -10,17 +11,25 @@ import { NextRequest, NextResponse } from 'next/server';
  * наступний перехід на GET top-level navigation (несе cookie сесії, не трактується
  * App Router-ом як Server Action) і коректно рендерить сторінку успіху. POST-гілка
  * лишається захистом на випадок form-сабміт-повернення.
+ *
+ * Sprint 43 — прив'язка картки повертається на власну сторінку: гроші там не
+ * рухаються, а результат перевірки картки ще треба дізнатись у сервера.
  */
 function redirectToSuccess(request: NextRequest): NextResponse {
     const returnPath = request.nextUrl.searchParams.get('returnPath');
+    const page =
+        request.nextUrl.searchParams.get('flow') ===
+        BILLING_RETURN_FLOW.CARD_VERIFICATION
+            ? '/billing/card'
+            : '/billing/success';
     // Відносний Location, а не absolute(request.url): у standalone-режимі за
     // reverse-proxy `request.url` віддає внутрішній origin контейнера (Docker
     // container-id), а не публічний host. Браузер резолвить відносний редирект
     // проти адреси, на яку зробив запит, тож хост лишається коректним за
     // будь-яким проксі (ngrok локально, nginx на проді).
     const location = returnPath
-        ? `/billing/success?returnPath=${encodeURIComponent(returnPath)}`
-        : '/billing/success';
+        ? `${page}?returnPath=${encodeURIComponent(returnPath)}`
+        : page;
     return new NextResponse(null, {
         status: 303,
         headers: { Location: location },

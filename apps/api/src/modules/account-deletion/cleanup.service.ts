@@ -249,7 +249,7 @@ export class CleanupService {
         this.logger.log(
             `Hard-deleted ${deleted}/${expiredUsers.length} expired account(s)` +
                 (deferred > 0
-                    ? `, ${deferred} deferred (reconcile incomplete)`
+                    ? `, ${deferred} deferred (reconcile or card revocation pending)`
                     : '') +
                 (restored > 0 ? `, ${restored} skipped (restored)` : '')
         );

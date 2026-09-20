@@ -20,6 +20,7 @@ import {
     RESPONSE_CODE,
     type BillingCatalog,
     type BillingProfileView,
+    type CardVerificationResult,
     type CreditLedgerEntry,
     type PaymentRecord,
     type PriceCalculation,
@@ -36,6 +37,7 @@ import {
     ManageAttachmentDto,
     PriceCalculatorDto,
     ResumeSubscriptionDto,
+    StartCardVerificationDto,
     StartCheckoutDto,
 } from './dto/billing.dto';
 import type { PaymentRecordLean } from './schemas/payment-record.schema';
@@ -155,6 +157,21 @@ export class PaymentsController {
         return { data: { ok: true } };
     }
 
+    /**
+     * Відкликання скасування, поки оплачений період триває. Окремо від
+     * `resume`: там оплата боргу з переходом на сторінку банку, тут грошей
+     * немає взагалі й відповідати нема чим.
+     */
+    @UseGuards(JwtActiveGuard)
+    @Post('subscription/renew')
+    @HttpCode(HttpStatus.OK)
+    async renew(
+        @CurrentUser() user: UserDocument
+    ): Promise<{ data: { ok: true } }> {
+        await this.billing.renew(user._id.toString());
+        return { data: { ok: true } };
+    }
+
     @UseGuards(JwtActiveGuard)
     @Post('subscription/resume')
     @HttpCode(HttpStatus.OK)
@@ -165,6 +182,56 @@ export class PaymentsController {
         const result = await this.billing.resume(
             user._id.toString(),
             dto.returnPath
+        );
+        return { data: result };
+    }
+
+    /**
+     * Повернення після вимкнення доступу збереженою карткою: без сторінки
+     * банку. Відкриває новий місяць від дня оплати.
+     */
+    @UseGuards(JwtActiveGuard)
+    @Post('subscription/reactivate')
+    @HttpCode(HttpStatus.OK)
+    async reactivate(
+        @CurrentUser() user: UserDocument
+    ): Promise<{ data: { scheduled: boolean } }> {
+        const result = await this.billing.reactivate(user._id.toString());
+        return { data: result };
+    }
+
+    // ── Saved card ───────────────────────────────────────────────────────
+
+    /**
+     * Хостована сторінка прив'язки або заміни картки. Грошей не рухає: банк
+     * проводить рахунок на нуль як верифікацію картки.
+     */
+    @UseGuards(JwtActiveGuard)
+    @Post('card/verification')
+    @HttpCode(HttpStatus.OK)
+    async startCardVerification(
+        @CurrentUser() user: UserDocument,
+        @Body() dto: StartCardVerificationDto
+    ): Promise<{ data: { checkoutUrl: string } }> {
+        const result = await this.billing.startCardVerification(
+            user._id.toString(),
+            dto
+        );
+        return { data: result };
+    }
+
+    /**
+     * Результат прив'язки для сторінки повернення з банку. POST, бо може
+     * застосувати результат, якщо сповіщення банку ще не дійшло.
+     */
+    @UseGuards(JwtActiveGuard)
+    @Post('card/verification/result')
+    @HttpCode(HttpStatus.OK)
+    async resolveCardVerification(
+        @CurrentUser() user: UserDocument
+    ): Promise<{ data: CardVerificationResult }> {
+        const result = await this.billing.resolveCardVerification(
+            user._id.toString()
         );
         return { data: result };
     }

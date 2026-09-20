@@ -35,6 +35,23 @@ export interface OneOffCheckoutInput {
     returnUrl: string;
 }
 
+/**
+ * Прив'язка картки без списання коштів. monobank проводить її як рахунок на
+ * нуль із увімкненим збереженням картки: платник проходить ту саму хостовану
+ * сторінку, токен повертається у вебхуку, гроші не рухаються. Тому холд гривні
+ * з наступним поверненням не потрібен.
+ */
+export interface CardVerificationInput {
+    userId: string;
+    userEmail: string;
+    orderReference: string;
+    /** Стабільний per-user гаманець monobank, до якого прив'язується токен. */
+    walletId: string;
+    currency: string;
+    serviceUrl: string;
+    returnUrl: string;
+}
+
 export interface CheckoutResult {
     checkoutUrl: string;
     invoiceId: string;
@@ -74,11 +91,16 @@ export interface WebhookParseResult {
  * ДО будь-якого списання, гроші точно не рухались, тож спробу можна безпечно
  * повторити. Для таймауту, мережевого збою чи 5xx результат НЕВІДОМИЙ (false) —
  * повторне списання заборонене (money-safety: гроші могли піти).
+ *
+ * `status` — HTTP-код відповіді провайдера; `null`, якщо відповіді не було.
+ * Потрібен там, де різні відмови означають різне (відкликання картки: «такого
+ * токена немає» проти «тимчасово не можу»).
  */
 export class ProviderRequestError extends Error {
     constructor(
         message: string,
-        readonly chargeDefinitelyNotApplied: boolean
+        readonly chargeDefinitelyNotApplied: boolean,
+        readonly status: number | null = null
     ) {
         super(message);
         this.name = 'ProviderRequestError';
@@ -90,6 +112,10 @@ export interface IPaymentProvider {
         input: SubscriptionCheckoutInput
     ): Promise<CheckoutResult>;
     createOneOffCheckout(input: OneOffCheckoutInput): Promise<CheckoutResult>;
+    /** Хостована сторінка прив'язки картки без списання (див. вхідний тип). */
+    createCardVerification(
+        input: CardVerificationInput
+    ): Promise<CheckoutResult>;
     chargeByToken(input: ChargeByTokenInput): Promise<ChargeResult>;
     /**
      * Запит статусу рахунку для звірки сумнівних списань. Нормалізує відповідь у
@@ -108,6 +134,12 @@ export interface IPaymentProvider {
         rawBody: Buffer,
         signature: string | undefined
     ): Promise<WebhookParseResult>;
+    /**
+     * Відкликає токен картки у гаманці провайдера. Викликається щоразу, коли ми
+     * стираємо картку у себе: доти відкликання не відбувалось узагалі — токен
+     * зникав лише з нашої бази, а в гаманці лишався жити.
+     */
+    deleteCardToken(cardToken: string): Promise<void>;
 }
 
 export const PAYMENT_PROVIDER = Symbol('PAYMENT_PROVIDER');

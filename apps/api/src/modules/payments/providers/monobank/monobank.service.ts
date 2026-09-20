@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { type BillingWebhookEvent } from '@finly/types';
 import { ENV } from '../../../../config/env';
 import {
+    CardVerificationInput,
     ChargeByTokenInput,
     ChargeResult,
     CheckoutResult,
@@ -26,6 +27,7 @@ import {
     MONOBANK_INVOICE_STATUS,
     MONOBANK_PUBKEY,
     MONOBANK_REQUEST_TIMEOUT_MS,
+    MONOBANK_WALLET_CARD,
     MONOBANK_WALLET_PAYMENT,
     cardDetailsFromPayload,
 } from './monobank.contract';
@@ -33,6 +35,8 @@ import {
 const PAYMENT_TYPE_DEBIT = 'debit';
 /** merchant-initiated: списання за токеном без присутності клієнта і без 3DS. */
 const INITIATION_MERCHANT = 'merchant';
+/** Призначення нульового рахунку — те, що платник побачить на сторінці банку. */
+const CARD_VERIFICATION_DESTINATION = 'Перевірка картки Finly, без списання';
 
 /**
  * monobank «Плата» (Sprint 22). Тонкий виконавець без рекуренту: хостований
@@ -145,6 +149,35 @@ export class MonobankService implements IPaymentProvider {
         return this.normalizeInvoice(res, orderReference);
     }
 
+    /**
+     * Верифікація картки без списання: сума рівно нуль плюс увімкнене
+     * збереження картки. Обидві умови обов'язкові за документацією monobank —
+     * нуль без `saveCardData` рахунок не приймає.
+     */
+    async createCardVerification(
+        input: CardVerificationInput
+    ): Promise<CheckoutResult> {
+        const res = await this.postJson(MONOBANK_INVOICE_CREATE, {
+            amount: 0,
+            ccy: currencyToCcy(input.currency),
+            paymentType: PAYMENT_TYPE_DEBIT,
+            merchantPaymInfo: {
+                reference: input.orderReference,
+                destination: CARD_VERIFICATION_DESTINATION,
+            },
+            redirectUrl: input.returnUrl,
+            webHookUrl: input.serviceUrl,
+            saveCardData: { saveCard: true, walletId: input.walletId },
+        });
+        return this.toCheckoutResult(input.orderReference, res);
+    }
+
+    async deleteCardToken(cardToken: string): Promise<void> {
+        await this.deleteJson(
+            `${MONOBANK_WALLET_CARD}?cardToken=${encodeURIComponent(cardToken)}`
+        );
+    }
+
     async parseWebhook(
         rawBody: Buffer,
         signature: string | undefined
@@ -166,7 +199,15 @@ export class MonobankService implements IPaymentProvider {
         const reference = str(data.reference);
         const status = str(data.status);
         if (!reference || !status) {
-            this.logger.warn('monobank webhook: missing reference/status');
+            // Sprint 43 — свідоме рішення: підписане повідомлення без статусу
+            // рахунку (зокрема окреме сповіщення про стан збереженої картки)
+            // не обробляється. Картка з'являється у профілі лише з успішного
+            // рахунку, що несе токен. Токен, який банк згодом відкликав,
+            // виявиться відмовою на найближчому списанні і поведе у прострочку
+            // з заміною картки: ні безкоштовного доступу, ні загублених грошей.
+            this.logger.warn(
+                'monobank webhook: not an invoice status event, ignored'
+            );
             return { event: null };
         }
         return { event: this.normalizeInvoice(data, reference) };
@@ -263,11 +304,26 @@ export class MonobankService implements IPaymentProvider {
         });
     }
 
+    private async deleteJson(path: string): Promise<Record<string, unknown>> {
+        return this.request(path, {
+            method: 'DELETE',
+            headers: { 'X-Token': this.token },
+        });
+    }
+
     private async request(
         path: string,
         init: RequestInit
     ): Promise<Record<string, unknown>> {
         const url = `${MONOBANK_API_BASE}${path}`;
+        // У повідомлення помилки йде адреса БЕЗ query-рядка: видалення картки
+        // передає токен саме там (так вимагає monobank), а текст помилки осідає
+        // в логах застосунку. Токен це платіжний секрет — у профілі він ніколи
+        // не серіалізується, у лист ops його свідомо не кладуть, тож і сюди він
+        // потрапляти не сміє. Що саме не вдалось, кажуть самі виклики:
+        // відкликання логує необоротний відбиток токена, звірка статусу —
+        // orderReference.
+        const safePath = path.split('?')[0];
         let res: Awaited<ReturnType<typeof fetch>>;
         try {
             res = await fetch(url, {
@@ -283,7 +339,7 @@ export class MonobankService implements IPaymentProvider {
                       : 'network error';
             // Відповіді немає (таймаут / мережа): результат списання НЕВІДОМИЙ.
             throw new ProviderRequestError(
-                `monobank ${path} request failed: ${reason}`,
+                `monobank ${safePath} request failed: ${reason}`,
                 false
             );
         }
@@ -294,9 +350,10 @@ export class MonobankService implements IPaymentProvider {
             // відбулось (безпечно повторити). 5xx — серверний збій провайдера,
             // результат НЕВІДОМИЙ (гроші могли піти), повтор заборонений.
             throw new ProviderRequestError(
-                `monobank ${path} HTTP ${res.status}: ` +
+                `monobank ${safePath} HTTP ${res.status}: ` +
                     `${str(record.errText) ?? str(record.errCode) ?? 'unknown'}`,
-                res.status < 500
+                res.status < 500,
+                res.status
             );
         }
         return record;

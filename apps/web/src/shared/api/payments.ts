@@ -3,12 +3,14 @@ import type {
     BillingCatalog,
     BillingProfileView,
     BuyCredits,
+    CardVerificationResult,
     ChangeCapacity,
     CreditLedgerEntry,
     ManageAttachment,
     PaymentRecord,
     PriceCalculation,
     PriceCalculatorQuery,
+    StartCardVerification,
     StartCheckout,
 } from '@finly/types';
 
@@ -79,6 +81,53 @@ export async function calculatePrice(
 /** Скасування у кінці періоду (єдиний режим). Тіла немає. */
 export async function cancelSubscription(): Promise<void> {
     await apiClient.post('/payments/subscription/cancel');
+}
+
+/**
+ * Відкликання скасування, поки оплачений період триває. Грошей не рухає:
+ * повертає намір поновлювати і планувальник на межу цього самого періоду.
+ */
+export async function renewSubscription(): Promise<void> {
+    await apiClient.post('/payments/subscription/renew');
+}
+
+/**
+ * Прив'язка або заміна картки: хостована сторінка банку з рахунком на нуль,
+ * гроші не рухаються. `renewAfterSave` відновлює скасовану підписку одразу
+ * після збереження картки, без другого натискання.
+ */
+export async function startCardVerification(
+    dto: StartCardVerification
+): Promise<{ checkoutUrl: string }> {
+    const { data } = await apiClient.post<{ data: { checkoutUrl: string } }>(
+        '/payments/card/verification',
+        dto
+    );
+    return data.data;
+}
+
+/**
+ * Результат прив'язки картки для сторінки повернення з банку. Якщо сповіщення
+ * банку ще не дійшло, сервер сам дозвіряє результат у банку.
+ */
+export async function resolveCardVerification(): Promise<CardVerificationResult> {
+    const { data } = await apiClient.post<{ data: CardVerificationResult }>(
+        '/payments/card/verification/result'
+    );
+    return data.data;
+}
+
+/**
+ * Повернення після вимкнення доступу: списання збереженою карткою без сторінки
+ * банку. Відкриває новий місяць від дня оплати.
+ */
+export async function reactivateSubscription(): Promise<{
+    scheduled: boolean;
+}> {
+    const { data } = await apiClient.post<{ data: { scheduled: boolean } }>(
+        '/payments/subscription/reactivate'
+    );
+    return data.data;
 }
 
 /** Відновлення під час прострочки («оплатити зараз»): переоформлює checkout. */

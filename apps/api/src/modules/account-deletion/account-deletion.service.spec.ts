@@ -43,6 +43,7 @@ describe('AccountDeletionService', () => {
     const profileModel = {
         updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
         findOne: jest.fn(),
+        exists: jest.fn(),
         deleteOne: jest.fn().mockReturnValue(execOf({ deletedCount: 1 })),
         distinct: jest.fn().mockResolvedValue([]),
     };
@@ -143,6 +144,7 @@ describe('AccountDeletionService', () => {
         profileModel.distinct.mockResolvedValue([]);
         reconciliation.reconcileBusinesses.mockResolvedValue(true);
         profileModel.deleteOne.mockReturnValue(execOf({ deletedCount: 1 }));
+        profileModel.exists.mockReturnValue(execOf(null));
         paymentRecordModel.deleteMany.mockReturnValue(
             execOf({ deletedCount: 2 })
         );
@@ -306,10 +308,16 @@ describe('AccountDeletionService', () => {
                 expect.objectContaining({
                     $set: expect.objectContaining({
                         status: SUBSCRIPTION_STATUS.CANCELED,
-                        cardToken: null,
                     }),
                 })
             );
+            // Картку стирає і відкликає у банку лише білінг: тут токен не
+            // чіпається, інакше він зник би з бази, лишившись у гаманці.
+            const [, retireUpdate] = profileModel.updateOne.mock.calls[0] as [
+                unknown,
+                { $set: Record<string, unknown> },
+            ];
+            expect(retireUpdate.$set).not.toHaveProperty('cardToken');
             expect(businessesService.delete).toHaveBeenCalledWith(
                 departingBusiness
             );
@@ -362,6 +370,30 @@ describe('AccountDeletionService', () => {
             expect(profileModel.deleteOne).not.toHaveBeenCalled();
             expect(paymentRecordModel.deleteMany).not.toHaveBeenCalled();
             expect(payersService.deleteAllForUser).not.toHaveBeenCalled();
+        });
+
+        it('не знищує профіль, поки збережену картку не відкликано у банку', async () => {
+            stubFind([], []);
+            profileModel.findOne.mockReturnValue({
+                lean: jest.fn().mockReturnValue(execOf(null)),
+            });
+            profileModel.exists.mockReturnValue(
+                execOf({ _id: new Types.ObjectId() })
+            );
+
+            const result = await service.purgeUser(USER_ID);
+
+            expect(result).toBe(false);
+            expect(profileModel.exists).toHaveBeenCalledWith({
+                userId: userObjectId,
+                $or: [
+                    { cardToken: { $type: 'string' } },
+                    { pendingRevokeCardTokens: { $type: 'string' } },
+                    { cardRevocationAlertDueAt: { $type: 'date' } },
+                ],
+            });
+            expect(profileModel.deleteOne).not.toHaveBeenCalled();
+            expect(paymentRecordModel.deleteMany).not.toHaveBeenCalled();
         });
 
         /**
