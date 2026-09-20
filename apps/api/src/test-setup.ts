@@ -21,6 +21,7 @@ process.env.GOOGLE_CLIENT_ID ??= 'google-client-id-placeholder';
 process.env.GOOGLE_CLIENT_SECRET ??= 'google-client-secret-placeholder';
 process.env.RESEND_API_KEY ??= 're_test_placeholder';
 process.env.RESEND_FROM_EMAIL ??= 'Finly <test@test.dev>';
+process.env.OPS_ALERT_EMAIL ??= 'ops@test.dev';
 process.env.MONOBANK_TOKEN ??= 'test-monobank-token';
 process.env.GSC_SITE_URL ??= 'sc-domain:test.local';
 process.env.GSC_CLIENT_EMAIL ??= 'test-gsc@test.iam.gserviceaccount.com';

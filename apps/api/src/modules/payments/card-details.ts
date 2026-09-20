@@ -33,3 +33,21 @@ export function cardProfileFields(card: CardDetails): Record<string, string> {
     if (card.cardPaymentMethod === 'wallet') delete set.cardPaymentMethod;
     return set;
 }
+
+/**
+ * `$set`-фрагмент «даних картки немає»: усі поля показу у `null`. Потрібен там,
+ * де картку ЗАМІНЮЮТЬ, а не оновлюють дані тієї самої. `cardRecordFields` і
+ * `cardProfileFields` навмисно не затирають відоме порожнім (`paymentInfo`
+ * приходить не в кожній події), і без явного скидання маска, банк-емітент чи
+ * платіжна система ПОПЕРЕДНЬОЇ картки лишились би у профілі поруч із токеном
+ * нової — кабінет показував би картку, якої не існує, саме тоді, коли платник
+ * прийшов перевірити, чи не підмінив її хтось чужий.
+ */
+export function blankCardFields(): Record<string, null> {
+    return {
+        cardMask: null,
+        cardPaymentMethod: null,
+        cardPaymentSystem: null,
+        cardBank: null,
+    };
+}

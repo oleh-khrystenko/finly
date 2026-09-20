@@ -1,6 +1,10 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
-import { type CardPaymentMethod } from '@finly/types';
+import {
+    CARD_VERIFICATION_STATUS,
+    type CardPaymentMethod,
+    type CardVerificationStatus,
+} from '@finly/types';
 
 export type BillingProfileDocument = HydratedDocument<BillingProfile>;
 
@@ -81,6 +85,66 @@ class DocumentsWarehouse {
 }
 
 /**
+ * Документний склад без кредитного рахунку — рівно те, що описує ЦІНУ і
+ * прикріплення всесвіту. Форма знімка вимкненого профілю
+ * (див. `DisabledComposition`): кредити живі й поверненням не відкочуються, тож
+ * у знімку їм місця немає.
+ */
+@Schema({ _id: false })
+class DisabledDocumentsWarehouse {
+    @Prop({ type: Number, default: null })
+    tierSize!: number | null;
+
+    @Prop({ type: [Types.ObjectId], default: [] })
+    attachedBusinessIds!: Types.ObjectId[];
+
+    @Prop({ type: Number, default: null })
+    pendingTierSize!: number | null;
+
+    @Prop({ type: [Types.ObjectId], default: [] })
+    pendingKeepBusinessIds!: Types.ObjectId[];
+}
+
+/**
+ * Sprint 43 — склад підписки на момент, коли доступ вимкнено вичерпаною
+ * прострочкою: обидві ємності разом з відкладеними зменшеннями і
+ * прикріпленнями.
+ *
+ * Живі поля складу для цього не годяться, бо в них ДВА різні значення: у
+ * живого профілю це «за що платник платить», а у профілю без доступу
+ * `startCheckout` перезаписує їх бажаним складом нової купівлі. Покинута нова
+ * купівля (платник відкрив сторінку банку і закрив її) інакше тихо зменшувала
+ * б суму повернення збереженою карткою і губила прикріплення, за які вже
+ * заплачено.
+ */
+@Schema({ _id: false })
+class DisabledComposition {
+    @Prop({ type: BrandWarehouse, required: true })
+    brand!: BrandWarehouse;
+
+    @Prop({ type: DisabledDocumentsWarehouse, required: true })
+    documents!: DisabledDocumentsWarehouse;
+}
+
+/**
+ * Sprint 43 — остання спроба прив'язки картки. Платник повертається зі сторінки
+ * банку раніше, ніж гарантовано приходить сповіщення, тож результат для нього
+ * дозвіряється запитом статусу рахунку за `invoiceId`. Нова спроба перезаписує
+ * попередню: кабінет питає лише про ту, з якої платник щойно повернувся.
+ */
+@Schema({ _id: false })
+class CardVerificationAttempt {
+    @Prop({ required: true })
+    orderReference!: string;
+
+    @Prop({ required: true })
+    invoiceId!: string;
+
+    @Prop({ required: true, enum: Object.values(CARD_VERIFICATION_STATUS) })
+    status!: CardVerificationStatus;
+}
+
+/**
  * Sprint 27 — білінговий профіль платника. Одна сутність на платника (unique
  * `userId`): день-якір циклу (з першої проплати), платіжний токен monobank, два
  * склади. Раз на місяць у день-якір billing-clock робить ОДНЕ списання: чиста
@@ -103,6 +167,37 @@ export class BillingProfile {
     /** Secret-токен картки monobank — веде всі списання. Не у frontend. */
     @Prop({ type: String, default: null })
     cardToken!: string | null;
+
+    /**
+     * Sprint 43 — токени карток, які профіль уже забув, але гаманець провайдера
+     * ще тримає. Токен потрапляє сюди тим самим записом, що стирає його з
+     * `cardToken`, і зникає лише після підтвердженого відкликання у банку.
+     * Без черги збій одного запиту до банку губив би єдиний запис токена, і
+     * картка лишалась би в гаманці назавжди. Не у frontend.
+     */
+    @Prop({ type: [String], default: [] })
+    pendingRevokeCardTokens!: string[];
+
+    /**
+     * Sprint 43 — скільки разів поспіль банк не прийняв відкликання токена з
+     * черги. Успішне відкликання обнуляє лічильник; на межі
+     * `BILLING_CARD_REVOCATION_MAX_FAILURES` черга здається (токен виходить з
+     * неї, ops отримує лист). Без цієї межі застряглий токен тримав би профіль
+     * живим безстроково, а з ним — і остаточне видалення акаунта.
+     */
+    @Prop({ type: Number, default: 0 })
+    cardRevocationFailures!: number;
+
+    /**
+     * Sprint 43 — з якого моменту є здане відкликання картки, про яке ще не
+     * надіслано лист на `OPS_ALERT_EMAIL`. Ставиться тим самим записом, що
+     * виводить токен з черги, знімається фоновою відправкою після успішного
+     * листа. Після відступу токена в профілі вже немає, тож ця мітка —
+     * єдиний слід картки, що лишилась у гаманці monobank: збій пошти без неї
+     * загубив би картку назавжди.
+     */
+    @Prop({ type: Date, default: null })
+    cardRevocationAlertDueAt!: Date | null;
 
     /** Стабільний per-user гаманець monobank для токенізації. Не у frontend. */
     @Prop({ type: String, default: null })
@@ -184,6 +279,16 @@ export class BillingProfile {
     needsManualReview!: boolean;
 
     /**
+     * Sprint 43 — з якого моменту є ручний розбір, про який ще не надіслано
+     * лист на `OPS_ALERT_EMAIL`. Ставиться разом з `needsManualReview`,
+     * знімається фоновою відправкою після успішного листа. Окреме від прапорця
+     * поле, бо лист не можна слати з транзакції, у якій ставиться прапорець:
+     * її повтор надіслав би лист двічі, а відкат — про гроші, яких немає.
+     */
+    @Prop({ type: Date, default: null })
+    manualReviewAlertDueAt!: Date | null;
+
+    /**
      * Sprint 31 — пауза планувальника на час вікна відновлення акаунта.
      * Ставиться при підтвердженні видалення, знімається при відновленні,
      * зникає разом з профілем при остаточному прибиранні.
@@ -200,6 +305,46 @@ export class BillingProfile {
      */
     @Prop({ type: Date, default: null })
     billingPausedAt!: Date | null;
+
+    /**
+     * Sprint 43 — момент, коли доступ вимкнено вичерпаною прострочкою. Точка
+     * відліку строку зберігання картки: списання не пройшло жодного разу, але
+     * рішення піти платник не приймав, тож картка лишається ще на строк з
+     * `BILLING_CARD_RETENTION_DAYS` і повернення коштує один клік.
+     *
+     * Вивести момент з наявних полів не можна: `currentPeriodEnd` показує межу
+     * оплаченого періоду, а не дату вимкнення, і між ними лежить усе вікно
+     * прострочки.
+     *
+     * Живе рівно стільки, скільки живе сам стан: скидається на успішній оплаті
+     * (профіль ожив) і на остаточному згасанні профілю. Стирання картки мітку
+     * НЕ чіпає — інакше картка, вписана після того стирання, не мала б від чого
+     * відраховувати власний строк і лишилась би в гаманці банку назавжди.
+     */
+    @Prop({ type: Date, default: null })
+    dunningExhaustedAt!: Date | null;
+
+    /**
+     * Sprint 43 — момент останньої успішної прив'язки картки перевіркою без
+     * списання. Друга точка відліку строку зберігання: картка, яку платник
+     * вписав уже після вимкнення доступу, отримує власний строк, а не зникає
+     * наступної ночі за відліком від самого вимкнення.
+     */
+    @Prop({ type: Date, default: null })
+    cardVerifiedAt!: Date | null;
+
+    /**
+     * Sprint 43 — склад, яким підписка жила на момент вимкнення доступу. Джерело
+     * правди і для суми повернення збереженою карткою, і для того, який склад
+     * це повернення відновлює (див. `DisabledComposition`). `null` — знімка
+     * немає: профіль живий, або його вимкнули ще до появи поля, і тоді
+     * повернення читає живі поля складу, як і раніше.
+     */
+    @Prop({ type: DisabledComposition, default: null })
+    disabledSnapshot!: DisabledComposition | null;
+
+    @Prop({ type: CardVerificationAttempt, default: null })
+    cardVerification!: CardVerificationAttempt | null;
 
     /**
      * Durable-маркер незавершеної реконсиляції прикріплених бізнесів. Стемпиться
@@ -248,6 +393,45 @@ BillingProfileSchema.index({ reconcileRequiredAt: 1 }, { sparse: true });
 BillingProfileSchema.index(
     { billingPausedAt: 1 },
     { partialFilterExpression: { billingPausedAt: { $type: 'date' } } }
+);
+// Sprint 43 — гілка «покинута нова купівля поверх вимкненого доступу» у вибірці
+// стирання карток за строком зберігання: статус там INCOMPLETE, і від решти
+// незавершених купівель такий профіль відрізняє саме мітка вимкнення. Partial,
+// а не sparse: дефолт поля — `null`, тобто значення присутнє, і sparse тримав
+// би кожен профіль.
+BillingProfileSchema.index(
+    { dunningExhaustedAt: 1 },
+    { partialFilterExpression: { dunningExhaustedAt: { $type: 'date' } } }
+);
+// Sprint 43 — повторюване стирання карток погашених профілів: картка, яку не
+// вдалось стерти в годину згасання, підбирається наступним проходом.
+BillingProfileSchema.index(
+    { status: 1 },
+    { partialFilterExpression: { cardToken: { $type: 'string' } } }
+);
+// Sprint 43 — повтор відкликань карток, які банк ще не прийняв. Partial: черга
+// порожня майже в кожного профілю, і тримати їх в індексі нема для чого.
+BillingProfileSchema.index(
+    { pendingRevokeCardTokens: 1 },
+    {
+        partialFilterExpression: {
+            pendingRevokeCardTokens: { $type: 'string' },
+        },
+    }
+);
+// Sprint 43 — фонова відправка листів про ручний розбір.
+BillingProfileSchema.index(
+    { manualReviewAlertDueAt: 1 },
+    { partialFilterExpression: { manualReviewAlertDueAt: { $type: 'date' } } }
+);
+// Sprint 43 — фонова відправка листів про здане відкликання картки.
+BillingProfileSchema.index(
+    { cardRevocationAlertDueAt: 1 },
+    {
+        partialFilterExpression: {
+            cardRevocationAlertDueAt: { $type: 'date' },
+        },
+    }
 );
 // Per-business гейтинг: «які профілі мають цей бізнес прикріпленим у складі».
 // Multikey-індекс за масивом прикріплень кожного всесвіту — гаряча перевірка

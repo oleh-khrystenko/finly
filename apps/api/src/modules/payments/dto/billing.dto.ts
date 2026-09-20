@@ -5,6 +5,7 @@ import {
     ManageAttachmentSchema,
     PriceCalculatorSchema,
     ResumeSubscriptionSchema,
+    StartCardVerificationSchema,
     StartCheckoutSchema,
 } from '@finly/types';
 
@@ -15,4 +16,7 @@ export class BuyCreditsDto extends createZodDto(BuyCreditsSchema) {}
 export class PriceCalculatorDto extends createZodDto(PriceCalculatorSchema) {}
 export class ResumeSubscriptionDto extends createZodDto(
     ResumeSubscriptionSchema
+) {}
+export class StartCardVerificationDto extends createZodDto(
+    StartCardVerificationSchema
 ) {}

@@ -34,11 +34,37 @@ import {
     SubscriptionEndedEmail,
     SUBSCRIPTION_ENDED_SUBJECT,
 } from './templates/subscription-ended';
+import {
+    CardChangedEmail,
+    CARD_CHANGED_SUBJECT,
+} from './templates/card-changed';
+import {
+    ManualReviewAlertEmail,
+    MANUAL_REVIEW_ALERT_SUBJECT,
+    type ManualReviewAlertRow,
+} from './templates/manual-review-alert';
+import {
+    CardRevocationFailedEmail,
+    CARD_REVOCATION_FAILED_SUBJECT,
+} from './templates/card-revocation-failed';
 import { EMAIL_TEXT, PROFILE_COMPLETION_CTA_PATH } from './translations';
 
 const BILLING_CTA_PATH = '/billing';
 
 const DATE_LOCALE = 'uk-UA';
+
+/** Час у листі адміністратора — київський, як у кабінеті monobank. */
+const KYIV_TIME_ZONE = 'Europe/Kyiv';
+
+/** Списання, про яке розповідає лист ручного розбору. */
+export interface ManualReviewAlertCharge {
+    createdAt: Date;
+    amount: number; // копійки
+    currency: string;
+    /** Номер рахунку monobank; `null`, якщо до банку так і не дійшли. */
+    invoiceId: string | null;
+    orderReference: string;
+}
 
 @Injectable()
 export class EmailService {
@@ -187,6 +213,89 @@ export class EmailService {
             }),
         });
         this.logger.log(`Subscription ended notice sent to ${email}`);
+    }
+
+    /**
+     * Sprint 43 — сповіщення про зміну платіжної картки. Безпекове за суттю:
+     * підміна картки одна з перших дій того, хто дістався чужого кабінету.
+     */
+    async sendCardChanged(params: {
+        email: string;
+        cardMask: string | null;
+    }): Promise<void> {
+        const { email, cardMask } = params;
+        await this.send({
+            to: email,
+            subject: CARD_CHANGED_SUBJECT,
+            react: CardChangedEmail({
+                cardMask,
+                billingUrl: `${ENV.WEB_URL}${BILLING_CTA_PATH}`,
+            }),
+        });
+        this.logger.log(`Card changed notice sent to ${email}`);
+    }
+
+    /**
+     * Sprint 43 — лист адміністраторові про платіж, що потребує ручного
+     * розбору. Єдиний активний сигнал про такі платежі: прапорець у профілі і
+     * рядок у лозі самі нікого не будять.
+     */
+    async sendManualReviewAlert(params: {
+        userId: string;
+        userEmail: string | null;
+        stillFlagged: boolean;
+        unmatched: ManualReviewAlertCharge[];
+        unsettled: ManualReviewAlertCharge[];
+    }): Promise<void> {
+        const { userId, userEmail, stillFlagged, unmatched, unsettled } =
+            params;
+        await this.send({
+            to: ENV.OPS_ALERT_EMAIL,
+            subject: MANUAL_REVIEW_ALERT_SUBJECT,
+            react: ManualReviewAlertEmail({
+                userId,
+                userEmail,
+                stillFlagged,
+                unmatched: unmatched.map((c) => this.toAlertRow(c)),
+                unsettled: unsettled.map((c) => this.toAlertRow(c)),
+            }),
+        });
+        this.logger.log(`Manual review alert sent for user ${userId}`);
+    }
+
+    /**
+     * Sprint 43 — лист адміністраторові про картку, яку так і не вдалося
+     * відкликати у гаманці monobank. Спроби припинено свідомо: далі черга
+     * відкликань тримала б білінг-профіль живим безстроково, а з ним зависало б
+     * і остаточне видалення акаунта. Ціна відступу — картка лишається в
+     * гаманці, тож прибрати її руками має людина.
+     */
+    async sendCardRevocationFailed(params: {
+        userId: string;
+        walletId: string | null;
+        attempts: number;
+    }): Promise<void> {
+        const { userId, walletId, attempts } = params;
+        await this.send({
+            to: ENV.OPS_ALERT_EMAIL,
+            subject: CARD_REVOCATION_FAILED_SUBJECT,
+            react: CardRevocationFailedEmail({ userId, walletId, attempts }),
+        });
+        this.logger.log(`Card revocation alert sent for user ${userId}`);
+    }
+
+    private toAlertRow(charge: ManualReviewAlertCharge): ManualReviewAlertRow {
+        return {
+            whenLabel: charge.createdAt.toLocaleString(DATE_LOCALE, {
+                timeZone: KYIV_TIME_ZONE,
+                dateStyle: 'medium',
+                timeStyle: 'short',
+            }),
+            amountLabel: formatAmount(charge.amount, charge.currency),
+            referenceLabel: charge.invoiceId
+                ? `рахунок monobank ${charge.invoiceId}`
+                : `спроба ${charge.orderReference}, до банку не дійшла`,
+        };
     }
 
     private formatDate(date: Date): string {

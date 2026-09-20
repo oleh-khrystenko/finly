@@ -14,6 +14,7 @@ import {
     BillingProfileLean,
 } from './schemas/billing-profile.schema';
 import { ReconciliationService } from '../businesses/reconciliation.service';
+import { BillingProfileService } from './billing-profile.service';
 
 /**
  * `pending` webhook-подія, старша за цей поріг, — crash-orphan. Видаляємо, щоб
@@ -34,7 +35,8 @@ export class PaymentsCleanupService {
         private readonly webhookEventModel: Model<ProcessedWebhookEventDocument>,
         @InjectModel(BillingProfile.name)
         private readonly profileModel: Model<BillingProfileDocument>,
-        private readonly reconciliation: ReconciliationService
+        private readonly reconciliation: ReconciliationService,
+        private readonly billing: BillingProfileService
     ) {}
 
     // Щогодини (такт billing-clock), не раз на добу: добовий крок лишав би
@@ -47,6 +49,16 @@ export class PaymentsCleanupService {
         await this.step('expireCanceledProfiles', () =>
             this.expireCanceledProfiles()
         );
+        // Після згасання, у тому ж такті: картка того, хто скасував сам,
+        // стирається в годину закінчення доступу, а та, що не стерлась у
+        // минулих тактах, підбирається знову.
+        await this.step('forgetCardsOfEndedSubscriptions', () =>
+            this.billing.forgetCardsOfEndedSubscriptions()
+        );
+        // Щойно забуті картки і ті, чиє відкликання банк не прийняв раніше.
+        await this.step('revokePendingCardTokens', () =>
+            this.billing.revokePendingCardTokens()
+        );
     }
 
     @Cron(CronExpression.EVERY_DAY_AT_4AM)
@@ -54,12 +66,31 @@ export class PaymentsCleanupService {
         await this.step('retryPendingReconciles', () =>
             this.retryPendingReconciles()
         );
+        await this.step('forgetCardsPastRetention', () =>
+            this.billing.forgetCardsPastRetention()
+        );
+        await this.step('revokePendingCardTokens', () =>
+            this.billing.revokePendingCardTokens()
+        );
     }
 
     @Cron(CronExpression.EVERY_10_MINUTES)
     async runStalePendingSweep(): Promise<void> {
         await this.step('sweepStalePendingEvents', () =>
             this.sweepStalePendingEvents()
+        );
+    }
+
+    // Кожні 10 хвилин: затримка службових листів ops (ручний розбір, здане
+    // відкликання картки) обмежена тактом, а невдала відправка просто
+    // повториться наступним.
+    @Cron(CronExpression.EVERY_10_MINUTES)
+    async runManualReviewAlerts(): Promise<void> {
+        await this.step('sendManualReviewAlerts', () =>
+            this.billing.sendManualReviewAlerts()
+        );
+        await this.step('sendCardRevocationAlerts', () =>
+            this.billing.sendCardRevocationAlerts()
         );
     }
 

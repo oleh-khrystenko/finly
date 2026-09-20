@@ -109,6 +109,20 @@ export const BillingProfileViewSchema = z.object({
     nextChargeAt: z.coerce.date().nullable(),
     cancelAtPeriodEnd: z.boolean(),
     ...CardDetailsSchema.shape,
+    /**
+     * Чи є у профілі збережена картка, якою можна списати. Окреме поле, а не
+     * похідне від `cardMask`: маска це показ, а не платіжна здатність, і
+     * кабінет, що вивів би одне замість іншого, повів би платника у дію, під
+     * якою порожньо. Сам токен у публічний зріз не потрапляє ніколи.
+     */
+    hasSavedCard: z.boolean(),
+    /**
+     * Чи вимкнено доступ через вичерпану прострочку. Окреме поле, а не
+     * `status === UNPAID`: покинута нова купівля перезаписує статус на
+     * INCOMPLETE, і кабінет, що читав би лише статус, назавжди прибирав би
+     * кнопку повернення збереженою карткою — єдиний шлях назад в один крок.
+     */
+    accessDisabledByNonPayment: z.boolean(),
     /** Розрахункова сума наступного місячного списання, копійки. */
     nextChargeAmount: z.number().int().nonnegative(),
     brand: BrandWarehouseViewSchema,
@@ -237,6 +251,57 @@ export const ResumeSubscriptionSchema = z.object({
     returnPath: returnPathSchema,
 });
 export type ResumeSubscription = z.infer<typeof ResumeSubscriptionSchema>;
+
+/**
+ * Прив'язка або заміна платіжної картки. Проходить рахунком на нуль (банк
+ * проводить його як верифікацію картки без списання коштів), тож грошей не
+ * рухає. `renewAfterSave` — намір відновити скасовану підписку одразу після
+ * збереження картки: платник натиснув «Відновити підписку», а картки в профілі
+ * не було, і другого натискання після повернення з банку вимагати не треба.
+ */
+export const StartCardVerificationSchema = z.object({
+    renewAfterSave: z.boolean().optional(),
+    returnPath: returnPathSchema,
+});
+export type StartCardVerification = z.infer<typeof StartCardVerificationSchema>;
+
+/**
+ * Стан останньої спроби прив'язки картки. `pending` — банк ще не дав остаточної
+ * відповіді; `saved` — картку збережено; `failed` — банк відхилив або рахунок
+ * сплив, чинною лишається попередня картка.
+ */
+export const CARD_VERIFICATION_STATUS = {
+    PENDING: 'pending',
+    SAVED: 'saved',
+    FAILED: 'failed',
+} as const;
+
+export type CardVerificationStatus =
+    (typeof CARD_VERIFICATION_STATUS)[keyof typeof CARD_VERIFICATION_STATUS];
+
+/** Результат прив'язки картки для сторінки повернення з банку. */
+export const CardVerificationResultSchema = z.object({
+    status: z.enum([
+        CARD_VERIFICATION_STATUS.PENDING,
+        CARD_VERIFICATION_STATUS.SAVED,
+        CARD_VERIFICATION_STATUS.FAILED,
+    ]),
+});
+export type CardVerificationResult = z.infer<
+    typeof CardVerificationResultSchema
+>;
+
+/**
+ * Куди міст повернення з банку веде платника. Сторінка успішної оплати для
+ * прив'язки картки не годиться: гроші там не рухаються, а результат перевірки
+ * ще треба дізнатись.
+ */
+export const BILLING_RETURN_FLOW = {
+    CARD_VERIFICATION: 'card',
+} as const;
+
+export type BillingReturnFlow =
+    (typeof BILLING_RETURN_FLOW)[keyof typeof BILLING_RETURN_FLOW];
 
 /** Запит калькулятора ціни для UI (жива ціна при зміні ємності). */
 export const PriceCalculatorSchema = z.object({

@@ -12,6 +12,7 @@ import { asRecord, str } from './monobank.signature';
 export const MONOBANK_API_BASE = 'https://api.monobank.ua';
 export const MONOBANK_INVOICE_CREATE = '/api/merchant/invoice/create';
 export const MONOBANK_WALLET_PAYMENT = '/api/merchant/wallet/payment';
+export const MONOBANK_WALLET_CARD = '/api/merchant/wallet/card';
 export const MONOBANK_INVOICE_STATUS = '/api/merchant/invoice/status';
 export const MONOBANK_PUBKEY = '/api/merchant/pubkey';
 

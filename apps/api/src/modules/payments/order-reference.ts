@@ -7,7 +7,7 @@ import { randomBytes } from 'crypto';
  * підписаної події (значення довірене — підпис уже перевірено).
  *
  * Уніфікований формат: `fin-<kind>-<userId>-<suffix>`. Жоден сегмент не містить
- * дефіса. `kind` ∈ {chk,cyc,pro,crd}, `userId` — 24-hex ObjectId, `suffix` —
+ * дефіса. `kind` ∈ {chk,cyc,pro,crd,cvf,cvr,rea}, `userId` — 24-hex ObjectId, `suffix` —
  * hex-nonce (checkout / proration / докупівля: кожна унікальна) АБО epoch-мітка
  * межі періоду (детермінований ідентифікатор циклового продовження — claim-first).
  */
@@ -23,6 +23,24 @@ export const ORDER_KIND = {
     PRORATION: 'pro',
     /** Докупівля прихованого пакета кредитів. */
     CREDIT_PACK: 'crd',
+    /**
+     * Sprint 43 — прив'язка або заміна картки: рахунок на нуль, який monobank
+     * проводить як верифікацію картки без списання коштів.
+     */
+    CARD_VERIFY: 'cvf',
+    /**
+     * Те саме, але з наміром відновити скасовану підписку одразу після
+     * збереження картки. Окремий вид, а не прапорець у стані: маршрутизація
+     * вебхука вже кодується у самому reference, і намір, збережений збоку,
+     * довелося б ще й чистити після кожного покинутого рахунку.
+     */
+    CARD_VERIFY_RENEW: 'cvr',
+    /**
+     * Sprint 43 — повернення збереженою карткою після вимкнення доступу.
+     * Ідентифікатор детермінований за межею, на якій підписку вимкнули: друге
+     * натискання натикається на наявний запис спроби і не списує вдруге.
+     */
+    REACTIVATION: 'rea',
 } as const;
 
 export type OrderKind = (typeof ORDER_KIND)[keyof typeof ORDER_KIND];
@@ -64,6 +82,36 @@ export function buildProrationOrderReference(userId: string): string {
 /** Докупівля кредитів — випадковий nonce. */
 export function buildCreditPackOrderReference(userId: string): string {
     return `${PREFIX}-${ORDER_KIND.CREDIT_PACK}-${userId}-${nonce()}`;
+}
+
+/** Прив'язка / заміна картки — випадковий nonce (кожна спроба унікальна). */
+export function buildCardVerifyOrderReference(
+    userId: string,
+    renewAfter: boolean
+): string {
+    const kind = renewAfter
+        ? ORDER_KIND.CARD_VERIFY_RENEW
+        : ORDER_KIND.CARD_VERIFY;
+    return `${PREFIX}-${kind}-${userId}-${nonce()}`;
+}
+
+/**
+ * Повернення збереженою карткою — ДЕТЕРМІНОВАНИЙ ідентифікатор за межею, на
+ * якій доступ вимкнули: повторне натискання дає той самий ідентифікатор, тож
+ * друге списання за те саме повернення неможливе.
+ */
+export function buildReactivationOrderReference(
+    userId: string,
+    disabledBoundary: Date
+): string {
+    return `${PREFIX}-${ORDER_KIND.REACTIVATION}-${userId}-${disabledBoundary.getTime()}`;
+}
+
+/** Чи належить вид операції прив'язці картки (обидва наміри). */
+export function isCardVerifyKind(kind: OrderKind): boolean {
+    return (
+        kind === ORDER_KIND.CARD_VERIFY || kind === ORDER_KIND.CARD_VERIFY_RENEW
+    );
 }
 
 export function parseOrderReference(ref: string): ParsedOrderReference | null {

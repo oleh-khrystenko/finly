@@ -99,6 +99,15 @@ export class PaymentRecord {
         attachBusinessId: string | null;
     } | null;
 
+    /**
+     * Sprint 43 — чи зараховується відмова циклового списання як спроба
+     * прострочки. `false` — списання ініціював сам платник заміною картки, а не
+     * розклад: його відмова не наближає вимкнення доступу і не зсуває
+     * наступну планову спробу. Відсутнє поле у старих записах = планова спроба.
+     */
+    @Prop({ type: Boolean, default: true })
+    countsAsDunningAttempt!: boolean;
+
     // Declared for TypeScript visibility; managed by Mongoose timestamps: true.
     createdAt!: Date;
 }
