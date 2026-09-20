@@ -559,7 +559,12 @@ describe('Payments E2E (Sprint 27 — два всесвіти)', () => {
         const updated = await profileModel.findOne({ userId: user._id });
         expect(updated?.status).toBe(SUBSCRIPTION_STATUS.PAST_DUE);
         expect(updated?.dunningAttempts).toBe(1);
-        expect(updated?.nextRetryAt).toBeTruthy();
+        // Рівно на тику клока: час із секундами тик своєї ж години не взяв би, і
+        // кожна наступна спроба зсувалась би на годину вперед.
+        const nextRetryAt = updated?.nextRetryAt;
+        expect(nextRetryAt).toBeTruthy();
+        expect(nextRetryAt!.getTime() % (60 * 60 * 1000)).toBe(0);
+        expect(nextRetryAt!.getTime()).toBeGreaterThan(Date.now());
     });
 
     // Sprint 31 — пауза вікна відновлення акаунта перекрита не лише вибіркою

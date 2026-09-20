@@ -221,14 +221,14 @@ export class EmailService {
      */
     async sendCardChanged(params: {
         email: string;
-        cardMask: string | null;
+        cardLabel: string | null;
     }): Promise<void> {
-        const { email, cardMask } = params;
+        const { email, cardLabel } = params;
         await this.send({
             to: email,
             subject: CARD_CHANGED_SUBJECT,
             react: CardChangedEmail({
-                cardMask,
+                cardLabel,
                 billingUrl: `${ENV.WEB_URL}${BILLING_CTA_PATH}`,
             }),
         });

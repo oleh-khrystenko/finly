@@ -27,6 +27,7 @@ import {
     RESPONSE_CODE,
     SUBSCRIPTION_STATUS,
     brandMonthlyAmount,
+    describeCard,
     documentsMonthlyAmount,
     documentsMonthlyCredits,
     findDocumentsTierBySize,
@@ -103,6 +104,7 @@ import {
     RedisLockBusyError,
     RedisLockService,
 } from '../../common/services/redis-lock.service';
+import { alignToClockTick } from './billing-clock-grid';
 import {
     ORDER_KIND,
     buildCardVerifyOrderReference,
@@ -121,7 +123,15 @@ const PROVIDER = 'monobank';
 const WEBHOOK_MONGO_TIMEOUT_MS = 10_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** Див. RESUME_DUNNING_HOLD пояснення у старому сервісі — те саме вікно. */
+/**
+ * Наскільки відсувається найближчий повтор списання, поки платник платить зі
+ * сторінки банку: інакше клок устиг би списати картку паралельно з ним.
+ *
+ * Фактичне вікно довше за саме число: повтори бере клок, а він прокидається
+ * рівно щогодини, тож холд триває до першого тику після цієї позначки — від
+ * 30 до 90 хвилин. Вирівнювати число під сітку не треба, тик однаково
+ * забирає все, що вже настало.
+ */
 const RESUME_DUNNING_HOLD_MS = 30 * 60 * 1000;
 
 /** Скільки останніх нерозпізнаних списань платника показує лист ops. */
@@ -3235,9 +3245,15 @@ export class BillingProfileService implements OnModuleInit {
                         { session }
                     );
                 } else {
-                    const nextRetryAt = new Date(
-                        Date.now() +
-                            BILLING_DUNNING.retryIntervalHours * 3_600_000
+                    // Рівно на тик клока: між його тиком і цим записом минають
+                    // секунди обробки, тож точний `now + інтервал` лежав би на
+                    // кілька секунд ПОЗА сіткою, тик тієї ж години його не брав
+                    // би, і кожна спроба зсувалась би на годину вперед.
+                    const nextRetryAt = alignToClockTick(
+                        new Date(
+                            Date.now() +
+                                BILLING_DUNNING.retryIntervalHours * 3_600_000
+                        )
                     );
                     await this.profileModel.updateOne(
                         openCycle,
@@ -3512,8 +3528,7 @@ export class BillingProfileService implements OnModuleInit {
                 this.revokeQueuedCardToken(userId, replacedToken)
             );
         }
-        const cardMask = event.cardMask;
-        afterLock.push(() => this.notifyCardChanged(userId, cardMask));
+        afterLock.push(() => this.notifyCardChanged(userId, event));
         // У прострочці платник вписує картку рівно заради того, щоб борг
         // пройшов. Вимагати після цього окремого натискання означало б зайвий
         // крок у найгіршому для клієнта місці, тож списуємо одразу тим самим
@@ -3568,18 +3583,23 @@ export class BillingProfileService implements OnModuleInit {
     /**
      * Лист про зміну картки. Зміна платіжного інструменту чутлива: якщо до
      * кабінету дістався хтось чужий, підміна картки саме те, що власник має
-     * помітити. Best-effort, як решта білінг-листів.
+     * помітити. Саме тому картку тут описуємо так само, як на сторінці тарифів
+     * (`describeCard`): розбіжність між листом і кабінетом читалась би як
+     * підміна. Best-effort, як решта білінг-листів.
      */
     private async notifyCardChanged(
         userId: string,
-        cardMask: string | null
+        card: CardDetails
     ): Promise<void> {
         const user = await this.usersService.findById(userId);
         if (!user) return;
         await this.sendBillingEmailSafe(() =>
             this.emailService.sendCardChanged({
                 email: user.email,
-                cardMask,
+                // Той самий опис, що й у кабінеті: цифри лише коли вони справді
+                // від картки. Маска гаманця — номер пристрою, і в листі про
+                // зміну картки вона читалась би як чужа картка.
+                cardLabel: describeCard(card),
             })
         );
     }
