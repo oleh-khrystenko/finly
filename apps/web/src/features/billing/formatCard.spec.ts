@@ -1,69 +1,68 @@
 import type { CardDetails } from '@finly/types';
 import { formatCardLabel } from './formatCard';
 
-const card = (over: Partial<CardDetails> = {}): CardDetails => ({
+type CardLabelInput = CardDetails & { hasSavedCard: boolean };
+
+const card = (over: Partial<CardLabelInput> = {}): CardLabelInput => ({
     cardMask: '444403******1902',
     cardPaymentMethod: 'pan',
     cardPaymentSystem: 'mastercard',
     cardBank: 'ПриватБанк',
+    hasSavedCard: true,
     ...over,
 });
 
+const nothingToShow: CardDetails = {
+    cardMask: null,
+    cardPaymentMethod: null,
+    cardPaymentSystem: null,
+    cardBank: null,
+};
+
 describe('formatCardLabel', () => {
-    it('показує номер, коли платили введеною карткою', () => {
+    it('віддає спільний опис картки, коли є що описувати', () => {
         expect(formatCardLabel(card())).toBe(
             'Mastercard ПриватБанк · 444403******1902'
         );
-    });
-
-    it('ховає номер для Apple Pay, лишаючи впізнавані систему і банк', () => {
         expect(formatCardLabel(card({ cardPaymentMethod: 'apple' }))).toBe(
             'Apple Pay · Mastercard ПриватБанк'
         );
     });
 
-    it('ховає номер для Google Pay', () => {
-        expect(formatCardLabel(card({ cardPaymentMethod: 'google' }))).toBe(
-            'Google Pay · Mastercard ПриватБанк'
-        );
-    });
-
-    it('показує номер для оплати всередині застосунку monobank', () => {
-        expect(formatCardLabel(card({ cardPaymentMethod: 'monobank' }))).toBe(
-            'Mastercard ПриватБанк · 444403******1902'
-        );
-    });
-
-    it('лишає давні записи без способу оплати такими, якими кабінет показував їх раніше', () => {
+    it('каже, що картка є, коли показувати нічого, крім схованих цифр', () => {
         expect(
-            formatCardLabel({
-                cardMask: '444403******1902',
-                cardPaymentMethod: null,
-                cardPaymentSystem: null,
-                cardBank: null,
-            })
-        ).toBe('444403******1902');
+            formatCardLabel(
+                card({
+                    cardPaymentMethod: null,
+                    cardPaymentSystem: null,
+                    cardBank: null,
+                })
+            )
+        ).toBe("Картка прив'язана");
+    });
+
+    it('каже, що картка є, навіть коли банк не прислав жодного поля показу', () => {
+        expect(formatCardLabel({ ...nothingToShow, hasSavedCard: true })).toBe(
+            "Картка прив'язана"
+        );
+    });
+
+    it('мовчить про збережену картку, коли її немає, а маска лишилась від старої', () => {
+        expect(
+            formatCardLabel(
+                card({
+                    cardPaymentMethod: null,
+                    cardPaymentSystem: null,
+                    cardBank: null,
+                    hasSavedCard: false,
+                })
+            )
+        ).toBeNull();
     });
 
     it('віддає null, коли про картку не відомо нічого', () => {
         expect(
-            formatCardLabel({
-                cardMask: null,
-                cardPaymentMethod: null,
-                cardPaymentSystem: null,
-                cardBank: null,
-            })
+            formatCardLabel({ ...nothingToShow, hasSavedCard: false })
         ).toBeNull();
-    });
-
-    it('не лишає порожнього підпису, коли від гаманця відомий лише номер пристрою', () => {
-        expect(
-            formatCardLabel({
-                cardMask: '54456841******95',
-                cardPaymentMethod: 'apple',
-                cardPaymentSystem: null,
-                cardBank: null,
-            })
-        ).toBe('Apple Pay');
     });
 });

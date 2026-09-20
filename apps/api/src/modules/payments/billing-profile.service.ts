@@ -27,6 +27,7 @@ import {
     RESPONSE_CODE,
     SUBSCRIPTION_STATUS,
     brandMonthlyAmount,
+    describeCard,
     documentsMonthlyAmount,
     documentsMonthlyCredits,
     findDocumentsTierBySize,
@@ -3527,8 +3528,7 @@ export class BillingProfileService implements OnModuleInit {
                 this.revokeQueuedCardToken(userId, replacedToken)
             );
         }
-        const cardMask = event.cardMask;
-        afterLock.push(() => this.notifyCardChanged(userId, cardMask));
+        afterLock.push(() => this.notifyCardChanged(userId, event));
         // У прострочці платник вписує картку рівно заради того, щоб борг
         // пройшов. Вимагати після цього окремого натискання означало б зайвий
         // крок у найгіршому для клієнта місці, тож списуємо одразу тим самим
@@ -3583,18 +3583,23 @@ export class BillingProfileService implements OnModuleInit {
     /**
      * Лист про зміну картки. Зміна платіжного інструменту чутлива: якщо до
      * кабінету дістався хтось чужий, підміна картки саме те, що власник має
-     * помітити. Best-effort, як решта білінг-листів.
+     * помітити. Саме тому картку тут описуємо так само, як на сторінці тарифів
+     * (`describeCard`): розбіжність між листом і кабінетом читалась би як
+     * підміна. Best-effort, як решта білінг-листів.
      */
     private async notifyCardChanged(
         userId: string,
-        cardMask: string | null
+        card: CardDetails
     ): Promise<void> {
         const user = await this.usersService.findById(userId);
         if (!user) return;
         await this.sendBillingEmailSafe(() =>
             this.emailService.sendCardChanged({
                 email: user.email,
-                cardMask,
+                // Той самий опис, що й у кабінеті: цифри лише коли вони справді
+                // від картки. Маска гаманця — номер пристрою, і в листі про
+                // зміну картки вона читалась би як чужа картка.
+                cardLabel: describeCard(card),
             })
         );
     }
