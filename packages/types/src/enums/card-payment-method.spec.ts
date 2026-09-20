@@ -26,7 +26,11 @@ describe('hasRealCardNumber', () => {
         expect(hasRealCardNumber('direct')).toBe(true);
     });
 
-    it('невідомий спосіб трактує як справжній номер — так кабінет поводився до появи поля', () => {
-        expect(hasRealCardNumber(null)).toBe(true);
+    it('ховає цифри для списання токеном: токен міг бути створений з гаманця', () => {
+        expect(hasRealCardNumber('wallet')).toBe(false);
+    });
+
+    it('ховає цифри, коли спосіб невідомий — інакше номер пристрою поїхав би як номер картки', () => {
+        expect(hasRealCardNumber(null)).toBe(false);
     });
 });

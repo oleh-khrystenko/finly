@@ -1,52 +1,28 @@
-import { hasRealCardNumber, type CardDetails } from '@finly/types';
-
-const WALLET_LABELS: Partial<
-    Record<NonNullable<CardDetails['cardPaymentMethod']>, string>
-> = {
-    apple: 'Apple Pay',
-    google: 'Google Pay',
-};
-
-const PAYMENT_SYSTEM_LABELS: Record<string, string> = {
-    visa: 'Visa',
-    mastercard: 'Mastercard',
-};
-
-function formatPaymentSystem(system: string): string {
-    return (
-        PAYMENT_SYSTEM_LABELS[system.toLowerCase()] ??
-        system.charAt(0).toUpperCase() + system.slice(1)
-    );
-}
+import { describeCard, type CardDetails } from '@finly/types';
 
 /**
- * Підпис прив'язаної картки для кабінету. Цифри показуємо лише тоді, коли вони
- * справді належать картці платника: для Apple Pay і Google Pay гаманець
- * підставляє номер пристрою, і впізнати по ньому свою картку неможливо — тож
- * замість цифр лишається назва гаманця, платіжна система і банк-емітент, які
- * впізнаються і для гаманцевої оплати (`hasRealCardNumber`).
+ * Підпис прив'язаної картки для кабінету. Сам опис картки спільний з листами
+ * (`describeCard`): цифри лише тоді, коли вони справді належать картці платника,
+ * інакше — назва гаманця, платіжна система і банк-емітент.
  *
- * `null` — показувати нічого (даних про картку ще немає).
+ * Кабінет додає до нього своє: коли описати картку нічим, а картка збережена,
+ * підпис не зникає — сторінка мусить сказати, що платити є чим. Порожнє місце
+ * на рядку способу оплати читається як «картки немає», тобто як привід
+ * прив'язати ще одну.
+ *
+ * Ознака береться з `hasSavedCard`, а не з маски: маска це показ, а не платіжна
+ * здатність (див. `BillingProfileViewSchema`). Банк присилає дані картки не в
+ * кожній події, а заміна картки гасить поля показу перед записом нових, тож
+ * збережена картка цілком може лишитись без жодного поля показу — і саме там
+ * підпис за маскою мовчав би.
+ *
+ * `null` — показувати нічого (картки немає і описати нічого).
  */
-export function formatCardLabel(card: CardDetails): string | null {
-    const wallet = card.cardPaymentMethod
-        ? WALLET_LABELS[card.cardPaymentMethod]
-        : undefined;
-    const issuer = [
-        card.cardPaymentSystem
-            ? formatPaymentSystem(card.cardPaymentSystem)
-            : null,
-        card.cardBank,
-    ]
-        .filter((part): part is string => Boolean(part))
-        .join(' ');
-    const digits =
-        hasRealCardNumber(card.cardPaymentMethod) && card.cardMask
-            ? card.cardMask
-            : null;
-
-    const parts = [wallet, issuer, digits].filter((part): part is string =>
-        Boolean(part)
+export function formatCardLabel(
+    profile: CardDetails & { hasSavedCard: boolean }
+): string | null {
+    return (
+        describeCard(profile) ??
+        (profile.hasSavedCard ? "Картка прив'язана" : null)
     );
-    return parts.length > 0 ? parts.join(' · ') : null;
 }

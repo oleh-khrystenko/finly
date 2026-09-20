@@ -1,9 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 import { Model } from 'mongoose';
 import { PAYMENT_RECORD_STATUS, SUBSCRIPTION_STATUS } from '@finly/types';
 
+import { BILLING_CLOCK_CRON } from './billing-clock-grid';
 import {
     BillingProfile,
     BillingProfileDocument,
@@ -39,7 +40,7 @@ export class BillingClockService {
         private readonly billing: BillingProfileService
     ) {}
 
-    @Cron(CronExpression.EVERY_HOUR)
+    @Cron(BILLING_CLOCK_CRON)
     async runBillingClock(): Promise<void> {
         await this.step('reconcilePending', () => this.reconcilePending());
         await this.step('chargeDueCycles', () => this.chargeDueCycles());

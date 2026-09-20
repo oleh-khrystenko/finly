@@ -10,17 +10,22 @@ const FOOTER =
     'Якщо картку міняли не ви, зверніться до нас якнайшвидше: хтось міг отримати доступ до вашого кабінету.';
 
 interface CardChangedEmailProps {
-    /** Маска нової картки; `null`, якщо банк її не повернув. */
-    cardMask: string | null;
+    /**
+     * Впізнаваний опис нової картки (`describeCard`), а не голі цифри маски:
+     * для Apple Pay / Google Pay банк віддає номер пристрою, і лист, що назвав
+     * би його номером картки, сам провокував би тривогу, від якої застерігає
+     * його ж підпис. `null` — описати картку нічим.
+     */
+    cardLabel: string | null;
     billingUrl: string;
 }
 
 export function CardChangedEmail({
-    cardMask,
+    cardLabel,
     billingUrl,
 }: CardChangedEmailProps) {
-    const body = cardMask
-        ? `Платіжну картку для підписки Finly змінено на ${cardMask}. Наступні списання підуть з неї.`
+    const body = cardLabel
+        ? `Платіжну картку для підписки Finly змінено на ${cardLabel}. Наступні списання підуть з неї.`
         : 'Платіжну картку для підписки Finly змінено. Наступні списання підуть з нової картки.';
 
     return (

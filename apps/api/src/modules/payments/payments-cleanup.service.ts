@@ -4,6 +4,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { Model } from 'mongoose';
 import { SUBSCRIPTION_STATUS } from '@finly/types';
 
+import { BILLING_CLOCK_CRON } from './billing-clock-grid';
 import {
     ProcessedWebhookEvent,
     ProcessedWebhookEventDocument,
@@ -39,12 +40,13 @@ export class PaymentsCleanupService {
         private readonly billing: BillingProfileService
     ) {}
 
-    // Щогодини (такт billing-clock), не раз на добу: добовий крок лишав би
-    // скасованому профілю до ~24 год неоплаченого доступу після межі періоду
-    // і на той самий час блокував повторну купівлю (startCheckout на ще-ACTIVE
-    // профілі → BILLING_ALREADY_ACTIVE; сам checkout додатково має інлайн-гасіння
-    // такого профілю, але бренд-фічі гасить саме цей прохід).
-    @Cron(CronExpression.EVERY_HOUR)
+    // Той самий розклад, що й billing-clock (спільна константа, не копія: власне
+    // «щогодини» поруч розійшлося б з клоком мовчки), не раз на добу: добовий
+    // крок лишав би скасованому профілю до ~24 год неоплаченого доступу після
+    // межі періоду і на той самий час блокував повторну купівлю (startCheckout
+    // на ще-ACTIVE профілі → BILLING_ALREADY_ACTIVE; сам checkout додатково має
+    // інлайн-гасіння такого профілю, але бренд-фічі гасить саме цей прохід).
+    @Cron(BILLING_CLOCK_CRON)
     async runHourlyExpiry(): Promise<void> {
         await this.step('expireCanceledProfiles', () =>
             this.expireCanceledProfiles()
