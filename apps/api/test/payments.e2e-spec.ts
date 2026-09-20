@@ -11,6 +11,7 @@ import { ZodValidationPipe } from 'nestjs-zod';
 import { Model, Types } from 'mongoose';
 import {
     BILLING_UNIVERSE,
+    CARD_VERIFICATION_STATUS,
     CURRENT_TERMS_VERSION,
     MONOBANK_INVOICE_STATUS,
     PAYMENT_RECORD_STATUS,
@@ -54,7 +55,16 @@ import {
     PaymentRecord,
     PaymentRecordDocument,
 } from '../src/modules/payments/schemas/payment-record.schema';
-import { BILLING_GRID } from '../src/config/billing.config';
+import {
+    ProcessedWebhookEvent,
+    ProcessedWebhookEventDocument,
+} from '../src/modules/payments/schemas/processed-webhook-event.schema';
+import {
+    BILLING_CARD_RETENTION_DAYS,
+    BILLING_CARD_REVOCATION_MAX_FAILURES,
+    BILLING_DUNNING,
+    BILLING_GRID,
+} from '../src/config/billing.config';
 
 jest.mock('../src/config/env', () => ({
     ENV: {
@@ -151,9 +161,15 @@ const providerMock = {
         invoiceId: `inv_${i.orderReference}`,
         orderReference: i.orderReference,
     })),
+    createCardVerification: jest.fn(async (i: { orderReference: string }) => ({
+        checkoutUrl: `https://pay.mbnk.biz/${i.orderReference}`,
+        invoiceId: `inv_${i.orderReference}`,
+        orderReference: i.orderReference,
+    })),
     chargeByToken: jest.fn(),
     getInvoiceStatus: jest.fn(),
     parseWebhook: jest.fn(),
+    deleteCardToken: jest.fn().mockResolvedValue(undefined),
 };
 
 const emailMock = {
@@ -161,6 +177,9 @@ const emailMock = {
     sendDeletionConfirmation: jest.fn().mockResolvedValue(undefined),
     sendSubscriptionPastDue: jest.fn().mockResolvedValue(undefined),
     sendSubscriptionEnded: jest.fn().mockResolvedValue(undefined),
+    sendCardChanged: jest.fn().mockResolvedValue(undefined),
+    sendManualReviewAlert: jest.fn().mockResolvedValue(undefined),
+    sendCardRevocationFailed: jest.fn().mockResolvedValue(undefined),
 };
 
 describe('Payments E2E (Sprint 27 — два всесвіти)', () => {
@@ -392,13 +411,12 @@ describe('Payments E2E (Sprint 27 — два всесвіти)', () => {
         expect(branded?.brandedAt).toBeTruthy();
     });
 
-    it('checkout при живому профілі (скасований, без токена) → 409, склади не зачеплені', async () => {
-        // cancel занулює токен, але період оплачено (статус ACTIVE): повторний
-        // checkout НЕ має зносити склади і доступ — лише 409 ALREADY_ACTIVE.
+    it('checkout при живому скасованому профілі → 409, склади не зачеплені', async () => {
+        // Скасування лишає період оплаченим (статус ACTIVE) і картку на місці:
+        // повторний checkout НЕ має зносити склади і доступ — лише 409.
         const user = await createUser();
         const business = await createBusiness(user);
         await seedActiveProfile(user, {
-            cardToken: null,
             cancelAtPeriodEnd: true,
             nextChargeAt: null,
             brand: { capacity: 2, attachedBusinessIds: [business._id] },
@@ -570,7 +588,7 @@ describe('Payments E2E (Sprint 27 — два всесвіти)', () => {
 
     // ─── Cancel ───
 
-    it('POST /subscription/cancel → cancelAtPeriodEnd, токен стерто', async () => {
+    it('POST /subscription/cancel → cancelAtPeriodEnd, картка лишається до кінця періоду', async () => {
         const user = await createUser();
         await seedActiveProfile(user);
         await supertest(app.getHttpServer())
@@ -580,17 +598,2170 @@ describe('Payments E2E (Sprint 27 — два всесвіти)', () => {
 
         const profile = await profileModel.findOne({ userId: user._id });
         expect(profile?.cancelAtPeriodEnd).toBe(true);
-        expect(profile?.cardToken).toBeNull();
+        expect(profile?.nextChargeAt).toBeNull();
+        // Платник ще платник до межі періоду: картка на місці, у банку токен
+        // не відкликано. Стирання — робота згасання, не скасування.
+        expect(profile?.cardToken).toBe('tok-1');
+        expect(providerMock.deleteCardToken).not.toHaveBeenCalled();
+    });
+
+    it('POST /subscription/renew → скасування відкликано, списання повернуто на межу періоду', async () => {
+        const user = await createUser();
+        const profile = await seedActiveProfile(user, {
+            cancelAtPeriodEnd: true,
+            nextChargeAt: null,
+        });
+
+        await supertest(app.getHttpServer())
+            .post('/api/payments/subscription/renew')
+            .set('Authorization', bearerFor(user))
+            .expect(200);
+
+        const renewed = await profileModel.findOne({ userId: user._id });
+        expect(renewed?.cancelAtPeriodEnd).toBe(false);
+        expect(renewed?.nextChargeAt?.getTime()).toBe(
+            profile.currentPeriodEnd?.getTime()
+        );
+        // Грошей дія не рухає: період уже оплачено.
+        expect(providerMock.chargeByToken).not.toHaveBeenCalled();
+        expect(providerMock.createSubscriptionCheckout).not.toHaveBeenCalled();
+
+        // Після відновлення платні дії знову доступні.
+        providerMock.chargeByToken.mockResolvedValueOnce({
+            invoiceId: 'inv_pro',
+            status: MONOBANK_INVOICE_STATUS.SUCCESS,
+            cardToken: 'tok-1',
+            failureReason: null,
+            errCode: null,
+            cardMask: '** 1111',
+            cardPaymentMethod: 'pan',
+            cardPaymentSystem: 'mastercard',
+            cardBank: 'ПриватБанк',
+        });
+        await supertest(app.getHttpServer())
+            .post('/api/payments/capacity')
+            .set('Authorization', bearerFor(user))
+            .send({ universe: BILLING_UNIVERSE.BRAND, capacity: 2 })
+            .expect(200);
+        const expanded = await profileModel.findOne({ userId: user._id });
+        expect(expanded?.brand.capacity).toBe(2);
+    });
+
+    it('renew на нескасованій підписці → 400 BILLING_NOT_CANCELED', async () => {
+        const user = await createUser();
+        await seedActiveProfile(user);
+
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/subscription/renew')
+            .set('Authorization', bearerFor(user))
+            .expect(400);
+        expect((res.body as { error: { code: string } }).error.code).toBe(
+            'BILLING_NOT_CANCELED'
+        );
+    });
+
+    it('renew після межі оплаченого періоду → 400 BILLING_PERIOD_ENDED', async () => {
+        const user = await createUser();
+        await seedActiveProfile(user, {
+            cancelAtPeriodEnd: true,
+            nextChargeAt: null,
+            currentPeriodEnd: new Date(Date.now() - 3600_000),
+        });
+
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/subscription/renew')
+            .set('Authorization', bearerFor(user))
+            .expect(400);
+        expect((res.body as { error: { code: string } }).error.code).toBe(
+            'BILLING_PERIOD_ENDED'
+        );
+        const profile = await profileModel.findOne({ userId: user._id });
+        expect(profile?.cancelAtPeriodEnd).toBe(true);
         expect(profile?.nextChargeAt).toBeNull();
     });
 
-    it('POST /capacity на скасованому профілі → 400 BILLING_CANCEL_PENDING, без списання', async () => {
-        // Скасований-до-кінця-періоду профіль: доступ живий, токен стерто.
-        // Платна зміна ємності мусить діставати чесний код (не «немає картки,
-        // оформіть першу оплату», бо checkout на entitled-профілі — 409).
+    it('renew без збереженої картки → 400 BILLING_CARD_REQUIRED, підписка лишається скасованою', async () => {
+        // Стан усіх, хто скасував до цього спринту: картку вже стерто.
+        // Відновлення поновило б списання, якому нема з чого списувати, і
+        // профіль завис би у безкоштовному доступі назавжди.
         const user = await createUser();
         await seedActiveProfile(user, {
             cardToken: null,
+            cancelAtPeriodEnd: true,
+            nextChargeAt: null,
+        });
+
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/subscription/renew')
+            .set('Authorization', bearerFor(user))
+            .expect(400);
+        expect((res.body as { error: { code: string } }).error.code).toBe(
+            'BILLING_CARD_REQUIRED'
+        );
+        const profile = await profileModel.findOne({ userId: user._id });
+        expect(profile?.cancelAtPeriodEnd).toBe(true);
+        expect(profile?.nextChargeAt).toBeNull();
+    });
+
+    it('renew на профілі, який фонове згасання вже погасило, не воскрешає підписку', async () => {
+        // Фонове згасання скасованих працює без per-user лока і цілком може
+        // випередити натискання. Погашений профіль більше не entitled, тож
+        // відновлення відхиляється, а не роздає доступ безкоштовно. Те саме
+        // вікно у вужчому масштабі (між читанням профілю і записом) закриває
+        // повтор умов у фільтрі самого запису.
+        const user = await createUser();
+        await seedActiveProfile(user, {
+            status: SUBSCRIPTION_STATUS.CANCELED,
+            cancelAtPeriodEnd: true,
+            nextChargeAt: null,
+            currentPeriodEnd: new Date(Date.now() - 3600_000),
+        });
+
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/subscription/renew')
+            .set('Authorization', bearerFor(user))
+            .expect(400);
+        expect((res.body as { error: { code: string } }).error.code).toBe(
+            'BILLING_NOT_CANCELED'
+        );
+        const profile = await profileModel.findOne({ userId: user._id });
+        expect(profile?.status).toBe(SUBSCRIPTION_STATUS.CANCELED);
+        expect(profile?.nextChargeAt).toBeNull();
+    });
+
+    it('renew при незакритому списанні → намір повернуто, планувальник лишається зупиненим', async () => {
+        // Транспортний збій списання зупиняє планувальник свідомо: поки
+        // невідомо, пройшли гроші чи ні, нових списань бути не повинно.
+        // Відновлення повертає намір поновлювати, але вісь не чіпає — її
+        // поверне settle того списання (clearChargeUncertainty).
+        const user = await createUser();
+        await seedActiveProfile(user, {
+            cancelAtPeriodEnd: true,
+            nextChargeAt: null,
+            needsManualReview: true,
+        });
+        await paymentRecordModel.create({
+            userId: user._id,
+            orderReference: `fin-pro-${user._id.toString()}-c0ffeec0ffeec0ff`,
+            type: PAYMENT_RECORD_TYPE.PRORATION,
+            amount: BILLING_GRID.brand.pricePerBusiness,
+            currency: 'UAH',
+            status: PAYMENT_RECORD_STATUS.PENDING,
+            providerTransactionId: null,
+        });
+
+        await supertest(app.getHttpServer())
+            .post('/api/payments/subscription/renew')
+            .set('Authorization', bearerFor(user))
+            .expect(200);
+
+        const renewed = await profileModel.findOne({ userId: user._id });
+        expect(renewed?.cancelAtPeriodEnd).toBe(false);
+        expect(renewed?.nextChargeAt).toBeNull();
+        expect(providerMock.chargeByToken).not.toHaveBeenCalled();
+    });
+
+    // ─── Оплата простроченого місяця ───
+
+    it('«оплатити зараз» у прострочці закриває той самий місяць, день списання не зсувається', async () => {
+        const user = await createUser();
+        // Межа минула вчора, день щомісячного списання — 10 число.
+        const boundary = new Date('2026-05-10T09:00:00.000Z');
+        await seedActiveProfile(user, {
+            status: SUBSCRIPTION_STATUS.PAST_DUE,
+            anchorDay: 10,
+            currentPeriodStart: new Date('2026-04-10T09:00:00.000Z'),
+            currentPeriodEnd: boundary,
+            nextChargeAt: null,
+            nextRetryAt: new Date(Date.now() + 3600_000),
+            dunningAttempts: 3,
+        });
+
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/subscription/resume')
+            .set('Authorization', bearerFor(user))
+            .send({ returnPath: '/billing' })
+            .expect(200);
+        const orderReference =
+            (res.body as { data: { checkoutUrl: string } }).data.checkoutUrl
+                .split('/')
+                .pop() ?? '';
+
+        // Платник оплачує 14 числа, тобто через чотири дні після межі.
+        await postWebhook(
+            makeEvent({
+                orderReference,
+                invoiceId: 'inv_resume',
+                providerEventId: 'inv_resume:success',
+                occurredAt: new Date('2026-05-14T12:00:00.000Z'),
+                amount: BILLING_GRID.brand.pricePerBusiness,
+            })
+        );
+
+        const updated = await profileModel.findOne({ userId: user._id });
+        expect(updated?.status).toBe(SUBSCRIPTION_STATUS.ACTIVE);
+        // Оплачено САМЕ прострочений місяць: він рахується від старої межі,
+        // а не від дня оплати.
+        expect(updated?.currentPeriodStart?.toISOString()).toBe(
+            boundary.toISOString()
+        );
+        // Наступне списання — 10 квітня, день щомісячного списання не поїхав.
+        expect(updated?.currentPeriodEnd?.toISOString()).toBe(
+            '2026-06-10T09:00:00.000Z'
+        );
+        expect(updated?.nextChargeAt?.toISOString()).toBe(
+            '2026-06-10T09:00:00.000Z'
+        );
+        expect(updated?.anchorDay).toBe(10);
+        expect(updated?.dunningAttempts).toBe(0);
+        expect(updated?.nextRetryAt).toBeNull();
+        expect(updated?.needsManualReview).toBe(false);
+        // Оплачено тією самою карткою — відкликати нічого.
+        expect(updated?.cardToken).toBe('tok-1');
+        expect(providerMock.deleteCardToken).not.toHaveBeenCalled();
+    });
+
+    it('перша купівля лишає чинну поведінку: місяць і день списання від дня оплати', async () => {
+        const user = await createUser();
+        const business = await createBusiness(user);
+        await supertest(app.getHttpServer())
+            .post('/api/payments/checkout')
+            .set('Authorization', bearerFor(user))
+            .send({
+                universe: BILLING_UNIVERSE.BRAND,
+                capacity: 1,
+                attachBusinessId: business._id.toString(),
+            })
+            .expect(201);
+        const orderReference =
+            providerMock.createSubscriptionCheckout.mock.calls[0][0]
+                .orderReference;
+
+        await postWebhook(
+            makeEvent({
+                orderReference,
+                invoiceId: 'inv_first',
+                providerEventId: 'inv_first:success',
+                occurredAt: new Date('2026-05-14T12:00:00.000Z'),
+                amount: BILLING_GRID.brand.pricePerBusiness,
+            })
+        );
+
+        const profile = await profileModel.findOne({ userId: user._id });
+        expect(profile?.status).toBe(SUBSCRIPTION_STATUS.ACTIVE);
+        expect(profile?.anchorDay).toBe(14);
+        expect(profile?.currentPeriodStart?.toISOString()).toBe(
+            '2026-05-14T12:00:00.000Z'
+        );
+        expect(profile?.currentPeriodEnd?.toISOString()).toBe(
+            '2026-06-14T12:00:00.000Z'
+        );
+    });
+
+    it('повернення згаслого профілю лишає чинну поведінку: новий місяць від дня оплати', async () => {
+        const user = await createUser();
+        await seedActiveProfile(user, {
+            status: SUBSCRIPTION_STATUS.UNPAID,
+            anchorDay: 10,
+            currentPeriodEnd: new Date('2026-05-10T09:00:00.000Z'),
+            nextChargeAt: null,
+        });
+
+        await supertest(app.getHttpServer())
+            .post('/api/payments/checkout')
+            .set('Authorization', bearerFor(user))
+            .send({ universe: BILLING_UNIVERSE.BRAND, capacity: 1 })
+            .expect(201);
+        const orderReference =
+            providerMock.createSubscriptionCheckout.mock.calls[0][0]
+                .orderReference;
+
+        await postWebhook(
+            makeEvent({
+                orderReference,
+                invoiceId: 'inv_back',
+                providerEventId: 'inv_back:success',
+                occurredAt: new Date('2026-04-20T12:00:00.000Z'),
+                amount: BILLING_GRID.brand.pricePerBusiness,
+            })
+        );
+
+        const profile = await profileModel.findOne({ userId: user._id });
+        expect(profile?.status).toBe(SUBSCRIPTION_STATUS.ACTIVE);
+        // Дні, коли доступу не було, прощено: новий місяць від дня оплати.
+        expect(profile?.anchorDay).toBe(20);
+        expect(profile?.currentPeriodEnd?.toISOString()).toBe(
+            '2026-05-20T12:00:00.000Z'
+        );
+    });
+
+    it('друга оплата за вже закритий місяць не зсуває цикл і йде в ручний розбір', async () => {
+        const user = await createUser();
+        const boundary = new Date('2026-05-10T09:00:00.000Z');
+        await seedActiveProfile(user, {
+            status: SUBSCRIPTION_STATUS.PAST_DUE,
+            anchorDay: 10,
+            currentPeriodEnd: boundary,
+            nextChargeAt: null,
+            nextRetryAt: new Date(Date.now() + 3600_000),
+        });
+
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/subscription/resume')
+            .set('Authorization', bearerFor(user))
+            .send({})
+            .expect(200);
+        const orderReference =
+            (res.body as { data: { checkoutUrl: string } }).data.checkoutUrl
+                .split('/')
+                .pop() ?? '';
+
+        const paid = {
+            orderReference,
+            invoiceId: 'inv_dbl',
+            occurredAt: new Date('2026-05-14T12:00:00.000Z'),
+            amount: BILLING_GRID.brand.pricePerBusiness,
+        };
+        await postWebhook(
+            makeEvent({ ...paid, providerEventId: 'inv_dbl:success' })
+        );
+        const afterFirst = await profileModel.findOne({ userId: user._id });
+        expect(afterFirst?.currentPeriodEnd?.toISOString()).toBe(
+            '2026-06-10T09:00:00.000Z'
+        );
+
+        // Другі гроші за той самий місяць (інший рахунок, інша подія).
+        await postWebhook(
+            makeEvent({
+                ...paid,
+                invoiceId: 'inv_dbl2',
+                providerEventId: 'inv_dbl2:success',
+            })
+        );
+
+        const updated = await profileModel.findOne({ userId: user._id });
+        // Цикл не зсунуто вдруге, гроші видно у розборі.
+        expect(updated?.currentPeriodEnd?.toISOString()).toBe(
+            '2026-06-10T09:00:00.000Z'
+        );
+        expect(updated?.needsManualReview).toBe(true);
+        const unmatched = await paymentRecordModel.find({
+            userId: user._id,
+            type: PAYMENT_RECORD_TYPE.UNMATCHED,
+        });
+        expect(unmatched).toHaveLength(1);
+    });
+
+    it('планова спроба, що пройшла вже після «Оплатити зараз», не зараховується мовчки: ручний розбір', async () => {
+        const user = await createUser();
+        const boundary = new Date('2026-05-10T09:00:00.000Z');
+        await seedActiveProfile(user, {
+            status: SUBSCRIPTION_STATUS.PAST_DUE,
+            anchorDay: 10,
+            currentPeriodEnd: boundary,
+            nextChargeAt: null,
+            nextRetryAt: new Date(Date.now() + 3600_000),
+        });
+
+        // Платник відкрив сторінку оплати.
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/subscription/resume')
+            .set('Authorization', bearerFor(user))
+            .send({})
+            .expect(200);
+        const checkoutRef =
+            (res.body as { data: { checkoutUrl: string } }).data.checkoutUrl
+                .split('/')
+                .pop() ?? '';
+
+        // Сторінка ще відкрита, пауза спроб минула, планова спроба пішла, а
+        // банк її ще обробляє.
+        await profileModel.updateOne(
+            { userId: user._id },
+            { $set: { nextRetryAt: new Date(Date.now() - 1000) } }
+        );
+        providerMock.chargeByToken.mockResolvedValueOnce({
+            invoiceId: 'inv_retry_slow',
+            status: MONOBANK_INVOICE_STATUS.PROCESSING,
+            cardToken: null,
+            failureReason: null,
+            errCode: null,
+            cardMask: '** 1111',
+            cardPaymentMethod: 'pan',
+            cardPaymentSystem: 'mastercard',
+            cardBank: 'ПриватБанк',
+        });
+        await app.get(BillingClockService).runBillingClock();
+        const cycleRef = providerMock.chargeByToken.mock.calls[0][0]
+            .orderReference as string;
+
+        // Платник завершив оплату на сторінці банку: місяць закрито.
+        await postWebhook(
+            makeEvent({
+                orderReference: checkoutRef,
+                invoiceId: 'inv_resume_first',
+                providerEventId: 'inv_resume_first:success',
+                amount: BILLING_GRID.brand.pricePerBusiness,
+            })
+        );
+
+        // Банк доробив планову спробу: другі гроші за той самий місяць.
+        await postWebhook(
+            makeEvent({
+                orderReference: cycleRef,
+                invoiceId: 'inv_retry_slow',
+                providerEventId: 'inv_retry_slow:success',
+                amount: BILLING_GRID.brand.pricePerBusiness,
+            })
+        );
+
+        const updated = await profileModel.findOne({ userId: user._id });
+        expect(updated?.status).toBe(SUBSCRIPTION_STATUS.ACTIVE);
+        expect(updated?.currentPeriodEnd?.toISOString()).toBe(
+            '2026-06-10T09:00:00.000Z'
+        );
+        expect(updated?.needsManualReview).toBe(true);
+        // Планувальник не зупинено: наступне місячне списання за розкладом.
+        expect(updated?.nextChargeAt?.toISOString()).toBe(
+            '2026-06-10T09:00:00.000Z'
+        );
+        const cycleRecord = await paymentRecordModel.findOne({
+            orderReference: cycleRef,
+            providerTransactionId: 'inv_retry_slow',
+        });
+        expect(cycleRecord?.status).toBe(PAYMENT_RECORD_STATUS.APPROVED);
+        expect(cycleRecord?.type).toBe(PAYMENT_RECORD_TYPE.UNMATCHED);
+    });
+
+    it('відмова планової спроби вже після «Оплатити зараз» не повертає оплаченому профілю прострочку', async () => {
+        const user = await createUser();
+        const boundary = new Date('2026-05-10T09:00:00.000Z');
+        await seedActiveProfile(user, {
+            status: SUBSCRIPTION_STATUS.PAST_DUE,
+            anchorDay: 10,
+            currentPeriodEnd: boundary,
+            nextChargeAt: null,
+            nextRetryAt: new Date(Date.now() + 3600_000),
+            dunningAttempts: 3,
+        });
+
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/subscription/resume')
+            .set('Authorization', bearerFor(user))
+            .send({})
+            .expect(200);
+        const checkoutRef =
+            (res.body as { data: { checkoutUrl: string } }).data.checkoutUrl
+                .split('/')
+                .pop() ?? '';
+
+        // Планова спроба пішла, поки сторінка оплати відкрита, і зависла в банку.
+        await profileModel.updateOne(
+            { userId: user._id },
+            { $set: { nextRetryAt: new Date(Date.now() - 1000) } }
+        );
+        providerMock.chargeByToken.mockResolvedValueOnce({
+            invoiceId: 'inv_retry_slow_fail',
+            status: MONOBANK_INVOICE_STATUS.PROCESSING,
+            cardToken: null,
+            failureReason: null,
+            errCode: null,
+            cardMask: '** 1111',
+            cardPaymentMethod: 'pan',
+            cardPaymentSystem: 'mastercard',
+            cardBank: 'ПриватБанк',
+        });
+        await app.get(BillingClockService).runBillingClock();
+        const cycleRef = providerMock.chargeByToken.mock.calls[0][0]
+            .orderReference as string;
+
+        // Платник оплатив на сторінці банку: місяць закрито.
+        await postWebhook(
+            makeEvent({
+                orderReference: checkoutRef,
+                invoiceId: 'inv_resume_paid',
+                providerEventId: 'inv_resume_paid:success',
+                amount: BILLING_GRID.brand.pricePerBusiness,
+            })
+        );
+
+        // Банк відхилив завислу планову спробу вже за закритий місяць.
+        await postWebhook(
+            makeEvent({
+                orderReference: cycleRef,
+                invoiceId: 'inv_retry_slow_fail',
+                providerEventId: 'inv_retry_slow_fail:failure',
+                status: MONOBANK_INVOICE_STATUS.FAILURE,
+                amount: BILLING_GRID.brand.pricePerBusiness,
+            })
+        );
+
+        const updated = await profileModel.findOne({ userId: user._id });
+        expect(updated?.status).toBe(SUBSCRIPTION_STATUS.ACTIVE);
+        expect(updated?.dunningAttempts).toBe(0);
+        expect(updated?.nextRetryAt).toBeNull();
+        expect(updated?.currentPeriodEnd?.toISOString()).toBe(
+            '2026-06-10T09:00:00.000Z'
+        );
+        expect(updated?.nextChargeAt?.toISOString()).toBe(
+            '2026-06-10T09:00:00.000Z'
+        );
+        const cycleRecord = await paymentRecordModel.findOne({
+            orderReference: cycleRef,
+            providerTransactionId: 'inv_retry_slow_fail',
+        });
+        expect(cycleRecord?.status).toBe(PAYMENT_RECORD_STATUS.DECLINED);
+        expect(emailMock.sendSubscriptionPastDue).not.toHaveBeenCalled();
+    });
+
+    it('ручний розбір → один лист адміністраторові з нерозпізнаним списанням, без повторів', async () => {
+        const user = await createUser();
+        await seedActiveProfile(user, {
+            status: SUBSCRIPTION_STATUS.PAST_DUE,
+            anchorDay: 10,
+            currentPeriodEnd: new Date('2026-05-10T09:00:00.000Z'),
+            nextChargeAt: null,
+            nextRetryAt: new Date(Date.now() + 3600_000),
+        });
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/subscription/resume')
+            .set('Authorization', bearerFor(user))
+            .send({})
+            .expect(200);
+        const orderReference =
+            (res.body as { data: { checkoutUrl: string } }).data.checkoutUrl
+                .split('/')
+                .pop() ?? '';
+        const paid = {
+            orderReference,
+            amount: BILLING_GRID.brand.pricePerBusiness,
+        };
+        await postWebhook(
+            makeEvent({
+                ...paid,
+                invoiceId: 'inv_alert1',
+                providerEventId: 'inv_alert1:success',
+            })
+        );
+        await postWebhook(
+            makeEvent({
+                ...paid,
+                invoiceId: 'inv_alert2',
+                providerEventId: 'inv_alert2:success',
+            })
+        );
+
+        const cleanup = app.get(PaymentsCleanupService);
+        await cleanup.runManualReviewAlerts();
+
+        expect(emailMock.sendManualReviewAlert).toHaveBeenCalledTimes(1);
+        expect(emailMock.sendManualReviewAlert).toHaveBeenCalledWith(
+            expect.objectContaining({
+                userId: user._id.toString(),
+                userEmail: user.email,
+                stillFlagged: true,
+                unmatched: [
+                    expect.objectContaining({
+                        invoiceId: 'inv_alert2',
+                        amount: BILLING_GRID.brand.pricePerBusiness,
+                    }),
+                ],
+                unsettled: [],
+            })
+        );
+        const profile = await profileModel.findOne({ userId: user._id });
+        expect(profile?.manualReviewAlertDueAt).toBeNull();
+
+        await cleanup.runManualReviewAlerts();
+        expect(emailMock.sendManualReviewAlert).toHaveBeenCalledTimes(1);
+    });
+
+    it('лист адміністраторові не відправився → мітка лишається, лист іде наступним проходом', async () => {
+        const user = await createUser();
+        await seedActiveProfile(user, {
+            needsManualReview: true,
+            manualReviewAlertDueAt: new Date(),
+        });
+        emailMock.sendManualReviewAlert.mockRejectedValueOnce(
+            new Error('resend down')
+        );
+
+        const cleanup = app.get(PaymentsCleanupService);
+        await cleanup.runManualReviewAlerts();
+        const afterFailure = await profileModel.findOne({ userId: user._id });
+        expect(afterFailure?.manualReviewAlertDueAt).toBeTruthy();
+
+        await cleanup.runManualReviewAlerts();
+        expect(emailMock.sendManualReviewAlert).toHaveBeenCalledTimes(2);
+        const afterRetry = await profileModel.findOne({ userId: user._id });
+        expect(afterRetry?.manualReviewAlertDueAt).toBeNull();
+    });
+
+    it('щогодинна звірка завислого списання не шле адміністраторові той самий лист удруге', async () => {
+        const user = await createUser();
+        await seedActiveProfile(user);
+        const record = await paymentRecordModel.create({
+            userId: user._id,
+            orderReference: `fin-pro-${user._id.toString()}-abababababababab`,
+            type: PAYMENT_RECORD_TYPE.PRORATION,
+            amount: 1000,
+            currency: 'UAH',
+            status: PAYMENT_RECORD_STATUS.PENDING,
+        });
+        await paymentRecordModel.collection.updateOne(
+            { _id: record._id },
+            { $set: { createdAt: new Date(Date.now() - 3600_000) } }
+        );
+        const clock = app.get(BillingClockService);
+        const cleanup = app.get(PaymentsCleanupService);
+
+        await clock.runBillingClock();
+        await cleanup.runManualReviewAlerts();
+        expect(emailMock.sendManualReviewAlert).toHaveBeenCalledTimes(1);
+        expect(emailMock.sendManualReviewAlert).toHaveBeenCalledWith(
+            expect.objectContaining({
+                unsettled: [
+                    expect.objectContaining({
+                        invoiceId: null,
+                        orderReference: record.orderReference,
+                    }),
+                ],
+            })
+        );
+
+        await clock.runBillingClock();
+        await cleanup.runManualReviewAlerts();
+        expect(emailMock.sendManualReviewAlert).toHaveBeenCalledTimes(1);
+        const profile = await profileModel.findOne({ userId: user._id });
+        expect(profile?.needsManualReview).toBe(true);
+    });
+
+    it('«оплатити зараз» при незавершеному списанні → 409, другого рахунку не створюємо', async () => {
+        const user = await createUser();
+        await seedActiveProfile(user, {
+            status: SUBSCRIPTION_STATUS.PAST_DUE,
+            nextChargeAt: null,
+            nextRetryAt: new Date(Date.now() + 3600_000),
+        });
+        await paymentRecordModel.create({
+            userId: user._id,
+            orderReference: `fin-cyc-${user._id.toString()}-1`,
+            type: PAYMENT_RECORD_TYPE.CYCLE,
+            amount: BILLING_GRID.brand.pricePerBusiness,
+            currency: 'UAH',
+            status: PAYMENT_RECORD_STATUS.PENDING,
+            providerTransactionId: 'inv_hanging',
+        });
+
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/subscription/resume')
+            .set('Authorization', bearerFor(user))
+            .send({})
+            .expect(409);
+        expect((res.body as { error: { code: string } }).error.code).toBe(
+            'BILLING_OPERATION_IN_PROGRESS'
+        );
+        expect(providerMock.createSubscriptionCheckout).not.toHaveBeenCalled();
+    });
+
+    it('заміна картки у прострочці одразу гасить борг і повертає доступ', async () => {
+        const user = await createUser();
+        const boundary = new Date('2026-05-10T09:00:00.000Z');
+        await seedActiveProfile(user, {
+            status: SUBSCRIPTION_STATUS.PAST_DUE,
+            anchorDay: 10,
+            currentPeriodEnd: boundary,
+            nextChargeAt: null,
+            nextRetryAt: new Date(Date.now() + 3600_000),
+            dunningAttempts: 2,
+        });
+
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/card/verification')
+            .set('Authorization', bearerFor(user))
+            .send({})
+            .expect(200);
+        const orderReference =
+            (res.body as { data: { checkoutUrl: string } }).data.checkoutUrl
+                .split('/')
+                .pop() ?? '';
+
+        providerMock.chargeByToken.mockResolvedValueOnce({
+            invoiceId: 'inv_debt',
+            status: MONOBANK_INVOICE_STATUS.SUCCESS,
+            cardToken: 'tok-new',
+            failureReason: null,
+            errCode: null,
+            cardMask: '** 4242',
+            cardPaymentMethod: 'pan',
+            cardPaymentSystem: 'visa',
+            cardBank: 'monobank',
+        });
+
+        await postWebhook(
+            makeEvent({
+                orderReference,
+                invoiceId: 'inv_cvf_debt',
+                providerEventId: 'inv_cvf_debt:success',
+                amount: 0,
+                cardToken: 'tok-new',
+                cardMask: '** 4242',
+            })
+        );
+
+        // Борг списано новою карткою, без окремої дії платника.
+        expect(providerMock.chargeByToken).toHaveBeenCalledTimes(1);
+        const charged = providerMock.chargeByToken.mock.calls[0][0];
+        expect(charged.cardToken).toBe('tok-new');
+        expect(charged.amount).toBe(BILLING_GRID.brand.pricePerBusiness);
+        // Під локом лише те, що змінює стан підписки: відкликання старої
+        // картки і лист ідуть уже після списання боргу.
+        expect(providerMock.deleteCardToken).toHaveBeenCalledWith('tok-1');
+        expect(
+            providerMock.chargeByToken.mock.invocationCallOrder[0]
+        ).toBeLessThan(
+            providerMock.deleteCardToken.mock.invocationCallOrder[0]
+        );
+        expect(
+            providerMock.chargeByToken.mock.invocationCallOrder[0]
+        ).toBeLessThan(emailMock.sendCardChanged.mock.invocationCallOrder[0]);
+
+        const updated = await profileModel.findOne({ userId: user._id });
+        expect(updated?.status).toBe(SUBSCRIPTION_STATUS.ACTIVE);
+        expect(updated?.currentPeriodEnd?.toISOString()).toBe(
+            '2026-06-10T09:00:00.000Z'
+        );
+        expect(updated?.dunningAttempts).toBe(0);
+    });
+
+    it('відмова списання після заміни картки не забирає спробу прострочки', async () => {
+        // Заміну ініціював сам платник, а не розклад: інакше заміна картки на
+        // останньому дні прострочки вимикала б доступ миттєво.
+        const user = await createUser();
+        const nextRetryAt = new Date(Date.now() + 3600_000);
+        await seedActiveProfile(user, {
+            status: SUBSCRIPTION_STATUS.PAST_DUE,
+            currentPeriodEnd: new Date('2026-05-10T09:00:00.000Z'),
+            nextChargeAt: null,
+            nextRetryAt,
+            dunningAttempts: BILLING_DUNNING.maxAttempts - 1,
+        });
+
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/card/verification')
+            .set('Authorization', bearerFor(user))
+            .send({})
+            .expect(200);
+        const orderReference =
+            (res.body as { data: { checkoutUrl: string } }).data.checkoutUrl
+                .split('/')
+                .pop() ?? '';
+
+        providerMock.chargeByToken.mockResolvedValueOnce({
+            invoiceId: 'inv_debt_declined',
+            status: MONOBANK_INVOICE_STATUS.FAILURE,
+            cardToken: null,
+            failureReason: 'insufficient funds',
+            errCode: '51',
+            cardMask: '** 4242',
+            cardPaymentMethod: 'pan',
+            cardPaymentSystem: 'visa',
+            cardBank: 'monobank',
+        });
+
+        await postWebhook(
+            makeEvent({
+                orderReference,
+                invoiceId: 'inv_cvf_last_day',
+                providerEventId: 'inv_cvf_last_day:success',
+                amount: 0,
+                cardToken: 'tok-new',
+                cardMask: '** 4242',
+            })
+        );
+
+        expect(providerMock.chargeByToken).toHaveBeenCalledTimes(1);
+        const updated = await profileModel.findOne({ userId: user._id });
+        expect(updated?.cardToken).toBe('tok-new');
+        expect(updated?.status).toBe(SUBSCRIPTION_STATUS.PAST_DUE);
+        expect(updated?.dunningAttempts).toBe(BILLING_DUNNING.maxAttempts - 1);
+        expect(updated?.nextRetryAt?.getTime()).toBe(nextRetryAt.getTime());
+        expect(emailMock.sendSubscriptionEnded).not.toHaveBeenCalled();
+        expect(emailMock.sendSubscriptionPastDue).not.toHaveBeenCalled();
+        const record = await paymentRecordModel.findOne({ userId: user._id });
+        expect(record?.status).toBe(PAYMENT_RECORD_STATUS.DECLINED);
+    });
+
+    // ─── Повернення після вимкнення доступу ───
+
+    it('оплата збереженою карткою після вимкнення → новий місяць від дня оплати, бренд повернуто', async () => {
+        const user = await createUser();
+        const business = await createBusiness(user);
+        await seedActiveProfile(user, {
+            status: SUBSCRIPTION_STATUS.UNPAID,
+            anchorDay: 10,
+            currentPeriodEnd: new Date('2026-05-10T09:00:00.000Z'),
+            nextChargeAt: null,
+            dunningAttempts: BILLING_DUNNING.maxAttempts,
+            dunningExhaustedAt: new Date('2026-05-20T09:00:00.000Z'),
+            brand: { capacity: 1, attachedBusinessIds: [business._id] },
+        });
+        providerMock.chargeByToken.mockResolvedValueOnce({
+            invoiceId: 'inv_rea',
+            status: MONOBANK_INVOICE_STATUS.SUCCESS,
+            cardToken: 'tok-1',
+            failureReason: null,
+            errCode: null,
+            cardMask: '** 1111',
+            cardPaymentMethod: 'pan',
+            cardPaymentSystem: 'mastercard',
+            cardBank: 'ПриватБанк',
+        });
+
+        const before = Date.now();
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/subscription/reactivate')
+            .set('Authorization', bearerFor(user))
+            .expect(200);
+        expect(
+            (res.body as { data: { scheduled: boolean } }).data.scheduled
+        ).toBe(false);
+
+        const charged = providerMock.chargeByToken.mock.calls[0][0];
+        expect(charged.amount).toBe(BILLING_GRID.brand.pricePerBusiness);
+        expect(charged.orderReference.startsWith('fin-rea-')).toBe(true);
+
+        const updated = await profileModel.findOne({ userId: user._id });
+        expect(updated?.status).toBe(SUBSCRIPTION_STATUS.ACTIVE);
+        // Місяць рахується від дня оплати, а не від старої межі: дні без
+        // доступу прощено, і планувальник не списує кілька місяців поспіль.
+        expect(
+            updated?.currentPeriodStart?.getTime() ?? 0
+        ).toBeGreaterThanOrEqual(before);
+        expect(updated?.currentPeriodEnd?.getTime() ?? 0).toBeGreaterThan(
+            Date.now()
+        );
+        expect(updated?.anchorDay).toBe(new Date().getDate());
+        expect(updated?.dunningAttempts).toBe(0);
+        expect(updated?.dunningExhaustedAt).toBeNull();
+        // Бренд прикріпленого отримувача ввімкнено назад.
+        const branded = await businessModel.findById(business._id);
+        expect(branded?.brandedAt).toBeTruthy();
+    });
+
+    it('покинута нова купівля не забирає повернення збереженою карткою', async () => {
+        const user = await createUser();
+        await seedActiveProfile(user, {
+            status: SUBSCRIPTION_STATUS.UNPAID,
+            anchorDay: 10,
+            currentPeriodEnd: new Date('2026-05-10T09:00:00.000Z'),
+            nextChargeAt: null,
+            dunningAttempts: BILLING_DUNNING.maxAttempts,
+            dunningExhaustedAt: new Date('2026-05-20T09:00:00.000Z'),
+        });
+        // Платник натиснув купівлю і не дійшов до оплати: статус переїхав на
+        // INCOMPLETE, а стан «доступ вимкнено несплатою» лишився тим самим.
+        await supertest(app.getHttpServer())
+            .post('/api/payments/checkout')
+            .set('Authorization', bearerFor(user))
+            .send({ universe: BILLING_UNIVERSE.BRAND, capacity: 1 })
+            .expect(201);
+        expect((await profileModel.findOne({ userId: user._id }))?.status).toBe(
+            SUBSCRIPTION_STATUS.INCOMPLETE
+        );
+        const view = await supertest(app.getHttpServer())
+            .get('/api/payments/profile')
+            .set('Authorization', bearerFor(user))
+            .expect(200);
+        const shown = (
+            view.body as {
+                data: {
+                    accessDisabledByNonPayment: boolean;
+                    nextChargeAmount: number;
+                };
+            }
+        ).data;
+        expect(shown.accessDisabledByNonPayment).toBe(true);
+        expect(shown.nextChargeAmount).toBe(
+            BILLING_GRID.brand.pricePerBusiness
+        );
+
+        providerMock.chargeByToken.mockResolvedValueOnce({
+            invoiceId: 'inv_rea_after_checkout',
+            status: MONOBANK_INVOICE_STATUS.SUCCESS,
+            cardToken: 'tok-1',
+            failureReason: null,
+            errCode: null,
+            cardMask: '** 1111',
+            cardPaymentMethod: 'pan',
+            cardPaymentSystem: 'mastercard',
+            cardBank: 'ПриватБанк',
+        });
+
+        await supertest(app.getHttpServer())
+            .post('/api/payments/subscription/reactivate')
+            .set('Authorization', bearerFor(user))
+            .expect(200);
+
+        const updated = await profileModel.findOne({ userId: user._id });
+        expect(updated?.status).toBe(SUBSCRIPTION_STATUS.ACTIVE);
+        expect(updated?.dunningExhaustedAt).toBeNull();
+    });
+
+    it('покинута нова купівля не змінює склад, який відновлює повернення', async () => {
+        // Живі поля складу для вимкненого профілю означають «що платник хоче
+        // купити»: `startCheckout` перезаписує їх навіть тоді, коли платник
+        // закрив сторінку банку. Повернення мусить спиратись на знімок складу
+        // з моменту вимкнення, інакше воно тихо оплатило б менший склад і
+        // загубило прикріплення, за які вже заплачено.
+        const user = await createUser();
+        // Slug задаємо явно: авто-slug helper-а бере перші 8 hex ObjectId (це
+        // мітка часу), тож два отримувачі в одну секунду зіткнулись би.
+        const first = await createBusiness(user, {
+            slug: 'snap-first',
+            slugLower: 'snap-first',
+        });
+        const second = await createBusiness(user, {
+            slug: 'snap-second',
+            slugLower: 'snap-second',
+            taxId: '1234567898',
+        });
+        await seedActiveProfile(user, {
+            status: SUBSCRIPTION_STATUS.PAST_DUE,
+            dunningAttempts: BILLING_DUNNING.maxAttempts - 1,
+            nextChargeAt: null,
+            nextRetryAt: new Date(Date.now() - 1000),
+            brand: {
+                capacity: 2,
+                attachedBusinessIds: [first._id, second._id],
+            },
+        });
+        providerMock.chargeByToken.mockResolvedValueOnce({
+            invoiceId: 'inv_last_fail',
+            status: MONOBANK_INVOICE_STATUS.FAILURE,
+            cardToken: null,
+            failureReason: 'insufficient funds',
+            errCode: '51',
+            cardMask: '** 1111',
+            cardPaymentMethod: 'pan',
+            cardPaymentSystem: 'mastercard',
+            cardBank: 'ПриватБанк',
+        });
+        await app.get(BillingClockService).runBillingClock();
+        expect((await profileModel.findOne({ userId: user._id }))?.status).toBe(
+            SUBSCRIPTION_STATUS.UNPAID
+        );
+
+        // Платник відкриває купівлю одного слота і не доводить її до оплати.
+        await supertest(app.getHttpServer())
+            .post('/api/payments/checkout')
+            .set('Authorization', bearerFor(user))
+            .send({ universe: BILLING_UNIVERSE.BRAND, capacity: 1 })
+            .expect(201);
+        const abandoned = await profileModel.findOne({ userId: user._id });
+        expect(abandoned?.brand.capacity).toBe(1);
+
+        // Кабінет далі називає суму оплаченого складу, а не покинутого.
+        const view = await supertest(app.getHttpServer())
+            .get('/api/payments/profile')
+            .set('Authorization', bearerFor(user))
+            .expect(200);
+        expect(
+            (view.body as { data: { nextChargeAmount: number } }).data
+                .nextChargeAmount
+        ).toBe(2 * BILLING_GRID.brand.pricePerBusiness);
+
+        providerMock.chargeByToken.mockResolvedValueOnce({
+            invoiceId: 'inv_rea_snapshot',
+            status: MONOBANK_INVOICE_STATUS.SUCCESS,
+            cardToken: 'tok-1',
+            failureReason: null,
+            errCode: null,
+            cardMask: '** 1111',
+            cardPaymentMethod: 'pan',
+            cardPaymentSystem: 'mastercard',
+            cardBank: 'ПриватБанк',
+        });
+        await supertest(app.getHttpServer())
+            .post('/api/payments/subscription/reactivate')
+            .set('Authorization', bearerFor(user))
+            .expect(200);
+
+        const charged = providerMock.chargeByToken.mock.calls[1][0];
+        expect(charged.amount).toBe(2 * BILLING_GRID.brand.pricePerBusiness);
+
+        const updated = await profileModel.findOne({ userId: user._id });
+        expect(updated?.status).toBe(SUBSCRIPTION_STATUS.ACTIVE);
+        expect(updated?.brand.capacity).toBe(2);
+        expect(
+            updated?.brand.attachedBusinessIds.map((id) => id.toString()).sort()
+        ).toEqual([first._id.toString(), second._id.toString()].sort());
+        expect(updated?.disabledSnapshot).toBeNull();
+        // Обидва отримувачі повернули бренд, не лише той, що пережив покинуту
+        // купівлю.
+        for (const business of [first, second]) {
+            const branded = await businessModel.findById(business._id);
+            expect(branded?.brandedAt).toBeTruthy();
+        }
+    });
+
+    it('повторне натискання повернення не списує вдруге', async () => {
+        const user = await createUser();
+        await seedActiveProfile(user, {
+            status: SUBSCRIPTION_STATUS.UNPAID,
+            currentPeriodEnd: new Date('2026-05-10T09:00:00.000Z'),
+            nextChargeAt: null,
+        });
+        // Перше натискання лишило нерозв'язану спробу (банк ще думає).
+        providerMock.chargeByToken.mockResolvedValueOnce({
+            invoiceId: 'inv_rea_proc',
+            status: 'processing',
+            cardToken: null,
+            failureReason: null,
+            errCode: null,
+            cardMask: '** 1111',
+            cardPaymentMethod: 'pan',
+            cardPaymentSystem: 'mastercard',
+            cardBank: 'ПриватБанк',
+        });
+        await supertest(app.getHttpServer())
+            .post('/api/payments/subscription/reactivate')
+            .set('Authorization', bearerFor(user))
+            .expect(200);
+
+        // Друге натискання, поки перша спроба не розв'язана: чесне «зачекайте»
+        // замість другого походу по гроші.
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/subscription/reactivate')
+            .set('Authorization', bearerFor(user))
+            .expect(409);
+        expect((res.body as { error: { code: string } }).error.code).toBe(
+            'BILLING_OPERATION_IN_PROGRESS'
+        );
+        expect(providerMock.chargeByToken).toHaveBeenCalledTimes(1);
+        const records = await paymentRecordModel.find({ userId: user._id });
+        expect(records).toHaveLength(1);
+
+        // Завислу спробу добиває планувальник: маршрутизація за видом операції,
+        // інакше запис лишився б PENDING назавжди і мовчки блокував платні дії.
+        // Зістарюємо запис — свіжі клок свідомо не чіпає (їх ще може вести
+        // живий творець під локом).
+        await paymentRecordModel.collection.updateOne(
+            { _id: records[0]._id },
+            { $set: { createdAt: new Date(Date.now() - 3600_000) } }
+        );
+        providerMock.getInvoiceStatus.mockResolvedValueOnce({
+            ...makeEvent({
+                orderReference: records[0].orderReference,
+                invoiceId: 'inv_rea_proc',
+                providerEventId: 'inv_rea_proc:success',
+            }),
+        });
+        await app.get(BillingClockService).runBillingClock();
+
+        const settled = await paymentRecordModel.findOne({
+            userId: user._id,
+        });
+        expect(settled?.status).toBe(PAYMENT_RECORD_STATUS.APPROVED);
+        const profile = await profileModel.findOne({ userId: user._id });
+        expect(profile?.status).toBe(SUBSCRIPTION_STATUS.ACTIVE);
+    });
+
+    it('повернення, що пройшло вже після купівлі заново, не зараховується мовчки: ручний розбір', async () => {
+        const user = await createUser();
+        await seedActiveProfile(user, {
+            status: SUBSCRIPTION_STATUS.UNPAID,
+            anchorDay: 10,
+            currentPeriodEnd: new Date('2026-05-10T09:00:00.000Z'),
+            nextChargeAt: null,
+        });
+        providerMock.chargeByToken.mockResolvedValueOnce({
+            invoiceId: 'inv_rea_slow',
+            status: MONOBANK_INVOICE_STATUS.PROCESSING,
+            cardToken: null,
+            failureReason: null,
+            errCode: null,
+            cardMask: '** 1111',
+            cardPaymentMethod: 'pan',
+            cardPaymentSystem: 'mastercard',
+            cardBank: 'ПриватБанк',
+        });
+        await supertest(app.getHttpServer())
+            .post('/api/payments/subscription/reactivate')
+            .set('Authorization', bearerFor(user))
+            .expect(200);
+        const reactivationRef = providerMock.chargeByToken.mock.calls[0][0]
+            .orderReference as string;
+
+        // Не дочекавшись банку, платник купує підписку звичайним шляхом.
+        await supertest(app.getHttpServer())
+            .post('/api/payments/checkout')
+            .set('Authorization', bearerFor(user))
+            .send({ universe: BILLING_UNIVERSE.BRAND, capacity: 1 })
+            .expect(201);
+        const checkoutRef =
+            providerMock.createSubscriptionCheckout.mock.calls[0][0]
+                .orderReference;
+        await postWebhook(
+            makeEvent({
+                orderReference: checkoutRef,
+                invoiceId: 'inv_rebuy',
+                providerEventId: 'inv_rebuy:success',
+                amount: BILLING_GRID.brand.pricePerBusiness,
+            })
+        );
+        const afterRebuy = await profileModel.findOne({ userId: user._id });
+        expect(afterRebuy?.status).toBe(SUBSCRIPTION_STATUS.ACTIVE);
+
+        // Банк доробив повернення: другі гроші.
+        await postWebhook(
+            makeEvent({
+                orderReference: reactivationRef,
+                invoiceId: 'inv_rea_slow',
+                providerEventId: 'inv_rea_slow:success',
+                amount: BILLING_GRID.brand.pricePerBusiness,
+            })
+        );
+
+        const updated = await profileModel.findOne({ userId: user._id });
+        expect(updated?.status).toBe(SUBSCRIPTION_STATUS.ACTIVE);
+        expect(updated?.currentPeriodEnd?.toISOString()).toBe(
+            afterRebuy?.currentPeriodEnd?.toISOString()
+        );
+        expect(updated?.needsManualReview).toBe(true);
+        const record = await paymentRecordModel.findOne({
+            orderReference: reactivationRef,
+        });
+        expect(record?.status).toBe(PAYMENT_RECORD_STATUS.APPROVED);
+        expect(record?.type).toBe(PAYMENT_RECORD_TYPE.UNMATCHED);
+    });
+
+    it('відмова банку лишає доступ вимкненим', async () => {
+        const user = await createUser();
+        await seedActiveProfile(user, {
+            status: SUBSCRIPTION_STATUS.UNPAID,
+            currentPeriodEnd: new Date('2026-05-10T09:00:00.000Z'),
+            nextChargeAt: null,
+        });
+        providerMock.chargeByToken.mockResolvedValueOnce({
+            invoiceId: 'inv_rea_fail',
+            status: MONOBANK_INVOICE_STATUS.FAILURE,
+            cardToken: null,
+            failureReason: 'insufficient funds',
+            errCode: '51',
+            cardMask: '** 1111',
+            cardPaymentMethod: 'pan',
+            cardPaymentSystem: 'mastercard',
+            cardBank: 'ПриватБанк',
+        });
+
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/subscription/reactivate')
+            .set('Authorization', bearerFor(user))
+            .expect(400);
+        expect((res.body as { error: { code: string } }).error.code).toBe(
+            'BILLING_CHARGE_DECLINED'
+        );
+        const updated = await profileModel.findOne({ userId: user._id });
+        expect(updated?.status).toBe(SUBSCRIPTION_STATUS.UNPAID);
+    });
+
+    it('повернення на активному профілі → 400 BILLING_NOT_DISABLED', async () => {
+        const user = await createUser();
+        await seedActiveProfile(user);
+
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/subscription/reactivate')
+            .set('Authorization', bearerFor(user))
+            .expect(400);
+        expect((res.body as { error: { code: string } }).error.code).toBe(
+            'BILLING_NOT_DISABLED'
+        );
+        expect(providerMock.chargeByToken).not.toHaveBeenCalled();
+    });
+
+    it('повернення без збереженої картки → 400 BILLING_CARD_REQUIRED', async () => {
+        const user = await createUser();
+        await seedActiveProfile(user, {
+            status: SUBSCRIPTION_STATUS.UNPAID,
+            cardToken: null,
+            nextChargeAt: null,
+        });
+
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/subscription/reactivate')
+            .set('Authorization', bearerFor(user))
+            .expect(400);
+        expect((res.body as { error: { code: string } }).error.code).toBe(
+            'BILLING_CARD_REQUIRED'
+        );
+    });
+
+    it('повернення: банк не знає токена (400) → 400 BILLING_CHARGE_DECLINED, запис спроби звільнено', async () => {
+        // Відмова саме за карткою остаточна: повтор тією самою карткою дасть те
+        // саме. Кажемо це кодом відмови банку, щоб кабінет вів на заміну картки,
+        // а не пропонував зачекати і натиснути ще раз.
+        const user = await createUser();
+        await seedActiveProfile(user, {
+            status: SUBSCRIPTION_STATUS.UNPAID,
+            nextChargeAt: null,
+            dunningExhaustedAt: new Date(),
+        });
+        providerMock.chargeByToken.mockRejectedValueOnce(
+            new ProviderRequestError(
+                'monobank HTTP 400: unknown card token',
+                true,
+                400
+            )
+        );
+
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/subscription/reactivate')
+            .set('Authorization', bearerFor(user))
+            .expect(400);
+        expect((res.body as { error: { code: string } }).error.code).toBe(
+            'BILLING_CHARGE_DECLINED'
+        );
+
+        // Гроші точно не рухались: запис спроби звільнено, тож заміна картки і
+        // повторна оплата не впираються у «попередня операція ще виконується».
+        const records = await paymentRecordModel.find({ userId: user._id });
+        expect(records).toHaveLength(0);
+        const profile = await profileModel.findOne({ userId: user._id });
+        expect(profile?.status).toBe(SUBSCRIPTION_STATUS.UNPAID);
+        expect(profile?.needsManualReview).toBe(false);
+    });
+
+    // ─── Прив'язка і заміна картки ───
+
+    it('заміна картки: нульовий рахунок зберігає нову картку, стару відкликано, підписка не зачеплена', async () => {
+        const user = await createUser();
+        const profile = await seedActiveProfile(user);
+
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/card/verification')
+            .set('Authorization', bearerFor(user))
+            .send({ returnPath: '/billing' })
+            .expect(200);
+        const { checkoutUrl } = (res.body as { data: { checkoutUrl: string } })
+            .data;
+        const orderReference = checkoutUrl.split('/').pop() ?? '';
+        expect(orderReference.startsWith('fin-cvf-')).toBe(true);
+        // Верифікація йде саме нульовим рахунком, а не списанням.
+        expect(providerMock.createCardVerification).toHaveBeenCalledTimes(1);
+        expect(providerMock.chargeByToken).not.toHaveBeenCalled();
+
+        await postWebhook(
+            makeEvent({
+                orderReference,
+                invoiceId: 'inv_cvf',
+                providerEventId: 'inv_cvf:success',
+                amount: 0,
+                cardToken: 'tok-new',
+                cardMask: '** 4242',
+            })
+        );
+
+        const updated = await profileModel.findOne({ userId: user._id });
+        expect(updated?.cardToken).toBe('tok-new');
+        expect(updated?.cardMask).toBe('** 4242');
+        // Нульовий рахунок не має жодного шляху зрушити підписку.
+        expect(updated?.status).toBe(SUBSCRIPTION_STATUS.ACTIVE);
+        expect(updated?.currentPeriodEnd?.getTime()).toBe(
+            profile.currentPeriodEnd?.getTime()
+        );
+        expect(updated?.needsManualReview).toBe(false);
+        expect(updated?.brand.capacity).toBe(1);
+        // Стару картку відкликано у банку, нову — ні.
+        expect(providerMock.deleteCardToken).toHaveBeenCalledWith('tok-1');
+        expect(providerMock.deleteCardToken).not.toHaveBeenCalledWith(
+            'tok-new'
+        );
+        // Банк підтвердив відкликання — черга порожня.
+        expect(updated?.pendingRevokeCardTokens).toEqual([]);
+        expect(emailMock.sendCardChanged).toHaveBeenCalledTimes(1);
+        // Нульовий рахунок не є рухом грошей і в історію не потрапляє.
+        const records = await paymentRecordModel.find({ userId: user._id });
+        expect(records).toHaveLength(0);
+    });
+
+    it('проміжний статус прив’язки картки: подію закрито як оброблену, картку не зачеплено', async () => {
+        const user = await createUser();
+        await seedActiveProfile(user);
+
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/card/verification')
+            .set('Authorization', bearerFor(user))
+            .send({})
+            .expect(200);
+        const orderReference =
+            (res.body as { data: { checkoutUrl: string } }).data.checkoutUrl
+                .split('/')
+                .pop() ?? '';
+
+        await postWebhook(
+            makeEvent({
+                orderReference,
+                invoiceId: 'inv_cvf_proc',
+                providerEventId: 'inv_cvf_proc:processing',
+                status: MONOBANK_INVOICE_STATUS.PROCESSING,
+                amount: 0,
+                cardToken: null,
+            })
+        );
+
+        // Лишена «в роботі», подія виглядала б для фонової чистки як
+        // обробка, що впала посередині.
+        const eventModel = app.get<Model<ProcessedWebhookEventDocument>>(
+            getModelToken(ProcessedWebhookEvent.name)
+        );
+        const stored = await eventModel
+            .findOne({ providerEventId: 'inv_cvf_proc:processing' })
+            .lean();
+        expect(stored?.status).toBe('applied');
+        const profile = await profileModel.findOne({ userId: user._id });
+        expect(profile?.cardToken).toBe('tok-1');
+        expect(profile?.cardVerification?.status).toBe(
+            CARD_VERIFICATION_STATUS.PENDING
+        );
+    });
+
+    it('заміна картки не лишає у профілі даних попередньої', async () => {
+        // `paymentInfo` приходить не повним, а поля картки навмисно не
+        // затираються порожнім (щоб циклові списання не стирали відоме). При
+        // ЗАМІНІ це працювало б проти платника: банк-емітент і платіжна
+        // система старої картки лишились би поруч з маскою нової, і кабінет
+        // показував би картку, якої не існує.
+        const user = await createUser();
+        await seedActiveProfile(user, {
+            cardMask: '** 1111',
+            cardPaymentMethod: 'pan',
+            cardPaymentSystem: 'mastercard',
+            cardBank: 'ПриватБанк',
+        });
+
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/card/verification')
+            .set('Authorization', bearerFor(user))
+            .send({})
+            .expect(200);
+        const orderReference =
+            (res.body as { data: { checkoutUrl: string } }).data.checkoutUrl
+                .split('/')
+                .pop() ?? '';
+
+        await postWebhook(
+            makeEvent({
+                orderReference,
+                invoiceId: 'inv_cvf_partial',
+                providerEventId: 'inv_cvf_partial:success',
+                amount: 0,
+                cardToken: 'tok-new',
+                cardMask: '** 4242',
+                cardPaymentMethod: null,
+                cardPaymentSystem: null,
+                cardBank: null,
+            })
+        );
+
+        const updated = await profileModel.findOne({ userId: user._id });
+        expect(updated?.cardToken).toBe('tok-new');
+        expect(updated?.cardMask).toBe('** 4242');
+        expect(updated?.cardPaymentSystem).toBeNull();
+        expect(updated?.cardBank).toBeNull();
+        expect(updated?.cardPaymentMethod).toBeNull();
+    });
+
+    it('«оплатити зараз» іншою карткою → стару картку відкликано, дані показу не змішані', async () => {
+        const user = await createUser();
+        await seedActiveProfile(user, {
+            status: SUBSCRIPTION_STATUS.PAST_DUE,
+            anchorDay: 10,
+            currentPeriodEnd: new Date('2026-05-10T09:00:00.000Z'),
+            nextChargeAt: null,
+            nextRetryAt: new Date(Date.now() + 3600_000),
+            cardPaymentSystem: 'mastercard',
+            cardBank: 'ПриватБанк',
+        });
+
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/subscription/resume')
+            .set('Authorization', bearerFor(user))
+            .send({})
+            .expect(200);
+        const orderReference =
+            (res.body as { data: { checkoutUrl: string } }).data.checkoutUrl
+                .split('/')
+                .pop() ?? '';
+
+        await postWebhook(
+            makeEvent({
+                orderReference,
+                invoiceId: 'inv_resume_new_card',
+                providerEventId: 'inv_resume_new_card:success',
+                amount: BILLING_GRID.brand.pricePerBusiness,
+                cardToken: 'tok-new',
+                cardMask: '** 4242',
+                cardPaymentSystem: null,
+                cardBank: null,
+            })
+        );
+
+        const updated = await profileModel.findOne({ userId: user._id });
+        expect(updated?.status).toBe(SUBSCRIPTION_STATUS.ACTIVE);
+        expect(updated?.cardToken).toBe('tok-new');
+        expect(updated?.cardMask).toBe('** 4242');
+        expect(updated?.cardBank).toBeNull();
+        expect(updated?.cardPaymentSystem).toBeNull();
+        expect(providerMock.deleteCardToken).toHaveBeenCalledWith('tok-1');
+        expect(providerMock.deleteCardToken).not.toHaveBeenCalledWith(
+            'tok-new'
+        );
+        expect(updated?.pendingRevokeCardTokens).toEqual([]);
+    });
+
+    it('нова купівля іншою карткою після вимкнення доступу → збережену картку відкликано', async () => {
+        const user = await createUser();
+        await seedActiveProfile(user, {
+            status: SUBSCRIPTION_STATUS.UNPAID,
+            nextChargeAt: null,
+            dunningExhaustedAt: new Date(Date.now() - 24 * 3600_000),
+        });
+
+        await supertest(app.getHttpServer())
+            .post('/api/payments/checkout')
+            .set('Authorization', bearerFor(user))
+            .send({ universe: BILLING_UNIVERSE.BRAND, capacity: 1 })
+            .expect(201);
+        const orderReference =
+            providerMock.createSubscriptionCheckout.mock.calls[0][0]
+                .orderReference;
+
+        await postWebhook(
+            makeEvent({
+                orderReference,
+                invoiceId: 'inv_back_new_card',
+                providerEventId: 'inv_back_new_card:success',
+                amount: BILLING_GRID.brand.pricePerBusiness,
+                cardToken: 'tok-new',
+                cardMask: '** 4242',
+            })
+        );
+
+        const profile = await profileModel.findOne({ userId: user._id });
+        expect(profile?.status).toBe(SUBSCRIPTION_STATUS.ACTIVE);
+        expect(profile?.cardToken).toBe('tok-new');
+        expect(providerMock.deleteCardToken).toHaveBeenCalledWith('tok-1');
+        expect(profile?.pendingRevokeCardTokens).toEqual([]);
+    });
+
+    it("прив'язку картки не відкидає списання, оброблене раніше за її сповіщення", async () => {
+        // Списання (з часом нашого сервера) пройшло, поки сповіщення про картку
+        // чекало черги. Порядок подій різних видів для картки не важливий.
+        const user = await createUser();
+        await seedActiveProfile(user, {
+            lastProviderEventAt: new Date(Date.now() + 60_000),
+        });
+
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/card/verification')
+            .set('Authorization', bearerFor(user))
+            .send({})
+            .expect(200);
+        const orderReference =
+            (res.body as { data: { checkoutUrl: string } }).data.checkoutUrl
+                .split('/')
+                .pop() ?? '';
+
+        await postWebhook(
+            makeEvent({
+                orderReference,
+                invoiceId: 'inv_cvf_late',
+                providerEventId: 'inv_cvf_late:success',
+                amount: 0,
+                cardToken: 'tok-new',
+            })
+        );
+
+        const updated = await profileModel.findOne({ userId: user._id });
+        expect(updated?.cardToken).toBe('tok-new');
+        expect(updated?.cardVerification?.status).toBe(
+            CARD_VERIFICATION_STATUS.SAVED
+        );
+        expect(providerMock.deleteCardToken).toHaveBeenCalledWith('tok-1');
+    });
+
+    it("застаріла прив'язка не перезаписує новішу картку, а її токен відкликано", async () => {
+        const user = await createUser();
+        await seedActiveProfile(user, {
+            cardVerifiedAt: new Date(Date.now() + 60_000),
+        });
+
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/card/verification')
+            .set('Authorization', bearerFor(user))
+            .send({})
+            .expect(200);
+        const orderReference =
+            (res.body as { data: { checkoutUrl: string } }).data.checkoutUrl
+                .split('/')
+                .pop() ?? '';
+
+        await postWebhook(
+            makeEvent({
+                orderReference,
+                invoiceId: 'inv_cvf_stale',
+                providerEventId: 'inv_cvf_stale:success',
+                amount: 0,
+                cardToken: 'tok-stale',
+            })
+        );
+
+        const updated = await profileModel.findOne({ userId: user._id });
+        expect(updated?.cardToken).toBe('tok-1');
+        expect(updated?.cardVerification?.status).toBe(
+            CARD_VERIFICATION_STATUS.FAILED
+        );
+        expect(providerMock.deleteCardToken).toHaveBeenCalledWith('tok-stale');
+        expect(providerMock.deleteCardToken).not.toHaveBeenCalledWith('tok-1');
+        expect(updated?.pendingRevokeCardTokens).toEqual([]);
+        expect(emailMock.sendCardChanged).not.toHaveBeenCalled();
+    });
+
+    it("прив'язка заради відновлення повертає скасовану підписку без другого натискання", async () => {
+        const user = await createUser();
+        const profile = await seedActiveProfile(user, {
+            cardToken: null,
+            cardMask: null,
+            cancelAtPeriodEnd: true,
+            nextChargeAt: null,
+        });
+
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/card/verification')
+            .set('Authorization', bearerFor(user))
+            .send({ renewAfterSave: true, returnPath: '/billing' })
+            .expect(200);
+        const orderReference =
+            (res.body as { data: { checkoutUrl: string } }).data.checkoutUrl
+                .split('/')
+                .pop() ?? '';
+        expect(orderReference.startsWith('fin-cvr-')).toBe(true);
+
+        await postWebhook(
+            makeEvent({
+                orderReference,
+                invoiceId: 'inv_cvr',
+                providerEventId: 'inv_cvr:success',
+                amount: 0,
+                cardToken: 'tok-new',
+            })
+        );
+
+        const updated = await profileModel.findOne({ userId: user._id });
+        expect(updated?.cardToken).toBe('tok-new');
+        expect(updated?.cancelAtPeriodEnd).toBe(false);
+        expect(updated?.nextChargeAt?.getTime()).toBe(
+            profile.currentPeriodEnd?.getTime()
+        );
+    });
+
+    it('підписка згасла, поки платник був на сторінці банку → картку збережено, відновлення не сталось', async () => {
+        const user = await createUser();
+        await seedActiveProfile(user, {
+            cardToken: null,
+            cardMask: null,
+            cancelAtPeriodEnd: true,
+            nextChargeAt: null,
+        });
+
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/card/verification')
+            .set('Authorization', bearerFor(user))
+            .send({ renewAfterSave: true })
+            .expect(200);
+        const orderReference =
+            (res.body as { data: { checkoutUrl: string } }).data.checkoutUrl
+                .split('/')
+                .pop() ?? '';
+
+        // Фонове згасання скасованих профілів працює без per-user лока і цілком
+        // могло пройти, поки платник вводив картку на сторінці банку.
+        await profileModel.updateOne(
+            { userId: user._id },
+            {
+                $set: {
+                    status: SUBSCRIPTION_STATUS.CANCELED,
+                    currentPeriodEnd: new Date(Date.now() - 3600_000),
+                },
+            }
+        );
+
+        await postWebhook(
+            makeEvent({
+                orderReference,
+                invoiceId: 'inv_cvr_late',
+                providerEventId: 'inv_cvr_late:success',
+                amount: 0,
+                cardToken: 'tok-new',
+            })
+        );
+
+        // Картку банк уже токенізував, тож вона зберігається. А підписку
+        // відновлювати нема чого: доступ уже погашено, і відновлення роздало б
+        // його безкоштовно.
+        const updated = await profileModel.findOne({ userId: user._id });
+        expect(updated?.cardToken).toBe('tok-new');
+        expect(updated?.cancelAtPeriodEnd).toBe(true);
+        expect(updated?.nextChargeAt).toBeNull();
+        expect(updated?.status).toBe(SUBSCRIPTION_STATUS.CANCELED);
+    });
+
+    it("прив'язка заради відновлення на нескасованій підписці → 400 ще до походу в банк", async () => {
+        const user = await createUser();
+        await seedActiveProfile(user);
+
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/card/verification')
+            .set('Authorization', bearerFor(user))
+            .send({ renewAfterSave: true })
+            .expect(400);
+        expect((res.body as { error: { code: string } }).error.code).toBe(
+            'BILLING_NOT_CANCELED'
+        );
+        expect(providerMock.createCardVerification).not.toHaveBeenCalled();
+    });
+
+    it('невдала верифікація не чіпає збережену картку', async () => {
+        const user = await createUser();
+        await seedActiveProfile(user);
+
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/card/verification')
+            .set('Authorization', bearerFor(user))
+            .send({})
+            .expect(200);
+        const orderReference =
+            (res.body as { data: { checkoutUrl: string } }).data.checkoutUrl
+                .split('/')
+                .pop() ?? '';
+
+        await postWebhook(
+            makeEvent({
+                orderReference,
+                invoiceId: 'inv_cvf_fail',
+                providerEventId: 'inv_cvf_fail:failure',
+                status: MONOBANK_INVOICE_STATUS.FAILURE,
+                amount: 0,
+                cardToken: null,
+                cardMask: null,
+            })
+        );
+
+        const updated = await profileModel.findOne({ userId: user._id });
+        expect(updated?.cardToken).toBe('tok-1');
+        expect(updated?.cardMask).toBe('** 1111');
+        expect(providerMock.deleteCardToken).not.toHaveBeenCalled();
+        expect(emailMock.sendCardChanged).not.toHaveBeenCalled();
+    });
+
+    it('заміна картки доступна на профілі, вимкненому за несплатою', async () => {
+        const user = await createUser();
+        await seedActiveProfile(user, {
+            status: SUBSCRIPTION_STATUS.UNPAID,
+            nextChargeAt: null,
+            dunningExhaustedAt: new Date(),
+        });
+
+        await supertest(app.getHttpServer())
+            .post('/api/payments/card/verification')
+            .set('Authorization', bearerFor(user))
+            .send({})
+            .expect(200);
+        expect(providerMock.createCardVerification).toHaveBeenCalledTimes(1);
+    });
+
+    it('повернення з банку раніше за сповіщення: результат дозвіряється у банку, повтор сповіщення нічого не дублює', async () => {
+        const user = await createUser();
+        await seedActiveProfile(user);
+
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/card/verification')
+            .set('Authorization', bearerFor(user))
+            .send({ returnPath: '/billing' })
+            .expect(200);
+        const orderReference =
+            (res.body as { data: { checkoutUrl: string } }).data.checkoutUrl
+                .split('/')
+                .pop() ?? '';
+        // Повернення веде на сторінку результату прив'язки, а не «Оплату здійснено».
+        expect(providerMock.createCardVerification).toHaveBeenCalledWith(
+            expect.objectContaining({
+                returnUrl:
+                    'https://finly.com.ua/billing-return?returnPath=%2Fbilling&flow=card',
+            })
+        );
+
+        const event = makeEvent({
+            orderReference,
+            invoiceId: 'inv_cvf_pull',
+            providerEventId: 'inv_cvf_pull:success',
+            amount: 0,
+            cardToken: 'tok-new',
+            cardMask: '** 4242',
+        });
+        providerMock.getInvoiceStatus.mockResolvedValueOnce(event);
+
+        const result = await supertest(app.getHttpServer())
+            .post('/api/payments/card/verification/result')
+            .set('Authorization', bearerFor(user))
+            .expect(200);
+        expect((result.body as { data: { status: string } }).data.status).toBe(
+            'saved'
+        );
+        expect(providerMock.getInvoiceStatus).toHaveBeenCalledWith(
+            `inv_${orderReference}`,
+            orderReference
+        );
+        const updated = await profileModel.findOne({ userId: user._id });
+        expect(updated?.cardToken).toBe('tok-new');
+
+        await postWebhook(event);
+        expect(emailMock.sendCardChanged).toHaveBeenCalledTimes(1);
+        expect(providerMock.deleteCardToken).toHaveBeenCalledTimes(1);
+        expect(providerMock.deleteCardToken).toHaveBeenCalledWith('tok-1');
+    });
+
+    it('банк відхилив картку → сторінка повернення отримує «не вдалося», стара картка чинна', async () => {
+        const user = await createUser();
+        await seedActiveProfile(user);
+
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/card/verification')
+            .set('Authorization', bearerFor(user))
+            .send({})
+            .expect(200);
+        const orderReference =
+            (res.body as { data: { checkoutUrl: string } }).data.checkoutUrl
+                .split('/')
+                .pop() ?? '';
+
+        providerMock.getInvoiceStatus.mockResolvedValueOnce(
+            makeEvent({
+                orderReference,
+                invoiceId: 'inv_cvf_pull_fail',
+                providerEventId: 'inv_cvf_pull_fail:failure',
+                status: MONOBANK_INVOICE_STATUS.FAILURE,
+                amount: 0,
+                cardToken: null,
+                cardMask: null,
+            })
+        );
+
+        const result = await supertest(app.getHttpServer())
+            .post('/api/payments/card/verification/result')
+            .set('Authorization', bearerFor(user))
+            .expect(200);
+        expect((result.body as { data: { status: string } }).data.status).toBe(
+            'failed'
+        );
+        const updated = await profileModel.findOne({ userId: user._id });
+        expect(updated?.cardToken).toBe('tok-1');
+        expect(providerMock.deleteCardToken).not.toHaveBeenCalled();
+    });
+
+    it('банк ще не дав остаточної відповіді → «перевіряється», картка не чіпається', async () => {
+        const user = await createUser();
+        await seedActiveProfile(user);
+
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/card/verification')
+            .set('Authorization', bearerFor(user))
+            .send({})
+            .expect(200);
+        const orderReference =
+            (res.body as { data: { checkoutUrl: string } }).data.checkoutUrl
+                .split('/')
+                .pop() ?? '';
+
+        providerMock.getInvoiceStatus.mockResolvedValueOnce(
+            makeEvent({
+                orderReference,
+                invoiceId: 'inv_cvf_pull_proc',
+                providerEventId: 'inv_cvf_pull_proc:processing',
+                status: MONOBANK_INVOICE_STATUS.PROCESSING,
+                amount: 0,
+                cardToken: null,
+            })
+        );
+
+        const result = await supertest(app.getHttpServer())
+            .post('/api/payments/card/verification/result')
+            .set('Authorization', bearerFor(user))
+            .expect(200);
+        expect((result.body as { data: { status: string } }).data.status).toBe(
+            'pending'
+        );
+        const updated = await profileModel.findOne({ userId: user._id });
+        expect(updated?.cardToken).toBe('tok-1');
+    });
+
+    it("результат прив'язки без розпочатої прив'язки → 400 BILLING_NO_CARD_VERIFICATION", async () => {
+        const user = await createUser();
+        await seedActiveProfile(user);
+
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/card/verification/result')
+            .set('Authorization', bearerFor(user))
+            .expect(400);
+        expect((res.body as { error: { code: string } }).error.code).toBe(
+            'BILLING_NO_CARD_VERIFICATION'
+        );
+        expect(providerMock.getInvoiceStatus).not.toHaveBeenCalled();
+    });
+
+    it('вичерпана прострочка → доступ знято, картка лишається зі стемпом строку', async () => {
+        // Платник не приймав рішення піти — його вибило несплатою. Картка
+        // лишається на строк зберігання, щоб повернення коштувало один клік.
+        const user = await createUser();
+        await seedActiveProfile(user, {
+            status: SUBSCRIPTION_STATUS.PAST_DUE,
+            dunningAttempts: BILLING_DUNNING.maxAttempts - 1,
+            nextChargeAt: null,
+            nextRetryAt: new Date(Date.now() - 1000),
+        });
+        providerMock.chargeByToken.mockResolvedValueOnce({
+            invoiceId: 'inv_fail',
+            status: MONOBANK_INVOICE_STATUS.FAILURE,
+            cardToken: null,
+            failureReason: 'insufficient funds',
+            errCode: '51',
+            cardMask: '** 1111',
+            cardPaymentMethod: 'pan',
+            cardPaymentSystem: 'mastercard',
+            cardBank: 'ПриватБанк',
+        });
+
+        await app.get(BillingClockService).runBillingClock();
+
+        const profile = await profileModel.findOne({ userId: user._id });
+        expect(profile?.status).toBe(SUBSCRIPTION_STATUS.UNPAID);
+        expect(profile?.cardToken).toBe('tok-1');
+        expect(profile?.dunningExhaustedAt).toBeTruthy();
+        expect(providerMock.deleteCardToken).not.toHaveBeenCalled();
+    });
+
+    it('згасання скасованого профілю → картку забуто і токен відкликано у банку', async () => {
+        const user = await createUser();
+        await seedActiveProfile(user, {
+            cancelAtPeriodEnd: true,
+            nextChargeAt: null,
+            currentPeriodEnd: new Date(Date.now() - 3600_000),
+        });
+
+        await app.get(PaymentsCleanupService).runHourlyExpiry();
+
+        const profile = await profileModel.findOne({ userId: user._id });
+        expect(profile?.status).toBe(SUBSCRIPTION_STATUS.CANCELED);
+        expect(profile?.cardToken).toBeNull();
+        expect(profile?.cardMask).toBeNull();
+        expect(providerMock.deleteCardToken).toHaveBeenCalledWith('tok-1');
+    });
+
+    it('картка погашеного профілю, не стерта в годину згасання, стирається наступним проходом', async () => {
+        const user = await createUser();
+        await seedActiveProfile(user, {
+            status: SUBSCRIPTION_STATUS.CANCELED,
+            cancelAtPeriodEnd: true,
+            nextChargeAt: null,
+            currentPeriodEnd: new Date(Date.now() - 3 * 24 * 3600_000),
+        });
+
+        await app.get(PaymentsCleanupService).runHourlyExpiry();
+
+        const profile = await profileModel.findOne({ userId: user._id });
+        expect(profile?.cardToken).toBeNull();
+        expect(profile?.cardMask).toBeNull();
+        expect(providerMock.deleteCardToken).toHaveBeenCalledWith('tok-1');
+    });
+
+    it('збій банку при відкликанні не губить картку: вона чекає в черзі і відкликається наступним проходом', async () => {
+        const user = await createUser();
+        await seedActiveProfile(user, {
+            cancelAtPeriodEnd: true,
+            nextChargeAt: null,
+            currentPeriodEnd: new Date(Date.now() - 3600_000),
+        });
+        providerMock.deleteCardToken.mockRejectedValueOnce(
+            new ProviderRequestError('monobank HTTP 503', false, 503)
+        );
+
+        const cleanup = app.get(PaymentsCleanupService);
+        await cleanup.runHourlyExpiry();
+
+        const afterFailure = await profileModel.findOne({ userId: user._id });
+        expect(afterFailure?.cardToken).toBeNull();
+        expect(afterFailure?.pendingRevokeCardTokens).toEqual(['tok-1']);
+
+        await cleanup.runHourlyExpiry();
+
+        const afterRetry = await profileModel.findOne({ userId: user._id });
+        expect(providerMock.deleteCardToken).toHaveBeenCalledTimes(2);
+        expect(providerMock.deleteCardToken).toHaveBeenLastCalledWith('tok-1');
+        expect(afterRetry?.pendingRevokeCardTokens).toEqual([]);
+    });
+
+    it('поодинока відмова банку межі не досягає: токен чекає далі, ops не турбуємо', async () => {
+        const user = await createUser();
+        await seedActiveProfile(user, {
+            status: SUBSCRIPTION_STATUS.CANCELED,
+            cardToken: null,
+            nextChargeAt: null,
+            pendingRevokeCardTokens: ['tok-stuck'],
+        });
+        providerMock.deleteCardToken.mockRejectedValueOnce(
+            new ProviderRequestError('monobank HTTP 503', false, 503)
+        );
+
+        await billing.revokePendingCardTokens();
+
+        const profile = await profileModel.findOne({ userId: user._id });
+        expect(profile?.pendingRevokeCardTokens).toEqual(['tok-stuck']);
+        expect(profile?.cardRevocationFailures).toBe(1);
+        expect(emailMock.sendCardRevocationFailed).not.toHaveBeenCalled();
+    });
+
+    it('банк відмовляє до вичерпання межі → черга здається, ops отримує лист', async () => {
+        const user = await createUser();
+        await seedActiveProfile(user, {
+            status: SUBSCRIPTION_STATUS.CANCELED,
+            cardToken: null,
+            nextChargeAt: null,
+            pendingRevokeCardTokens: ['tok-stuck'],
+            cardRevocationFailures: BILLING_CARD_REVOCATION_MAX_FAILURES - 1,
+        });
+        providerMock.deleteCardToken.mockRejectedValueOnce(
+            new ProviderRequestError('monobank HTTP 503', false, 503)
+        );
+
+        await billing.revokePendingCardTokens();
+
+        // Токен здано свідомо: доки він у черзі, профіль не можна знищити, а
+        // з ним зависає і остаточне видалення акаунта. Картка лишилась у
+        // гаманці банку, тож відступ не мовчазний — про нього йде лист.
+        const profile = await profileModel.findOne({ userId: user._id });
+        expect(profile?.pendingRevokeCardTokens).toEqual([]);
+        expect(profile?.cardRevocationFailures).toBe(0);
+        expect(profile?.cardRevocationAlertDueAt).toBeTruthy();
+
+        await app.get(PaymentsCleanupService).runManualReviewAlerts();
+
+        expect(emailMock.sendCardRevocationFailed).toHaveBeenCalledWith({
+            userId: user._id.toString(),
+            walletId: user._id.toString(),
+            attempts: BILLING_CARD_REVOCATION_MAX_FAILURES,
+        });
+        const afterAlert = await profileModel.findOne({ userId: user._id });
+        expect(afterAlert?.cardRevocationAlertDueAt).toBeNull();
+    });
+
+    it('лист про здане відкликання не відправився → мітка лишається, лист іде наступним проходом', async () => {
+        const user = await createUser();
+        await seedActiveProfile(user, {
+            status: SUBSCRIPTION_STATUS.CANCELED,
+            cardToken: null,
+            nextChargeAt: null,
+            cardRevocationAlertDueAt: new Date(),
+        });
+        emailMock.sendCardRevocationFailed.mockRejectedValueOnce(
+            new Error('resend down')
+        );
+
+        const cleanup = app.get(PaymentsCleanupService);
+        await cleanup.runManualReviewAlerts();
+        const afterFailure = await profileModel.findOne({ userId: user._id });
+        expect(afterFailure?.cardRevocationAlertDueAt).toBeTruthy();
+
+        await cleanup.runManualReviewAlerts();
+        expect(emailMock.sendCardRevocationFailed).toHaveBeenCalledTimes(2);
+        const afterRetry = await profileModel.findOne({ userId: user._id });
+        expect(afterRetry?.cardRevocationAlertDueAt).toBeNull();
+    });
+
+    it('банк не знає токена → відкликання остаточне, черга не блокує назавжди', async () => {
+        const user = await createUser();
+        await seedActiveProfile(user, {
+            status: SUBSCRIPTION_STATUS.CANCELED,
+            cardToken: null,
+            nextChargeAt: null,
+            pendingRevokeCardTokens: ['tok-gone'],
+        });
+        providerMock.deleteCardToken.mockRejectedValueOnce(
+            new ProviderRequestError('monobank HTTP 404', true, 404)
+        );
+
+        await billing.revokePendingCardTokens();
+
+        const profile = await profileModel.findOne({ userId: user._id });
+        expect(profile?.pendingRevokeCardTokens).toEqual([]);
+    });
+
+    it('токен у черзі, що знову став робочою карткою, у банку не відкликається', async () => {
+        const user = await createUser();
+        await seedActiveProfile(user, { pendingRevokeCardTokens: ['tok-1'] });
+
+        await billing.revokePendingCardTokens();
+
+        const profile = await profileModel.findOne({ userId: user._id });
+        expect(providerMock.deleteCardToken).not.toHaveBeenCalled();
+        expect(profile?.cardToken).toBe('tok-1');
+        expect(profile?.pendingRevokeCardTokens).toEqual([]);
+    });
+
+    it("картка, прив'язана вже після вимкнення доступу, отримує власний строк зберігання", async () => {
+        const user = await createUser();
+        await seedActiveProfile(user, {
+            status: SUBSCRIPTION_STATUS.UNPAID,
+            nextChargeAt: null,
+            dunningExhaustedAt: new Date(
+                Date.now() - (BILLING_CARD_RETENTION_DAYS + 1) * 24 * 3600_000
+            ),
+        });
+
+        const res = await supertest(app.getHttpServer())
+            .post('/api/payments/card/verification')
+            .set('Authorization', bearerFor(user))
+            .send({})
+            .expect(200);
+        const orderReference =
+            (res.body as { data: { checkoutUrl: string } }).data.checkoutUrl
+                .split('/')
+                .pop() ?? '';
+        await postWebhook(
+            makeEvent({
+                orderReference,
+                invoiceId: 'inv_cvf_after_disable',
+                providerEventId: 'inv_cvf_after_disable:success',
+                amount: 0,
+                cardToken: 'tok-new',
+                cardMask: '** 4242',
+            })
+        );
+
+        await app.get(PaymentsCleanupService).runDailyCleanup();
+
+        const profile = await profileModel.findOne({ userId: user._id });
+        expect(profile?.cardToken).toBe('tok-new');
+        expect(profile?.cardVerifiedAt).toBeTruthy();
+        expect(providerMock.deleteCardToken).not.toHaveBeenCalledWith(
+            'tok-new'
+        );
+    });
+
+    it('картка вибитого несплатою живе до кінця строку і зникає після нього', async () => {
+        const user = await createUser();
+        const fresh = await createUser();
+        const dayMs = 24 * 3600 * 1000;
+        await seedActiveProfile(user, {
+            status: SUBSCRIPTION_STATUS.UNPAID,
+            nextChargeAt: null,
+            dunningExhaustedAt: new Date(
+                Date.now() - (BILLING_CARD_RETENTION_DAYS + 1) * dayMs
+            ),
+        });
+        await seedActiveProfile(fresh, {
+            status: SUBSCRIPTION_STATUS.UNPAID,
+            nextChargeAt: null,
+            dunningExhaustedAt: new Date(
+                Date.now() - (BILLING_CARD_RETENTION_DAYS - 1) * dayMs
+            ),
+        });
+
+        await app.get(PaymentsCleanupService).runDailyCleanup();
+
+        const expired = await profileModel.findOne({ userId: user._id });
+        expect(expired?.cardToken).toBeNull();
+        // Мітка вимкнення переживає стирання картки: доступ лишається
+        // вимкненим, і наступна вписана картка має від чого відраховувати
+        // власний строк зберігання.
+        expect(expired?.dunningExhaustedAt).toBeTruthy();
+        expect(providerMock.deleteCardToken).toHaveBeenCalledWith('tok-1');
+
+        // Строк ще не вийшов — картка на місці.
+        const kept = await profileModel.findOne({ userId: fresh._id });
+        expect(kept?.cardToken).toBe('tok-1');
+        expect(kept?.dunningExhaustedAt).toBeTruthy();
+    });
+
+    it('картка, вписана після стирання попередньої, теж має кінцевий строк', async () => {
+        const user = await createUser();
+        const dayMs = 24 * 3600 * 1000;
+        // Перша картка вже стерта строком зберігання, друга вписана давно: без
+        // відліку за датою прив'язки вона лишалась би у гаманці банку назавжди.
+        await seedActiveProfile(user, {
+            status: SUBSCRIPTION_STATUS.UNPAID,
+            nextChargeAt: null,
+            cardToken: 'tok-second',
+            dunningExhaustedAt: new Date(
+                Date.now() - (BILLING_CARD_RETENTION_DAYS + 30) * dayMs
+            ),
+            cardVerifiedAt: new Date(
+                Date.now() - (BILLING_CARD_RETENTION_DAYS + 1) * dayMs
+            ),
+        });
+
+        await app.get(PaymentsCleanupService).runDailyCleanup();
+
+        const profile = await profileModel.findOne({ userId: user._id });
+        expect(profile?.cardToken).toBeNull();
+        expect(profile?.cardVerifiedAt).toBeNull();
+        expect(providerMock.deleteCardToken).toHaveBeenCalledWith('tok-second');
+    });
+
+    it('картка профілю, вимкненого ще до появи мітки, теж прибирається', async () => {
+        const user = await createUser();
+        // Профіль, вибитий несплатою до Sprint 43: мітки вимкнення немає, дати
+        // прив'язки теж. Вибірка за самою міткою лишила б картку назавжди.
+        await seedActiveProfile(user, {
+            status: SUBSCRIPTION_STATUS.UNPAID,
+            nextChargeAt: null,
+            dunningExhaustedAt: null,
+            cardVerifiedAt: null,
+        });
+
+        await app.get(PaymentsCleanupService).runDailyCleanup();
+
+        const profile = await profileModel.findOne({ userId: user._id });
+        expect(profile?.cardToken).toBeNull();
+        expect(providerMock.deleteCardToken).toHaveBeenCalledWith('tok-1');
+    });
+
+    it('покинута нова купівля поверх вимкненого доступу строку зберігання не скидає', async () => {
+        const user = await createUser();
+        const dayMs = 24 * 3600 * 1000;
+        // Статус переписала незавершена купівля, але доступ і далі вимкнено
+        // несплатою — стан видно за міткою, і строк добігає свого кінця.
+        await seedActiveProfile(user, {
+            status: SUBSCRIPTION_STATUS.INCOMPLETE,
+            nextChargeAt: null,
+            dunningExhaustedAt: new Date(
+                Date.now() - (BILLING_CARD_RETENTION_DAYS + 1) * dayMs
+            ),
+        });
+
+        await app.get(PaymentsCleanupService).runDailyCleanup();
+
+        const profile = await profileModel.findOne({ userId: user._id });
+        expect(profile?.cardToken).toBeNull();
+        expect(providerMock.deleteCardToken).toHaveBeenCalledWith('tok-1');
+    });
+
+    it('POST /capacity на скасованому профілі → 400 BILLING_CANCEL_PENDING, без списання', async () => {
+        // Скасований-до-кінця-періоду профіль: доступ і картка живі, але платні
+        // дії свідомо заблоковані — куплений слот згас би на межі періоду.
+        // Код веде кабінет на відновлення, а не в глухий кут.
+        const user = await createUser();
+        await seedActiveProfile(user, {
             cancelAtPeriodEnd: true,
             nextChargeAt: null,
             brand: { capacity: 1, attachedBusinessIds: [] },

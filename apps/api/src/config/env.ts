@@ -112,6 +112,10 @@ export const ENV = {
 
     RESEND_API_KEY: getEnvVar('RESEND_API_KEY'),
     RESEND_FROM_EMAIL: getEnvVar('RESEND_FROM_EMAIL'),
+    // Sprint 43 — скринька адміністратора для службових листів (платіж, що
+    // потребує ручного розбору). Змінна середовища, а не константа: у dev і на
+    // тестовому стенді листи не мають падати в бойову скриньку.
+    OPS_ALERT_EMAIL: getEnvVar('OPS_ALERT_EMAIL'),
 
     // monobank «Плата» (Sprint 22) — merchant X-Token із кабінету monobank
     // (або тестовий токен з api.monobank.ua). Єдиний секрет провайдера:

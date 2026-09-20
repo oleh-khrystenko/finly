@@ -288,6 +288,7 @@ GOOGLE_CLIENT_SECRET=<з §5>
 
 RESEND_API_KEY=<з §6>
 RESEND_FROM_EMAIL=Finly <no-reply@finly.com.ua>
+OPS_ALERT_EMAIL=admin@finly.com.ua
 
 MONOBANK_TOKEN=<з §4>
 

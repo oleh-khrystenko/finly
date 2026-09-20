@@ -4,6 +4,7 @@ export { default as DocumentsUniverseCard } from './DocumentsUniverseCard';
 export { default as RecentPayments } from './RecentPayments';
 export { default as CancelSubscriptionDialog } from './CancelSubscriptionDialog';
 export { useCancelSubscriptionDialogStore } from './cancelSubscriptionDialogStore';
+export { useCardChangeConfirmStore } from './cardChangeConfirmStore';
 export {
     useSubscribeLabel,
     startSubscriptionCheckout,

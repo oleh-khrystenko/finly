@@ -92,6 +92,32 @@ export const BILLING_DUNNING = {
 } as const;
 
 /**
+ * Скільки днів збережена картка живе після того, як доступ вимкнено вичерпаною
+ * прострочкою. Свідоме скасування картку стирає одразу (платник пішов сам), а
+ * тут його не було: списання просто не пройшло, гроші цілком можуть з'явитись
+ * пізніше, і повернення тоді коштує один клік замість повторного введення
+ * реквізитів.
+ *
+ * Строк кінцевий, бо збережена картка це не копія номера, а перепустка,
+ * прив'язана до конкретної картки: після спливу її терміну дії перепустка
+ * мертва незалежно від того, скільки ми її тримаємо.
+ */
+export const BILLING_CARD_RETENTION_DAYS = 90;
+
+/**
+ * Скільки разів поспіль фонове відкликання картки у гаманці monobank може
+ * наткнутись на відмову банку, перш ніж ми здаємось і прибираємо токен з черги.
+ * Прохід іде щогодини, тож 24 — приблизно доба спроб.
+ *
+ * Межа обов'язкова. Поки токен чекає у черзі, білінг-профіль не можна знищити
+ * (інакше зник би єдиний запис про токен), а разом з профілем зависає і
+ * остаточне видалення акаунта. Без стелі право людини видалити свої дані стало
+ * б заручником доступності банку. Ціна відступу — картка лишається у гаманці
+ * monobank, тому відступ не мовчазний: ops отримує лист і прибирає її руками.
+ */
+export const BILLING_CARD_REVOCATION_MAX_FAILURES = 24;
+
+/**
  * Які всесвіти продаються. Бренд — одразу; Документи під прапором «скоро»:
  * механіка будується і тестується, вітрина й checkout вимкнені до запуску.
  */
@@ -121,3 +147,50 @@ validateDunningConfig(
     BILLING_DUNNING.maxAttempts,
     BILLING_DUNNING.retryIntervalHours
 );
+
+/**
+ * Строк зберігання картки мусить перекривати саме вікно прострочки: інакше
+ * картку стирало б у платника, якому ще йдуть спроби списання, і найближча з
+ * них лишилась би без чого списувати.
+ */
+export function validateCardRetention(
+    retentionDays: number,
+    maxAttempts: number,
+    retryIntervalHours: number
+): void {
+    const dunningDays = (maxAttempts * retryIntervalHours) / 24;
+    if (!Number.isInteger(retentionDays) || retentionDays < 1) {
+        throw new Error(
+            `❌ BILLING_CARD_RETENTION_DAYS must be an integer ≥ 1 (got ${retentionDays}).`
+        );
+    }
+    if (retentionDays < dunningDays) {
+        throw new Error(
+            `❌ BILLING_CARD_RETENTION_DAYS (${retentionDays}) must not be shorter ` +
+                `than the dunning window (${dunningDays} days from BILLING_DUNNING). ` +
+                'Otherwise the card is wiped while retries are still due.'
+        );
+    }
+}
+
+validateCardRetention(
+    BILLING_CARD_RETENTION_DAYS,
+    BILLING_DUNNING.maxAttempts,
+    BILLING_DUNNING.retryIntervalHours
+);
+
+/**
+ * Спроб відкликання мусить бути щонайменше одна: нуль означав би, що першу ж
+ * відмову банку ми приймаємо за остаточну і лишаємо картку в гаманці, навіть
+ * коли це була хвилинна недоступність.
+ */
+export function validateCardRevocationLimit(maxFailures: number): void {
+    if (!Number.isInteger(maxFailures) || maxFailures < 1) {
+        throw new Error(
+            '❌ BILLING_CARD_REVOCATION_MAX_FAILURES must be an integer ≥ 1 ' +
+                `(got ${maxFailures}).`
+        );
+    }
+}
+
+validateCardRevocationLimit(BILLING_CARD_REVOCATION_MAX_FAILURES);
