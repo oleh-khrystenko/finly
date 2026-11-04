@@ -217,6 +217,30 @@ Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client ID
 4. API Keys → Create → scoped до `sending` → `.env` `RESEND_API_KEY` (`re_...`).
 5. `.env` `RESEND_FROM_EMAIL` = `Finly <no-reply@finly.com.ua>` (sender має жити на verified domain — інакше Resend rejects).
 
+> Resend лише **надсилає**. Записи Resend живуть на субдомені `send` (MX + SPF) і `resend._domainkey` (DKIM), тому кореневі MX/SPF домену вони не чіпають. Прийом пошти на адреси домену — окремий шар, §6.1.
+
+### 6.1. Вхідна пошта домену (Cloudflare Email Routing)
+
+Окремих поштових скриньок на домені немає. Адреси домену лише **пересилають** листи на особисту скриньку власника.
+
+`admin@finly.com.ua` при цьому лишається обліковим записом Google на безкоштовному **Cloud Identity Free** (без Gmail): йому належать організація Google Cloud `finly.com.ua` з проєктом `finly-496517` (OAuth-клієнт, сервісний акаунт Search Console) і ресурс Search Console. Двоетапна перевірка увімкнена. Тому MX-записи домену вільні під Cloudflare.
+
+Адреси, які мусять приймати пошту:
+
+| Адреса                  | Де використовується                                                             |
+| ----------------------- | ------------------------------------------------------------------------------- |
+| `support@finly.com.ua`  | контакт для користувачів: лендінг, футер, кабінет, `/privacy`, `/terms`         |
+| `admin@finly.com.ua`    | `OPS_ALERT_EMAIL` — службові листи (платіж для ручної перевірки, PAY-12)        |
+| `no-reply@finly.com.ua` | лише відправник Resend; приймати листи не мусить (відповіді на неї ігноруються) |
+
+1. Cloudflare → `finly.com.ua` → **Email → Email Routing** → Enable.
+2. **Destination addresses** → додати особисту скриньку → підтвердити листом.
+3. **Routing rules** → **Create routing rule**: `support` і `admin` → Send to an email → особиста скринька. Catch-all не вмикати (інакше спам на будь-яку вигадану адресу).
+4. Cloudflare сам пропонує DNS-записи: три MX `route{1,2,3}.mx.cloudflare.net`, DKIM `cf2024-1._domainkey` і кореневий SPF `v=spf1 include:_spf.mx.cloudflare.net ~all`. TXT `google-site-verification=…` на корені **не видаляти**: ним домен підтверджено в Search Console і Cloud Identity. Чужих кореневих MX (наприклад, `*.google.com`) і `include:_spf.google.com` у SPF бути не повинно: два набори MX роблять доставку непередбачуваною.
+5. Перевірка: лист зі сторонньої скриньки на `support@` і на `admin@` доходить в особисту скриньку; лист Finly (вхід через magic-link) так само доходить, тобто Resend не зачеплено.
+
+Деякі сторонні сервіси (Resend, UptimeRobot) зареєстровані на `admin@`. Відновлення доступу до них тримається на пересиланні: якщо воно зламається, план такий: новий акаунт на особисту пошту і нові ключі в `.env`.
+
 ## 7. Cloudflare R2 (media bucket)
 
 1. R2 → Create bucket → `finly-media`. Region: automatic.
